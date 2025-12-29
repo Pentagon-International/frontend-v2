@@ -290,39 +290,32 @@ const Outstanding = ({
       shadow="sm"
       p="md"
       radius="md"
-      h={380}
-      style={{ border: "1px solid #e9ecef" }}
+      style={{ border: "1px solid #e9ecef", height: "100%" }}
     >
-      <Group justify="space-between" align="center" mb="xs" wrap="nowrap">
-        <Text size="md" fw={500} c="Black">
-          Outstanding vs Over Due
-        </Text>
+      <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
         <Group gap="xs" align="center">
-          <Text
-            size="md"
-            c="#105476"
-            style={{
-              textDecoration: "underline",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-            onClick={handleOutstandingViewAll}
-          >
-            View All
-          </Text>
+          {drillLevel > 1 && (
+            <Button
+              size="compact-xs"
+              variant="light"
+              onClick={handleBack}
+            >
+              Back
+            </Button>
+          )}
         </Group>
-      </Group>
-      <Group gap="xs" mb="md" justify="flex-end">
-        {drillLevel > 1 && (
-          <Button
-            size="compact-xs"
-            variant="light"
-            ml="100px"
-            onClick={handleBack}
-          >
-            Back
-          </Button>
-        )}
+        <Text
+          size="sm"
+          c="#105476"
+          style={{
+            textDecoration: "underline",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+          onClick={handleOutstandingViewAll}
+        >
+          View All
+        </Text>
       </Group>
 
       <Box

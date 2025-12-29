@@ -38,37 +38,12 @@ const CallEntry = ({
       shadow="sm"
       p="md"
       radius="md"
-      h={165}
+      h={120}
       style={{ border: "1px solid #e9ecef" }}
-      mb={15}
     >
-      <Group justify="space-between" align="center" mb="md">
-        <Group gap="md" align="center">
-          <Text size="md" fw={500}>
-            Call Entry
-          </Text>
-          <Select
-            placeholder="Select Period"
-            value={selectedPeriod}
-            onChange={(value) => setSelectedPeriod(value || "last_3_months")}
-            w={150}
-            size="xs"
-            data={[
-              { value: "weekly", label: "Last Week" },
-              { value: "current_month", label: "Current Month" },
-              { value: "last_month", label: "Last Month" },
-              { value: "last_3_months", label: "Last 3 Months" },
-              { value: "last_6_months", label: "Last 6 Months" },
-              { value: "last_year", label: "Last Year" },
-            ]}
-            styles={{
-              input: { fontSize: "12px" },
-            }}
-          />
-        </Group>
-
+      <Group justify="flex-end" align="center" mb="sm">
         <Text
-          size="md"
+          size="sm"
           c="#105476"
           style={{
             textDecoration: "underline",

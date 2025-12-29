@@ -323,34 +323,46 @@ const Budget = ({
       shadow="sm"
       p="md"
       radius="md"
-      h={380}
-      style={{ border: "1px solid #e9ecef" }}
+      style={{ border: "1px solid #e9ecef", height: "100%" }}
     >
-      {/* Header row: Title + Toggle + View All */}
-      <Group justify="space-between" align="center" mb="xs" gap="xs">
-        <Text size="md" fw={500} c="Black">
-          Budget vs Actual
-        </Text>
-        {/* <Group gap="xs"> */}
-        <SegmentedControl
-          value={budgetType}
-          onChange={(value) =>
-            handleBudgetTypeChange(value as "salesperson" | "non-salesperson")
-          }
-          data={[
-            { label: "Sales", value: "salesperson" },
-            { label: "Non-Sales", value: "non-salesperson" },
-          ]}
-          size="xs"
-          color="#105476"
-          styles={{
-            root: {
-              backgroundColor: "#f1f3f5",
-            },
-          }}
-        />
+      {/* Header row: Month filters + View All */}
+      <Group justify="space-between" align="center" mb="sm" gap="xs">
+        <Group gap="xs" align="center">
+          <Select
+            placeholder="From Month"
+            data={fromMonthOptions}
+            value={budgetStartMonth}
+            onChange={(value) => {
+              if (value) {
+                const endMonth =
+                  !budgetEndMonth || budgetEndMonth < value
+                    ? value
+                    : budgetEndMonth;
+                handleBudgetMonthFilterChange(value, endMonth);
+              }
+            }}
+            size="xs"
+            w={110}
+            withAsterisk
+            required
+          />
+          <Select
+            placeholder="To Month"
+            data={toMonthOptions}
+            value={budgetEndMonth}
+            onChange={(value) => {
+              if (value) {
+                handleBudgetMonthFilterChange(budgetStartMonth, value);
+              }
+            }}
+            size="xs"
+            w={110}
+            withAsterisk
+            required
+          />
+        </Group>
         <Text
-          size="md"
+          size="sm"
           c="#105476"
           style={{
             textDecoration: "underline",
@@ -360,64 +372,6 @@ const Budget = ({
         >
           View All
         </Text>
-        {/* </Group> */}
-      </Group>
-
-      {/* Filter inputs row */}
-      <Group gap="xs" mb="xs" align="center">
-        <Select
-          placeholder="Year"
-          data={[
-            { value: "2025", label: "2025" },
-            { value: "2024", label: "2024" },
-            { value: "2023", label: "2023" },
-            { value: "2022", label: "2022" },
-            { value: "2021", label: "2021" },
-            { value: "2020", label: "2020" },
-          ]}
-          value={selectedYear}
-          onChange={(value) => {
-            if (value) {
-              setSelectedYear(value);
-              // The parent component will handle updating the month values with the new year
-            }
-          }}
-          clearable
-          size="xs"
-          w={80}
-        />
-        <Select
-          placeholder="From Month"
-          data={fromMonthOptions}
-          value={budgetStartMonth}
-          onChange={(value) => {
-            if (value) {
-              const endMonth =
-                !budgetEndMonth || budgetEndMonth < value
-                  ? value
-                  : budgetEndMonth;
-              handleBudgetMonthFilterChange(value, endMonth);
-            }
-          }}
-          size="xs"
-          w={110}
-          withAsterisk
-          required
-        />
-        <Select
-          placeholder="To Month"
-          data={toMonthOptions}
-          value={budgetEndMonth}
-          onChange={(value) => {
-            if (value) {
-              handleBudgetMonthFilterChange(budgetStartMonth, value);
-            }
-          }}
-          size="xs"
-          w={110}
-          withAsterisk
-          required
-        />
       </Group>
 
       {/* Second row: Date Range + Back Button */}

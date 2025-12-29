@@ -235,7 +235,7 @@ const NewCustomers = ({
       {/* Header */}
       <Group justify="space-between" align="center" mb="xs">
         <Text size="md" fw={500} c="Black">
-          New Customers
+          Gain
         </Text>
         <Text
           size="md"

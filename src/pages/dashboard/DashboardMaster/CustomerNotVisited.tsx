@@ -273,7 +273,7 @@ const CustomerNotVisited = ({
       {/* Header */}
       <Group justify="space-between" align="center" mb="xs">
         <Text size="md" fw={500} c="Black">
-          Customer Not Visited
+          Not Visited
         </Text>
         {/* <Text
           size="md"

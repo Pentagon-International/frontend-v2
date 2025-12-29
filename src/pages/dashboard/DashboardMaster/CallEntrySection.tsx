@@ -1,0 +1,60 @@
+import { Box, Text, Group, Select } from "@mantine/core";
+import CallEntry from "./CallEntry";
+import { CallEntryStatisticsSummary } from "../../../service/dashboard.service";
+
+interface CallEntrySectionProps {
+  callEntrySummary: CallEntryStatisticsSummary | null;
+  isLoadingCallEntry: boolean;
+  handleCallEntryViewAll: (
+    filterType: "all" | "overdue" | "today" | "upcoming" | "closed"
+  ) => void;
+  selectedPeriod: string;
+  setSelectedPeriod: (period: string) => void;
+}
+
+const CallEntrySection = ({
+  callEntrySummary,
+  isLoadingCallEntry,
+  handleCallEntryViewAll,
+  selectedPeriod,
+  setSelectedPeriod,
+}: CallEntrySectionProps) => {
+  return (
+    <Box mb="lg">
+      <Group justify="space-between" align="center" mb="md">
+        <Text size="lg" fw={600}>
+          Call Entry
+        </Text>
+        <Select
+          placeholder="Select Period"
+          value={selectedPeriod}
+          onChange={(value) => setSelectedPeriod(value || "last_3_months")}
+          w={150}
+          size="xs"
+          data={[
+            { value: "weekly", label: "Last Week" },
+            { value: "current_month", label: "Current Month" },
+            { value: "last_month", label: "Last Month" },
+            { value: "last_3_months", label: "Last 3 Months" },
+            { value: "last_6_months", label: "Last 6 Months" },
+            { value: "last_year", label: "Last Year" },
+          ]}
+          styles={{
+            input: { fontSize: "12px" },
+          }}
+        />
+      </Group>
+
+      <CallEntry
+        callEntrySummary={callEntrySummary}
+        isLoadingCallEntry={isLoadingCallEntry}
+        handleCallEntryViewAll={handleCallEntryViewAll}
+        selectedPeriod={selectedPeriod}
+        setSelectedPeriod={setSelectedPeriod}
+      />
+    </Box>
+  );
+};
+
+export default CallEntrySection;
+

@@ -63,6 +63,11 @@ import Enquiry from "./Enquiry";
 import NewCustomers from "./NewCustomers";
 import LostCustomer from "./LostCustomer";
 import CustomerNotVisited from "./CustomerNotVisited";
+import CustomerInteractionStatus from "./CustomerInteractionStatus";
+import CallEntrySection from "./CallEntrySection";
+import OutstandingSection from "./OutstandingSection";
+import EnquirySection from "./EnquirySection";
+import BudgetSection from "./BudgetSection";
 import PipelineReport from "../PipelineReport/index";
 import Booking from "../Booking/index";
 
@@ -290,6 +295,12 @@ const Dashboard = () => {
       activePercentage: 0,
       quotePercentage: 0,
     });
+
+  // Section-level period states (for unified filters in section headers)
+  const [customerInteractionPeriod, setCustomerInteractionPeriod] =
+    useState<string>("quarterly");
+  const [outstandingPeriod, setOutstandingPeriod] =
+    useState<string>("last_30_days");
 
   // Budget states
   const [budgetAggregatedData, setBudgetAggregatedData] =
@@ -6878,134 +6889,121 @@ const Dashboard = () => {
               }
             />
           ) : (
-            <Grid>
-              {/* Outstanding Pie Chart */}
-              <Grid.Col span={4}>
-                <Outstanding
-                  drillLevel={drillLevel}
-                  selectedMetric={selectedMetric}
-                  companySummary={companySummary}
-                  locationData={locationData}
-                  salespersonData={salespersonData}
-                  selectedCompanyCtx={selectedCompanyCtx}
-                  selectedCompany={selectedCompany}
-                  selectedLocation={selectedLocation}
-                  contextTotals={contextTotals}
-                  hoverTotals={hoverTotals}
-                  isLoadingOutstandingChart={isLoadingOutstandingChart}
-                  handleOutstandingViewAll={handleOutstandingViewAll}
-                  handleBack={handleBack}
-                  handlePieClick={handlePieClick}
-                />
-              </Grid.Col>
+            <Box>
+              {/* Section 1: Customer Interaction Status */}
+              <CustomerInteractionStatus
+                newCustomerDrillLevel={newCustomerDrillLevel}
+                newCustomerRawData={newCustomerRawData}
+                newCustomerSelectedSalesperson={newCustomerSelectedSalesperson}
+                newCustomerPeriod={newCustomerPeriod}
+                isLoadingNewCustomer={isLoadingNewCustomer}
+                handleNewCustomerViewAll={handleNewCustomerViewAll}
+                handleNewCustomerSalespersonClick={handleNewCustomerSalespersonClick}
+                handleNewCustomerBack={handleNewCustomerBack}
+                handleNewCustomerPeriodChange={handleNewCustomerPeriodChange}
+                lostCustomerDrillLevel={lostCustomerDrillLevel}
+                lostCustomerRawData={lostCustomerRawData}
+                lostCustomerSelectedSalesperson={lostCustomerSelectedSalesperson}
+                lostCustomerPeriod={lostCustomerPeriod}
+                isLoadingLostCustomer={isLoadingLostCustomer}
+                handleLostCustomerViewAll={handleLostCustomerViewAll}
+                handleLostCustomerSalespersonClick={handleLostCustomerSalespersonClick}
+                handleLostCustomerBack={handleLostCustomerBack}
+                handleLostCustomerPeriodChange={handleLostCustomerPeriodChange}
+                customerNotVisitedDrillLevel={customerNotVisitedDrillLevel}
+                customerNotVisitedRawData={customerNotVisitedRawData}
+                customerNotVisitedSelectedSalesperson={customerNotVisitedSelectedSalesperson}
+                customerNotVisitedPeriod={customerNotVisitedPeriod}
+                isLoadingCustomerNotVisited={isLoadingCustomerNotVisited}
+                handleCustomerNotVisitedViewAll={handleCustomerNotVisitedViewAll}
+                handleCustomerNotVisitedCompanyClick={handleCustomerNotVisitedCompanyClick}
+                handleCustomerNotVisitedSalespersonClick={handleCustomerNotVisitedSalespersonClick}
+                handleCustomerNotVisitedBack={handleCustomerNotVisitedBack}
+                handleCustomerNotVisitedPeriodChange={handleCustomerNotVisitedPeriodChange}
+                customerInteractionPeriod={customerInteractionPeriod}
+                setCustomerInteractionPeriod={setCustomerInteractionPeriod}
+              />
 
-              {/* Budget Bar Chart */}
-              <Grid.Col span={4}>
-                <Budget
-                  budgetDrillLevel={budgetDrillLevel}
-                  budgetSelectedCompany={budgetSelectedCompany}
-                  budgetSelectedSalesperson={budgetSelectedSalesperson}
-                  budgetDateRange={budgetDateRange}
-                  budgetWindowStart={budgetWindowStart}
-                  budgetRawData={budgetRawData}
-                  budgetAggregatedData={budgetAggregatedData}
-                  budgetHoverTotals={budgetHoverTotals}
-                  isLoadingBudget={isLoadingBudget}
-                  budgetStartMonth={budgetStartMonth}
-                  budgetEndMonth={budgetEndMonth}
-                  budgetType={budgetType}
-                  selectedYear={selectedYear}
-                  fromMonthOptions={fromMonthOptions}
-                  toMonthOptions={toMonthOptions}
-                  setBudgetDrillLevel={setBudgetDrillLevel}
-                  setBudgetSelectedCompany={setBudgetSelectedCompany}
-                  setBudgetSelectedSalesperson={setBudgetSelectedSalesperson}
-                  setBudgetWindowStart={setBudgetWindowStart}
-                  setBudgetRawData={setBudgetRawData}
-                  setBudgetAggregatedData={setBudgetAggregatedData}
-                  setSearchSalesman={setSearchSalesman}
-                  setSelectedCompany={setSelectedCompany}
-                  setIsLoadingBudget={setIsLoadingBudget}
-                  setBudgetType={setBudgetType}
-                  setSelectedYear={setSelectedYear}
-                  handleBudgetViewAll={handleBudgetViewAll}
-                  handleBudgetBarClick={handleBudgetBarClick}
-                  handleBudgetTypeChange={handleBudgetTypeChange}
-                  handleBudgetMonthFilterChange={handleBudgetMonthFilterChange}
-                />
-              </Grid.Col>
+              {/* Section 2: Call Entry */}
+              <CallEntrySection
+                callEntrySummary={callEntrySummary}
+                isLoadingCallEntry={isLoadingCallEntry}
+                handleCallEntryViewAll={handleCallEntryViewAll}
+                selectedPeriod={callEntryPeriod}
+                setSelectedPeriod={handleCallEntryPeriodChange}
+              />
 
-              {/* Call Entry & Enquiry */}
-              <Grid.Col span={4} style={{ flexDirection: "column" }}>
-                <CallEntry
-                  callEntrySummary={callEntrySummary}
-                  isLoadingCallEntry={isLoadingCallEntry}
-                  handleCallEntryViewAll={handleCallEntryViewAll}
-                  selectedPeriod={callEntryPeriod}
-                  setSelectedPeriod={handleCallEntryPeriodChange}
-                />
+              {/* Section 3 & 4: Outstanding and Enquiry (side by side) */}
+              <Grid mb="lg">
+                <Grid.Col span={6}>
+                  <OutstandingSection
+                    drillLevel={drillLevel}
+                    selectedMetric={selectedMetric}
+                    companySummary={companySummary}
+                    locationData={locationData}
+                    salespersonData={salespersonData}
+                    selectedCompanyCtx={selectedCompanyCtx}
+                    selectedCompany={selectedCompany}
+                    selectedLocation={selectedLocation}
+                    contextTotals={contextTotals}
+                    hoverTotals={hoverTotals}
+                    isLoadingOutstandingChart={isLoadingOutstandingChart}
+                    handleOutstandingViewAll={handleOutstandingViewAll}
+                    handleBack={handleBack}
+                    handlePieClick={handlePieClick}
+                    outstandingPeriod={outstandingPeriod}
+                    setOutstandingPeriod={setOutstandingPeriod}
+                  />
+                </Grid.Col>
 
-                <Enquiry
-                  enquiryConversionAggregatedData={
-                    enquiryConversionAggregatedData
-                  }
-                  isLoadingEnquiryConversion={isLoadingEnquiryConversion}
-                  isLoadingEnquiryChart={isLoadingEnquiryChart}
-                  enquiryView={enquiryView}
-                  setEnquiryView={setEnquiryView}
-                  handleEnquiryConversionViewAll={
-                    handleEnquiryConversionViewAll
-                  }
-                  selectedPeriod={enquiryPeriod}
-                  setSelectedPeriod={handleEnquiryPeriodChange}
-                />
-              </Grid.Col>
+                <Grid.Col span={6}>
+                  <EnquirySection
+                    enquiryConversionAggregatedData={enquiryConversionAggregatedData}
+                    isLoadingEnquiryConversion={isLoadingEnquiryConversion}
+                    isLoadingEnquiryChart={isLoadingEnquiryChart}
+                    enquiryView={enquiryView}
+                    setEnquiryView={setEnquiryView}
+                    handleEnquiryConversionViewAll={handleEnquiryConversionViewAll}
+                    selectedPeriod={enquiryPeriod}
+                    setSelectedPeriod={handleEnquiryPeriodChange}
+                  />
+                </Grid.Col>
+              </Grid>
 
-              <Grid.Col span={4}>
-                <NewCustomers
-                  drillLevel={newCustomerDrillLevel}
-                  data={newCustomerRawData}
-                  selectedSalesperson={newCustomerSelectedSalesperson}
-                  period={newCustomerPeriod}
-                  loading={isLoadingNewCustomer}
-                  handleViewAll={handleNewCustomerViewAll}
-                  handleSalespersonClick={handleNewCustomerSalespersonClick}
-                  handleBack={handleNewCustomerBack}
-                  handlePeriodChange={handleNewCustomerPeriodChange}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={4}>
-                <LostCustomer
-                  drillLevel={lostCustomerDrillLevel}
-                  data={lostCustomerRawData}
-                  selectedSalesperson={lostCustomerSelectedSalesperson}
-                  period={lostCustomerPeriod}
-                  loading={isLoadingLostCustomer}
-                  handleViewAll={handleLostCustomerViewAll}
-                  handleSalespersonClick={handleLostCustomerSalespersonClick}
-                  handleBack={handleLostCustomerBack}
-                  handlePeriodChange={handleLostCustomerPeriodChange}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={4}>
-                <CustomerNotVisited
-                  drillLevel={customerNotVisitedDrillLevel}
-                  data={customerNotVisitedRawData}
-                  selectedSalesperson={customerNotVisitedSelectedSalesperson}
-                  period={customerNotVisitedPeriod}
-                  loading={isLoadingCustomerNotVisited}
-                  handleViewAll={handleCustomerNotVisitedViewAll}
-                  handleCompanyClick={handleCustomerNotVisitedCompanyClick}
-                  handleSalespersonClick={
-                    handleCustomerNotVisitedSalespersonClick
-                  }
-                  handleBack={handleCustomerNotVisitedBack}
-                  handlePeriodChange={handleCustomerNotVisitedPeriodChange}
-                />
-              </Grid.Col>
-            </Grid>
+              {/* Section 5: Budget vs Actual */}
+              <BudgetSection
+                budgetDrillLevel={budgetDrillLevel}
+                budgetSelectedCompany={budgetSelectedCompany}
+                budgetSelectedSalesperson={budgetSelectedSalesperson}
+                budgetDateRange={budgetDateRange}
+                budgetWindowStart={budgetWindowStart}
+                budgetRawData={budgetRawData}
+                budgetAggregatedData={budgetAggregatedData}
+                budgetHoverTotals={budgetHoverTotals}
+                isLoadingBudget={isLoadingBudget}
+                budgetStartMonth={budgetStartMonth}
+                budgetEndMonth={budgetEndMonth}
+                budgetType={budgetType}
+                selectedYear={selectedYear}
+                fromMonthOptions={fromMonthOptions}
+                toMonthOptions={toMonthOptions}
+                setBudgetDrillLevel={setBudgetDrillLevel}
+                setBudgetSelectedCompany={setBudgetSelectedCompany}
+                setBudgetSelectedSalesperson={setBudgetSelectedSalesperson}
+                setBudgetWindowStart={setBudgetWindowStart}
+                setBudgetRawData={setBudgetRawData}
+                setBudgetAggregatedData={setBudgetAggregatedData}
+                setSearchSalesman={setSearchSalesman}
+                setSelectedCompany={setSelectedCompany}
+                setIsLoadingBudget={setIsLoadingBudget}
+                setBudgetType={setBudgetType}
+                setSelectedYear={setSelectedYear}
+                handleBudgetViewAll={handleBudgetViewAll}
+                handleBudgetBarClick={handleBudgetBarClick}
+                handleBudgetTypeChange={handleBudgetTypeChange}
+                handleBudgetMonthFilterChange={handleBudgetMonthFilterChange}
+              />
+            </Box>
           )}
         </Tabs.Panel>
 
