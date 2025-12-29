@@ -1,0 +1,1296 @@
+import {
+  Box,
+  Title,
+  Grid,
+  Select,
+  Button,
+  Stack,
+  TextInput,
+  NumberInput,
+  Group,
+  Text,
+  Paper,
+  Modal,
+  Flex,
+  Divider,
+  LoadingOverlay,
+  Center,
+} from "@mantine/core";
+import { DateInput } from "@mantine/dates";
+import { useForm } from "@mantine/form";
+import {
+  IconCalendar,
+  IconPlus,
+  IconTrash,
+  IconInfoCircle,
+  IconSparkles,
+} from "@tabler/icons-react";
+import dayjs from "dayjs";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { ToastNotification, SearchableSelect } from "../../../components";
+import { postAPICall } from "../../../service/postApiCall";
+import { putAPICall } from "../../../service/putApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
+import { URL } from "../../../api/serverUrls";
+import { useQuery } from "@tanstack/react-query";
+import { useDisclosure } from "@mantine/hooks";
+import * as yup from "yup";
+import { yupResolver } from "mantine-form-yup-resolver";
+import { getAPICall } from "../../../service/getApiCall";
+
+// Type definitions for better type safety
+
+type ServiceData = {
+  id: number;
+  service_code: string;
+  service_name: string;
+};
+
+// Validation schemas
+const mainFormSchema = yup.object({
+  destination_code: yup.string().required("Destination is required"),
+  service: yup.string().required("Service is required"),
+  valid_from: yup.string().required("Valid from date is required"),
+  valid_to: yup.string().required("Valid to date is required"),
+  status: yup.string().required("Status is required"),
+});
+
+const gridFormSchema = yup.object({
+  tariff_charges: yup.array().of(
+    yup.object({
+      customer_code: yup.string().required("Customer is required"),
+      charge_name: yup.string().required("Charge name is required"),
+      carrier_code: yup.string().required("Carrier is required"),
+      unit: yup.string().required("Unit is required"),
+      currency_code: yup.string().required("Currency is required"),
+      rate: yup
+        .number()
+        .required("Rate is required")
+        .positive("Rate must be positive"),
+    })
+  ),
+});
+
+// Static service data - no API call needed
+const fetchServiceMaster = async () => {
+  return [
+    {
+      id: 1,
+      service_code: "LCL",
+      service_name: "LCL",
+    },
+    {
+      id: 2,
+      service_code: "FCL",
+      service_name: "FCL",
+    },
+    {
+      id: 3,
+      service_code: "AIR",
+      service_name: "AIR",
+    },
+  ];
+};
+
+// Fetch container type data
+const fetchContainerType = async () => {
+  const response = await getAPICall(`${URL.containerType}`, API_HEADER);
+  return response;
+};
+
+function DestinationCreate() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const editData = location.state || null;
+  const isEditMode = editData?.actionType === "edit";
+  const isViewMode = editData?.actionType === "view";
+
+  // State for number of containers
+  const [numberOfContainers, setNumberOfContainers] = useState(1);
+
+  // State for SearchableSelect display values in edit mode
+  const [destinationDisplayValue, setDestinationDisplayValue] =
+    useState<string>("");
+  const [customerDisplayValues, setCustomerDisplayValues] = useState<string[]>(
+    []
+  );
+  const [carrierDisplayValues, setCarrierDisplayValues] = useState<string[]>(
+    []
+  );
+  const [currencyDisplayValues, setCurrencyDisplayValues] = useState<string[]>(
+    []
+  );
+
+  // Modal state for destination information
+  const [modalOpened, { open, close }] = useDisclosure(false);
+
+  // Modal state for create quote
+  const [quoteModalOpened, { open: openQuoteModal, close: closeQuoteModal }] =
+    useDisclosure(false);
+
+  // Loading state for API call
+  const [isLoadingCharges, setIsLoadingCharges] = useState(false);
+
+  // Quote form using useForm - updated to support multiple containers like enquiry create
+  const quoteForm = useForm({
+    initialValues: {
+      origin_code: "",
+      origin_name: "",
+      container_details: [
+        {
+          container_type_code: "",
+          no_of_containers: 1,
+          gross_weight: null,
+        },
+      ],
+    },
+    validate: {
+      origin_code: (value) => (!value ? "Origin is required" : null),
+      container_details: (value) => {
+        if (!value || value.length === 0) {
+          return "At least one container detail is required";
+        }
+        for (let i = 0; i < value.length; i++) {
+          if (!value[i].container_type_code) {
+            return `Container type is required for container ${i + 1}`;
+          }
+          if (!value[i].no_of_containers || value[i].no_of_containers < 1) {
+            return `Number of containers must be at least 1 for container ${i + 1}`;
+          }
+        }
+        return null;
+      },
+    },
+  });
+
+  // console.log("editData in DestinationCreate:", editData);
+  // console.log("isEditMode:", isEditMode);
+  // console.log("editData.id:", editData?.id);
+
+  const mainForm = useForm({
+    initialValues: {
+      destination_code: editData?.destination_code || "",
+      service: editData?.service || "",
+      valid_from: editData?.valid_from || "",
+      valid_to: editData?.valid_to || "",
+      status: editData?.status || "ACTIVE",
+    },
+    validate: yupResolver(mainFormSchema),
+  });
+
+  const gridForm = useForm({
+    initialValues: {
+      tariff_charges: [
+        {
+          customer_code: "",
+          charge_name: "",
+          carrier_code: "",
+          unit: "",
+          currency_code: "",
+          rate: "",
+          containers: 1, // Add containers field for view mode
+        },
+      ],
+    },
+    validate: yupResolver(gridFormSchema),
+  });
+
+  // Only fetch service data - other data will be fetched via SearchableSelect
+  const { data: rawServiceData = [] } = useQuery({
+    queryKey: ["serviceMaster"],
+    queryFn: fetchServiceMaster,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  // Fetch container type data for quote modal
+  const { data: rawContainerData = [] } = useQuery({
+    queryKey: ["containerType"],
+    queryFn: fetchContainerType,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  // Only transform service data - other data will be handled by SearchableSelect
+
+  const serviceData = useMemo(() => {
+    if (!Array.isArray(rawServiceData) || !rawServiceData.length) return [];
+
+    return rawServiceData.map((item: ServiceData) => ({
+      value: String(item.service_code),
+      label: item.service_name,
+    }));
+  }, [rawServiceData]);
+
+  const containerTypeData = useMemo(() => {
+    if (!Array.isArray(rawContainerData) || !rawContainerData.length) return [];
+
+    return rawContainerData.map((item: any) => ({
+      value: item.container_code ? String(item.container_code) : "",
+      label: item.container_name,
+    }));
+  }, [rawContainerData]);
+
+  // Calculate totals by unit type - memoized for performance
+  const calculateTotalsByUnitType = useCallback(() => {
+    const unitTotals: { [key: string]: number } = {};
+    let shipmentTotal = 0;
+    let nonShipmentTotal = 0;
+
+    gridForm.values.tariff_charges.forEach((charge) => {
+      const rate = parseFloat(String(charge.rate)) || 0;
+      const unit = charge.unit || "Unit";
+
+      if (unit === "shipment") {
+        // Shipment charges are added once (not multiplied by containers)
+        shipmentTotal += rate;
+        if (!unitTotals[unit]) {
+          unitTotals[unit] = 0;
+        }
+        unitTotals[unit] += rate;
+      } else {
+        // Non-shipment charges are multiplied by containers
+        nonShipmentTotal += rate;
+        if (!unitTotals[unit]) {
+          unitTotals[unit] = 0;
+        }
+        unitTotals[unit] += rate;
+      }
+    });
+
+    // Calculate final totals for display
+    const finalUnitTotals: { [key: string]: number } = {};
+    Object.entries(unitTotals).forEach(([unit, total]) => {
+      if (unit === "shipment") {
+        finalUnitTotals[unit] = total; // Shipment stays as is
+      } else {
+        // Add shipment total to each non-shipment unit
+        finalUnitTotals[unit] = total * numberOfContainers + shipmentTotal;
+      }
+    });
+
+    // Overall total: non-shipment * containers + shipment
+    const overallTotal = nonShipmentTotal * numberOfContainers + shipmentTotal;
+
+    return { unitTotals: finalUnitTotals, overallTotal };
+  }, [gridForm.values.tariff_charges, numberOfContainers]);
+
+  // Calculate totals for display - memoized
+  const totals = useMemo(
+    () => calculateTotalsByUnitType(),
+    [calculateTotalsByUnitType]
+  );
+  const { unitTotals } = totals;
+
+  // Simplified effect to update form values when editData changes
+  useEffect(() => {
+    if (editData && (isEditMode || isViewMode)) {
+      // Update main form with basic data
+      mainForm.setValues({
+        destination_code: editData.destination_code || "",
+        service: editData.service || "",
+        valid_from: editData.valid_from || "",
+        valid_to: editData.valid_to || "",
+        status: editData.status || "ACTIVE",
+      });
+
+      // Set display value for destination SearchableSelect
+      setDestinationDisplayValue(editData.destination_name || "");
+
+      // Update grid form with tariff charges data
+      if (editData.tariff_charges && editData.tariff_charges.length > 0) {
+        const mappedCharges = editData.tariff_charges.map((charge: any) => ({
+          customer_code: charge.customer_code || "",
+          customer_name: charge.customer_name || "",
+          charge_name: charge.charge_name || "",
+          carrier_code: charge.carrier_code || "",
+          carrier_name: charge.carrier_name || "",
+          unit: charge.unit || "",
+          currency_code: charge.currency_code || "",
+          currency_name: charge.currency_name || "",
+          rate: charge.rate || "",
+          containers: 1, // Default containers for view mode
+        }));
+
+        gridForm.setValues({
+          tariff_charges: mappedCharges,
+        });
+
+        // Set display values for SearchableSelect components
+        const customerDisplays = mappedCharges.map(
+          (charge: any) => charge.customer_name || charge.customer_code || ""
+        );
+        const carrierDisplays = mappedCharges.map(
+          (charge: any) => charge.carrier_name || ""
+        );
+        const currencyDisplays = mappedCharges.map(
+          (charge: any) => charge.currency_name || charge.currency_code || ""
+        );
+
+        setCustomerDisplayValues(customerDisplays);
+        setCarrierDisplayValues(carrierDisplays);
+        setCurrencyDisplayValues(currencyDisplays);
+      }
+    }
+  }, [editData, isEditMode, isViewMode]);
+
+  const tariffSubmit = async () => {
+    // Validate forms before submission
+    const mainFormValidation = mainForm.validate();
+    const gridFormValidation = gridForm.validate();
+
+    if (mainFormValidation.hasErrors || gridFormValidation.hasErrors) {
+      ToastNotification({
+        type: "error",
+        message: "Please fix validation errors before submitting",
+      });
+      return;
+    }
+
+    const mainFormVal = mainForm.values;
+    const gridFormVal = gridForm.values;
+    const values = {
+      ...mainFormVal,
+      ...gridFormVal,
+    };
+    console.log("Final data----", values);
+
+    try {
+      let res;
+      if (isEditMode) {
+        // Update existing destination
+        const updateUrl = `${URL.destination}${editData.id}/`;
+        console.log("PUT URL:", updateUrl);
+        console.log("PUT Values:", values);
+        res = await putAPICall(updateUrl, values as any, API_HEADER);
+        if (res) {
+          ToastNotification({
+            type: "success",
+            message: "Destination is updated successfully",
+          });
+          navigate("/tariff/destination");
+        }
+      } else {
+        // Create new destination
+        res = await postAPICall(URL.destination, values as any, API_HEADER);
+        if (res) {
+          ToastNotification({
+            type: "success",
+            message: "Destination charge is created",
+          });
+          navigate("/tariff/destination");
+        }
+      }
+    } catch (err: any) {
+      ToastNotification({
+        type: "error",
+        message: `Error while ${isEditMode ? "updating" : "creating"} destination: ${err?.message}`,
+      });
+    }
+  };
+
+  // Get selected destination name for modal display
+  const selectedDestinationName = useMemo(() => {
+    return destinationDisplayValue || null;
+  }, [destinationDisplayValue]);
+
+  // Handle quote creation
+  const handleQuoteSubmit = async () => {
+    // Validate form
+    const validation = quoteForm.validate();
+    if (validation.hasErrors) {
+      return;
+    }
+
+    if (!mainForm.values.destination_code) {
+      ToastNotification({
+        type: "error",
+        message: "Destination code is missing",
+      });
+      return;
+    }
+
+    if (!mainForm.values.service) {
+      ToastNotification({
+        type: "error",
+        message: "Service is missing",
+      });
+      return;
+    }
+
+    // Get carrier code from the first tariff charge
+    const carrierCode = gridForm.values.tariff_charges[0]?.carrier_code;
+    const carrierName = carrierDisplayValues[0] || carrierCode;
+
+    if (!carrierCode) {
+      ToastNotification({
+        type: "error",
+        message: "Carrier code is missing from tariff charges",
+      });
+      return;
+    }
+
+    // Create API payload - updated to support multiple containers
+    const apiPayload = {
+      destination_code: mainForm.values.destination_code,
+      carrier_code: carrierCode,
+      service: mainForm.values.service,
+      container_details: quoteForm.values.container_details.map(
+        (container) => ({
+          container_type: container.container_type_code,
+          no_of_containers: container.no_of_containers,
+          gross_weight: container.gross_weight || 0,
+        })
+      ),
+    };
+
+    console.log("API Payload:", apiPayload);
+
+    setIsLoadingCharges(true);
+
+    try {
+      // Call API to get charges
+      const response = await postAPICall(
+        URL.getChargeswithoutEnquiry,
+        apiPayload,
+        API_HEADER
+      );
+
+      console.log("API Response:", response);
+
+      // Type guard for response
+      const apiResponse = response as {
+        data?: Array<{
+          tariff_charges?: any[];
+          data?: any[];
+        }>;
+      };
+
+      if (
+        !apiResponse ||
+        !apiResponse.data ||
+        !Array.isArray(apiResponse.data)
+      ) {
+        ToastNotification({
+          type: "error",
+          message: "No charges data found",
+        });
+        setIsLoadingCharges(false);
+        return;
+      }
+
+      // Extract charges from the first data item's tariff_charges
+      const chargesData =
+        apiResponse.data[0]?.tariff_charges || apiResponse.data[0]?.data || [];
+
+      if (!chargesData || chargesData.length === 0) {
+        ToastNotification({
+          type: "error",
+          message: "No charges found in the response",
+        });
+        setIsLoadingCharges(false);
+        return;
+      }
+
+      // Prepare enquiry data for stepper 2
+      const enquiryData = {
+        // Basic enquiry info
+        customer_code: "",
+        customer_name: "",
+        enquiry_received_date: dayjs().format("YYYY-MM-DD"),
+        sales_person: "",
+        sales_coordinator: "",
+        customer_services: "",
+
+        // Service details for stepper 2
+        services: [
+          {
+            service: mainForm.values.service,
+            trade: "Export", // Default value, can be changed by user
+            origin_code: quoteForm.values.origin_code,
+            origin_name: quoteForm.values.origin_name,
+            destination_code: mainForm.values.destination_code,
+            destination_name: destinationDisplayValue,
+            pickup: false,
+            delivery: false,
+            pickup_location: "",
+            delivery_location: "",
+            shipment_terms_code: "",
+            hazardous_cargo: false,
+
+            // FCL details with multiple container types
+            fcl_details: quoteForm.values.container_details.map(
+              (container) => ({
+                container_type: container.container_type_code,
+                no_of_containers: container.no_of_containers,
+                gross_weight: container.gross_weight,
+              })
+            ),
+          },
+        ],
+      };
+
+      // Prepare quotation data with charges from API response
+      const quotationData = {
+        carrier_code: carrierCode,
+        carrier: carrierName,
+        charges: chargesData,
+        origin_code: quoteForm.values.origin_code,
+        destination_code: mainForm.values.destination_code,
+        service: mainForm.values.service,
+        container_details: quoteForm.values.container_details,
+      };
+
+      console.log("Navigating to enquiry-create with data:", {
+        enquiryData,
+        quotationData,
+      });
+
+      setIsLoadingCharges(false);
+      closeQuoteModal();
+
+      // Navigate to enquiry-create with state
+      navigate("/enquiry-create", {
+        state: {
+          ...enquiryData,
+          quotationData,
+          actionType: "createQuote",
+          fromDestination: true,
+        },
+      });
+
+      // Reset form fields
+      quoteForm.reset();
+    } catch (error: any) {
+      console.error("Error fetching charges:", error);
+      ToastNotification({
+        type: "error",
+        message: error?.message || "Error fetching charges. Please try again.",
+      });
+      setIsLoadingCharges(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Use full width container for better alignment */}
+      <Box w="100%" p="md">
+        {" "}
+        <Title order={4} mt="md" mb={"sm"} c={"#105476"}>
+          {isViewMode
+            ? "View Destination"
+            : isEditMode
+              ? "Edit Destination"
+              : "Create Destination"}
+        </Title>
+        <Grid w="100%" mb="lg" gutter="md">
+          <Grid.Col span={3.5}>
+            <Flex gap="sm" align="flex-end">
+              <div
+                style={{
+                  flex: mainForm.values.destination_code ? 0.75 : 1,
+                  transition: "flex 0.3s ease",
+                }}
+              >
+                <SearchableSelect
+                  apiEndpoint={URL.portMaster}
+                  label="Destination"
+                  placeholder="Search by port code or name"
+                  value={mainForm.values.destination_code}
+                  displayValue={destinationDisplayValue}
+                  onChange={(value, selectedData) => {
+                    mainForm.setFieldValue("destination_code", value || "");
+                    if (selectedData) {
+                      setDestinationDisplayValue(
+                        selectedData.label.split(" (")[0] || ""
+                      );
+                    }
+                  }}
+                  searchFields={["port_code", "port_name"]}
+                  displayFormat={(item: any) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  required={!isViewMode}
+                  disabled={isViewMode}
+                  minSearchLength={3}
+                />
+              </div>
+
+              {mainForm.values.destination_code && (
+                <div style={{ flex: 0.25 }}>
+                  <Button
+                    size="xs"
+                    mb={4}
+                    color="#105476"
+                    onClick={() => open()}
+                  >
+                    <IconInfoCircle size={16} />
+                  </Button>
+                </div>
+              )}
+            </Flex>
+
+            <Modal
+              opened={modalOpened}
+              onClose={close}
+              title="Destination Information"
+              centered
+            >
+              <Divider my="sm" />
+
+              <Stack gap="sm">
+                <Text size="md" fw={600} color="blue">
+                  Destination Name:{" "}
+                  <Text span fw={500} color="dark">
+                    {selectedDestinationName}
+                  </Text>
+                </Text>
+
+                <Text size="md" fw={600} color="blue">
+                  Destination Code:{" "}
+                  <Text span fw={500} color="dark">
+                    {mainForm.values.destination_code}
+                  </Text>
+                </Text>
+
+                <Text size="sm" c="dimmed" mt="sm">
+                  This destination is available for tariff configuration.
+                </Text>
+              </Stack>
+            </Modal>
+
+            {/* Create Quote Modal */}
+            <Modal
+              opened={quoteModalOpened}
+              onClose={closeQuoteModal}
+              title="Create Quotation"
+              centered
+              size="xl"
+              closeOnClickOutside={!isLoadingCharges}
+              closeOnEscape={!isLoadingCharges}
+              withCloseButton={!isLoadingCharges}
+            >
+              <LoadingOverlay
+                visible={isLoadingCharges}
+                // zIndex={1000}
+                // overlayProps={{ radius: "sm", blur: 2 }}
+                // loaderProps={{ color: "#105476", type: "bars" }}
+              />
+
+              <Divider my="sm" />
+
+              {isLoadingCharges && (
+                <Center py="xl">
+                  <Stack align="center" gap="md">
+                    <Text size="lg" fw={600} c="#105476">
+                      Redirecting to create quotation...
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                      Please wait while fetching the charges
+                    </Text>
+                  </Stack>
+                </Center>
+              )}
+
+              {!isLoadingCharges && (
+                <Stack gap="md">
+                  <Text size="sm" c="dimmed">
+                    Enter the origin and container type to create a quote based
+                    on the current destination tariff data.
+                  </Text>
+
+                  <SearchableSelect
+                    label="Origin"
+                    placeholder="Type origin code or name"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={quoteForm.values.origin_code}
+                    displayValue={
+                      quoteForm.values.origin_name
+                        ? `${quoteForm.values.origin_name} (${quoteForm.values.origin_code})`
+                        : quoteForm.values.origin_code
+                    }
+                    onChange={(value, selectedData) => {
+                      quoteForm.setFieldValue("origin_code", value || "");
+                      if (selectedData) {
+                        quoteForm.setFieldValue(
+                          "origin_name",
+                          selectedData.label.split(" (")[0] || ""
+                        );
+                      }
+                    }}
+                    required
+                    minSearchLength={3}
+                    error={quoteForm.errors.origin_code as string}
+                  />
+
+                  {/* Container Details - Multiple containers like enquiry create */}
+                  <Stack gap="md">
+                    <Text size="sm" fw={600} c="#105476">
+                      Container Details
+                    </Text>
+                    {quoteForm.values.container_details.map(
+                      (_, containerIndex) => (
+                        <Box
+                          key={`container-${containerIndex}`}
+                          p="sm"
+                          style={{
+                            backgroundColor: "#f8f9fa",
+                            borderRadius: 4,
+                            border: "1px solid #dee2e6",
+                          }}
+                        >
+                          <Grid>
+                            <Grid.Col span={4}>
+                              <Select
+                                key={quoteForm.key(
+                                  `container_details.${containerIndex}.container_type_code`
+                                )}
+                                label={
+                                  containerIndex === 0 ? "Container Type" : ""
+                                }
+                                placeholder="Select Container Type"
+                                searchable
+                                data={containerTypeData}
+                                withAsterisk
+                                nothingFoundMessage="No container types found"
+                                {...quoteForm.getInputProps(
+                                  `container_details.${containerIndex}.container_type_code`
+                                )}
+                                onFocus={(event) => {
+                                  const input =
+                                    event.target as HTMLInputElement;
+                                  if (input && input.value) {
+                                    input.select();
+                                  }
+                                }}
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={3}>
+                              <NumberInput
+                                key={quoteForm.key(
+                                  `container_details.${containerIndex}.no_of_containers`
+                                )}
+                                label={
+                                  containerIndex === 0 ? "No of Containers" : ""
+                                }
+                                placeholder="Enter number of containers"
+                                min={1}
+                                withAsterisk
+                                {...quoteForm.getInputProps(
+                                  `container_details.${containerIndex}.no_of_containers`
+                                )}
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={3}>
+                              <NumberInput
+                                key={quoteForm.key(
+                                  `container_details.${containerIndex}.gross_weight`
+                                )}
+                                label={
+                                  containerIndex === 0
+                                    ? "Gross Weight (kg)"
+                                    : ""
+                                }
+                                placeholder="Enter gross weight"
+                                min={0}
+                                {...quoteForm.getInputProps(
+                                  `container_details.${containerIndex}.gross_weight`
+                                )}
+                              />
+                            </Grid.Col>
+                            {/* Add button only on the last container detail */}
+                            {containerIndex ===
+                              quoteForm.values.container_details.length - 1 && (
+                              <Grid.Col span={1}>
+                                <Button
+                                  variant="light"
+                                  color="#105476"
+                                  mt={containerIndex === 0 ? 25 : 0}
+                                  size="sm"
+                                  onClick={() =>
+                                    quoteForm.insertListItem(
+                                      "container_details",
+                                      {
+                                        container_type_code: "",
+                                        no_of_containers: 1,
+                                        gross_weight: null,
+                                      }
+                                    )
+                                  }
+                                >
+                                  <IconPlus size={16} />
+                                </Button>
+                              </Grid.Col>
+                            )}
+                            {/* Remove button */}
+                            <Grid.Col span={1}>
+                              {quoteForm.values.container_details.length > 1 ? (
+                                <Button
+                                  variant="light"
+                                  color="red"
+                                  mt={containerIndex === 0 ? 25 : 0}
+                                  size="sm"
+                                  onClick={() =>
+                                    quoteForm.removeListItem(
+                                      "container_details",
+                                      containerIndex
+                                    )
+                                  }
+                                >
+                                  <IconTrash size={16} />
+                                </Button>
+                              ) : (
+                                ""
+                              )}
+                            </Grid.Col>
+                          </Grid>
+                        </Box>
+                      )
+                    )}
+                    {quoteForm.errors.container_details && (
+                      <Text size="sm" c="red">
+                        {quoteForm.errors.container_details as string}
+                      </Text>
+                    )}
+                  </Stack>
+
+                  <Divider my="sm" />
+
+                  <Group justify="flex-end" mt="md">
+                    <Button
+                      variant="outline"
+                      onClick={closeQuoteModal}
+                      disabled={isLoadingCharges}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      color="teal"
+                      onClick={handleQuoteSubmit}
+                      loading={isLoadingCharges}
+                      disabled={isLoadingCharges}
+                    >
+                      Create Quotation
+                    </Button>
+                  </Group>
+                </Stack>
+              )}
+            </Modal>
+          </Grid.Col>
+          <Grid.Col span={2}>
+            <Select
+              searchable
+              key={mainForm.key("service")}
+              label="Service"
+              withAsterisk={!isViewMode}
+              placeholder="Select Service"
+              data={serviceData}
+              disabled={isViewMode}
+              {...mainForm.getInputProps("service")}
+              onFocus={(event) => {
+                // Auto-select all text when input is focused
+                const input = event.target as HTMLInputElement;
+                if (input && input.value) {
+                  input.select();
+                }
+              }}
+            />
+          </Grid.Col>
+          <Grid.Col span={2}>
+            <Box maw={300} mx="auto">
+              <DateInput
+                label="Valid from"
+                withAsterisk={!isViewMode}
+                key={mainForm.key("valid_from")}
+                placeholder="YYYY-MM-DD"
+                disabled={isViewMode}
+                value={
+                  mainForm.values.valid_from
+                    ? dayjs(mainForm.values.valid_from).toDate()
+                    : null
+                }
+                onChange={(date) => {
+                  const formatted = date
+                    ? dayjs(date).format("YYYY-MM-DD")
+                    : "";
+                  mainForm.setFieldValue("valid_from", formatted);
+                  console.log("formatted=", formatted);
+                }}
+                valueFormat="YYYY-MM-DD"
+                leftSection={<IconCalendar size={18} />}
+                leftSectionPointerEvents="none"
+                radius="md"
+                size="sm"
+              />
+            </Box>
+          </Grid.Col>
+          <Grid.Col span={2}>
+            <Box maw={300} mx="auto">
+              <DateInput
+                label="Valid to"
+                withAsterisk={!isViewMode}
+                key={mainForm.key("valid_to")}
+                placeholder="YYYY-MM-DD"
+                disabled={isViewMode}
+                value={
+                  mainForm.values.valid_to
+                    ? dayjs(mainForm.values.valid_to).toDate()
+                    : null
+                }
+                onChange={(date) => {
+                  const formatted = date
+                    ? dayjs(date).format("YYYY-MM-DD")
+                    : "";
+                  mainForm.setFieldValue("valid_to", formatted);
+                  console.log("formatted=", formatted);
+                }}
+                valueFormat="YYYY-MM-DD"
+                leftSection={<IconCalendar size={18} />}
+                leftSectionPointerEvents="none"
+                radius="md"
+                size="sm"
+              />
+            </Box>
+          </Grid.Col>
+          <Grid.Col span={1.5}>
+            <NumberInput
+              label="No of Containers"
+              min={1}
+              value={numberOfContainers}
+              onChange={(value) => setNumberOfContainers(Number(value) || 1)}
+              disabled={false}
+            />
+          </Grid.Col>
+          {/* <Grid.Col span={2}>
+            <Button
+              color="#105476"
+              mt={25}
+              onClick={() => navigate("/tariff-bulk-upload")}
+            >
+              Upload File
+            </Button>
+          </Grid.Col> */}
+          {/* <Grid.Col span={2}>
+              <FileInput
+                clearable
+              //   accept="image/png,image/jpeg"
+                label="Upload file"
+                placeholder="Upload file"
+              />
+            </Grid.Col> */}
+        </Grid>
+        <Stack gap="md">
+          {gridForm.values.tariff_charges.map((_, index) => (
+            <Grid key={index} w="100%" gutter="md">
+              <Grid.Col span={isViewMode ? 2.5 : 2.5}>
+                <SearchableSelect
+                  apiEndpoint={URL.customer}
+                  label={index === 0 ? "Customer Name" : ""}
+                  placeholder="Search by customer code or name"
+                  value={gridForm.values.tariff_charges[index].customer_code}
+                  displayValue={customerDisplayValues[index] || ""}
+                  onChange={(value, selectedData) => {
+                    gridForm.setFieldValue(
+                      `tariff_charges.${index}.customer_code`,
+                      value || ""
+                    );
+                    // Update the display value for this specific index
+                    const newDisplayValues = [...customerDisplayValues];
+                    if (selectedData) {
+                      newDisplayValues[index] = selectedData.label || "";
+                    }
+                    setCustomerDisplayValues(newDisplayValues);
+                  }}
+                  searchFields={["customer_code", "customer_name"]}
+                  displayFormat={(item: any) => ({
+                    value: String(item.customer_code),
+                    label: String(item.customer_name),
+                  })}
+                  required={!isViewMode}
+                  disabled={isViewMode}
+                  minSearchLength={3}
+                />
+              </Grid.Col>
+              <Grid.Col span={isViewMode ? 2 : 2}>
+                <TextInput
+                  label={index === 0 ? "Charge Name" : ""}
+                  placeholder="Enter Charge Name"
+                  key={`charge-name-${index}`}
+                  withAsterisk={!isViewMode}
+                  variant="default"
+                  disabled={isViewMode}
+                  {...gridForm.getInputProps(
+                    `tariff_charges.${index}.charge_name`
+                  )}
+                />
+              </Grid.Col>
+              <Grid.Col span={isViewMode ? 2.5 : 1.5}>
+                <SearchableSelect
+                  apiEndpoint={URL.carrier}
+                  label={index === 0 ? "Carrier" : ""}
+                  placeholder="Search by carrier code or name"
+                  value={gridForm.values.tariff_charges[index].carrier_code}
+                  displayValue={carrierDisplayValues[index] || ""}
+                  onChange={(value, selectedData) => {
+                    gridForm.setFieldValue(
+                      `tariff_charges.${index}.carrier_code`,
+                      value || ""
+                    );
+                    // Update the display value for this specific index
+                    const newDisplayValues = [...carrierDisplayValues];
+                    if (selectedData) {
+                      newDisplayValues[index] = selectedData.label || "";
+                    }
+                    setCarrierDisplayValues(newDisplayValues);
+                  }}
+                  searchFields={["carrier_code", "carrier_name"]}
+                  displayFormat={(item: any) => ({
+                    value: String(item.carrier_code),
+                    label: String(item.carrier_name),
+                  })}
+                  required={!isViewMode}
+                  disabled={isViewMode}
+                  minSearchLength={3}
+                />
+              </Grid.Col>
+              <Grid.Col span={isViewMode ? 1.5 : 1.5}>
+                <Select
+                  searchable
+                  label={index === 0 ? "Unit" : ""}
+                  withAsterisk={!isViewMode}
+                  placeholder="Select Unit"
+                  data={[
+                    { value: "20ft", label: "20ft Container" },
+                    { value: "40ft", label: "40ft Container" },
+                    { value: "shipment", label: "shipment" },
+                    { value: "CBM", label: "CBM" },
+                    { value: "W/M", label: "W/m" },
+                  ]}
+                  key={
+                    gridForm.values.tariff_charges[index].unit ||
+                    `unit-${index}-unit`
+                  }
+                  disabled={isViewMode}
+                  {...gridForm.getInputProps(`tariff_charges.${index}.unit`)}
+                  onFocus={(event) => {
+                    // Auto-select all text when input is focused
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                />
+              </Grid.Col>
+              <Grid.Col span={isViewMode ? 1.5 : 1.5}>
+                <SearchableSelect
+                  apiEndpoint={URL.currencyMaster}
+                  label={index === 0 ? "Currency" : ""}
+                  placeholder="Search by currency code"
+                  value={gridForm.values.tariff_charges[index].currency_code}
+                  displayValue={currencyDisplayValues[index] || ""}
+                  onChange={(value, selectedData) => {
+                    gridForm.setFieldValue(
+                      `tariff_charges.${index}.currency_code`,
+                      value || ""
+                    );
+                    // Update the display value for this specific index
+                    const newDisplayValues = [...currencyDisplayValues];
+                    if (selectedData) {
+                      newDisplayValues[index] = selectedData.label || "";
+                    }
+                    setCurrencyDisplayValues(newDisplayValues);
+                  }}
+                  searchFields={["code", "name"]}
+                  displayFormat={(item: any) => ({
+                    value: String(item.code),
+                    label: String(item.code),
+                  })}
+                  required={!isViewMode}
+                  disabled={isViewMode}
+                  minSearchLength={2}
+                />
+              </Grid.Col>
+              <Grid.Col span={isViewMode ? 2 : 1.5}>
+                <NumberInput
+                  key={`rate-name-${index}`}
+                  min={1}
+                  label={index === 0 ? "Rate" : ""}
+                  withAsterisk={!isViewMode}
+                  disabled={isViewMode}
+                  {...gridForm.getInputProps(`tariff_charges.${index}.rate`)}
+                />
+              </Grid.Col>
+              {!isViewMode && (
+                <>
+                  {index === gridForm.values.tariff_charges.length - 1 && (
+                    <Grid.Col span={0.75}>
+                      <Button
+                        radius={"sm"}
+                        mt={index === 0 ? 25 : 0}
+                        variant="light"
+                        color="#105476"
+                        size="sm"
+                        onClick={() =>
+                          gridForm.insertListItem("tariff_charges", {
+                            customer_code: "",
+                            charge_name: "",
+                            carrier_code: "",
+                            unit: "",
+                            currency_code: "",
+                            rate: "",
+                            containers: 1,
+                          })
+                        }
+                      >
+                        <IconPlus size={16} />
+                      </Button>
+                    </Grid.Col>
+                  )}
+                  <Grid.Col span={0.5}>
+                    <Button
+                      mt={index === 0 ? 25 : 0}
+                      variant="light"
+                      color="red"
+                      size="sm"
+                      onClick={() =>
+                        gridForm.removeListItem("tariff_charges", index)
+                      }
+                    >
+                      <IconTrash size={16} />
+                    </Button>
+                  </Grid.Col>
+                </>
+              )}
+            </Grid>
+            // </Box>
+          ))}
+        </Stack>
+        {/* Total Rate Display for All Modes */}
+        <Paper mt="lg" maw={600} style={{ marginLeft: "auto", marginRight: 0 }}>
+          <Text size="lg" fw={600} c="#105476" mb="md">
+            Total Calculations
+          </Text>
+
+          {/* Unit Type Totals */}
+          {Object.keys(unitTotals).length > 0 && (
+            <Stack gap="xs" mb="md">
+              {Object.entries(unitTotals)
+                .filter(([unit]) => unit !== "shipment") // Hide shipment from display
+                .map(([unit, total]) => {
+                  // Calculate the breakdown for display
+
+                  return (
+                    <div key={unit}>
+                      <Group justify="space-between">
+                        <Text size="sm" fw={500}>
+                          Total {unit}:
+                        </Text>
+                        <Text size="sm" fw={600} c="#105476">
+                          {total.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </Text>
+                      </Group>
+                      <Text size="xs" c="dimmed" ml="md">
+                        Per Container :{" "}
+                        {(total / numberOfContainers).toFixed(2)}
+                      </Text>
+                    </div>
+                  );
+                })}
+            </Stack>
+          )}
+
+          {/* Overall Total */}
+          {/* <Box
+            p="sm"
+            style={{
+              backgroundColor: "#f8f9fa",
+              borderRadius: 4,
+              border: "1px solid #dee2e6",
+            }}
+          >
+            <Group justify="space-between">
+              <Text size="md" fw={600} c="#105476">
+                Overall Total:
+              </Text>
+              <Text size="md" fw={600} c="#105476">
+                {overallTotal.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </Text>
+            </Group>
+          </Box> */}
+
+          {/* Total with Containers */}
+          {/* <Box
+            p="sm"
+            mt="sm"
+            style={{
+              backgroundColor: "#e3f2fd",
+              borderRadius: 4,
+              border: "1px solid #2196f3",
+            }}
+          >
+            <Group justify="space-between">
+              <Text size="md" fw={600} c="#1976d2">
+                Total with {numberOfContainers} Container(s):
+              </Text>
+              <Text size="md" fw={600} c="#1976d2">
+                {overallTotal.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </Text>
+            </Group>
+          </Box> */}
+        </Paper>
+        <Group justify={"space-between"} mt="xl">
+          <Group gap="sm">
+            <Button
+              variant="outline"
+              color="#105476"
+              onClick={() => navigate("/tariff/destination")}
+            >
+              Back to List
+            </Button>
+
+            {(isViewMode || isEditMode) && (
+              <Button
+                variant="outline"
+                color="#105476"
+                leftSection={<IconSparkles size={16} />}
+                onClick={openQuoteModal}
+              >
+                Create Quotation
+              </Button>
+            )}
+          </Group>
+
+          <Group justify="space-between">
+            {!isViewMode && (
+              <Button color="#105476" onClick={() => tariffSubmit()}>
+                {isEditMode ? "Update" : "Submit"}
+              </Button>
+            )}
+          </Group>
+        </Group>
+      </Box>
+    </>
+  );
+}
+
+export default DestinationCreate;

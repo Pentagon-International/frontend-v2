@@ -1,0 +1,80 @@
+*{
+  transition: "width 0.2s ease-in-out",
+}
+body{
+    /* overflow: hidden; */
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    
+}
+
+/* Add responsive styles for login page */
+@media (max-width: 768px) {
+  /* Mobile styles */
+  /* .login-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .login-image-section {
+    height: 40vh;
+    min-height: 250px;
+  }
+  
+  .login-form-section {
+    height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  } */
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Tablet styles */
+  /* .login-container {
+    min-height: 100vh;
+  }
+  
+  .login-image-section {
+    height: 100vh;
+  }
+  
+  .login-form-section {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  } */
+}
+
+@media (min-width: 1025px) {
+  /* Desktop styles */
+  /* .login-container {
+    min-height: 100vh;
+  }
+  
+  .login-image-section {
+    height: 100vh;
+  }
+  
+  .login-form-section {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  } */
+}
+
+/* Ensure proper form sizing on mobile */
+@media (max-width: 480px) {
+  /* .login-form-container {
+    padding: 12px !important;
+  }
+  
+  .login-form-container input,
+  .login-form-container button {
+    font-size: 16px !important; /* Prevents zoom on iOS */
+  /* } */ 
+}
