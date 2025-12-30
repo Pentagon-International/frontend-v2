@@ -121,17 +121,15 @@ const OutstandingBarChart = ({
       }}
     >
       <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
-        <Group gap="xs" align="center">
-          {drillLevel > 0 && (
-            <Button
-              size="compact-xs"
-              variant="light"
-              onClick={handleBack}
-            >
-              Back
-            </Button>
-          )}
-        </Group>
+        <Text
+          size="lg"
+          fw={500}
+          c="#22252B"
+          style={{ fontFamily: "Inter, sans-serif" }}
+        >
+          Outstanding vs Overdue
+        </Text>
+      
         <Text
           size="sm"
           c="#105476"

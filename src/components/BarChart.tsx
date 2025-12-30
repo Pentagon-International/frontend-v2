@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { Box, Center, Loader } from "@mantine/core";
 
@@ -33,25 +33,22 @@ const BarChart = ({
   showLegend = true,
   legendPosition = "bottom",
 }: BarChartProps) => {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const isOutstandingOverdue = type === "outstanding-overdue";
+  
+  // Extract labels for use in both chartOption and chartEvents
+  const labels = useMemo(() => data.map((item) => item.label), [data]);
+
   const chartOption = useMemo(() => {
-    const labels = data.map((item) => item.label);
     const value1Data = data.map((item) => item.value1);
     const value2Data = data.map((item) => item.value2);
-    const salespersonData = data.map((item) => item.salesperson);
 
-    // Determine colors and labels based on type
-    const isOutstandingOverdue = type === "outstanding-overdue";
-    
     const series1Name = isOutstandingOverdue ? "Outstanding" : "Actual";
     const series2Name = isOutstandingOverdue ? "Overdue" : "Budget";
     
-    // Colors matching the image exactly
-    // Outstanding: Light blue (#A3D5F0)
-    // Overdue: Light pink/red (#F5A8A8)
-    // Actual: Light blue (#A7D8F0)
-    // Budget: Light pink/red (#F5A3A3)
-    const series1Color = isOutstandingOverdue ? "#A3D5F0" : "#A7D8F0"; // Light blue for Outstanding and Actual
-    const series2Color = isOutstandingOverdue ? "#F5A8A8" : "#F5A3A3"; // Light pink for Overdue and Budget
+    // Softer pastel colors to mirror the provided design
+    const series1Color = isOutstandingOverdue ? "#BCDFF5" : "#A7D8F0";
+    const series2Color = isOutstandingOverdue ? "#F6C7C9" : "#F5A3A3";
 
     // Calculate max value for Y-axis
     const allValues = [...value1Data, ...value2Data];
@@ -105,38 +102,44 @@ const BarChart = ({
       return "";
     };
 
-    // Create graphic elements for salesperson labels at fixed top position
-    const graphicElements = isOutstandingOverdue ? data.map((item, index) => {
-      if (!item.salesperson) return null;
-      
-      return {
-        type: 'text',
-        left: `${((index + 0.5) / labels.length) * 100}%`, // Center of each bar group
-        top: '8%', // Fixed position from top
-        style: {
-          text: `Salesperson\n${item.salesperson}`,
-          textAlign: 'center',
+    // Use series labels instead of graphics for salesperson counts
+    const graphicElements: any[] = [];
+
+    const salespersonLabel = isOutstandingOverdue
+      ? {
+          show: true,
+          position: "top",
+          formatter: (params: any) => {
+            if (hoveredIndex === params.dataIndex) return "";
+            const item = data[params.dataIndex];
+            if (!item?.salesperson) return "";
+            return `Salesperson ${item.salesperson}`;
+          },
           fontSize: 10,
-          fontWeight: 400,
-          fill: '#666',
+          fontWeight: 500,
+          color: "#98A2B3",
           lineHeight: 14,
-        },
-        silent: true,
-      };
-    }).filter(Boolean) : [];
+        }
+      : {
+          show: false,
+        };
 
     return {
-      graphic: [],
+      backgroundColor: "#fff",
+      graphic: graphicElements as any,
       tooltip: {
         trigger: "axis",
         axisPointer: {
           type: "shadow",
         },
-        backgroundColor: "rgba(255, 255, 255, 0.95)",
-        borderColor: "#ccc",
+        backgroundColor: "rgba(255, 255, 255, 0.98)",
+        borderColor: "#E5E7EB",
         borderWidth: 1,
+        shadowBlur: 12,
+        shadowColor: "rgba(16, 84, 118, 0.08)",
+        padding: 12,
         textStyle: {
-          color: "#333",
+          color: "#0F172A",
           fontSize: 12,
         },
         formatter: tooltipFormatter,
@@ -161,7 +164,7 @@ const BarChart = ({
             [legendPosition]: legendPosition === "bottom" ? 10 : 5,
             textStyle: {
               fontSize: 11,
-              color: "#666",
+              color: "#98A2B3",
             },
             itemGap: 20,
             itemWidth: 14,
@@ -175,21 +178,34 @@ const BarChart = ({
         left: "5%",
         right: "4%",
         bottom: showLegend && legendPosition === "bottom" ? "15%" : "10%",
-        top: isOutstandingOverdue ? "18%" : "10%", // More space at top for salesperson labels
+        top: isOutstandingOverdue ? "22%" : "10%", // More space at top for salesperson labels
         containLabel: true,
       },
       xAxis: {
         type: "category",
         data: labels,
+        triggerEvent: true, // Enable click events on axis labels
         axisLabel: {
           fontSize: 10,
-          color: "#666",
-          rotate: labels.some((l) => l.length > 10) ? 45 : 0,
-          interval: 0,
+          color: "#98A2B3",
+          rotate: isOutstandingOverdue ? 0 : 0, // tilt for budget to keep all labels visible
+          hideOverlap: true,
+          overflow: isOutstandingOverdue ? undefined : "break",
+          width: isOutstandingOverdue ? undefined : 50,          interval: 0,
         },
         axisLine: {
           lineStyle: {
-            color: "#e0e0e0",
+            color: "#E5E7EB",
+          },
+        },
+        axisTick: {
+          show: false,
+        },
+        axisPointer: {
+          show: true,
+          type: "shadow",
+          shadowStyle: {
+            color: "rgba(16, 84, 118, 0.08)",
           },
         },
       },
@@ -198,12 +214,12 @@ const BarChart = ({
         axisLabel: {
           formatter: formatter,
           fontSize: 10,
-          color: "#666",
+          color: "#98A2B3",
         },
         splitLine: {
           lineStyle: {
-            color: "#f0f0f0",
-            type: "dashed",
+            color: "#F2F4F7",
+            type: "dotted",
           },
         },
         max: yAxisMax,
@@ -215,73 +231,47 @@ const BarChart = ({
           type: "bar",
           stack: isOutstandingOverdue ? undefined : "total", // Side-by-side for Outstanding vs Overdue, stacked for Budget vs Actual
           data: value1Data,
-          barWidth: isOutstandingOverdue ? "35%" : "60%", // Narrower bars for side-by-side layout
-          barGap: isOutstandingOverdue ? "10%" : "0%", // Gap between bars in side-by-side layout
+          barWidth: isOutstandingOverdue ? "32%" : "60%", // Narrower bars for side-by-side layout
+          barGap: isOutstandingOverdue ? "0%" : "0%", // Gap between bars in side-by-side layout
           itemStyle: {
             color: series1Color,
-            borderRadius: isOutstandingOverdue ? [4, 4, 0, 0] : 0, // Rounded top for Outstanding vs Overdue
+            cursor: isOutstandingOverdue ? "pointer" : "default",
+            borderRadius: isOutstandingOverdue ? [6, 6, 0, 0] : 0, // Rounded top for Outstanding vs Overdue
           },
           emphasis: {
             itemStyle: {
-              shadowBlur: 10,
+              shadowBlur: 14,
               shadowOffsetX: 0,
-              shadowColor: "rgba(0, 0, 0, 0.3)",
+              shadowColor: "rgba(16, 84, 118, 0.25)",
             },
           },
           label: {
-            show: false,
+            ...salespersonLabel,
           },
-          // Add markPoint for salesperson labels at consistent height
-          ...(isOutstandingOverdue && {
-            markPoint: {
-              symbol: "rect",
-              symbolSize: [60, 30], // Rectangle to contain the text, centered between bars
-              symbolOffset: [0, 0], // Center the symbol at the coordinate
-              itemStyle: {
-                color: "transparent",
-                borderWidth: 0,
-              },
-              label: {
-                show: true,
-                formatter: (params: any) => {
-                  const dataIndex = params.data.coord[0];
-                  if (salespersonData[dataIndex]) {
-                    return `Salesperson\n${salespersonData[dataIndex]}`;
-                  }
-                  return "";
-                },
-                fontSize: 10,
-                color: "#666",
-                fontWeight: 400,
-                lineHeight: 14,
-                position: "inside",
+          labelLayout: isOutstandingOverdue
+            ? () => ({
+                y: 10, // keep all salesperson labels at a consistent height
                 align: "center",
-                verticalAlign: "middle",
-              },
-              data: labels.map((_label: string, index: number) => ({
-                coord: [index, yAxisMax * 0.95], // Position at 95% of Y-axis max for consistent height
-                value: salespersonData[index],
-              })),
-              silent: true,
-              animation: false,
-            },
-          }),
+                verticalAlign: "top",
+              })
+            : undefined,
         },
         {
           name: series2Name,
           type: "bar",
           stack: isOutstandingOverdue ? undefined : "total", // Side-by-side for Outstanding vs Overdue, stacked for Budget vs Actual
           data: value2Data,
-          barWidth: isOutstandingOverdue ? "35%" : "60%", // Narrower bars for side-by-side layout
+          barWidth: isOutstandingOverdue ? "32%" : "60%", // Narrower bars for side-by-side layout
           itemStyle: {
             color: series2Color,
-            borderRadius: isOutstandingOverdue ? [4, 4, 0, 0] : 0, // Rounded top for Outstanding vs Overdue
+            cursor: isOutstandingOverdue ? "pointer" : "default",
+            borderRadius: isOutstandingOverdue ? [6, 6, 0, 0] : 0, // Rounded top for Outstanding vs Overdue
           },
           emphasis: {
             itemStyle: {
-              shadowBlur: 10,
+              shadowBlur: 14,
               shadowOffsetX: 0,
-              shadowColor: "rgba(0, 0, 0, 0.3)",
+              shadowColor: "rgba(16, 84, 118, 0.25)",
             },
           },
           label: {
@@ -290,7 +280,17 @@ const BarChart = ({
         },
       ],
     };
-  }, [data, type, maxValue, yAxisFormatter, showLegend, legendPosition]);
+  }, [
+    data,
+    type,
+    maxValue,
+    yAxisFormatter,
+    showLegend,
+    legendPosition,
+    hoveredIndex,
+    isOutstandingOverdue,
+    labels,
+  ]);
 
   const chartStyle = useMemo(
     () => ({
@@ -300,12 +300,50 @@ const BarChart = ({
     [height]
   );
 
-  const chartEvents = useMemo(
-    () => ({
-      click: onBarClick || (() => {}),
-    }),
-    [onBarClick]
-  );
+  const chartEvents = useMemo(() => {
+    const baseEvents: any = {
+      click: (params: any) => {
+        if (!onBarClick) return;
+        
+        // Handle click on x-axis labels
+        if (params.componentType === "xAxis") {
+          // Create a synthetic event object that matches bar click structure
+          const syntheticParams = {
+            componentType: "series",
+            componentSubType: "bar",
+            seriesType: "bar",
+            seriesIndex: 0,
+            seriesName: isOutstandingOverdue ? "Outstanding" : "Actual",
+            name: params.value,
+            dataIndex: labels.indexOf(params.value),
+            data: data[labels.indexOf(params.value)],
+            value: data[labels.indexOf(params.value)]?.value1 || 0,
+          };
+          onBarClick(syntheticParams);
+        } 
+        // Handle normal bar clicks
+        else {
+          onBarClick(params);
+        }
+      },
+    };
+
+    if (isOutstandingOverdue) {
+      baseEvents.mouseover = (params: any) => {
+        if (
+          params?.componentSubType === "bar" &&
+          typeof params?.dataIndex === "number"
+        ) {
+          setHoveredIndex(params.dataIndex);
+        }
+      };
+
+      baseEvents.mouseout = () => setHoveredIndex(null);
+      baseEvents.globalout = () => setHoveredIndex(null);
+    }
+
+    return baseEvents;
+  }, [onBarClick, isOutstandingOverdue, data, labels]);
 
   if (isLoading) {
     return (

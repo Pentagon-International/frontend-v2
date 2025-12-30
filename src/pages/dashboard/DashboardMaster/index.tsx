@@ -334,7 +334,6 @@ const Dashboard = () => {
     null
   );
   const [budgetDateRange, setBudgetDateRange] = useState<string>("");
-  const [budgetWindowStart, setBudgetWindowStart] = useState<number>(0);
   const [budgetHoverTotals] = useState<{
     actual: number;
     sales: number;
@@ -908,7 +907,6 @@ const Dashboard = () => {
         setBudgetSelectedCompany(null);
         setBudgetSelectedSalesperson(null);
         setBudgetSelectedMonth(null);
-        setBudgetWindowStart(0);
 
         // Extract month parts from existing budgetStartMonth and budgetEndMonth
         const existingStartMonth = budgetStartMonth
@@ -969,7 +967,6 @@ const Dashboard = () => {
         setSelectedCompany(null);
         setSelectedLocation(null);
         setBudgetSelectedMonth(null);
-        setBudgetWindowStart(0);
 
         const filterData: DashboardFilters = addSearchToFilters({
           ...(selectedYear && { year: parseInt(selectedYear) }),
@@ -1445,7 +1442,6 @@ const Dashboard = () => {
 
         setBudgetSelectedSalesperson(null);
         setBudgetSelectedMonth(null);
-        setBudgetWindowStart(0);
         const dr = budgetResponse?.data?.[0]?.date_range || "";
         setBudgetDateRange(dr);
         setSelectedYear(dayjs().year().toString());
@@ -1591,7 +1587,6 @@ const Dashboard = () => {
       setBudgetSelectedCompany(companyName);
       setBudgetSelectedSalesperson(null);
       setBudgetSelectedMonth(null);
-      setBudgetWindowStart(1);
       setBudgetDateRange(budgetResponse?.data?.[0]?.date_range || "");
     } catch (error) {
       console.error("Error resetting to initial state:", error);
@@ -3233,6 +3228,8 @@ const Dashboard = () => {
   );
 
   const handleCloseDetailedView = () => {
+    const wasDetailedViewTypeBudget = detailedViewType === "budget";
+    
     setShowDetailedView(false);
     setDetailedViewData([]);
     setDetailedViewTitle("");
@@ -3247,6 +3244,40 @@ const Dashboard = () => {
     setDetailedViewSelectedSalesperson(null);
 
     setSearchSalesman("");
+
+    // If closing budget detailed view, reset budget drill level and reload level 1 data
+    if (wasDetailedViewTypeBudget) {
+      setBudgetDrillLevel(1);
+      setBudgetSelectedSalesperson(null);
+      setBudgetSelectedMonth(null);
+      
+      // Reload budget data at level 1 (salesperson level)
+      const companyName =
+        budgetSelectedCompany ||
+        user?.company?.company_name ||
+        selectedCompany ||
+        "PENTAGON INDIA";
+      
+      setIsLoadingBudget(true);
+      getFilteredBudgetData({
+        company: companyName,
+        start_month: budgetStartMonth,
+        end_month: budgetEndMonth,
+        type: budgetType,
+      } as any)
+        .then((resp) => {
+          setBudgetRawData(resp);
+          setBudgetDateRange(resp?.data?.[0]?.date_range || budgetDateRange);
+          const agg = calculateBudgetAggregatedData(resp);
+          setBudgetAggregatedData(agg);
+        })
+        .catch((error) => {
+          console.error("Error reloading budget data:", error);
+        })
+        .finally(() => {
+          setIsLoadingBudget(false);
+        });
+    }
 
     const callEntryFilterData: DashboardFilters = {
       ...(selectedDate && {
@@ -5330,6 +5361,8 @@ const Dashboard = () => {
           setDetailedViewData(tableData);
           setDetailedViewDrillLevel(2);
           setBudgetSelectedMonth(null);
+          // Ensure budget chart stays at level 1 (main chart should always show salesperson level)
+          setBudgetDrillLevel(1);
           // Update title for salesperson monthly view
           const salespersonName = detailedViewSelectedSalesperson || "";
           setDetailedViewTitle(
@@ -5356,6 +5389,12 @@ const Dashboard = () => {
           setDetailedViewData(tableData);
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(1);
+          // Reset budget drill level to 1 and update budget chart data
+          setBudgetDrillLevel(1);
+          setBudgetRawData(response);
+          setBudgetDateRange(response?.data?.[0]?.date_range || budgetDateRange);
+          const agg = calculateBudgetAggregatedData(response);
+          setBudgetAggregatedData(agg);
           // Update title for salesperson wise view
           setDetailedViewTitle("Budget vs Actual - Salesperson Wise");
         } else if (detailedViewDrillLevel === 1) {
@@ -5375,6 +5414,24 @@ const Dashboard = () => {
           setDetailedViewSelectedCompany(null);
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(0);
+          // Reset budget drill level to 1 and reload salesperson data for current user's company
+          const companyName =
+            user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+          setBudgetSelectedCompany(companyName);
+          
+          // Reload level 1 data for budget chart
+          const budgetFilterData = {
+            company: companyName,
+            ...(budgetStartMonth && { start_month: budgetStartMonth }),
+            ...(budgetEndMonth && { end_month: budgetEndMonth }),
+            type: budgetType,
+          };
+          const budgetResp = await getFilteredBudgetData(budgetFilterData as any);
+          setBudgetRawData(budgetResp);
+          setBudgetDateRange(budgetResp?.data?.[0]?.date_range || budgetDateRange);
+          const budgetAgg = calculateBudgetAggregatedData(budgetResp);
+          setBudgetAggregatedData(budgetAgg);
+          setBudgetDrillLevel(1);
           // Update title for overall view
           setDetailedViewTitle("Budget vs Actual - Overall");
         }
@@ -5937,6 +5994,53 @@ const Dashboard = () => {
       if (!meta) return;
 
       try {
+        // Navigate to detailed view for location-level selection
+        if (meta.type === "location") {
+          try {
+            setIsLoadingDetailedView(true);
+            setShowDetailedView(true);
+            setDetailedViewType("outstanding");
+            setDetailedViewTitle("Outstanding vs Over Due - Detailed View");
+            setDetailedViewSearch(globalSearch);
+
+            const companyFilter =
+              selectedCompanyCtx.company || selectedCompany || "";
+            const locationFilter = meta.location || null;
+
+            setDetailedViewSelectedCompany(companyFilter || null);
+            setDetailedViewSelectedLocation(locationFilter);
+            setDetailedViewSelectedSalesperson(null);
+            setDetailedViewDrillLevel(2);
+
+            const filterData: DashboardFilters = addSearchToFilters({
+              ...(companyFilter && { company: companyFilter }),
+              ...(locationFilter && { location: locationFilter }),
+              ...(selectedYear && { year: parseInt(selectedYear) }),
+              ...(selectedDate && {
+                date_from: dayjs(selectedDate).format("YYYY-MM-DD"),
+                date_to: dayjs(selectedDate).format("YYYY-MM-DD"),
+              }),
+            });
+
+            const response = await getFilteredOutstandingData(filterData);
+            const tableData = convertFilteredResponseToTableData(
+              response,
+              false
+            );
+
+            setDetailedViewData(tableData);
+          } catch (error) {
+            console.error(
+              "Error loading location detailed view from bar click:",
+              error
+            );
+          } finally {
+            setIsLoadingDetailedView(false);
+            setIsLoadingOutstandingChart(false);
+          }
+          return;
+        }
+
         if (meta.type === "company") {
           setIsLoadingOutstandingChart(true);
 
@@ -6074,6 +6178,8 @@ const Dashboard = () => {
       selectedLocation,
       callEntryData,
       addSearchToFilters,
+      globalSearch,
+      selectedYear,
     ]
   );
 
@@ -6138,7 +6244,6 @@ const Dashboard = () => {
         setBudgetSelectedCompany(null);
         setBudgetSelectedSalesperson(null);
         setBudgetSelectedMonth(null);
-        setBudgetWindowStart(0);
 
         // Get company name from user's auth data
         const companyName =
@@ -6179,7 +6284,6 @@ const Dashboard = () => {
         if (budgetDrillLevel === 0) {
           setBudgetSelectedCompany(params?.name || null);
           setSelectedCompany(params?.name || null);
-          setBudgetWindowStart(0);
           const resp = await getFilteredBudgetData(
             addSearchToFilters({
               company: params?.name,
@@ -6195,13 +6299,25 @@ const Dashboard = () => {
           setBudgetDrillLevel(1);
         } else if (budgetDrillLevel === 1) {
           const fullSalespersonName =
-            budgetRawData?.data?.[0]?.budget?.[
-              params?.dataIndex + budgetWindowStart
-            ]?.salesperson || params?.name;
+          budgetRawData?.data?.[0]?.budget?.[params?.dataIndex]?.salesperson ||
+          params?.name;
           setBudgetSelectedSalesperson(fullSalespersonName);
           setSearchSalesman(fullSalespersonName);
 
-          setBudgetWindowStart(0);
+          // Open detailed view at level 2 (month wise) for the selected salesperson
+          setIsLoadingDetailedView(true);
+          setShowDetailedView(true);
+          setDetailedViewType("budget");
+          const companyName =
+            budgetSelectedCompany ||
+            user?.company?.company_name ||
+            selectedCompany ||
+            "PENTAGON INDIA";
+          setDetailedViewSelectedCompany(companyName);
+          setDetailedViewSelectedSalesperson(fullSalespersonName);
+          setDetailedViewDrillLevel(2);
+          setDetailedViewSearch(globalSearch);
+
           const resp = await getFilteredBudgetData(
             addSearchToFilters({
               company: budgetSelectedCompany,
@@ -6216,11 +6332,21 @@ const Dashboard = () => {
           const agg = calculateBudgetAggregatedData(resp);
           setBudgetAggregatedData(agg);
           setBudgetDrillLevel(2);
+
+          // Populate detailed view table for month-wise view
+          const tableData = convertBudgetResponseToTableData(
+            resp,
+            2,
+            budgetType
+          );
+          setDetailedViewData(tableData);
+          setDetailedViewTitle(
+            `Budget vs Actual - ${fullSalespersonName} - Month Wise`
+          );
+          setIsLoadingDetailedView(false);
         } else if (budgetDrillLevel === 2) {
           const clickedMonth =
-            budgetRawData?.data?.[0]?.budget?.[
-              params?.dataIndex + budgetWindowStart
-            ]?.month;
+          budgetRawData?.data?.[0]?.budget?.[params?.dataIndex]?.month;
 
           if (clickedMonth) {
             // Show detailed view for the selected month
@@ -6268,6 +6394,7 @@ const Dashboard = () => {
         }
       } finally {
         setIsLoadingBudget(false);
+        setIsLoadingDetailedView(false);
       }
     },
     [
@@ -6278,7 +6405,6 @@ const Dashboard = () => {
       budgetRawData,
       budgetSelectedCompany,
       budgetSelectedSalesperson,
-      budgetWindowStart,
       searchSalesman,
       budgetType,
       addSearchToFilters,
@@ -6970,7 +7096,6 @@ const Dashboard = () => {
                 budgetSelectedCompany={budgetSelectedCompany}
                 budgetSelectedSalesperson={budgetSelectedSalesperson}
                 budgetDateRange={budgetDateRange}
-                budgetWindowStart={budgetWindowStart}
                 budgetRawData={budgetRawData}
                 budgetAggregatedData={budgetAggregatedData}
                 budgetHoverTotals={budgetHoverTotals}
@@ -6984,7 +7109,6 @@ const Dashboard = () => {
                 setBudgetDrillLevel={setBudgetDrillLevel}
                 setBudgetSelectedCompany={setBudgetSelectedCompany}
                 setBudgetSelectedSalesperson={setBudgetSelectedSalesperson}
-                setBudgetWindowStart={setBudgetWindowStart}
                 setBudgetRawData={setBudgetRawData}
                 setBudgetAggregatedData={setBudgetAggregatedData}
                 setSearchSalesman={setSearchSalesman}

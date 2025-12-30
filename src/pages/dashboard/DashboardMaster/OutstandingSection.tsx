@@ -51,24 +51,24 @@ const OutstandingSection = ({
   return (
     <Box
       style={{
-        border: "1px solid #F7F7F7",
-        borderRadius: "8px",
-        padding: "16px",
-        height: "100%",
+        // border: "1px solid #F7F7F7",
+        // borderRadius: "8px",
+        // padding: "16px",
+        // height: "100%",
         display: "flex",
         flexDirection: "column",
       }}
     >
-      <Group justify="space-between" align="center" mb="md">
-        <Text
+      {/* <Group justify="space-between" align="center" mb="md"> */}
+        {/* <Text
           size="lg"
           fw={500}
           c="#22252B"
           style={{ fontFamily: "Inter, sans-serif" }}
         >
           Outstanding vs Overdue
-        </Text>
-        <Select
+        </Text> */}
+        {/* <Select
           placeholder="Select Period"
           value={outstandingPeriod}
           onChange={(value) => setOutstandingPeriod(value || "last_30_days")}
@@ -84,8 +84,8 @@ const OutstandingSection = ({
           styles={{
             input: { fontSize: "12px" },
           }}
-        />
-      </Group>
+        /> */}
+      {/* </Group> */}
 
       <Box style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <OutstandingBarChart

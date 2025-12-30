@@ -1,12 +1,5 @@
 import { useMemo } from "react";
-import {
-  Card,
-  Group,
-  Text,
-  Button,
-  Select,
-} from "@mantine/core";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { Card, Group, Text, Button, Select, SegmentedControl } from "@mantine/core";
 import { BarChart, BarChartDataItem } from "../../../components";
 import dayjs from "dayjs";
 import {
@@ -20,13 +13,12 @@ interface BudgetBarChartProps {
   budgetDrillLevel: 0 | 1 | 2 | 3;
   budgetSelectedCompany: string | null;
   budgetSelectedSalesperson: string | null;
-  budgetDateRange: string;
-  budgetWindowStart: number;
+  budgetDateRange: { date_from: string; date_to: string };
   budgetRawData: any;
   budgetAggregatedData: BudgetAggregatedData;
   budgetHoverTotals: {
+    budget: number;
     actual: number;
-    sales: number;
   } | null;
   isLoadingBudget: boolean;
   budgetStartMonth: string;
@@ -40,7 +32,6 @@ interface BudgetBarChartProps {
   setBudgetDrillLevel: (level: 0 | 1 | 2 | 3) => void;
   setBudgetSelectedCompany: (company: string | null) => void;
   setBudgetSelectedSalesperson: (salesperson: string | null) => void;
-  setBudgetWindowStart: (start: number | ((prev: number) => number)) => void;
   setBudgetRawData: (data: any) => void;
   setBudgetAggregatedData: (data: BudgetAggregatedData) => void;
   setSearchSalesman: (salesman: string) => void;
@@ -63,33 +54,33 @@ const BudgetBarChart = ({
   budgetDrillLevel,
   budgetSelectedCompany,
   budgetSelectedSalesperson,
-  budgetWindowStart,
   budgetRawData,
   isLoadingBudget,
   budgetStartMonth,
   budgetEndMonth,
   budgetType,
+  selectedYear,
   fromMonthOptions,
   toMonthOptions,
   setBudgetDrillLevel,
-  setBudgetWindowStart,
   setBudgetRawData,
   setBudgetAggregatedData,
   setSearchSalesman,
   setSelectedCompany,
   setIsLoadingBudget,
+  setSelectedYear,
   handleBudgetViewAll,
   handleBudgetBarClick,
+  handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
 }: BudgetBarChartProps) => {
   // Memoized chart data preparation
-  const { barChartData, totalItems } = useMemo(() => {
+  const barChartData = useMemo(() => {
     if (!budgetRawData?.data || !Array.isArray(budgetRawData.data)) {
-      return { barChartData: [], totalItems: 0 };
+      return [];
     }
 
     let chartData: BarChartDataItem[] = [];
-    let total = 0;
 
     if (budgetDrillLevel === 0) {
       // At level 0, show all companies
@@ -104,13 +95,11 @@ const BudgetBarChart = ({
           budget: Number(company?.summary?.total_sales_budget || 0),
         },
       }));
-      total = budgetRawData.data.length;
     } else {
       const root = budgetRawData.data[0];
-      if (!root) return { barChartData: [], totalItems: 0 };
+      if (!root) return [];
 
       const items = Array.isArray(root?.budget) ? root.budget : [];
-      total = items.length;
 
       if (budgetDrillLevel === 1) {
         chartData = items.map((i: any) => ({
@@ -139,46 +128,28 @@ const BudgetBarChart = ({
       }
     }
 
-    // Pagination
-    const pageSize = 6;
-    if (chartData.length > pageSize) {
-      const start = budgetWindowStart;
-      const end = start + pageSize;
-      chartData = chartData.slice(start, end);
-    }
-
-    return { barChartData: chartData, totalItems: total };
-  }, [budgetRawData, budgetDrillLevel, budgetWindowStart]);
-
-  // Memoized pagination button visibility
-  const budgetPaginationButtons = useMemo(() => {
-    const pageSize = 6;
-    const showPrev = budgetWindowStart > 0;
-    const showNext = budgetWindowStart + pageSize < totalItems;
-
-    return { showPrev, showNext };
-  }, [budgetWindowStart, totalItems]);
+    return chartData;
+  }, [budgetRawData, budgetDrillLevel]);
 
   // Handle bar click
   const handleBarClickEvent = (params: any) => {
     const dataIndex = params.dataIndex;
-    const actualIndex = dataIndex + budgetWindowStart;
-    
+
     // Get the full item from raw data
     let item: any = null;
-    
+
     if (budgetDrillLevel === 0) {
-      item = budgetRawData?.data?.[actualIndex];
+      item = budgetRawData?.data?.[dataIndex];
     } else {
       const root = budgetRawData?.data?.[0];
       if (root && Array.isArray(root.budget)) {
-        item = root.budget[actualIndex];
+        item = root.budget[dataIndex];
       }
     }
 
     if (item) {
       handleBudgetBarClick({
-        dataIndex: actualIndex,
+        dataIndex,
         data: item,
         seriesName: params.seriesName,
       });
@@ -192,9 +163,55 @@ const BudgetBarChart = ({
       radius="md"
       style={{ border: "1px solid #e9ecef", height: "100%" }}
     >
-      {/* Header row: Month filters + View All */}
-      <Group justify="space-between" align="center" mb="sm" gap="xs">
-        <Group gap="xs" align="center">
+      {/* Title and Controls */}
+      <Group justify="space-between" align="center" mb="md">
+        <Text 
+        size="lg"
+        fw={500}
+        c="#22252B"
+        style={{ fontFamily: "Inter, sans-serif" }}
+        >
+          Budget vs Actual
+        </Text>
+        <Group gap="sm">
+          <SegmentedControl
+            value={budgetType}
+            onChange={(value) =>
+              handleBudgetTypeChange(value as "salesperson" | "non-salesperson")
+            }
+            data={[
+              { label: "Sales", value: "salesperson" },
+              { label: "Non-Sales", value: "non-salesperson" },
+            ]}
+            size="xs"
+            styles={{
+              root: {
+                backgroundColor: "#f1f3f5",
+                fontFamily: "Inter, sans-serif",
+              },
+              label: {
+                fontSize: "12px",
+              },
+            }}
+          />
+            <Group gap="xs" align="center">
+        <Select
+            placeholder="Select Period"
+            value={selectedYear}
+            onChange={(value) =>
+              setSelectedYear(value)
+            }
+            w={150}
+            size="xs"
+            data={[
+              { value: "2023", label: "2023" },
+              { value: "2024", label: "2024" },
+              { value: "2025", label: "2025" },
+            ]}
+            styles={{
+              input: { fontSize: "12px", fontFamily: "Inter, sans-serif" },
+            }}
+          />
           <Select
             placeholder="From Month"
             data={fromMonthOptions}
@@ -228,6 +245,13 @@ const BudgetBarChart = ({
             required
           />
         </Group>
+      
+        </Group>
+      </Group>
+
+      {/* Header row: Month filters + View All */}
+      <Group justify="end" align="center" mb="sm" gap="xs">
+      
         <Text
           size="sm"
           c="#105476"
@@ -252,7 +276,6 @@ const BudgetBarChart = ({
               setIsLoadingBudget(true);
               try {
                 if (budgetDrillLevel === 3) {
-                  setBudgetWindowStart(0);
                   const resp = await getFilteredBudgetData({
                     company: budgetSelectedCompany,
                     salesman: budgetSelectedSalesperson,
@@ -266,7 +289,6 @@ const BudgetBarChart = ({
                   setBudgetDrillLevel(2);
                 } else if (budgetDrillLevel === 2) {
                   setSearchSalesman("");
-                  setBudgetWindowStart(0);
                   const resp = await getFilteredBudgetData({
                     company: budgetSelectedCompany,
                     start_month: budgetStartMonth,
@@ -280,7 +302,6 @@ const BudgetBarChart = ({
                 } else if (budgetDrillLevel === 1) {
                   setBudgetSelectedCompany(null);
                   setSelectedCompany(null);
-                  setBudgetWindowStart(0);
                   const resp = await getFilteredBudgetData({
                     start_month: budgetStartMonth,
                     end_month: budgetEndMonth,
@@ -310,31 +331,6 @@ const BudgetBarChart = ({
         showLegend={true}
         legendPosition="bottom"
       />
-
-      {/* Pagination buttons */}
-      <Group justify="flex-end" pt="xs">
-        {budgetPaginationButtons.showPrev && (
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            onClick={() => setBudgetWindowStart((s) => Math.max(0, s - 3))}
-          >
-            <IconChevronLeft size={14} />
-            <Text size="sm">Prev</Text>
-          </Button>
-        )}
-        {budgetPaginationButtons.showNext && (
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            aria-label="Next"
-            onClick={() => setBudgetWindowStart((s) => s + 3)}
-          >
-            <Text size="sm">Next</Text>
-            <IconChevronRight size={14} />
-          </Button>
-        )}
-      </Group>
     </Card>
   );
 };
