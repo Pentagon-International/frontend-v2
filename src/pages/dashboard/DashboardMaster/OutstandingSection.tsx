@@ -1,5 +1,5 @@
 import { Box, Text, Group, Select } from "@mantine/core";
-import Outstanding from "./Outstanding";
+import OutstandingBarChart from "./OutstandingBarChart";
 
 interface OutstandingSectionProps {
   drillLevel: 0 | 1 | 2;
@@ -73,7 +73,7 @@ const OutstandingSection = ({
         />
       </Group>
 
-      <Outstanding
+      <OutstandingBarChart
         drillLevel={drillLevel}
         selectedMetric={selectedMetric}
         companySummary={companySummary}
@@ -87,7 +87,7 @@ const OutstandingSection = ({
         isLoadingOutstandingChart={isLoadingOutstandingChart}
         handleOutstandingViewAll={handleOutstandingViewAll}
         handleBack={handleBack}
-        handlePieClick={handlePieClick}
+        handleBarClick={handlePieClick}
       />
     </Box>
   );

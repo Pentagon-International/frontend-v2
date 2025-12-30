@@ -6956,7 +6956,7 @@ const Dashboard = () => {
                   />
                 </Grid.Col>
 
-                <Grid.Col span={6}>
+                {/* <Grid.Col span={6}>
                   <EnquirySection
                     enquiryConversionAggregatedData={enquiryConversionAggregatedData}
                     isLoadingEnquiryConversion={isLoadingEnquiryConversion}
@@ -6967,7 +6967,7 @@ const Dashboard = () => {
                     selectedPeriod={enquiryPeriod}
                     setSelectedPeriod={handleEnquiryPeriodChange}
                   />
-                </Grid.Col>
+                </Grid.Col> */}
               </Grid>
 
               {/* Section 5: Budget vs Actual */}
