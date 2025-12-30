@@ -6900,7 +6900,7 @@ const Dashboard = () => {
             />
           ) : (
             <Box>
-              {/* Section 1 & 2: Customer Interaction Status and Call Entry (side by side) */}
+              {/* Section 1 & 2: Customer Interaction Status and Enquiry (side by side) */}
               <Grid mb="lg">
                 <Grid.Col span={6}>
                   <CustomerInteractionStatus
@@ -6913,19 +6913,26 @@ const Dashboard = () => {
                   />
                 </Grid.Col>
                 <Grid.Col span={6}>
-                  <CallEntrySection
-                    callEntrySummary={callEntrySummary}
-                    isLoadingCallEntry={isLoadingCallEntry}
-                    handleCallEntryViewAll={handleCallEntryViewAll}
-                    selectedPeriod={callEntryPeriod}
-                    setSelectedPeriod={handleCallEntryPeriodChange}
+                  <EnquirySection
+                    enquiryConversionAggregatedData={
+                      enquiryConversionAggregatedData
+                    }
+                    isLoadingEnquiryConversion={isLoadingEnquiryConversion}
+                    isLoadingEnquiryChart={isLoadingEnquiryChart}
+                    enquiryView={enquiryView}
+                    setEnquiryView={setEnquiryView}
+                    handleEnquiryConversionViewAll={
+                      handleEnquiryConversionViewAll
+                    }
+                    selectedPeriod={enquiryPeriod}
+                    setSelectedPeriod={handleEnquiryPeriodChange}
                   />
                 </Grid.Col>
               </Grid>
 
-              {/* Section 3 & 4: Outstanding and Enquiry (side by side) */}
+              {/* Section 3 & 4: Outstanding and Call Entry (side by side) */}
               <Grid mb="lg">
-                <Grid.Col span={6}>
+                <Grid.Col span={8}>
                   <OutstandingSection
                     drillLevel={drillLevel}
                     selectedMetric={selectedMetric}
@@ -6946,22 +6953,15 @@ const Dashboard = () => {
                   />
                 </Grid.Col>
 
-                {/* <Grid.Col span={6}>
-                  <EnquirySection
-                    enquiryConversionAggregatedData={
-                      enquiryConversionAggregatedData
-                    }
-                    isLoadingEnquiryConversion={isLoadingEnquiryConversion}
-                    isLoadingEnquiryChart={isLoadingEnquiryChart}
-                    enquiryView={enquiryView}
-                    setEnquiryView={setEnquiryView}
-                    handleEnquiryConversionViewAll={
-                      handleEnquiryConversionViewAll
-                    }
-                    selectedPeriod={enquiryPeriod}
-                    setSelectedPeriod={handleEnquiryPeriodChange}
+                <Grid.Col span={4}>
+                  <CallEntrySection
+                    callEntrySummary={callEntrySummary}
+                    isLoadingCallEntry={isLoadingCallEntry}
+                    handleCallEntryViewAll={handleCallEntryViewAll}
+                    selectedPeriod={callEntryPeriod}
+                    setSelectedPeriod={handleCallEntryPeriodChange}
                   />
-                </Grid.Col> */}
+                </Grid.Col>
               </Grid>
 
               {/* Section 5: Budget vs Actual */}

@@ -32,6 +32,9 @@ const CustomerInteractionStatus = ({
         border: "1px solid #F7F7F7",
         borderRadius: "8px",
         padding: "16px",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <Group justify="space-between" align="center" mb="md">
@@ -80,11 +83,13 @@ const CustomerInteractionStatus = ({
         </Group>
       </Group>
 
-      <CustomerInteractionStatusCard
-        data={data}
-        loading={loading}
-        onViewAll={handleViewAll}
-      />
+      <Box style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <CustomerInteractionStatusCard
+          data={data}
+          loading={loading}
+          onViewAll={handleViewAll}
+        />
+      </Box>
     </Box>
   );
 };

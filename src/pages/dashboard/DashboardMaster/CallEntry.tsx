@@ -23,13 +23,13 @@ const CallEntry = ({
   handleCallEntryViewAll,
 }: CallEntryProps) => {
   return (
-    <Box>
+    <Box style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       {isLoadingCallEntry ? (
         <Center h={200}>
           <Loader size="lg" color="#105476" />
         </Center>
       ) : (
-        <Stack gap="lg" w="100%">
+        <Stack gap="lg" w="100%" style={{ flex: 1, padding: "8px" }}>
           {/* First Row - Today and Closed */}
           <Group gap="lg" justify="space-between" w="100%">
             {/* Today */}

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Card, Group, Text, Button } from "@mantine/core";
+import { Card, Group, Text, Button, Box } from "@mantine/core";
 import { BarChart, BarChartDataItem } from "../../../components";
 
 type MetricType = "outstanding" | "overdue";
@@ -110,11 +110,15 @@ const OutstandingBarChart = ({
   };
 
   return (
-    <Card
-      shadow="sm"
-      p="md"
-      radius="md"
-      style={{ border: "1px solid #e9ecef", height: "100%" }}
+    <Box
+      style={{
+        border: "1px solid #F7F7F7",
+        borderRadius: "8px",
+        padding: "16px",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
       <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
         <Group gap="xs" align="center">
@@ -142,16 +146,18 @@ const OutstandingBarChart = ({
         </Text>
       </Group>
 
-      <BarChart
-        data={barChartData}
-        type="outstanding-overdue"
-        height={350}
-        isLoading={isLoadingOutstandingChart}
-        onBarClick={handleBarClickEvent}
-        showLegend={true}
-        legendPosition="bottom"
-      />
-    </Card>
+      <Box style={{ flex: 1, padding: "8px", display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <BarChart
+          data={barChartData}
+          type="outstanding-overdue"
+          height={350}
+          isLoading={isLoadingOutstandingChart}
+          onBarClick={handleBarClickEvent}
+          showLegend={true}
+          legendPosition="bottom"
+        />
+      </Box>
+    </Box>
   );
 };
 
