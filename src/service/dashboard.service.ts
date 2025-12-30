@@ -1266,7 +1266,9 @@ export interface PipelineReportFilters {
   salesperson?: string;
   type?: string;
   customer_code?: string;
-  period?: string;
+  period?: string; // Commented out - can be used in future case
+  date_from?: string;
+  date_to?: string;
   region?: string;
   service?: string;
   service_type?: string;
@@ -1315,7 +1317,9 @@ export type PipelineReportSectorResponse = PipelineReportRegionalResponse;
 
 export interface PipelineReportRegionalFilters {
   company: string;
-  period: string;
+  period?: string; // Commented out - can be used in future case
+  date_from?: string;
+  date_to?: string;
   region?: string;
   salesperson?: string;
   search?: string;
@@ -1448,7 +1452,9 @@ export interface PipelineReportProductResponse {
 
 export interface PipelineReportProductFilters {
   company: string;
-  period: string;
+  period?: string; // Commented out - can be used in future case
+  date_from?: string;
+  date_to?: string;
   service?: string;
   service_type?: string;
   salesperson?: string;
@@ -1611,6 +1617,11 @@ export const getBookingData = async (
       filters: {
         status: "GAINED",
         ...(search && search.trim() && { search: search.trim() }),
+        // Add date filters in the same format as quotation list page
+        ...(fromDate && toDate && {
+          enquiry_received_date_from: dayjs(fromDate).format("YYYY-MM-DD"),
+          enquiry_received_date_to: dayjs(toDate).format("YYYY-MM-DD"),
+        }),
       },
     };
 
@@ -1639,25 +1650,8 @@ export const getBookingData = async (
       `Received ${quotationData.data.length} quotations with GAINED status`
     );
 
-    // Step 2: Filter by updated_at field based on date range
+    // Step 2: Use filtered quotations directly (date filtering is now done by API)
     let filteredQuotations = quotationData.data;
-
-    if (fromDate && toDate) {
-      const fromDateStr = dayjs(fromDate).format("YYYY-MM-DD");
-      const toDateStr = dayjs(toDate).format("YYYY-MM-DD");
-
-      filteredQuotations = quotationData.data.filter((quotation: any) => {
-        if (!quotation.updated_at) return false;
-
-        // Parse updated_at (format: "2025-11-18T11:51:33.860476Z")
-        const updatedDate = dayjs(quotation.updated_at).format("YYYY-MM-DD");
-        return updatedDate >= fromDateStr && updatedDate <= toDateStr;
-      });
-
-      console.log(
-        `Filtered to ${filteredQuotations.length} quotations based on updated_at date range (${fromDateStr} to ${toDateStr})`
-      );
-    }
 
     // Step 3: Transform data to BookingItem format
     const bookingItems: BookingItem[] = [];

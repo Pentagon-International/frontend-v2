@@ -70,7 +70,7 @@ const Enquiry = ({
             />
             <Box
               style={{
-                backgroundColor: "#AFC2D5",
+                backgroundColor: "#F6C667",
                 width: `${enquiryConversionAggregatedData.activePercentage}%`,
                 cursor: "pointer",
                 transition: "opacity 0.2s ease",
@@ -137,7 +137,7 @@ const Enquiry = ({
               <Text size="xs" c="dimmed">
                 Active
               </Text>
-              <Text size="lg" fw={700} c="#AFC2D5">
+              <Text size="lg" fw={700} c="#F6C667">
                 {enquiryConversionAggregatedData.totalActive}
               </Text>
             </Stack>

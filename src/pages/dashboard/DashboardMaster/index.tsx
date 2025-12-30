@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Grid,
-  Select,
   Tabs,
   TextInput,
   Autocomplete,
@@ -6809,314 +6808,9 @@ const Dashboard = () => {
                     detailedViewType === "customerNotVisited"))
               }
               headerActions={
-                detailedViewType === "callentry" ? (
-                  <Select
-                    key={`call-entry-period-${callEntryPeriod}`}
-                    value={callEntryPeriod}
-                    onChange={async (value) => {
-                      if (value) {
-                        setIsLoadingDetailedView(true);
-                        setCallEntryPeriod(value);
-                        const dateRange = calculateCallEntryDateRange(value);
-                        const companyName =
-                          user?.company?.company_name ||
-                          selectedCompany ||
-                          "PENTAGON INDIA";
-
-                        try {
-                          // Refresh based on current drill level
-                          if (callEntryDrillLevel === 0) {
-                            // Drill Level 0: Refresh salesperson list
-                            const response = await getCallEntryStatistics({
-                              company: companyName,
-                              date_from: dateRange.date_from,
-                              date_to: dateRange.date_to,
-                              ...(callEntryFilterType !== "all" && {
-                                type: callEntryFilterType,
-                              }),
-                            });
-                            const tableData = (
-                              response.data as CallEntrySalespersonData[]
-                            ).map((item) => ({
-                              SALESPERSON: item.salesperson,
-                              OVERDUE: item.total_overdue,
-                              TODAY: item.total_today,
-                              UPCOMING: item.total_upcoming,
-                              CLOSED: item.total_closed,
-                              TOTAL_CALLS: item.total_calls,
-                              // Enable Send Email action at salesperson level
-                              send_email: "send_email",
-                              salesperson_email: item.salesperson_email || "",
-                              cc_mail: item.cc_mail || [],
-                            }));
-                            // Sort by total calls in descending order
-                            tableData.sort((a, b) => {
-                              const aTotal = a.TOTAL_CALLS || 0;
-                              const bTotal = b.TOTAL_CALLS || 0;
-                              return bTotal - aTotal; // Descending order
-                            });
-                            setDetailedViewData(tableData);
-                            setCallEntrySummary(response.summary);
-                          } else if (
-                            callEntryDrillLevel === 1 &&
-                            callEntrySelectedSalesperson
-                          ) {
-                            // Drill Level 1: Refresh customer list
-                            const response = await getCallEntryStatistics({
-                              company: companyName,
-                              salesperson: callEntrySelectedSalesperson,
-                              date_from: dateRange.date_from,
-                              date_to: dateRange.date_to,
-                              ...(callEntryFilterType !== "all" && {
-                                type: callEntryFilterType,
-                              }),
-                            });
-                            const statsResponse =
-                              response as CallEntryStatisticsResponse;
-                            const salespersonEmail =
-                              statsResponse.salesperson_email || "";
-                            const ccMail = statsResponse.cc_mail || [];
-
-                            const tableData = (
-                              response.data as CallEntryCustomerData[]
-                            ).map((item) => ({
-                              CUSTOMER_CODE: item.customer_code,
-                              CUSTOMER_NAME: item.customer_name,
-                              OVERDUE: item.total_overdue,
-                              TODAY: item.total_today,
-                              UPCOMING: item.total_upcoming,
-                              CLOSED: item.total_closed,
-                              TOTAL_CALLS: item.total_calls,
-                              // Enable Send Email action at customer level (same salesperson email)
-                              send_email: "send_email",
-                              salesperson_email: salespersonEmail,
-                              cc_mail: ccMail,
-                            }));
-                            setDetailedViewData(tableData);
-                          } else if (
-                            callEntryDrillLevel === 2 &&
-                            callEntrySelectedCustomer &&
-                            callEntrySelectedSalesperson
-                          ) {
-                            // Drill Level 2: Refresh call entry details
-                            const response = await getCallEntryStatistics({
-                              company: companyName,
-                              salesperson: callEntrySelectedSalesperson,
-                              customer_code: callEntrySelectedCustomer.code,
-                              date_from: dateRange.date_from,
-                              date_to: dateRange.date_to,
-                              ...(callEntryFilterType !== "all" && {
-                                type: callEntryFilterType,
-                              }),
-                            });
-                            const tableData = (
-                              response.data as CallEntryDetailData[]
-                            ).map((item) => ({
-                              CALL_ENTRY_ID: item.call_entry_id,
-                              CUSTOMER_NAME: item.customer_name,
-                              CALL_DATE: item.call_date,
-                              CALL_MODE: item.call_mode_name,
-                              FOLLOWUP_ACTION: item.followup_action_name,
-                              CALL_SUMMARY: item.call_summary,
-                              FOLLOWUP_DATE: item.followup_date,
-                              EXPECTED_PROFIT: item.expected_profit,
-                              CREATED_BY: item.created_by_name,
-                            }));
-                            setDetailedViewData(tableData);
-                          }
-                        } catch (error) {
-                          console.error(
-                            "Error refreshing call entry data:",
-                            error
-                          );
-                          toast.error("Failed to refresh data");
-                        } finally {
-                          setIsLoadingDetailedView(false);
-                        }
-                      }
-                    }}
-                    data={[
-                      { value: "weekly", label: "Last Week" },
-                      { value: "current_month", label: "Current Month" },
-                      { value: "last_month", label: "Last Month" },
-                      { value: "last_3_months", label: "Last 3 Months" },
-                      { value: "last_6_months", label: "Last 6 Months" },
-                      { value: "last_year", label: "Last Year" },
-                    ]}
-                    size="xs"
-                    w={150}
-                    styles={{
-                      input: { fontSize: "12px" },
-                    }}
-                  />
-                ) : detailedViewType === "enquiry" ? (
-                  <Select
-                    key={`enquiry-period-${enquiryPeriod}`}
-                    value={enquiryPeriod}
-                    onChange={async (value) => {
-                      if (value) {
-                        setIsLoadingDetailedView(true);
-                        setEnquiryPeriod(value);
-                        const dateRange = calculateCallEntryDateRange(value);
-                        const companyName =
-                          user?.company?.company_name ||
-                          selectedCompany ||
-                          "PENTAGON INDIA";
-
-                        try {
-                          // Refresh based on current drill level
-                          if (detailedViewDrillLevel === 0) {
-                            // Drill Level 0: Refresh initial view
-                            const filterData: DashboardFilters = {
-                              ...(companyName && { company: companyName }),
-                              date_from: dateRange.date_from,
-                              date_to: dateRange.date_to,
-                            };
-                            const response =
-                              await getFilteredEnquiryConversionData(
-                                filterData
-                              );
-                            let tableData =
-                              convertEnquiryResponseToTableData(response);
-
-                            // Apply current filter type if any
-                            if (enquiryFilterType === "gain") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.gained || item.total_gain || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "lost") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.lost || item.total_lost || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "active") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.active || item.total_active || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "quote") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.quote_created ||
-                                    item.total_quote_created ||
-                                    0) > 0
-                              );
-                            }
-                            setDetailedViewData(tableData);
-                          } else if (
-                            detailedViewDrillLevel === 1 &&
-                            detailedViewSelectedCompany
-                          ) {
-                            // Drill Level 1: Refresh company-level data
-                            const filterData: DashboardFilters = {
-                              company: detailedViewSelectedCompany,
-                              date_from: dateRange.date_from,
-                              date_to: dateRange.date_to,
-                            };
-                            const response =
-                              await getFilteredEnquiryConversionData(
-                                filterData
-                              );
-                            let tableData =
-                              convertEnquiryResponseToTableData(response);
-
-                            // Apply current filter type if any
-                            if (enquiryFilterType === "gain") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.gained || item.total_gain || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "lost") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.lost || item.total_lost || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "active") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.active || item.total_active || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "quote") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.quote_created ||
-                                    item.total_quote_created ||
-                                    0) > 0
-                              );
-                            }
-                            setDetailedViewData(tableData);
-                          } else if (
-                            detailedViewDrillLevel === 2 &&
-                            detailedViewSelectedCompany &&
-                            detailedViewSelectedSalesperson
-                          ) {
-                            // Drill Level 2: Refresh salesperson-level data
-                            const filterData: DashboardFilters = {
-                              company: detailedViewSelectedCompany,
-                              salesman: detailedViewSelectedSalesperson,
-                              date_from: dateRange.date_from,
-                              date_to: dateRange.date_to,
-                            };
-                            const response =
-                              await getFilteredEnquiryConversionData(
-                                filterData
-                              );
-                            let tableData =
-                              convertEnquiryResponseToTableData(response);
-
-                            // Apply current filter type if any
-                            if (enquiryFilterType === "gain") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.gained || item.total_gain || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "lost") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.lost || item.total_lost || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "active") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.active || item.total_active || 0) > 0
-                              );
-                            } else if (enquiryFilterType === "quote") {
-                              tableData = tableData.filter(
-                                (item: any) =>
-                                  (item.quote_created ||
-                                    item.total_quote_created ||
-                                    0) > 0
-                              );
-                            }
-                            setDetailedViewData(tableData);
-                          }
-                        } catch (error) {
-                          console.error(
-                            "Error refreshing enquiry conversion data:",
-                            error
-                          );
-                          toast.error("Failed to refresh data");
-                        } finally {
-                          setIsLoadingDetailedView(false);
-                        }
-                      }
-                    }}
-                    data={[
-                      { value: "weekly", label: "Last Week" },
-                      { value: "current_month", label: "Current Month" },
-                      { value: "last_month", label: "Last Month" },
-                      { value: "last_3_months", label: "Last 3 Months" },
-                      { value: "last_6_months", label: "Last 6 Months" },
-                      { value: "last_year", label: "Last Year" },
-                    ]}
-                    size="xs"
-                    w={150}
-                    styles={{
-                      input: { fontSize: "12px" },
-                    }}
-                  />
-                ) : undefined
+                // Commented out - can be used in future case
+                // Period filter is now common at top level
+                undefined
               }
             />
           ) : (
@@ -7249,11 +6943,18 @@ const Dashboard = () => {
             key={tabsRefreshKey}
             initialState={pipelineReportState || undefined}
             globalSearch={globalSearch}
+            fromDate={customerInteractionFromDate}
+            toDate={customerInteractionToDate}
           />
         </Tabs.Panel>
 
         <Tabs.Panel value="booking" pt="md">
-          <Booking key={tabsRefreshKey} globalSearch={globalSearch} />
+          <Booking
+            key={tabsRefreshKey}
+            globalSearch={globalSearch}
+            fromDate={customerInteractionFromDate}
+            toDate={customerInteractionToDate}
+          />
         </Tabs.Panel>
       </Tabs>
 
