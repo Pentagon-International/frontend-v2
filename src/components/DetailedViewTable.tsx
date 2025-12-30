@@ -1,9 +1,9 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Text,
   Button,
   Group,
-  Card,
+  Box,
   Stack,
   Badge,
   Center,
@@ -17,7 +17,6 @@ import {
   IconArrowLeft,
   IconChevronLeft,
   IconChevronRight,
-  IconSearch,
   IconSend,
 } from "@tabler/icons-react";
 import {
@@ -96,8 +95,6 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
   showCloseButton = true,
   headerActions,
   onCellEdit,
-  initialSearch = "",
-  onSearchChange,
 }) => {
   // State to track which cell is being edited (rowIndex, columnKey)
   const [editingCell, setEditingCell] = useState<{
@@ -111,49 +108,6 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
   // Pagination state - track internally for UI, sync with parent via callback
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [currentPageSize, setCurrentPageSize] = useState(10);
-
-  // Search state
-  const [searchInputValue, setSearchInputValue] = useState<string>(
-    initialSearch || ""
-  );
-  const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
-
-  // Sync with parent's initial search value
-  useEffect(() => {
-    if (initialSearch !== undefined) {
-      setSearchInputValue(initialSearch);
-    }
-  }, [initialSearch]);
-
-  // Simple search handler - always triggers API call
-  const handleSearch = async (searchValue?: string) => {
-    // Use provided value or current state value
-    const valueToSearch =
-      searchValue !== undefined ? searchValue : searchInputValue;
-    const searchQuery = valueToSearch.trim();
-    setIsSearchLoading(true);
-    if (onSearchChange) {
-      try {
-        await onSearchChange(searchQuery);
-      } catch (error) {
-        console.error("Search error:", error);
-      } finally {
-        setIsSearchLoading(false);
-      }
-    } else {
-      setIsSearchLoading(false);
-    }
-  };
-
-  // Handler for Enter key press - reads value directly from input
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      // Read value directly from input element to ensure we get current value
-      const currentValue = event.currentTarget.value;
-      handleSearch(currentValue);
-    }
-  };
 
   // Enable pagination only for customerNotVisited module
   const isPaginationEnabled = moduleType === "customerNotVisited";
@@ -1143,9 +1097,10 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       style: { width: "100%", border: "1px solid #dee2e6" },
     },
     mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
+      shadow: "none",
+      p: 0,
+      radius: 0,
+      style: { border: "none", boxShadow: "none" },
     },
     mantineTableBodyCellProps: {
       style: {
@@ -1244,13 +1199,13 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
   if (loading) {
     return (
-      <Card shadow="sm" padding="lg" radius="md" withBorder={false}>
+      <Box>
         <Group justify="space-between" align="center" mb="md" wrap="nowrap">
           <Text
             size="md"
             fw={500}
             c="#424242"
-            style={{ fontFamily: "lux/font/family/geist" }}
+            style={{ fontFamily: "Geist, sans-serif" }}
           >
             {title}
           </Text>
@@ -1283,56 +1238,54 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         <Center py="xl">
           <Loader size="lg" color="#105476" />
         </Center>
-      </Card>
+      </Box>
     );
   }
 
   if (!data || data.length === 0) {
     return (
-      <Card shadow="sm" padding="lg" radius="md" withBorder={false}>
-        <>
-          <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-            <Text
-              size="md"
-              fw={500}
-              c="#424242"
-              style={{ fontFamily: "lux/font/family/geist" }}
-            >
-              {title}
-            </Text>
-            <Group gap="xs">
-              {headerActions}
-              {showBackButton && onBack && (
-                <Button
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={onBack}
-                  variant="outline"
-                  size="xs"
-                  color="#105476"
-                >
-                  Back
-                </Button>
-              )}
-              {showCloseButton && (
-                <Button
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={onClose}
-                  variant="outline"
-                  size="xs"
-                  color="#105476"
-                >
-                  Back to Dashboard
-                </Button>
-              )}
-            </Group>
+      <Box>
+        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
+          <Text
+            size="md"
+            fw={500}
+            c="#424242"
+            style={{ fontFamily: "Geist, sans-serif" }}
+          >
+            {title}
+          </Text>
+          <Group gap="xs">
+            {headerActions}
+            {showBackButton && onBack && (
+              <Button
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={onBack}
+                variant="outline"
+                size="xs"
+                color="#105476"
+              >
+                Back
+              </Button>
+            )}
+            {showCloseButton && (
+              <Button
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={onClose}
+                variant="outline"
+                size="xs"
+                color="#105476"
+              >
+                Back to Dashboard
+              </Button>
+            )}
           </Group>
-          <Center py="xl">
-            <Text size="md" c="dimmed">
-              No data available
-            </Text>
-          </Center>
-        </>
-      </Card>
+        </Group>
+        <Center py="xl">
+          <Text size="md" c="dimmed">
+            No data available
+          </Text>
+        </Center>
+      </Box>
     );
   }
 
@@ -1344,7 +1297,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           size="md"
           fw={500}
           c="#424242"
-          style={{ fontFamily: "lux/font/family/geist" }}
+          style={{ fontFamily: "Geist, sans-serif" }}
         >
           {title}
         </Text>
@@ -1374,37 +1327,6 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           )}
         </Group>
       </Group>
-
-      {/* Search Input */}
-      {onSearchChange && (
-        <Group mb="md" justify="flex-end">
-          <Group style={{ flex: 1, maxWidth: "400px" }} gap="xs">
-            <TextInput
-              placeholder="Search by customer name or salesperson..."
-              value={searchInputValue}
-              onChange={(event) =>
-                setSearchInputValue(event.currentTarget.value)
-              }
-              onKeyDown={handleKeyDown}
-              rightSection={
-                isSearchLoading ? (
-                  <Loader size="xs" />
-                ) : (
-                  <ActionIcon
-                    variant="subtle"
-                    color="blue"
-                    onClick={() => handleSearch()}
-                    disabled={isSearchLoading}
-                  >
-                    <IconSearch size={18} />
-                  </ActionIcon>
-                )
-              }
-              style={{ flex: 1 }}
-            />
-          </Group>
-        </Group>
-      )}
 
       <MantineReactTable key={columnOrder.join(",")} table={table} />
 

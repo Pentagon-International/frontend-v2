@@ -20,9 +20,20 @@ const CallEntrySection = ({
   setSelectedPeriod,
 }: CallEntrySectionProps) => {
   return (
-    <Box>
+    <Box
+      style={{
+        border: "1px solid #F7F7F7",
+        borderRadius: "8px",
+        padding: "16px",
+      }}
+    >
       <Group justify="space-between" align="center" mb="md">
-        <Text size="lg" fw={600}>
+        <Text
+          size="lg"
+          fw={500}
+          c="#22252B"
+          style={{ fontFamily: "Inter, sans-serif" }}
+        >
           Call Entry
         </Text>
         <Group gap="xs">

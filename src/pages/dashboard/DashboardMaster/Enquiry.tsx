@@ -1,21 +1,4 @@
-import {
-  Card,
-  Group,
-  Text,
-  Badge,
-  Stack,
-  Box,
-  Image,
-  Loader,
-  Center,
-  ActionIcon,
-  Select,
-} from "@mantine/core";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
-import gainImage from "../../../assets/images/gain.png";
-import lossImage from "../../../assets/images/loss.png";
-import quotationImage from "../../../assets/images/quotation.png";
-import tasksImage from "../../../assets/images/tasks.png";
+import { Group, Text, Badge, Stack, Box, Loader, Center } from "@mantine/core";
 import { EnquiryConversionAggregatedData } from "../../../service/dashboard.service";
 
 interface EnquiryProps {
@@ -35,24 +18,15 @@ const Enquiry = ({
   enquiryConversionAggregatedData,
   isLoadingEnquiryConversion,
   isLoadingEnquiryChart,
-  enquiryView,
-  setEnquiryView,
   handleEnquiryConversionViewAll,
-  selectedPeriod,
-  setSelectedPeriod,
 }: EnquiryProps) => {
   return (
-    <Card
-      shadow="sm"
-      p="md"
-      radius="md"
-      style={{ border: "1px solid #e9ecef", height: "100%" }}
-    >
+    <Box>
       <Group justify="space-between" align="center" mb="sm">
         <Badge color="#105476" variant="filled" size="sm">
           Total {enquiryConversionAggregatedData.totalEnquiries}
         </Badge>
-        
+
         <Text
           size="sm"
           c="#105476"
@@ -71,219 +45,137 @@ const Enquiry = ({
           <Loader size="lg" color="#105476" />
         </Center>
       ) : (
-        <Stack align="center" justify="center" h="70%">
-          <Box style={{ position: "relative", width: "100%" }}>
-            <Group gap="xl" justify="center">
-              {enquiryView === "gain-lost" ? (
-                <>
-                  <Stack
-                    align="center"
-                    gap="sm"
-                    style={{
-                      cursor: "pointer",
-                      padding: "10px",
-                      borderRadius: "8px",
-                      transition: "all 0.2s ease",
-                    }}
-                    onClick={() => handleEnquiryConversionViewAll("gain")}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#e8f4f8";
-                      e.currentTarget.style.transform = "scale(1.05)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                      e.currentTarget.style.transform = "scale(1)";
-                    }}
-                  >
-                    <Group align="center" gap="md">
-                      <Image src={gainImage} alt="Gain" w={40} h={40} />
-                      <Box
-                        p="xs"
-                        style={{
-                          backgroundColor: "#105476",
-                          borderRadius: "4px",
-                          display: "inline-block",
-                        }}
-                      >
-                        <Text size="lg" fw={700} c="white">
-                          {enquiryConversionAggregatedData.gainPercentage}%
-                        </Text>
-                      </Box>
-                    </Group>
-                    <Group gap={4}>
-                      <Text size="sm" c="dimmed">
-                        Gain
-                      </Text>
-                      <Badge color="#105476" variant="filled" size="sm">
-                        {enquiryConversionAggregatedData.totalGain}
-                      </Badge>
-                    </Group>
-                  </Stack>
-                  <Stack
-                    align="center"
-                    gap="sm"
-                    style={{
-                      cursor: "pointer",
-                      padding: "10px",
-                      borderRadius: "8px",
-                      transition: "all 0.2s ease",
-                    }}
-                    onClick={() => handleEnquiryConversionViewAll("lost")}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#f9f9fb";
-                      e.currentTarget.style.transform = "scale(1.05)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                      e.currentTarget.style.transform = "scale(1)";
-                    }}
-                  >
-                    <Group align="center" gap="md">
-                      <Image src={lossImage} alt="Loss" w={40} h={40} />
-                      <Box
-                        p="xs"
-                        style={{
-                          backgroundColor: "#F1F3F9",
-                          borderRadius: "4px",
-                          display: "inline-block",
-                        }}
-                      >
-                        <Text size="lg" fw={700} c="#105476">
-                          {enquiryConversionAggregatedData.lossPercentage}%
-                        </Text>
-                      </Box>
-                    </Group>
-                    <Group gap={4}>
-                      <Text size="sm" c="dimmed">
-                        Loss
-                      </Text>
-                      <Badge color="gray" variant="filled" size="sm">
-                        {enquiryConversionAggregatedData.totalLost}
-                      </Badge>
-                    </Group>
-                  </Stack>
-                </>
-              ) : (
-                <>
-                  <Stack
-                    align="center"
-                    gap="sm"
-                    style={{
-                      cursor: "pointer",
-                      padding: "10px",
-                      borderRadius: "8px",
-                      transition: "all 0.2s ease",
-                    }}
-                    onClick={() => handleEnquiryConversionViewAll("active")}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#e8f4f8";
-                      e.currentTarget.style.transform = "scale(1.05)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                      e.currentTarget.style.transform = "scale(1)";
-                    }}
-                  >
-                    <Group align="center" gap="md">
-                      <Image src={tasksImage} alt="Active" w={40} h={40} />
-                      <Box
-                        p="xs"
-                        style={{
-                          backgroundColor: "#105476",
-                          borderRadius: "4px",
-                          display: "inline-block",
-                        }}
-                      >
-                        <Text size="lg" fw={700} c="white">
-                          {enquiryConversionAggregatedData.activePercentage}%
-                        </Text>
-                      </Box>
-                    </Group>
-                    <Group gap={4}>
-                      <Text size="sm" c="dimmed">
-                        Active
-                      </Text>
-                      <Badge color="#105476" variant="filled" size="sm">
-                        {enquiryConversionAggregatedData.totalActive}
-                      </Badge>
-                    </Group>
-                  </Stack>
-                  <Stack
-                    align="center"
-                    gap="sm"
-                    style={{
-                      cursor: "pointer",
-                      padding: "10px",
-                      borderRadius: "8px",
-                      transition: "all 0.2s ease",
-                    }}
-                    onClick={() => handleEnquiryConversionViewAll("quote")}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#f9f9fb";
-                      e.currentTarget.style.transform = "scale(1.05)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                      e.currentTarget.style.transform = "scale(1)";
-                    }}
-                  >
-                    <Group align="center" gap="md">
-                      <Image src={quotationImage} alt="Quote" w={40} h={40} />
-                      <Box
-                        p="xs"
-                        style={{
-                          backgroundColor: "#F1F3F9",
-                          borderRadius: "4px",
-                          display: "inline-block",
-                        }}
-                      >
-                        <Text size="lg" fw={700} c="#105476">
-                          {enquiryConversionAggregatedData.quotePercentage}%
-                        </Text>
-                      </Box>
-                    </Group>
-                    <Group gap={4}>
-                      <Text size="sm" c="dimmed">
-                        Quoted
-                      </Text>
-                      <Badge color="gray" variant="filled" size="sm">
-                        {enquiryConversionAggregatedData.totalQuoteCreated}
-                      </Badge>
-                    </Group>
-                  </Stack>
-                </>
-              )}
-            </Group>
-
-            {/* Slider Button - Fixed position on right side */}
-            <ActionIcon
-              variant="filled"
-              color="#105476"
-              size="md"
-              radius="xl"
+        <Stack gap="md" style={{ paddingTop: "16px" }}>
+          {/* Horizontal Bar Chart */}
+          <Box
+            style={{
+              width: "100%",
+              height: "40px",
+              display: "flex",
+              borderRadius: "4px",
+              overflow: "hidden",
+            }}
+          >
+            <Box
               style={{
-                position: "absolute",
-                right: -10,
-                top: "30%",
-                transform: "translateY(-50%)",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                backgroundColor: "#2E7D32",
+                width: `${enquiryConversionAggregatedData.gainPercentage}%`,
+                cursor: "pointer",
+                transition: "opacity 0.2s ease",
               }}
-              onClick={() =>
-                setEnquiryView(
-                  enquiryView === "gain-lost" ? "active-quote" : "gain-lost"
-                )
-              }
-            >
-              {enquiryView === "gain-lost" ? (
-                <IconChevronRight size={16} />
-              ) : (
-                <IconChevronLeft size={16} />
-              )}
-            </ActionIcon>
+              onClick={() => handleEnquiryConversionViewAll("gain")}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = "0.8";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = "1";
+              }}
+            />
+            <Box
+              style={{
+                backgroundColor: "#8B0000",
+                width: `${enquiryConversionAggregatedData.lossPercentage}%`,
+                cursor: "pointer",
+                transition: "opacity 0.2s ease",
+              }}
+              onClick={() => handleEnquiryConversionViewAll("lost")}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = "0.8";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = "1";
+              }}
+            />
+            <Box
+              style={{
+                backgroundColor: "#C7A54B",
+                width: `${enquiryConversionAggregatedData.activePercentage}%`,
+                cursor: "pointer",
+                transition: "opacity 0.2s ease",
+              }}
+              onClick={() => handleEnquiryConversionViewAll("active")}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = "0.8";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = "1";
+              }}
+            />
+            <Box
+              style={{
+                backgroundColor: "#105476",
+                width: `${enquiryConversionAggregatedData.quotePercentage}%`,
+                cursor: "pointer",
+                transition: "opacity 0.2s ease",
+              }}
+              onClick={() => handleEnquiryConversionViewAll("quote")}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = "0.8";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = "1";
+              }}
+            />
           </Box>
+
+          {/* Labels below the bar */}
+          <Group justify="space-between" style={{ paddingTop: "8px" }}>
+            <Stack
+              align="center"
+              gap={4}
+              style={{ cursor: "pointer" }}
+              onClick={() => handleEnquiryConversionViewAll("gain")}
+            >
+              <Text size="xs" c="dimmed">
+                Gain
+              </Text>
+              <Text size="xl" fw={700} c="#2E7D32">
+                {enquiryConversionAggregatedData.totalGain}
+              </Text>
+            </Stack>
+            <Stack
+              align="center"
+              gap={4}
+              style={{ cursor: "pointer" }}
+              onClick={() => handleEnquiryConversionViewAll("lost")}
+            >
+              <Text size="xs" c="dimmed">
+                Loss
+              </Text>
+              <Text size="xl" fw={700} c="#8B0000">
+                {enquiryConversionAggregatedData.totalLost}
+              </Text>
+            </Stack>
+            <Stack
+              align="center"
+              gap={4}
+              style={{ cursor: "pointer" }}
+              onClick={() => handleEnquiryConversionViewAll("active")}
+            >
+              <Text size="xs" c="dimmed">
+                Active
+              </Text>
+              <Text size="xl" fw={700} c="#C7A54B">
+                {enquiryConversionAggregatedData.totalActive}
+              </Text>
+            </Stack>
+            <Stack
+              align="center"
+              gap={4}
+              style={{ cursor: "pointer" }}
+              onClick={() => handleEnquiryConversionViewAll("quote")}
+            >
+              <Text size="xs" c="dimmed">
+                Quoted
+              </Text>
+              <Text size="xl" fw={700} c="#105476">
+                {enquiryConversionAggregatedData.totalQuoteCreated}
+              </Text>
+            </Stack>
+          </Group>
         </Stack>
       )}
-    </Card>
+    </Box>
   );
 };
 
