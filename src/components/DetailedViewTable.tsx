@@ -260,17 +260,21 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       followup_action: "Follow-Up Action",
       created_by: "Created By",
       expected_profit: "Expected Profit",
-      total_enquiries: "TOTAL ENQUIRIES",
-      total_enquiry: "TOTAL ENQUIRY",
-      gain_percentage: "GAIN PERCENTAGE",
-      loss_percentage: "LOSS PERCENTAGE",
-      active_percentage: "ACTIVE PERCENTAGE",
-      quoted_percentage: "QUOTED PERCENTAGE",
+      total_enquiries: "Total Enquiries",
+      total_enquiry: "Total Enquiry",
+      gain_percentage: "Gain Percentage",
+      loss_percentage: "Loss Percentage",
+      active_percentage: "Active Percentage",
+      quoted_percentage: "Quoted Percentage",
       salesperson: "Salesperson",
       region: "Region",
       product: "Product",
       volume: "Volume",
       date: "Booking Date",
+      OVERDUE: "Overdue",
+      TODAY: "Today",
+      UPCOMING: "Upcoming",
+      CLOSED: "Closed",
     };
 
     // Generate columns dynamically using MantineReactTable format
@@ -803,7 +807,13 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         // Handle percentage columns - display with special formatting
         columnDefs.push({
           accessorKey: key,
-          header: fieldNameMappings[key] || key.toUpperCase(),
+          header: (fieldNameMappings[key] || key.toUpperCase())
+            .split(" ")
+            .map(
+              (word) =>
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            )
+            .join(" "),
           Cell: ({ row }) => {
             const cellValue = row.original[key];
             // Cell value is already a string with '%' (e.g., "75%")
@@ -886,6 +896,14 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
             )
             .join(" ");
+
+        // Ensure first letter of each word is capitalized (apply to fieldNameMappings values too)
+        headerText = headerText
+          .split(" ")
+          .map(
+            (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          )
+          .join(" ");
 
         // Special header handling for salesperson column when company name is available
         if (
@@ -1328,7 +1346,15 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         </Group>
       </Group>
 
-      <MantineReactTable key={columnOrder.join(",")} table={table} />
+      <Box
+        style={{
+          borderTopLeftRadius: "8px",
+          borderTopRightRadius: "8px",
+          overflow: "hidden",
+        }}
+      >
+        <MantineReactTable key={columnOrder.join(",")} table={table} />
+      </Box>
 
       {/* Custom Pagination for Customer Not Visited (EnquiryMaster style) */}
       {isPaginationEnabled && (

@@ -53,7 +53,7 @@ const OutstandingSection = ({
       style={{
         border: "1px solid #F7F7F7",
         borderRadius: "8px",
-        padding: "16px",
+        padding: "12px",
         height: "100%",
         display: "flex",
         flexDirection: "column",
@@ -61,7 +61,7 @@ const OutstandingSection = ({
     >
       <Group justify="space-between" align="center" mb="md">
         <Text
-          size="lg"
+          size="md"
           fw={500}
           c="#22252B"
           style={{ fontFamily: "Inter, sans-serif" }}

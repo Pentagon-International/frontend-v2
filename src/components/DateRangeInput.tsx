@@ -19,9 +19,11 @@ export interface DateRangeInputProps {
   allowDeselection?: boolean;
   showRangeInCalendar?: boolean;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
+  containerStyle?: React.CSSProperties;
   disabled?: boolean;
   minDate?: Date;
   maxDate?: Date;
+  hideLabels?: boolean;
 }
 
 const DateRangeInput: React.FC<DateRangeInputProps> = ({
@@ -39,6 +41,8 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
   disabled = false,
   minDate,
   maxDate,
+  containerStyle,
+  hideLabels = false,
 }) => {
   // Helper to check if date is selected
   const isDateSelected = (
@@ -165,9 +169,15 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
   };
 
   return (
-    <Group gap="md" align="flex-end" w={"100%"} grow>
+    <Group
+      gap="md"
+      align={hideLabels ? "center" : "flex-end"}
+      w={"100%"}
+      grow
+      style={containerStyle}
+    >
       <DateInput
-        label={fromLabel}
+        label={hideLabels ? undefined : fromLabel}
         placeholder={fromPlaceholder}
         value={fromDate}
         onChange={handleFromDateChange}
@@ -226,7 +236,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         styles={getDateStyles()}
       />
       <DateInput
-        label={toLabel}
+        label={hideLabels ? undefined : toLabel}
         placeholder={toPlaceholder}
         value={toDate}
         onChange={handleToDateChange}

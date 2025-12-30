@@ -69,7 +69,8 @@ const OutstandingBarChart = ({
         label: loc.location || loc.Location || "Location",
         value1: parseFloat(loc?.summary?.total_outstanding || 0),
         value2: parseFloat(loc?.summary?.total_overdue || 0),
-        salesperson: loc?.summary?.total || loc?.summary?.total_salesperson || "",
+        salesperson:
+          loc?.summary?.total || loc?.summary?.total_salesperson || "",
         _meta: {
           type: "location",
           location: loc.location || loc.Location,
@@ -98,7 +99,7 @@ const OutstandingBarChart = ({
   const handleBarClickEvent = (params: any) => {
     const dataIndex = params.dataIndex;
     const item = barChartData[dataIndex];
-    
+
     if (item && item._meta) {
       handleBarClick({
         data: {
@@ -123,11 +124,7 @@ const OutstandingBarChart = ({
       <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
         <Group gap="xs" align="center">
           {drillLevel > 0 && (
-            <Button
-              size="compact-xs"
-              variant="light"
-              onClick={handleBack}
-            >
+            <Button size="compact-xs" variant="light" onClick={handleBack}>
               Back
             </Button>
           )}
@@ -146,7 +143,15 @@ const OutstandingBarChart = ({
         </Text>
       </Group>
 
-      <Box style={{ flex: 1, padding: "8px", display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <Box
+        style={{
+          flex: 1,
+          padding: "8px",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+        }}
+      >
         <BarChart
           data={barChartData}
           type="outstanding-overdue"
@@ -162,4 +167,3 @@ const OutstandingBarChart = ({
 };
 
 export default OutstandingBarChart;
-

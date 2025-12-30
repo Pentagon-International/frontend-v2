@@ -55,7 +55,7 @@ import {
   extractNumericValue,
 } from "../../../service/dashboard.service";
 import { useQuery } from "@tanstack/react-query";
-import { DetailedViewTable } from "../../../components";
+import { DetailedViewTable, DateRangeInput } from "../../../components";
 import dayjs from "dayjs";
 import Outstanding from "./Outstanding";
 import Budget from "./Budget";
@@ -303,6 +303,35 @@ const Dashboard = () => {
   const [outstandingPeriod, setOutstandingPeriod] =
     useState<string>("last_30_days");
 
+  // Customer Interaction Status date range states
+  const getDefaultFromDate = (): Date => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  };
+  const getDefaultToDate = (): Date => {
+    return new Date();
+  };
+  const [customerInteractionFromDate, setCustomerInteractionFromDate] =
+    useState<Date | null>(getDefaultFromDate());
+  const [customerInteractionToDate, setCustomerInteractionToDate] =
+    useState<Date | null>(getDefaultToDate());
+
+  // Enquiry date range states
+  const [enquiryFromDate, setEnquiryFromDate] = useState<Date | null>(
+    getDefaultFromDate()
+  );
+  const [enquiryToDate, setEnquiryToDate] = useState<Date | null>(
+    getDefaultToDate()
+  );
+
+  // Call Entry date range states
+  const [callEntryFromDate, setCallEntryFromDate] = useState<Date | null>(
+    getDefaultFromDate()
+  );
+  const [callEntryToDate, setCallEntryToDate] = useState<Date | null>(
+    getDefaultToDate()
+  );
+
   // Customer Interaction Status Summary (simplified)
   const [customerInteractionData, setCustomerInteractionData] = useState<{
     gain: number;
@@ -422,12 +451,12 @@ const Dashboard = () => {
         );
         setSelectedYear(dashboardState.selectedYear || null);
         setSelectedDate(dashboardState.selectedDate || null);
-        // Restore enquiryPeriod if available and refresh main card data
-        if (dashboardState.enquiryPeriod) {
-          setEnquiryPeriod(dashboardState.enquiryPeriod);
-          // Refresh main enquiry card data with restored period
-          handleEnquiryPeriodChange(dashboardState.enquiryPeriod);
-        }
+        // Restore enquiryPeriod if available (commented out - can be used in future case)
+        // if (dashboardState.enquiryPeriod) {
+        //   setEnquiryPeriod(dashboardState.enquiryPeriod);
+        //   // Refresh main enquiry card data with restored period
+        //   handleEnquiryPeriodChange(dashboardState.enquiryPeriod);
+        // }
 
         // Restore detailed view data
         const restoreDetailedView = async () => {
@@ -577,10 +606,10 @@ const Dashboard = () => {
             restoredPeriod = callEntryPeriod;
           }
         }
-        // Set period state immediately - this will update the Select component
-        setCallEntryPeriod(restoredPeriod);
-        // Refresh main call entry card data with restored period
-        handleCallEntryPeriodChange(restoredPeriod);
+        // Set period state immediately (commented out - can be used in future case)
+        // setCallEntryPeriod(restoredPeriod);
+        // Refresh main call entry card data with restored period (commented out - can be used in future case)
+        // handleCallEntryPeriodChange(restoredPeriod);
 
         // Restore detailed view data
         const restoreCallEntryDetailedView = async () => {
@@ -1040,18 +1069,44 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, selectedCompany, selectedLocation, searchSalesman]);
 
-  // Handler for customer interaction period change
-  const handleCustomerInteractionPeriodChange = async (period: string) => {
+  // Handler for customer interaction period change (commented - can be used in future case)
+  // const handleCustomerInteractionPeriodChange = async (period: string) => {
+  //   try {
+  //     setIsLoadingCustomerInteraction(true);
+  //     setCustomerInteractionPeriod(period);
+
+  //     const companyName =
+  //       user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+  //     const data = await getCustomerInteractionStatusSummary({
+  //       company: companyName,
+  //       period: period,
+  //     });
+
+  //     setCustomerInteractionData(data);
+  //   } catch (error) {
+  //     console.error("Error fetching customer interaction status:", error);
+  //     toast.error("Failed to fetch customer interaction status");
+  //   } finally {
+  //     setIsLoadingCustomerInteraction(false);
+  //   }
+  // };
+
+  // Handler for customer interaction date range change
+  const handleCustomerInteractionDateChange = async () => {
+    if (!customerInteractionFromDate || !customerInteractionToDate) {
+      return;
+    }
     try {
       setIsLoadingCustomerInteraction(true);
-      setCustomerInteractionPeriod(period);
 
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
       const data = await getCustomerInteractionStatusSummary({
         company: companyName,
-        period: period,
+        date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+        date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
       });
 
       setCustomerInteractionData(data);
@@ -1063,21 +1118,60 @@ const Dashboard = () => {
     }
   };
 
-  // Handler for call entry period change
-  const handleCallEntryPeriodChange = async (period: string) => {
+  // Effect to trigger API call when date range changes (common for all three sections)
+  useEffect(() => {
+    if (customerInteractionFromDate && customerInteractionToDate) {
+      handleCustomerInteractionDateChange();
+      handleEnquiryDateChange();
+      handleCallEntryDateChange();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerInteractionFromDate, customerInteractionToDate]);
+
+  // Handler for call entry period change (commented - can be used in future case)
+  // const handleCallEntryPeriodChange = async (period: string) => {
+  //   try {
+  //     setIsLoadingCallEntry(true);
+  //     setCallEntryPeriod(period);
+
+  //     const dateRange = calculateCallEntryDateRange(period);
+  //     const companyName =
+  //       user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+  //     const response = await getCallEntryStatistics(
+  //       addSearchToFilters({
+  //         company: companyName,
+  //         date_from: dateRange.date_from,
+  //         date_to: dateRange.date_to,
+  //       })
+  //     );
+
+  //     setCallEntryStatisticsData(response);
+  //     setCallEntrySummary(response.summary);
+  //   } catch (error) {
+  //     console.error("Error fetching call entry statistics:", error);
+  //     toast.error("Failed to fetch call entry data");
+  //   } finally {
+  //     setIsLoadingCallEntry(false);
+  //   }
+  // };
+
+  // Handler for call entry date range change (uses common date filter)
+  const handleCallEntryDateChange = async () => {
+    if (!customerInteractionFromDate || !customerInteractionToDate) {
+      return;
+    }
     try {
       setIsLoadingCallEntry(true);
-      setCallEntryPeriod(period);
 
-      const dateRange = calculateCallEntryDateRange(period);
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
       const response = await getCallEntryStatistics(
         addSearchToFilters({
           company: companyName,
-          date_from: dateRange.date_from,
-          date_to: dateRange.date_to,
+          date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+          date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
         })
       );
 
@@ -1091,20 +1185,51 @@ const Dashboard = () => {
     }
   };
 
-  // Handler for enquiry conversion period change
-  const handleEnquiryPeriodChange = async (period: string) => {
+  // Effect removed - now using common date filter in the main useEffect above
+
+  // Handler for enquiry conversion period change (commented - can be used in future case)
+  // const handleEnquiryPeriodChange = async (period: string) => {
+  //   try {
+  //     setIsLoadingEnquiryConversion(true);
+  //     setEnquiryPeriod(period);
+
+  //     const dateRange = calculateCallEntryDateRange(period);
+  //     const companyName =
+  //       user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+  //     const filterData: DashboardFilters = addSearchToFilters({
+  //       ...(companyName && { company: companyName }),
+  //       date_from: dateRange.date_from,
+  //       date_to: dateRange.date_to,
+  //     });
+
+  //     const response = await getFilteredEnquiryConversionData(filterData);
+  //     const aggregatedData =
+  //       calculateFilteredEnquiryConversionAggregatedData(response);
+  //     setEnquiryConversionAggregatedData(aggregatedData);
+  //   } catch (error) {
+  //     console.error("Error fetching enquiry conversion data:", error);
+  //     toast.error("Failed to fetch enquiry conversion data");
+  //   } finally {
+  //     setIsLoadingEnquiryConversion(false);
+  //   }
+  // };
+
+  // Handler for enquiry date range change (uses common date filter)
+  const handleEnquiryDateChange = async () => {
+    if (!customerInteractionFromDate || !customerInteractionToDate) {
+      return;
+    }
     try {
       setIsLoadingEnquiryConversion(true);
-      setEnquiryPeriod(period);
 
-      const dateRange = calculateCallEntryDateRange(period);
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
       const filterData: DashboardFilters = addSearchToFilters({
         ...(companyName && { company: companyName }),
-        date_from: dateRange.date_from,
-        date_to: dateRange.date_to,
+        date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+        date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
       });
 
       const response = await getFilteredEnquiryConversionData(filterData);
@@ -1118,6 +1243,8 @@ const Dashboard = () => {
       setIsLoadingEnquiryConversion(false);
     }
   };
+
+  // Effect removed - now using common date filter in the main useEffect above
 
   // Consolidated effect to load initial data and handle company/search changes
   useEffect(() => {
@@ -1305,29 +1432,65 @@ const Dashboard = () => {
             )
           : "",
         // Customer Interaction Status Summary (replaces individual customer data calls)
-        getCustomerInteractionStatusSummary({
-          company: companyName,
-          period: customerInteractionPeriod,
-        }),
-        // Use filtered API call with company name and period for enquiry conversion data
-        // Use current enquiryPeriod state, not hardcoded "current_month"
+        // Updated to use date range instead of period
+        customerInteractionFromDate && customerInteractionToDate
+          ? getCustomerInteractionStatusSummary({
+              company: companyName,
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+            })
+          : getCustomerInteractionStatusSummary({
+              company: companyName,
+              period: customerInteractionPeriod,
+            }),
+        // Use filtered API call with company name and date range for enquiry conversion data
+        // Updated to use date range instead of period
         (async () => {
-          const dateRange = calculateCallEntryDateRange(enquiryPeriod);
           const filterData: DashboardFilters = addSearchToFilters({
             ...(companyName && { company: companyName }),
-            date_from: dateRange.date_from,
-            date_to: dateRange.date_to,
+            ...(customerInteractionFromDate && customerInteractionToDate
+              ? {
+                  date_from: dayjs(customerInteractionFromDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                  date_to: dayjs(customerInteractionToDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                }
+              : (() => {
+                  const dateRange = calculateCallEntryDateRange(enquiryPeriod);
+                  return {
+                    date_from: dateRange.date_from,
+                    date_to: dateRange.date_to,
+                  };
+                })()),
           });
           return await getFilteredEnquiryConversionData(filterData);
         })(),
-        // Call entry statistics - use current callEntryPeriod state, not hardcoded "current_month"
+        // Call entry statistics - use date range instead of period
         (async () => {
-          const dateRange = calculateCallEntryDateRange(callEntryPeriod);
           return await getCallEntryStatistics(
             addSearchToFilters({
               company: companyName,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
+              ...(customerInteractionFromDate && customerInteractionToDate
+                ? {
+                    date_from: dayjs(customerInteractionFromDate).format(
+                      "DD-MM-YYYY"
+                    ),
+                    date_to: dayjs(customerInteractionToDate).format(
+                      "DD-MM-YYYY"
+                    ),
+                  }
+                : (() => {
+                    const dateRange =
+                      calculateCallEntryDateRange(callEntryPeriod);
+                    return {
+                      date_from: dateRange.date_from,
+                      date_to: dateRange.date_to,
+                    };
+                  })()),
             })
           );
         })(),
@@ -6384,32 +6547,43 @@ const Dashboard = () => {
       {/* Filter Section - Single Row */}
 
       {/* Tabs and Search Row - Available in all drill levels */}
-      <Group mb="md" justify="space-between" align="center">
+      <Group
+        mb="md"
+        justify="space-between"
+        align="center"
+        wrap="nowrap"
+        style={{ alignItems: "center" }}
+      >
         {/* Tabs with Segmented Control Style */}
         <Group
           gap={0}
           style={{
             backgroundColor: "#f1f3f5",
-            borderRadius: "8px",
-            padding: "4px",
+            borderRadius: "6px",
+            padding: "2px",
+            height: "32px",
+            display: "flex",
+            alignItems: "center",
           }}
         >
           <Button
             variant={activeTab === "overall" ? "filled" : "subtle"}
             onClick={() => setActiveTab("overall")}
-            size="sm"
+            size="xs"
             style={{
               backgroundColor:
                 activeTab === "overall" ? "#ffffff" : "transparent",
               color: activeTab === "overall" ? "#000000" : "#666",
               fontWeight: activeTab === "overall" ? 600 : 400,
               border: "none",
-              borderRadius: "6px",
+              borderRadius: "4px",
               boxShadow:
                 activeTab === "overall"
-                  ? "0 1px 3px rgba(0, 0, 0, 0.1)"
+                  ? "0 1px 2px rgba(0, 0, 0, 0.1)"
                   : "none",
               transition: "all 0.2s ease",
+              fontSize: "12px",
+              padding: "4px 12px",
             }}
           >
             Overall
@@ -6417,19 +6591,21 @@ const Dashboard = () => {
           <Button
             variant={activeTab === "pipeline-Report" ? "filled" : "subtle"}
             onClick={() => setActiveTab("pipeline-Report")}
-            size="sm"
+            size="xs"
             style={{
               backgroundColor:
                 activeTab === "pipeline-Report" ? "#ffffff" : "transparent",
               color: activeTab === "pipeline-Report" ? "#000000" : "#666",
               fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
               border: "none",
-              borderRadius: "6px",
+              borderRadius: "4px",
               boxShadow:
                 activeTab === "pipeline-Report"
-                  ? "0 1px 3px rgba(0, 0, 0, 0.1)"
+                  ? "0 1px 2px rgba(0, 0, 0, 0.1)"
                   : "none",
               transition: "all 0.2s ease",
+              fontSize: "12px",
+              padding: "4px 12px",
             }}
           >
             Pipeline Report
@@ -6437,92 +6613,137 @@ const Dashboard = () => {
           <Button
             variant={activeTab === "booking" ? "filled" : "subtle"}
             onClick={() => setActiveTab("booking")}
-            size="sm"
+            size="xs"
             style={{
               backgroundColor:
                 activeTab === "booking" ? "#ffffff" : "transparent",
               color: activeTab === "booking" ? "#000000" : "#666",
               fontWeight: activeTab === "booking" ? 600 : 400,
               border: "none",
-              borderRadius: "6px",
+              borderRadius: "4px",
               boxShadow:
                 activeTab === "booking"
-                  ? "0 1px 3px rgba(0, 0, 0, 0.1)"
+                  ? "0 1px 2px rgba(0, 0, 0, 0.1)"
                   : "none",
               transition: "all 0.2s ease",
+              fontSize: "12px",
+              padding: "4px 12px",
             }}
           >
             Booking
           </Button>
         </Group>
 
-        {/* Global Search Input */}
-        <Group style={{ maxWidth: "400px" }} gap="xs">
-          <Autocomplete
-            placeholder="Search by Customer name or Salesperson"
-            value={searchInputValue}
-            onChange={setSearchInputValue}
-            onOptionSubmit={(value) => {
-              setSearchInputValue(value);
-              setGlobalSearch(value);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && searchInputValue.trim()) {
-                setGlobalSearch(searchInputValue.trim());
-              }
-            }}
-            data={dropdownOptions}
-            style={{ width: "400px" }}
-            rightSectionWidth={60}
-            rightSection={
-              <Group gap={4} align="center" wrap="nowrap">
-                {/* Clear (X) icon - only when value exists and not loading dropdown */}
-                {searchInputValue.trim() !== "" && !isDropdownLoading && (
-                  <ActionIcon
-                    variant="subtle"
-                    color="gray"
-                    onClick={() => {
-                      setSearchInputValue("");
-                      setGlobalSearch("");
-                      setDropdownOptions([]);
-                    }}
-                    size="sm"
-                    style={{ flexShrink: 0 }}
-                  >
-                    <IconX size={16} />
-                  </ActionIcon>
-                )}
+        {/* Global Search Input and Date Filter - Always visible at dashboard base level (only hidden in detailed view) */}
+        {!showDetailedView && (
+          <Group
+            gap="md"
+            align="center"
+            wrap="nowrap"
+            style={{ alignItems: "center" }}
+          >
+            {/* Common Date Range Filter */}
+            <Box
+              style={{
+                width: "270px",
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                height: "32px",
+              }}
+            >
+              <DateRangeInput
+                fromDate={customerInteractionFromDate}
+                toDate={customerInteractionToDate}
+                onFromDateChange={setCustomerInteractionFromDate}
+                onToDateChange={setCustomerInteractionToDate}
+                fromPlaceholder="From Date"
+                toPlaceholder="To Date"
+                size="xs"
+                allowDeselection={true}
+                showRangeInCalendar={false}
+                hideLabels={true}
+                containerStyle={{ gap: "4px" }}
+              />
+            </Box>
+            {/* Global Search Input */}
+            <Group
+              style={{
+                maxWidth: "400px",
+                display: "flex",
+                alignItems: "center",
+                height: "32px",
+              }}
+              gap="xs"
+            >
+              <Autocomplete
+                placeholder="Search by Customer name or Salesperson"
+                value={searchInputValue}
+                onChange={setSearchInputValue}
+                onOptionSubmit={(value) => {
+                  setSearchInputValue(value);
+                  setGlobalSearch(value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && searchInputValue.trim()) {
+                    setGlobalSearch(searchInputValue.trim());
+                  }
+                }}
+                data={dropdownOptions}
+                size="xs"
+                style={{ width: "400px" }}
+                rightSectionWidth={60}
+                rightSection={
+                  <Group gap={4} align="center" wrap="nowrap">
+                    {/* Clear (X) icon - only when value exists and not loading dropdown */}
+                    {searchInputValue.trim() !== "" && !isDropdownLoading && (
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => {
+                          setSearchInputValue("");
+                          setGlobalSearch("");
+                          setDropdownOptions([]);
+                        }}
+                        size="sm"
+                        style={{ flexShrink: 0 }}
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    )}
 
-                {/* Fixed-width box for loader or search icon */}
-                <Box
-                  style={{
-                    width: 26,
-                    height: 26,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  {isDropdownLoading || isSearchLoading ? (
-                    <Loader size="xs" />
-                  ) : (
-                    <ActionIcon
-                      variant="subtle"
-                      color="blue"
-                      onClick={handleSearch}
-                      size="sm"
+                    {/* Fixed-width box for loader or search icon */}
+                    <Box
+                      style={{
+                        width: 26,
+                        height: 26,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
                     >
-                      <IconSearch size={16} />
-                    </ActionIcon>
-                  )}
-                </Box>
-              </Group>
-            }
-            limit={10}
-            maxDropdownHeight={280}
-          />
-        </Group>
+                      {isDropdownLoading || isSearchLoading ? (
+                        <Loader size="xs" />
+                      ) : (
+                        <ActionIcon
+                          variant="subtle"
+                          color="blue"
+                          onClick={handleSearch}
+                          size="sm"
+                        >
+                          <IconSearch size={16} />
+                        </ActionIcon>
+                      )}
+                    </Box>
+                  </Group>
+                }
+                limit={10}
+                maxDropdownHeight={280}
+              />
+            </Group>
+          </Group>
+        )}
       </Group>
 
       {/* Main Dashboard Content */}
@@ -6908,8 +7129,14 @@ const Dashboard = () => {
                     loading={isLoadingCustomerInteraction}
                     customerInteractionPeriod={customerInteractionPeriod}
                     setCustomerInteractionPeriod={
-                      handleCustomerInteractionPeriodChange
+                      () => {} // Commented out - can be used in future case
                     }
+                    fromDate={customerInteractionFromDate}
+                    toDate={customerInteractionToDate}
+                    setFromDate={setCustomerInteractionFromDate}
+                    setToDate={setCustomerInteractionToDate}
+                    // Date filter is now common at top level, so hide it here
+                    hideDateFilter={true}
                   />
                 </Grid.Col>
                 <Grid.Col span={6}>
@@ -6925,7 +7152,15 @@ const Dashboard = () => {
                       handleEnquiryConversionViewAll
                     }
                     selectedPeriod={enquiryPeriod}
-                    setSelectedPeriod={handleEnquiryPeriodChange}
+                    setSelectedPeriod={
+                      () => {} // Commented out - can be used in future case
+                    }
+                    fromDate={customerInteractionFromDate}
+                    toDate={customerInteractionToDate}
+                    setFromDate={setCustomerInteractionFromDate}
+                    setToDate={setCustomerInteractionToDate}
+                    // Date filter is now common at top level, so hide it here
+                    hideDateFilter={true}
                   />
                 </Grid.Col>
               </Grid>
@@ -6959,7 +7194,15 @@ const Dashboard = () => {
                     isLoadingCallEntry={isLoadingCallEntry}
                     handleCallEntryViewAll={handleCallEntryViewAll}
                     selectedPeriod={callEntryPeriod}
-                    setSelectedPeriod={handleCallEntryPeriodChange}
+                    setSelectedPeriod={
+                      () => {} // Commented out - can be used in future case
+                    }
+                    fromDate={customerInteractionFromDate}
+                    toDate={customerInteractionToDate}
+                    setFromDate={setCustomerInteractionFromDate}
+                    setToDate={setCustomerInteractionToDate}
+                    // Date filter is now common at top level, so hide it here
+                    hideDateFilter={true}
                   />
                 </Grid.Col>
               </Grid>
