@@ -42,6 +42,7 @@ import {
   getCustomerNotVisitedData,
   getLostCustomerData,
   getNewCustomerData,
+  getCustomerInteractionStatusSummary,
   DashboardFilters,
   CallEntryAggregatedData,
   CallEntryStatisticsSummary,
@@ -244,7 +245,7 @@ const Dashboard = () => {
   const [searchInputValue, setSearchInputValue] = useState<string>("");
   const [globalSearch, setGlobalSearch] = useState<string>("");
   const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
-  
+
   // Searchable dropdown states
   const [dropdownOptions, setDropdownOptions] = useState<string[]>([]);
   const [isDropdownLoading, setIsDropdownLoading] = useState<boolean>(false);
@@ -298,9 +299,21 @@ const Dashboard = () => {
 
   // Section-level period states (for unified filters in section headers)
   const [customerInteractionPeriod, setCustomerInteractionPeriod] =
-    useState<string>("quarterly");
+    useState<string>("last_30_days");
   const [outstandingPeriod, setOutstandingPeriod] =
     useState<string>("last_30_days");
+
+  // Customer Interaction Status Summary (simplified)
+  const [customerInteractionData, setCustomerInteractionData] = useState<{
+    gain: number;
+    gainSalesperson: number;
+    notVisited: number;
+    notVisitedSalesperson: number;
+    lost: number;
+    lostSalesperson: number;
+  } | null>(null);
+  const [isLoadingCustomerInteraction, setIsLoadingCustomerInteraction] =
+    useState(false);
 
   // Budget states
   const [budgetAggregatedData, setBudgetAggregatedData] =
@@ -450,7 +463,11 @@ const Dashboard = () => {
               ...(dashboardState.selectedYear && {
                 year: parseInt(dashboardState.selectedYear),
               }),
-              ...(dashboardState.enquiryFilterType !== "all" && { type: typeMap[dashboardState.enquiryFilterType] ?? dashboardState.enquiryFilterType }),
+              ...(dashboardState.enquiryFilterType !== "all" && {
+                type:
+                  typeMap[dashboardState.enquiryFilterType] ??
+                  dashboardState.enquiryFilterType,
+              }),
               // Use date range from enquiryPeriod instead of selectedDate
               date_from: dateRange.date_from,
               date_to: dateRange.date_to,
@@ -1023,6 +1040,29 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, selectedCompany, selectedLocation, searchSalesman]);
 
+  // Handler for customer interaction period change
+  const handleCustomerInteractionPeriodChange = async (period: string) => {
+    try {
+      setIsLoadingCustomerInteraction(true);
+      setCustomerInteractionPeriod(period);
+
+      const companyName =
+        user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+      const data = await getCustomerInteractionStatusSummary({
+        company: companyName,
+        period: period,
+      });
+
+      setCustomerInteractionData(data);
+    } catch (error) {
+      console.error("Error fetching customer interaction status:", error);
+      toast.error("Failed to fetch customer interaction status");
+    } finally {
+      setIsLoadingCustomerInteraction(false);
+    }
+  };
+
   // Handler for call entry period change
   const handleCallEntryPeriodChange = async (period: string) => {
     try {
@@ -1151,7 +1191,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchDropdownOptions = async () => {
       const searchQuery = debouncedSearch.trim();
-      
+
       // Only fetch if search query has at least 2 characters
       if (searchQuery.length < 2) {
         setDropdownOptions([]);
@@ -1173,8 +1213,11 @@ const Dashboard = () => {
               // Extract user_name for users or customer_name for customers
               return item.user_name || item.customer_name || null;
             })
-            .filter((name: string | null): name is string => name !== null && name.trim() !== "");
-          
+            .filter(
+              (name: string | null): name is string =>
+                name !== null && name.trim() !== ""
+            );
+
           setDropdownOptions(options);
         } else {
           setDropdownOptions([]);
@@ -1215,9 +1258,7 @@ const Dashboard = () => {
       setLoading(true);
       setIsLoadingOutstandingChart(true);
       setIsLoadingBudget(true);
-      setIsLoadingCustomerNotVisited(true);
-      setIsLoadingLostCustomer(true);
-      setIsLoadingNewCustomer(true);
+      setIsLoadingCustomerInteraction(true);
       setIsLoadingEnquiryConversion(true);
       setIsLoadingCallEntry(true);
 
@@ -1263,35 +1304,10 @@ const Dashboard = () => {
               } as any)
             )
           : "",
-        // Use filtered API call with company name for customer not visited data
-        companyName
-          ? getCustomerNotVisitedData({
-              period: "quarterly",
-              company: companyName,
-              index: 0,
-              limit: 10,
-              ...(globalSearch &&
-                globalSearch.trim() && { search: globalSearch.trim() }),
-            })
-          : getCustomerNotVisitedData({
-              period: "quarterly",
-              index: 0,
-              limit: 10,
-              ...(globalSearch &&
-                globalSearch.trim() && { search: globalSearch.trim() }),
-            }),
-        // Lost Customer data
-        getLostCustomerData({
-          period: "quarterly",
+        // Customer Interaction Status Summary (replaces individual customer data calls)
+        getCustomerInteractionStatusSummary({
           company: companyName,
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
-        }),
-        getNewCustomerData({
-          company: companyName || "PENTAGON Dubai",
-          period: "quarterly",
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          period: customerInteractionPeriod,
         }),
         // Use filtered API call with company name and period for enquiry conversion data
         // Use current enquiryPeriod state, not hardcoded "current_month"
@@ -1322,16 +1338,12 @@ const Dashboard = () => {
         results[0].status === "fulfilled" ? results[0].value : null;
       const budgetResponse =
         results[1].status === "fulfilled" ? results[1].value : null;
-      const customerNotVisitedResponse =
+      const customerInteractionResponse =
         results[2].status === "fulfilled" ? results[2].value : null;
-      const lostCustomerResponse =
-        results[3].status === "fulfilled" ? results[3].value : null;
-      const newCustomerResponse =
-        results[4].status === "fulfilled" ? results[4].value : null;
       const enquiryConversionResponse =
-        results[5].status === "fulfilled" ? results[5].value : null;
+        results[3].status === "fulfilled" ? results[3].value : null;
       const callEntryResponse =
-        results[6].status === "fulfilled" ? results[6].value : null;
+        results[4].status === "fulfilled" ? results[4].value : null;
 
       // Log any failed API calls for debugging
       results.forEach((result, index) => {
@@ -1339,9 +1351,7 @@ const Dashboard = () => {
           const apiNames = [
             "Outstanding",
             "Budget",
-            "Customer Not Visited",
-            "Lost Customer",
-            "New Customer",
+            "Customer Interaction Status",
             "Enquiry Conversion",
             "Call Entry",
           ];
@@ -1445,47 +1455,12 @@ const Dashboard = () => {
         setIsLoadingBudget(false);
       }
 
-      // Process Customer Not Visited response
-      if (customerNotVisitedResponse) {
-        setCustomerNotVisitedRawData(customerNotVisitedResponse);
-
-        // Set drill level based on whether we have company name
-        if (companyName) {
-          setCustomerNotVisitedDrillLevel(1); // Start at level 1 (company filtered)
-          setCustomerNotVisitedSelectedCompany(companyName);
-        } else {
-          setCustomerNotVisitedDrillLevel(0); // Start at level 0 (all companies)
-          setCustomerNotVisitedSelectedCompany(null);
-        }
-
-        setCustomerNotVisitedSelectedSalesperson(null);
-        setCustomerNotVisitedPeriod("quarterly");
-        setIsLoadingCustomerNotVisited(false);
+      // Process Customer Interaction Status response
+      if (customerInteractionResponse) {
+        setCustomerInteractionData(customerInteractionResponse);
+        setIsLoadingCustomerInteraction(false);
       } else if (results[2].status === "rejected") {
-        setIsLoadingCustomerNotVisited(false);
-      }
-
-      // Process Lost Customer response
-      if (lostCustomerResponse) {
-        setLostCustomerRawData(lostCustomerResponse);
-        setLostCustomerDrillLevel(0); // Start at level 0 (all salespersons)
-        setLostCustomerSelectedSalesperson(null);
-        setLostCustomerPeriod("quarterly");
-        setIsLoadingLostCustomer(false);
-      } else if (results[3].status === "rejected") {
-        setIsLoadingLostCustomer(false);
-      }
-
-      // Process New Customer response
-      if (newCustomerResponse) {
-        setNewCustomerRawData(newCustomerResponse);
-        setNewCustomerOriginalData(newCustomerResponse); // Store original data
-        setNewCustomerDrillLevel(0); // Start at level 0 (salesperson list)
-        setNewCustomerSelectedSalesperson(null);
-        setNewCustomerPeriod("quarterly");
-        setIsLoadingNewCustomer(false);
-      } else if (results[4].status === "rejected") {
-        setIsLoadingNewCustomer(false);
+        setIsLoadingCustomerInteraction(false);
       }
 
       // Process Enquiry Conversion response
@@ -1505,7 +1480,7 @@ const Dashboard = () => {
         setEnquiryConversionAggregatedData(calculatedEnquiryConversionData);
         // Don't reset period here - preserve user's selected period
         setIsLoadingEnquiryConversion(false);
-      } else if (results[5].status === "rejected") {
+      } else if (results[3].status === "rejected") {
         setIsLoadingEnquiryConversion(false);
       }
 
@@ -1520,7 +1495,7 @@ const Dashboard = () => {
         );
         // Don't reset period here - let it be controlled by user selection only
         setIsLoadingCallEntry(false);
-      } else if (results[6].status === "rejected") {
+      } else if (results[4].status === "rejected") {
         setIsLoadingCallEntry(false);
       }
     } catch (error) {
@@ -1530,9 +1505,7 @@ const Dashboard = () => {
       setLoading(false);
       setIsLoadingOutstandingChart(false);
       setIsLoadingBudget(false);
-      setIsLoadingCustomerNotVisited(false);
-      setIsLoadingLostCustomer(false);
-      setIsLoadingNewCustomer(false);
+      setIsLoadingCustomerInteraction(false);
       setIsLoadingEnquiryConversion(false);
       setIsLoadingCallEntry(false);
     } finally {
@@ -1821,7 +1794,18 @@ const Dashboard = () => {
         ...(selectedYear && { year: parseInt(selectedYear) }),
         date_from: dateRange.date_from,
         date_to: dateRange.date_to,
-        ...(filterType !== 'all' && { type: filterType === 'gain' ? 'gained' : filterType === 'lost' ? 'lost' : filterType === 'active' ? 'active' : filterType === 'quote' ? 'quote created' : '' }),
+        ...(filterType !== "all" && {
+          type:
+            filterType === "gain"
+              ? "gained"
+              : filterType === "lost"
+                ? "lost"
+                : filterType === "active"
+                  ? "active"
+                  : filterType === "quote"
+                    ? "quote created"
+                    : "",
+        }),
         ...(globalSearch?.trim() && { search: globalSearch.trim() }),
       };
 
@@ -1829,7 +1813,6 @@ const Dashboard = () => {
       const response = await getFilteredEnquiryConversionData(filterData);
       let tableData = convertEnquiryResponseToTableData(response);
       // let tableData = response;
-
 
       // if (filterType === "gain") {
       //   tableData = tableData.filter(
@@ -2844,7 +2827,9 @@ const Dashboard = () => {
           });
         } else if (item.Enquiry_data && Array.isArray(item.Enquiry_data)) {
           item.Enquiry_data.forEach((enquiryItem: any) => {
-            const totalEnquiryCount = extractNumericValue(enquiryItem.total_enquiry_count);
+            const totalEnquiryCount = extractNumericValue(
+              enquiryItem.total_enquiry_count
+            );
             // const totalGain = extractNumericValue(enquiryItem.total_gain);
             // const totalLost = extractNumericValue(enquiryItem.total_lost);
             // const active = extractNumericValue(enquiryItem.total_active);
@@ -3035,7 +3020,6 @@ const Dashboard = () => {
           }
           const response = await getFilteredEnquiryConversionData(filterData);
           let tableData = convertEnquiryResponseToTableData(response);
-
 
           // Only filter client-side if there's no search parameter
           // When search is present, the API should return filtered results
@@ -3283,51 +3267,54 @@ const Dashboard = () => {
   // Helper function to parse emails from comma or semicolon separated string
   const parseEmails = (emailString: string): string[] => {
     if (!emailString || !emailString.trim()) return [];
-    
+
     // Remove any non-printable characters and normalize whitespace
     const cleanedString = emailString
-      .replace(/[\r\n\t]/g, ' ') // Replace newlines and tabs with space
-      .replace(/\s+/g, ' ') // Normalize multiple spaces to single space
+      .replace(/[\r\n\t]/g, " ") // Replace newlines and tabs with space
+      .replace(/\s+/g, " ") // Normalize multiple spaces to single space
       .trim();
-    
+
     // Split by comma or semicolon and clean up each email
     const emails = cleanedString
       .split(/[,;]+/) // Split by one or more commas or semicolons
       .map((email) => email.trim())
       .filter((email) => email.length > 0);
-    
+
     return emails;
   };
 
   // Helper function to validate email format
   const isValidEmail = (email: string): boolean => {
     if (!email || !email.trim()) return false;
-    
+
     const trimmedEmail = email.trim();
-    
+
     // More permissive email regex that handles common valid formats
     // Allows: letters, numbers, dots, hyphens, underscores, plus signs
-    const emailRegex = /^[a-zA-Z0-9][a-zA-Z0-9._+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$/;
-    
+    const emailRegex =
+      /^[a-zA-Z0-9][a-zA-Z0-9._+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$/;
+
     // Additional checks for common invalid patterns
-    if (trimmedEmail.includes('..')) return false; // No consecutive dots
-    if (trimmedEmail.startsWith('.') || trimmedEmail.endsWith('.')) return false; // No leading/trailing dots
-    if (trimmedEmail.includes('@.') || trimmedEmail.includes('.@')) return false; // No dot immediately before/after @
-    
+    if (trimmedEmail.includes("..")) return false; // No consecutive dots
+    if (trimmedEmail.startsWith(".") || trimmedEmail.endsWith("."))
+      return false; // No leading/trailing dots
+    if (trimmedEmail.includes("@.") || trimmedEmail.includes(".@"))
+      return false; // No dot immediately before/after @
+
     return emailRegex.test(trimmedEmail);
   };
 
   // Helper function to clean email string - removes non-printable chars and normalizes
   const cleanEmailString = (emailStr: string | null | undefined): string => {
     if (!emailStr) return "";
-    
+
     // Convert to string and remove non-printable characters
     const cleaned = String(emailStr)
-      .replace(/[\r\n\t]/g, ' ') // Replace newlines and tabs with space
-      .replace(/\s+/g, ' ') // Normalize multiple spaces to single space
-      .replace(/[^\x20-\x7E]/g, '') // Remove non-printable ASCII characters
+      .replace(/[\r\n\t]/g, " ") // Replace newlines and tabs with space
+      .replace(/\s+/g, " ") // Normalize multiple spaces to single space
+      .replace(/[^\x20-\x7E]/g, "") // Remove non-printable ASCII characters
       .trim();
-    
+
     return cleaned;
   };
 
@@ -3396,7 +3383,7 @@ const Dashboard = () => {
       salesperson_email: rowData.salesperson_email,
       cc_mail: rowData.cc_mail,
       cleanedToEmail,
-      cleanedCcEmail
+      cleanedCcEmail,
     });
 
     setCurrentEmailData(rowData);
@@ -3406,10 +3393,10 @@ const Dashboard = () => {
       subject: subject,
       message: defaultMessage,
     });
-    
+
     // Reset any previous errors
     setEmailErrors({ to_email: "", cc_email: "" });
-    
+
     openSendEmail();
   };
 
@@ -3428,14 +3415,14 @@ const Dashboard = () => {
 
     // Validate and parse to_email
     const toEmailString = emailForm.to_email.trim();
-    
+
     console.log("🔍 Email validation - Raw to_email:", {
       raw: emailForm.to_email,
       trimmed: toEmailString,
       length: toEmailString.length,
-      charCodes: toEmailString.split('').map(c => c.charCodeAt(0))
+      charCodes: toEmailString.split("").map((c) => c.charCodeAt(0)),
     });
-    
+
     if (!toEmailString) {
       setEmailErrors({
         ...emailErrors,
@@ -3446,28 +3433,32 @@ const Dashboard = () => {
     }
 
     const toEmailArray = parseEmails(toEmailString);
-    
+
     console.log("📧 Parsed to_email array:", {
       array: toEmailArray,
-      count: toEmailArray.length
+      count: toEmailArray.length,
     });
-    
+
     if (toEmailArray.length === 0) {
       setEmailErrors({
         ...emailErrors,
         to_email: "Please enter valid email address(es)",
       });
-      toast.error("Please enter valid email address(es) separated by comma or semicolon");
+      toast.error(
+        "Please enter valid email address(es) separated by comma or semicolon"
+      );
       return;
     }
 
     // Validate each to_email with detailed logging
     const invalidToEmails = toEmailArray.filter((email) => {
       const isValid = isValidEmail(email);
-      console.log(`✉️ Validating email: "${email}" -> ${isValid ? "✅ VALID" : "❌ INVALID"}`);
+      console.log(
+        `✉️ Validating email: "${email}" -> ${isValid ? "✅ VALID" : "❌ INVALID"}`
+      );
       return !isValid;
     });
-    
+
     if (invalidToEmails.length > 0) {
       console.error("❌ Invalid emails found:", invalidToEmails);
       setEmailErrors({
@@ -3477,46 +3468,50 @@ const Dashboard = () => {
       toast.error(`Invalid email address(es): ${invalidToEmails.join(", ")}`);
       return;
     }
-    
+
     console.log("✅ All emails validated successfully:", toEmailArray);
 
     // Validate and parse cc_email (optional)
     let ccEmailArray: string[] = [];
     const ccEmailString = emailForm.cc_email.trim();
-    
+
     console.log("🔍 CC Email validation - Raw cc_email:", {
       raw: emailForm.cc_email,
       trimmed: ccEmailString,
-      length: ccEmailString.length
+      length: ccEmailString.length,
     });
-    
+
     if (ccEmailString) {
       ccEmailArray = parseEmails(ccEmailString);
-      
+
       console.log("📧 Parsed cc_email array:", {
         array: ccEmailArray,
-        count: ccEmailArray.length
+        count: ccEmailArray.length,
       });
-      
+
       if (ccEmailArray.length > 0) {
         const invalidCcEmails = ccEmailArray.filter((email) => {
           const isValid = isValidEmail(email);
-          console.log(`✉️ Validating CC email: "${email}" -> ${isValid ? "✅ VALID" : "❌ INVALID"}`);
+          console.log(
+            `✉️ Validating CC email: "${email}" -> ${isValid ? "✅ VALID" : "❌ INVALID"}`
+          );
           return !isValid;
         });
-        
+
         if (invalidCcEmails.length > 0) {
           console.error("❌ Invalid CC emails found:", invalidCcEmails);
           setEmailErrors({
             ...emailErrors,
             cc_email: `Invalid email address(es): ${invalidCcEmails.join(", ")}`,
           });
-          toast.error(`Invalid CC email address(es): ${invalidCcEmails.join(", ")}`);
+          toast.error(
+            `Invalid CC email address(es): ${invalidCcEmails.join(", ")}`
+          );
           return;
         }
       }
     }
-    
+
     console.log("✅ All CC emails validated successfully:", ccEmailArray);
 
     // Clear errors if validation passes
@@ -3551,24 +3546,13 @@ const Dashboard = () => {
       if (detailedViewType === "enquiry") {
         // Enquiry Conversion: Use enquiry_statistics-style payload like Pulse
         const salespersonName =
-          currentEmailData.salesperson ||
-          detailedViewSelectedSalesperson ||
-          "";
+          currentEmailData.salesperson || detailedViewSelectedSalesperson || "";
 
         emailPayload.data_table = {
           salesperson: salespersonName || "",
-          active:
-            currentEmailData.active ??
-            currentEmailData.total_active ??
-            0,
-          gained:
-            currentEmailData.gained ??
-            currentEmailData.total_gain ??
-            0,
-          lost:
-            currentEmailData.lost ??
-            currentEmailData.total_lost ??
-            0,
+          active: currentEmailData.active ?? currentEmailData.total_active ?? 0,
+          gained: currentEmailData.gained ?? currentEmailData.total_gain ?? 0,
+          lost: currentEmailData.lost ?? currentEmailData.total_lost ?? 0,
           quote_created:
             currentEmailData.quote_created ??
             currentEmailData.total_quote_created ??
@@ -3598,32 +3582,18 @@ const Dashboard = () => {
             "";
 
           const totalOverdue =
-            currentEmailData.total_overdue ??
-            currentEmailData.OVERDUE ??
-            0;
+            currentEmailData.total_overdue ?? currentEmailData.OVERDUE ?? 0;
           const totalToday =
-            currentEmailData.total_today ??
-            currentEmailData.TODAY ??
-            0;
+            currentEmailData.total_today ?? currentEmailData.TODAY ?? 0;
           const totalUpcoming =
-            currentEmailData.total_upcoming ??
-            currentEmailData.UPCOMING ??
-            0;
+            currentEmailData.total_upcoming ?? currentEmailData.UPCOMING ?? 0;
           const totalClosed =
-            currentEmailData.total_closed ??
-            currentEmailData.CLOSED ??
-            0;
+            currentEmailData.total_closed ?? currentEmailData.CLOSED ?? 0;
           const totalCalls =
-            currentEmailData.total_calls ??
-            currentEmailData.TOTAL_CALLS ??
-            0;
+            currentEmailData.total_calls ?? currentEmailData.TOTAL_CALLS ?? 0;
 
           const rawCc = currentEmailData.cc_mail;
-          const ccList = Array.isArray(rawCc)
-            ? rawCc
-            : rawCc
-            ? [rawCc]
-            : [];
+          const ccList = Array.isArray(rawCc) ? rawCc : rawCc ? [rawCc] : [];
 
           emailPayload.data_table = {
             company_code: companyCode,
@@ -3649,9 +3619,7 @@ const Dashboard = () => {
           // Customer-wise statistics (call_entry_statistics_customer)
           const summary: any = callEntrySummary || {};
           const salespersonName =
-            callEntrySelectedSalesperson ||
-            statsMeta?.salesperson ||
-            "";
+            callEntrySelectedSalesperson || statsMeta?.salesperson || "";
 
           const summaryCcMail = summary?.cc_mail || [];
           const summarySalesManagerEmail = summary?.sales_manager_email;
@@ -3669,9 +3637,7 @@ const Dashboard = () => {
           const uniqueCc = Array.from(new Set(collectedCc));
 
           const totalCustomers =
-            statsMeta?.total_customers ??
-            summary?.total_customers ??
-            0;
+            statsMeta?.total_customers ?? summary?.total_customers ?? 0;
 
           const salespersonEmail =
             statsMeta?.salesperson_email ||
@@ -3708,17 +3674,13 @@ const Dashboard = () => {
                   currentEmailData.OVERDUE ??
                   0,
                 total_today:
-                  currentEmailData.total_today ??
-                  currentEmailData.TODAY ??
-                  0,
+                  currentEmailData.total_today ?? currentEmailData.TODAY ?? 0,
                 total_upcoming:
                   currentEmailData.total_upcoming ??
                   currentEmailData.UPCOMING ??
                   0,
                 total_closed:
-                  currentEmailData.total_closed ??
-                  currentEmailData.CLOSED ??
-                  0,
+                  currentEmailData.total_closed ?? currentEmailData.CLOSED ?? 0,
               },
             ],
             summary: {
@@ -3779,8 +3741,7 @@ const Dashboard = () => {
         // Customer-level fields (if present)
         if (currentEmailData.customer_code) {
           outstandingItem.customer_code = currentEmailData.customer_code || "";
-          outstandingItem.customer_name =
-            currentEmailData.customer_name || "";
+          outstandingItem.customer_name = currentEmailData.customer_name || "";
         }
 
         // Salesman fields: prefer explicit salesman fields; fall back to selected salesperson
@@ -3851,7 +3812,7 @@ const Dashboard = () => {
         cc_email: emailPayload.cc_email,
         subject: emailPayload.subject,
         messageLength: emailPayload.message.length,
-        dataTable: emailPayload.data_table
+        dataTable: emailPayload.data_table,
       });
 
       // Send email via accounts/send-email/ (same as Pulse)
@@ -3859,7 +3820,7 @@ const Dashboard = () => {
         URL.accountsSendEmail,
         emailPayload
       );
-      
+
       console.log("✅ Email sent successfully:", response);
 
       const successMessage =
@@ -4668,13 +4629,14 @@ const Dashboard = () => {
               const totalEnquiries = active + gained + lost + quoteCreated;
               return {
                 salesperson: item.salesperson || "-",
-              active: item.active || 0,
-              gained: item.gained || 0,
-              lost: item.lost || 0,
-              quote_created: item.quote_created || 0,
-              total_enquiries:totalEnquiries
-              }
-          })}
+                active: item.active || 0,
+                gained: item.gained || 0,
+                lost: item.lost || 0,
+                quote_created: item.quote_created || 0,
+                total_enquiries: totalEnquiries,
+              };
+            });
+          }
 
           // Only filter client-side if there's no search parameter
           // When search is present, the API should return filtered results
@@ -5438,8 +5400,11 @@ const Dashboard = () => {
             company: detailedViewSelectedCompany,
             date_from: dateRange.date_from,
             date_to: dateRange.date_to,
-            ...(initialEnquiryFilterType !== "all" && { type: typeMap[initialEnquiryFilterType] ?? initialEnquiryFilterType }),
-        });
+            ...(initialEnquiryFilterType !== "all" && {
+              type:
+                typeMap[initialEnquiryFilterType] ?? initialEnquiryFilterType,
+            }),
+          });
           const response = await getFilteredEnquiryConversionData(filterData);
           let tableData = convertEnquiryResponseToTableData(response);
 
@@ -6418,117 +6383,162 @@ const Dashboard = () => {
     <Box p="xs" h="50vh">
       {/* Filter Section - Single Row */}
 
-      {/* Global Search Input - Hide when detailed view is shown */}
-      {!showDetailedView && (
-        <Group mb="xs" justify="flex-end">
-          <Group style={{ flex: 1, maxWidth: "400px" }} gap="xs">
-            <Autocomplete
-              placeholder="Search by customer name or salesperson..."
-              value={searchInputValue}
-              onChange={setSearchInputValue}
-              onOptionSubmit={(value) => {
-                setSearchInputValue(value);
-                setGlobalSearch(value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && searchInputValue.trim()) {
-                  setGlobalSearch(searchInputValue.trim());
-                }
-              }}
-              data={dropdownOptions}
-              style={{ flex: 1 }}
-              rightSectionWidth={60}
-              rightSection={
-                <Group gap={4} align="center" wrap="nowrap">
-                  {/* Clear (X) icon - only when value exists and not loading dropdown */}
-                  {searchInputValue.trim() !== "" && !isDropdownLoading && (
+      {/* Tabs and Search Row - Available in all drill levels */}
+      <Group mb="md" justify="space-between" align="center">
+        {/* Tabs with Segmented Control Style */}
+        <Group
+          gap={0}
+          style={{
+            backgroundColor: "#f1f3f5",
+            borderRadius: "8px",
+            padding: "4px",
+          }}
+        >
+          <Button
+            variant={activeTab === "overall" ? "filled" : "subtle"}
+            onClick={() => setActiveTab("overall")}
+            size="sm"
+            style={{
+              backgroundColor:
+                activeTab === "overall" ? "#ffffff" : "transparent",
+              color: activeTab === "overall" ? "#000000" : "#666",
+              fontWeight: activeTab === "overall" ? 600 : 400,
+              border: "none",
+              borderRadius: "6px",
+              boxShadow:
+                activeTab === "overall"
+                  ? "0 1px 3px rgba(0, 0, 0, 0.1)"
+                  : "none",
+              transition: "all 0.2s ease",
+            }}
+          >
+            Overall
+          </Button>
+          <Button
+            variant={activeTab === "pipeline-Report" ? "filled" : "subtle"}
+            onClick={() => setActiveTab("pipeline-Report")}
+            size="sm"
+            style={{
+              backgroundColor:
+                activeTab === "pipeline-Report" ? "#ffffff" : "transparent",
+              color: activeTab === "pipeline-Report" ? "#000000" : "#666",
+              fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
+              border: "none",
+              borderRadius: "6px",
+              boxShadow:
+                activeTab === "pipeline-Report"
+                  ? "0 1px 3px rgba(0, 0, 0, 0.1)"
+                  : "none",
+              transition: "all 0.2s ease",
+            }}
+          >
+            Pipeline Report
+          </Button>
+          <Button
+            variant={activeTab === "booking" ? "filled" : "subtle"}
+            onClick={() => setActiveTab("booking")}
+            size="sm"
+            style={{
+              backgroundColor:
+                activeTab === "booking" ? "#ffffff" : "transparent",
+              color: activeTab === "booking" ? "#000000" : "#666",
+              fontWeight: activeTab === "booking" ? 600 : 400,
+              border: "none",
+              borderRadius: "6px",
+              boxShadow:
+                activeTab === "booking"
+                  ? "0 1px 3px rgba(0, 0, 0, 0.1)"
+                  : "none",
+              transition: "all 0.2s ease",
+            }}
+          >
+            Booking
+          </Button>
+        </Group>
+
+        {/* Global Search Input */}
+        <Group style={{ maxWidth: "400px" }} gap="xs">
+          <Autocomplete
+            placeholder="Search by Customer name or Salesperson"
+            value={searchInputValue}
+            onChange={setSearchInputValue}
+            onOptionSubmit={(value) => {
+              setSearchInputValue(value);
+              setGlobalSearch(value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && searchInputValue.trim()) {
+                setGlobalSearch(searchInputValue.trim());
+              }
+            }}
+            data={dropdownOptions}
+            style={{ width: "400px" }}
+            rightSectionWidth={60}
+            rightSection={
+              <Group gap={4} align="center" wrap="nowrap">
+                {/* Clear (X) icon - only when value exists and not loading dropdown */}
+                {searchInputValue.trim() !== "" && !isDropdownLoading && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => {
+                      setSearchInputValue("");
+                      setGlobalSearch("");
+                      setDropdownOptions([]);
+                    }}
+                    size="sm"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <IconX size={16} />
+                  </ActionIcon>
+                )}
+
+                {/* Fixed-width box for loader or search icon */}
+                <Box
+                  style={{
+                    width: 26,
+                    height: 26,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  {isDropdownLoading || isSearchLoading ? (
+                    <Loader size="xs" />
+                  ) : (
                     <ActionIcon
                       variant="subtle"
-                      color="gray"
-                      onClick={() => {
-                        setSearchInputValue("");
-                        setGlobalSearch("");
-                        setDropdownOptions([]);
-                      }}
+                      color="blue"
+                      onClick={handleSearch}
                       size="sm"
-                      style={{ flexShrink: 0 }}
                     >
-                      <IconX size={16} />
+                      <IconSearch size={16} />
                     </ActionIcon>
                   )}
-
-                  {/* Fixed-width box for loader or search icon */}
-                  <Box
-                    style={{
-                      width: 26,
-                      height: 26,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {isDropdownLoading || isSearchLoading ? (
-                      <Loader size="xs" />
-                    ) : (
-                      <ActionIcon
-                        variant="subtle"
-                        color="blue"
-                        onClick={handleSearch}
-                        size="sm"
-                      >
-                        <IconSearch size={16} />
-                      </ActionIcon>
-                    )}
-                  </Box>
-                </Group>
-              }
-              limit={10}
-              maxDropdownHeight={280}
-            />
-          </Group>
+                </Box>
+              </Group>
+            }
+            limit={10}
+            maxDropdownHeight={280}
+          />
         </Group>
-      )}
+      </Group>
 
       {/* Main Dashboard Content */}
       <Tabs
         value={activeTab}
         onChange={(value) => setActiveTab(value || "overall")}
+        styles={{
+          list: {
+            display: "none",
+          },
+        }}
       >
-        <Tabs.List>
-          <Tabs.Tab
-            value="overall"
-            style={{
-              backgroundColor:
-                activeTab === "overall" ? "#105476" : "transparent",
-              color: activeTab === "overall" ? "white" : "#105476",
-              fontWeight: activeTab === "overall" ? 600 : 400,
-            }}
-          >
-            Overall
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="pipeline-Report"
-            style={{
-              backgroundColor:
-                activeTab === "pipeline-Report" ? "#105476" : "transparent",
-              color: activeTab === "pipeline-Report" ? "white" : "#105476",
-              fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
-            }}
-          >
-            Pipeline Report
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="booking"
-            style={{
-              backgroundColor:
-                activeTab === "booking" ? "#105476" : "transparent",
-              color: activeTab === "booking" ? "white" : "#105476",
-              fontWeight: activeTab === "booking" ? 600 : 400,
-            }}
-          >
-            Booking
-          </Tabs.Tab>
+        <Tabs.List style={{ display: "none" }}>
+          <Tabs.Tab value="overall">Overall</Tabs.Tab>
+          <Tabs.Tab value="pipeline-Report">Pipeline Report</Tabs.Tab>
+          <Tabs.Tab value="booking">Booking</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="overall" pt="sm">
@@ -6890,48 +6900,28 @@ const Dashboard = () => {
             />
           ) : (
             <Box>
-              {/* Section 1: Customer Interaction Status */}
-              <CustomerInteractionStatus
-                newCustomerDrillLevel={newCustomerDrillLevel}
-                newCustomerRawData={newCustomerRawData}
-                newCustomerSelectedSalesperson={newCustomerSelectedSalesperson}
-                newCustomerPeriod={newCustomerPeriod}
-                isLoadingNewCustomer={isLoadingNewCustomer}
-                handleNewCustomerViewAll={handleNewCustomerViewAll}
-                handleNewCustomerSalespersonClick={handleNewCustomerSalespersonClick}
-                handleNewCustomerBack={handleNewCustomerBack}
-                handleNewCustomerPeriodChange={handleNewCustomerPeriodChange}
-                lostCustomerDrillLevel={lostCustomerDrillLevel}
-                lostCustomerRawData={lostCustomerRawData}
-                lostCustomerSelectedSalesperson={lostCustomerSelectedSalesperson}
-                lostCustomerPeriod={lostCustomerPeriod}
-                isLoadingLostCustomer={isLoadingLostCustomer}
-                handleLostCustomerViewAll={handleLostCustomerViewAll}
-                handleLostCustomerSalespersonClick={handleLostCustomerSalespersonClick}
-                handleLostCustomerBack={handleLostCustomerBack}
-                handleLostCustomerPeriodChange={handleLostCustomerPeriodChange}
-                customerNotVisitedDrillLevel={customerNotVisitedDrillLevel}
-                customerNotVisitedRawData={customerNotVisitedRawData}
-                customerNotVisitedSelectedSalesperson={customerNotVisitedSelectedSalesperson}
-                customerNotVisitedPeriod={customerNotVisitedPeriod}
-                isLoadingCustomerNotVisited={isLoadingCustomerNotVisited}
-                handleCustomerNotVisitedViewAll={handleCustomerNotVisitedViewAll}
-                handleCustomerNotVisitedCompanyClick={handleCustomerNotVisitedCompanyClick}
-                handleCustomerNotVisitedSalespersonClick={handleCustomerNotVisitedSalespersonClick}
-                handleCustomerNotVisitedBack={handleCustomerNotVisitedBack}
-                handleCustomerNotVisitedPeriodChange={handleCustomerNotVisitedPeriodChange}
-                customerInteractionPeriod={customerInteractionPeriod}
-                setCustomerInteractionPeriod={setCustomerInteractionPeriod}
-              />
-
-              {/* Section 2: Call Entry */}
-              <CallEntrySection
-                callEntrySummary={callEntrySummary}
-                isLoadingCallEntry={isLoadingCallEntry}
-                handleCallEntryViewAll={handleCallEntryViewAll}
-                selectedPeriod={callEntryPeriod}
-                setSelectedPeriod={handleCallEntryPeriodChange}
-              />
+              {/* Section 1 & 2: Customer Interaction Status and Call Entry (side by side) */}
+              <Grid mb="lg">
+                <Grid.Col span={6}>
+                  <CustomerInteractionStatus
+                    data={customerInteractionData}
+                    loading={isLoadingCustomerInteraction}
+                    customerInteractionPeriod={customerInteractionPeriod}
+                    setCustomerInteractionPeriod={
+                      handleCustomerInteractionPeriodChange
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <CallEntrySection
+                    callEntrySummary={callEntrySummary}
+                    isLoadingCallEntry={isLoadingCallEntry}
+                    handleCallEntryViewAll={handleCallEntryViewAll}
+                    selectedPeriod={callEntryPeriod}
+                    setSelectedPeriod={handleCallEntryPeriodChange}
+                  />
+                </Grid.Col>
+              </Grid>
 
               {/* Section 3 & 4: Outstanding and Enquiry (side by side) */}
               <Grid mb="lg">
@@ -6958,12 +6948,16 @@ const Dashboard = () => {
 
                 <Grid.Col span={6}>
                   <EnquirySection
-                    enquiryConversionAggregatedData={enquiryConversionAggregatedData}
+                    enquiryConversionAggregatedData={
+                      enquiryConversionAggregatedData
+                    }
                     isLoadingEnquiryConversion={isLoadingEnquiryConversion}
                     isLoadingEnquiryChart={isLoadingEnquiryChart}
                     enquiryView={enquiryView}
                     setEnquiryView={setEnquiryView}
-                    handleEnquiryConversionViewAll={handleEnquiryConversionViewAll}
+                    handleEnquiryConversionViewAll={
+                      handleEnquiryConversionViewAll
+                    }
                     selectedPeriod={enquiryPeriod}
                     setSelectedPeriod={handleEnquiryPeriodChange}
                   />

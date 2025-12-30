@@ -1150,6 +1150,61 @@ export const getNewCustomerData = async (
   }
 };
 
+// Customer Interaction Status Summary interface
+export interface CustomerInteractionStatusSummary {
+  gain: number;
+  gainSalesperson: number;
+  notVisited: number;
+  notVisitedSalesperson: number;
+  lost: number;
+  lostSalesperson: number;
+}
+
+// Get Customer Interaction Status Summary
+export const getCustomerInteractionStatusSummary = async (
+  filters: {
+    company?: string;
+    period: string;
+  }
+): Promise<CustomerInteractionStatusSummary> => {
+  try {
+    // Fetch all three data sets in parallel
+    const [newCustomerData, customerNotVisitedData, lostCustomerData] = await Promise.all([
+      getNewCustomerData(filters),
+      getCustomerNotVisitedData(filters),
+      getLostCustomerData(filters),
+    ]);
+
+    // Calculate aggregated values
+    const gainSalesperson = Array.isArray(newCustomerData.data)
+      ? newCustomerData.data.filter((sp: NewCustomerSalesperson) => sp.customer_count > 0).length
+      : 0;
+    
+    const gain = newCustomerData.summary?.total_customers || 0;
+
+    const notVisitedSalesperson = customerNotVisitedData.summary?.total_salesperson_count || 0;
+    const notVisited = customerNotVisitedData.summary?.total_customer_count || 0;
+
+    const lostSalesperson = Array.isArray(lostCustomerData.data)
+      ? lostCustomerData.data.filter((sp: LostCustomerSalesperson) => sp.customer_count > 0).length
+      : 0;
+    
+    const lost = lostCustomerData.summary?.total_customers || 0;
+
+    return {
+      gain,
+      gainSalesperson,
+      notVisited,
+      notVisitedSalesperson,
+      lost,
+      lostSalesperson,
+    };
+  } catch (error) {
+    console.error("Error fetching customer interaction status summary:", error);
+    throw error;
+  }
+};
+
 // Pipeline Report API interfaces
 export interface PipelineReportItem {
   salesperson: string;

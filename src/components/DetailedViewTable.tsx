@@ -382,7 +382,11 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           },
           size: 150,
         });
-      } else if (key === "actual_budget" || key === "sales_budget" || key === "incentive_amount") {
+      } else if (
+        key === "actual_budget" ||
+        key === "sales_budget" ||
+        key === "incentive_amount"
+      ) {
         // Special styling for actual_budget, sales_budget, and incentive_amount columns - display as badges
         const getHeaderText = () => {
           if (key === "actual_budget") return "ACTUAL";
@@ -390,14 +394,14 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           if (key === "incentive_amount") return "APPLICABLE INCENTIVE";
           return key.toUpperCase();
         };
-        
+
         const getBadgeColor = () => {
           if (key === "actual_budget") return "#086ea1";
           if (key === "sales_budget") return "#105476";
           if (key === "incentive_amount") return "#27ae60";
           return "#105476";
         };
-        
+
         columnDefs.push({
           accessorKey: key,
           header: getHeaderText(),
@@ -408,11 +412,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 ? cellValue.toLocaleString()
                 : cellValue;
             return (
-              <Badge
-                color={getBadgeColor()}
-                size="md"
-                variant="filled"
-              >
+              <Badge color={getBadgeColor()} size="md" variant="filled">
                 {displayValue}
               </Badge>
             );
@@ -557,7 +557,8 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             : moduleType === "callentry"
               ? drillLevel === 0 || drillLevel === 1
               : moduleType === "pipelineReport"
-                ? (drillLevel === 0 || drillLevel === 1 || drillLevel === 2) && isCustomerLevelClickableColumn
+                ? (drillLevel === 0 || drillLevel === 1 || drillLevel === 2) &&
+                  isCustomerLevelClickableColumn
                 : drillLevel === 1);
 
         // Legacy logic for other modules (not used for pipelineReport anymore as it now follows the same logic as enquiry/callentry)
@@ -587,7 +588,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               ? "QUOTED"
               : key.toUpperCase(),
           Cell: ({ row }) => {
-            const cellValue = row.original[key] ;
+            const cellValue = row.original[key];
             const displayValue =
               typeof cellValue === "number"
                 ? cellValue.toLocaleString()
@@ -705,7 +706,8 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               !shouldDisableClick &&
               (isEnquiryModule || isCallEntryModule || isPipelineReportModule
                 ? true // Enquiry, call entry, and pipelineReport module badges show pointer when clickable and value > 0
-                : pipelineReportCustomerLevelPointer || moduleType !== "pipelineReport");
+                : pipelineReportCustomerLevelPointer ||
+                  moduleType !== "pipelineReport");
 
             if (isFinancialColumnClickable && !isTotalRow) {
               return (
@@ -762,8 +764,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             // For total row, show badge but make it non-clickable
             if (
               isTotalRow &&
-              (
-                key === "potential" ||
+              (key === "potential" ||
                 key === "pipeline" ||
                 key === "gained" ||
                 key === "lost" ||
@@ -874,7 +875,11 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                   size="md"
                   onClick={() => {
                     if (onColumnClick) {
-                      onColumnClick("send_email", row.original[key], row.original);
+                      onColumnClick(
+                        "send_email",
+                        row.original[key],
+                        row.original
+                      );
                     }
                   }}
                   style={{ cursor: "pointer" }}
@@ -1102,7 +1107,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     if (sendEmailIndex !== -1) {
       // Remove send_email from its current position
       order.splice(sendEmailIndex, 1);
-      
+
       // Place it right after sno (S.No)
       const snoIdx = order.indexOf("sno");
       if (snoIdx !== -1) {
@@ -1133,9 +1138,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
-      withTableBorder: false,
+      withTableBorder: true,
       withColumnBorders: false,
-      style: { width: "100%" },
+      style: { width: "100%", border: "1px solid #dee2e6" },
     },
     mantinePaperProps: {
       shadow: "sm",
@@ -1144,19 +1149,22 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     },
     mantineTableBodyCellProps: {
       style: {
-        padding: "8px 12px",
-        fontSize: "13px",
+        padding: "12px 16px",
+        fontSize: "14px",
         backgroundColor: "#ffffff",
+        borderBottom: "1px solid #dee2e6",
       },
     },
     mantineTableHeadCellProps: {
       style: {
-        padding: "6px 12px",
-        fontSize: "12px",
-        backgroundColor: "#ffffff",
+        padding: "12px 16px",
+        fontSize: "13px",
+        fontWeight: 400,
+        backgroundColor: "#E0E0E0",
+        color: "#000000",
         top: 0,
         zIndex: 3,
-        borderBottom: "1px solid #e9ecef",
+        borderBottom: "1px solid #dee2e6",
       },
     },
     mantineTableContainerProps: {
@@ -1194,7 +1202,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     if (sendEmailIndex !== -1) {
       // Remove send_email from its current position
       desiredOrder.splice(sendEmailIndex, 1);
-      
+
       // Place it right after sno (S.No)
       const snoIdx = desiredOrder.indexOf("sno");
       if (snoIdx !== -1) {
@@ -1236,9 +1244,14 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
   if (loading) {
     return (
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Card shadow="sm" padding="lg" radius="md" withBorder={false}>
         <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c="#105476">
+          <Text
+            size="md"
+            fw={500}
+            c="#424242"
+            style={{ fontFamily: "lux/font/family/geist" }}
+          >
             {title}
           </Text>
           <Group gap="xs">
@@ -1276,42 +1289,49 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
   if (!data || data.length === 0) {
     return (
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c="#105476">
-            {title}
-          </Text>
-          <Group gap="xs">
-            {headerActions}
-            {showBackButton && onBack && (
-              <Button
-                leftSection={<IconArrowLeft size={16} />}
-                onClick={onBack}
-                variant="outline"
-                size="xs"
-                color="#105476"
-              >
-                Back
-              </Button>
-            )}
-            {showCloseButton && (
-              <Button
-                leftSection={<IconArrowLeft size={16} />}
-                onClick={onClose}
-                variant="outline"
-                size="xs"
-                color="#105476"
-              >
-                Back to Dashboard
-              </Button>
-            )}
+      <Card shadow="sm" padding="lg" radius="md" withBorder={false}>
+        <>
+          <Group justify="space-between" align="center" mb="md" wrap="nowrap">
+            <Text
+              size="md"
+              fw={500}
+              c="#424242"
+              style={{ fontFamily: "lux/font/family/geist" }}
+            >
+              {title}
+            </Text>
+            <Group gap="xs">
+              {headerActions}
+              {showBackButton && onBack && (
+                <Button
+                  leftSection={<IconArrowLeft size={16} />}
+                  onClick={onBack}
+                  variant="outline"
+                  size="xs"
+                  color="#105476"
+                >
+                  Back
+                </Button>
+              )}
+              {showCloseButton && (
+                <Button
+                  leftSection={<IconArrowLeft size={16} />}
+                  onClick={onClose}
+                  variant="outline"
+                  size="xs"
+                  color="#105476"
+                >
+                  Back to Dashboard
+                </Button>
+              )}
+            </Group>
           </Group>
-        </Group>
-        <Center py="xl">
-          <Text size="md" c="dimmed">
-            No data available
-          </Text>
-        </Center>
+          <Center py="xl">
+            <Text size="md" c="dimmed">
+              No data available
+            </Text>
+          </Center>
+        </>
       </Card>
     );
   }
@@ -1320,7 +1340,12 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     // <Card shadow="sm" padding="lg" radius="md" withBorder>
     <>
       <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-        <Text size="md" fw={600} c="#105476">
+        <Text
+          size="md"
+          fw={500}
+          c="#424242"
+          style={{ fontFamily: "lux/font/family/geist" }}
+        >
           {title}
         </Text>
         <Group gap="xs">
