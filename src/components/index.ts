@@ -8,7 +8,9 @@ import DetailedViewTable from "./DetailedViewTable";
 import DateRangeInput from "./DateRangeInput";
 import SingleDateInput from "./SingleDateInput";
 import DateTimeInput from "./DateTimeInput";
+import BarChart from "./BarChart";
 // import ExportShipmentStepper from "../pages/customer-service/ExportShipmentStepper";
+
 export {
   ToastNotification,
   Navbar,
@@ -20,5 +22,9 @@ export {
   DateRangeInput,
   SingleDateInput,
   DateTimeInput,
+  BarChart,
   //  ExportShipmentStepper
 };
+
+// Export types
+export type { BarChartDataItem, BarChartProps } from "./BarChart";

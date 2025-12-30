@@ -1,9 +1,9 @@
 import { Box, Text, Group, Select, SegmentedControl } from "@mantine/core";
-import Budget from "./Budget";
+import BudgetBarChart from "./BudgetBarChart";
 import { BudgetAggregatedData } from "../../../service/dashboard.service";
 
 interface BudgetSectionProps {
-  budgetDrillLevel: 0 | 1 | 2;
+  budgetDrillLevel: 0 | 1 | 2 | 3;
   budgetSelectedCompany: string | null;
   budgetSelectedSalesperson: string | null;
   budgetDateRange: { date_from: string; date_to: string };
@@ -18,10 +18,10 @@ interface BudgetSectionProps {
   selectedYear: string | null;
   fromMonthOptions: { value: string; label: string }[];
   toMonthOptions: { value: string; label: string }[];
-  setBudgetDrillLevel: (level: 0 | 1 | 2) => void;
+  setBudgetDrillLevel: (level: 0 | 1 | 2 | 3) => void;
   setBudgetSelectedCompany: (company: string | null) => void;
   setBudgetSelectedSalesperson: (salesperson: string | null) => void;
-  setBudgetWindowStart: (start: number) => void;
+  setBudgetWindowStart: (start: number | ((prev: number) => number)) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setBudgetRawData: (data: any[]) => void;
   setBudgetAggregatedData: (data: BudgetAggregatedData) => void;
@@ -90,7 +90,7 @@ const BudgetSection = (props: BudgetSectionProps) => {
         </Group>
       </Group>
 
-      <Budget
+      <BudgetBarChart
         {...budgetProps}
         budgetType={budgetType}
         selectedYear={selectedYear}
