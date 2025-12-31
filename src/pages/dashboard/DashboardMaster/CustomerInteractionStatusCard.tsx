@@ -34,12 +34,12 @@ const CustomerInteractionStatusCard = ({
               p="md"
               radius="md"
               style={{
-                cursor: "pointer",
+                cursor: "default",
                 background: "#F5FAF5",
                 border: "1px solid transparent",
                 borderImage: "linear-gradient(135deg, #EFFFED, #ECFCEB) 1",
                 transition: "all 0.3s ease",
-                height: "100px",
+                height: "85px",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
@@ -52,12 +52,12 @@ const CustomerInteractionStatusCard = ({
               }}
             >
               <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="dimmed" fw={500}>
+                <Text size="xs" c="#22252B" fw={500}>
                   Gain
                 </Text>
                 <Text
-                  size="2rem"
-                  fw={700}
+                  size="1.5rem"
+                  fw={500}
                   c="#308028"
                   style={{ lineHeight: 1 }}
                 >
@@ -77,12 +77,12 @@ const CustomerInteractionStatusCard = ({
               p="md"
               radius="md"
               style={{
-                cursor: "pointer",
+                cursor: "default",
                 background: "#FAF8F5",
                 border: "1px solid transparent",
                 borderImage: "linear-gradient(135deg, #FFFAED, #FCF7EB) 1",
                 transition: "all 0.3s ease",
-                height: "100px",
+                height: "85px",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
@@ -95,12 +95,12 @@ const CustomerInteractionStatusCard = ({
               }}
             >
               <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="dimmed" fw={500}>
+                <Text size="xs" c="#22252B" fw={500}>
                   Not Visited
                 </Text>
                 <Text
-                  size="2rem"
-                  fw={700}
+                  size="1.5rem"
+                  fw={500}
                   c="#B5891B"
                   style={{ lineHeight: 1 }}
                 >
@@ -120,12 +120,12 @@ const CustomerInteractionStatusCard = ({
               p="md"
               radius="md"
               style={{
-                cursor: "pointer",
+                cursor: "default",
                 background: "#FAF5F5",
                 border: "1px solid transparent",
                 borderImage: "linear-gradient(135deg, #FFEDEF, #FFEDEF) 1",
                 transition: "all 0.3s ease",
-                height: "100px",
+                height: "85px",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
@@ -138,12 +138,12 @@ const CustomerInteractionStatusCard = ({
               }}
             >
               <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="dimmed" fw={500}>
+                <Text size="xs" c="#22252B" fw={500}>
                   Lost
                 </Text>
                 <Text
-                  size="2rem"
-                  fw={700}
+                  size="1.5rem"
+                  fw={500}
                   c="#8A000D"
                   style={{ lineHeight: 1 }}
                 >

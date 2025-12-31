@@ -1,4 +1,4 @@
-import { Group, Text, Badge, Stack, Box, Loader, Center } from "@mantine/core";
+import { Group, Text, Stack, Box, Loader, Center } from "@mantine/core";
 import { EnquiryConversionAggregatedData } from "../../../service/dashboard.service";
 
 interface EnquiryProps {
@@ -22,24 +22,6 @@ const Enquiry = ({
 }: EnquiryProps) => {
   return (
     <Box>
-      <Group justify="space-between" align="center" mb="sm">
-        <Badge color="#105476" variant="filled" size="sm">
-          Total {enquiryConversionAggregatedData.totalEnquiries}
-        </Badge>
-
-        <Text
-          size="sm"
-          c="#105476"
-          style={{
-            textDecoration: "underline",
-            cursor: "pointer",
-          }}
-          onClick={() => handleEnquiryConversionViewAll("all")}
-        >
-          View All
-        </Text>
-      </Group>
-
       {isLoadingEnquiryConversion || isLoadingEnquiryChart ? (
         <Center h="70%">
           <Loader size="lg" color="#105476" />
@@ -88,7 +70,7 @@ const Enquiry = ({
             />
             <Box
               style={{
-                backgroundColor: "#C7A54B",
+                backgroundColor: "#F6C667",
                 width: `${enquiryConversionAggregatedData.activePercentage}%`,
                 cursor: "pointer",
                 transition: "opacity 0.2s ease",
@@ -103,7 +85,7 @@ const Enquiry = ({
             />
             <Box
               style={{
-                backgroundColor: "#105476",
+                backgroundColor: "#64B5F6",
                 width: `${enquiryConversionAggregatedData.quotePercentage}%`,
                 cursor: "pointer",
                 transition: "opacity 0.2s ease",
@@ -129,7 +111,7 @@ const Enquiry = ({
               <Text size="xs" c="dimmed">
                 Gain
               </Text>
-              <Text size="xl" fw={700} c="#2E7D32">
+              <Text size="lg" fw={700} c="#2E7D32">
                 {enquiryConversionAggregatedData.totalGain}
               </Text>
             </Stack>
@@ -142,7 +124,7 @@ const Enquiry = ({
               <Text size="xs" c="dimmed">
                 Loss
               </Text>
-              <Text size="xl" fw={700} c="#8B0000">
+              <Text size="lg" fw={700} c="#8B0000">
                 {enquiryConversionAggregatedData.totalLost}
               </Text>
             </Stack>
@@ -155,7 +137,7 @@ const Enquiry = ({
               <Text size="xs" c="dimmed">
                 Active
               </Text>
-              <Text size="xl" fw={700} c="#C7A54B">
+              <Text size="lg" fw={700} c="#F6C667">
                 {enquiryConversionAggregatedData.totalActive}
               </Text>
             </Stack>
@@ -168,7 +150,7 @@ const Enquiry = ({
               <Text size="xs" c="dimmed">
                 Quoted
               </Text>
-              <Text size="xl" fw={700} c="#105476">
+              <Text size="lg" fw={700} c="#1976D2">
                 {enquiryConversionAggregatedData.totalQuoteCreated}
               </Text>
             </Stack>

@@ -252,9 +252,11 @@ const LostCustomer = ({
         </Text>
       </Group>
 
-      {/* Second row: Period filter + Back Button */}
+      {/* Second row: Back Button */}
       <Group justify="space-between" align="center" mb="md">
-        <Select
+        {/* Commented out - can be used in future case */}
+        {/* Period filter is now common at top level */}
+        {/* <Select
           placeholder="Select period"
           data={[
             { value: "weekly", label: "Last Week" },
@@ -267,7 +269,7 @@ const LostCustomer = ({
           onChange={handlePeriodChange}
           size="xs"
           style={{ width: "150px" }}
-        />
+        /> */}
         {drillLevel > 0 && (
           <Button
             size="compact-xs"

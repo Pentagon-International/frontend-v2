@@ -1058,6 +1058,8 @@ export interface CustomerNotVisitedFilters {
   company?: string;
   salesperson?: string;
   period?: string;
+  date_from?: string;
+  date_to?: string;
   index?: number;
   limit?: number;
   search?: string;
@@ -1073,6 +1075,8 @@ export const getCustomerNotVisitedData = async (
     if (filters.company) payload.company = filters.company;
     if (filters.salesperson) payload.salesperson = filters.salesperson;
     if (filters.period) payload.period = filters.period;
+    if (filters.date_from) payload.date_from = filters.date_from;
+    if (filters.date_to) payload.date_to = filters.date_to;
     if (filters.search) payload.search = filters.search;
 
     // Build URL with query params
@@ -1122,8 +1126,10 @@ export interface NewCustomerResponse {
 }
 
 export interface NewCustomerFilters {
-  company: string;
-  period: string;
+  company?: string;
+  period?: string;
+  date_from?: string;
+  date_to?: string;
   search?: string;
 }
 
@@ -1133,11 +1139,12 @@ export const getNewCustomerData = async (
 ): Promise<NewCustomerResponse> => {
   try {
     const url = `${URL.dashboard.newCustomerShipment}/get_new_customers/`;
-    const payload: any = {
-      company: filters.company,
-      period: filters.period,
-      ...(filters.search && { search: filters.search }),
-    };
+    const payload: any = {};
+    if (filters.company) payload.company = filters.company;
+    if (filters.period) payload.period = filters.period;
+    if (filters.date_from) payload.date_from = filters.date_from;
+    if (filters.date_to) payload.date_to = filters.date_to;
+    if (filters.search) payload.search = filters.search;
     console.log("New Customer API URL:", url);
     console.log("New Customer API Payload:", payload);
 
@@ -1164,7 +1171,9 @@ export interface CustomerInteractionStatusSummary {
 export const getCustomerInteractionStatusSummary = async (
   filters: {
     company?: string;
-    period: string;
+    period?: string;
+    date_from?: string;
+    date_to?: string;
   }
 ): Promise<CustomerInteractionStatusSummary> => {
   try {
@@ -1180,7 +1189,9 @@ export const getCustomerInteractionStatusSummary = async (
       ? newCustomerData.data.filter((sp: NewCustomerSalesperson) => sp.customer_count > 0).length
       : 0;
     
-    const gain = newCustomerData.summary?.total_customers || 0;
+    const gain = Array.isArray(newCustomerData.data)
+      ? newCustomerData.data.reduce((sum: number, sp: NewCustomerSalesperson) => sum + (sp.customer_count || 0), 0)
+      : 0;
 
     const notVisitedSalesperson = customerNotVisitedData.summary?.total_salesperson_count || 0;
     const notVisited = customerNotVisitedData.summary?.total_customer_count || 0;
@@ -1189,7 +1200,9 @@ export const getCustomerInteractionStatusSummary = async (
       ? lostCustomerData.data.filter((sp: LostCustomerSalesperson) => sp.customer_count > 0).length
       : 0;
     
-    const lost = lostCustomerData.summary?.total_customers || 0;
+    const lost = Array.isArray(lostCustomerData.data)
+      ? lostCustomerData.data.reduce((sum: number, sp: LostCustomerSalesperson) => sum + (sp.customer_count || 0), 0)
+      : 0;
 
     return {
       gain,
@@ -1253,7 +1266,9 @@ export interface PipelineReportFilters {
   salesperson?: string;
   type?: string;
   customer_code?: string;
-  period?: string;
+  period?: string; // Commented out - can be used in future case
+  date_from?: string;
+  date_to?: string;
   region?: string;
   service?: string;
   service_type?: string;
@@ -1302,7 +1317,9 @@ export type PipelineReportSectorResponse = PipelineReportRegionalResponse;
 
 export interface PipelineReportRegionalFilters {
   company: string;
-  period: string;
+  period?: string; // Commented out - can be used in future case
+  date_from?: string;
+  date_to?: string;
   region?: string;
   salesperson?: string;
   search?: string;
@@ -1435,7 +1452,9 @@ export interface PipelineReportProductResponse {
 
 export interface PipelineReportProductFilters {
   company: string;
-  period: string;
+  period?: string; // Commented out - can be used in future case
+  date_from?: string;
+  date_to?: string;
   service?: string;
   service_type?: string;
   salesperson?: string;
@@ -1598,6 +1617,11 @@ export const getBookingData = async (
       filters: {
         status: "GAINED",
         ...(search && search.trim() && { search: search.trim() }),
+        // Add date filters in the same format as quotation list page
+        ...(fromDate && toDate && {
+          enquiry_received_date_from: dayjs(fromDate).format("YYYY-MM-DD"),
+          enquiry_received_date_to: dayjs(toDate).format("YYYY-MM-DD"),
+        }),
       },
     };
 
@@ -1626,25 +1650,8 @@ export const getBookingData = async (
       `Received ${quotationData.data.length} quotations with GAINED status`
     );
 
-    // Step 2: Filter by updated_at field based on date range
+    // Step 2: Use filtered quotations directly (date filtering is now done by API)
     let filteredQuotations = quotationData.data;
-
-    if (fromDate && toDate) {
-      const fromDateStr = dayjs(fromDate).format("YYYY-MM-DD");
-      const toDateStr = dayjs(toDate).format("YYYY-MM-DD");
-
-      filteredQuotations = quotationData.data.filter((quotation: any) => {
-        if (!quotation.updated_at) return false;
-
-        // Parse updated_at (format: "2025-11-18T11:51:33.860476Z")
-        const updatedDate = dayjs(quotation.updated_at).format("YYYY-MM-DD");
-        return updatedDate >= fromDateStr && updatedDate <= toDateStr;
-      });
-
-      console.log(
-        `Filtered to ${filteredQuotations.length} quotations based on updated_at date range (${fromDateStr} to ${toDateStr})`
-      );
-    }
 
     // Step 3: Transform data to BookingItem format
     const bookingItems: BookingItem[] = [];
@@ -1889,6 +1896,8 @@ export interface LostCustomerResponse {
 export interface LostCustomerFilters {
   company?: string;
   period?: string;
+  date_from?: string;
+  date_to?: string;
   search?: string;
 }
 
@@ -1901,6 +1910,8 @@ export const getLostCustomerData = async (
 
     if (filters.company) payload.company = filters.company;
     if (filters.period) payload.period = filters.period;
+    if (filters.date_from) payload.date_from = filters.date_from;
+    if (filters.date_to) payload.date_to = filters.date_to;
     if (filters.search) payload.search = filters.search;
 
     console.log("Lost Customer API Payload:", payload);

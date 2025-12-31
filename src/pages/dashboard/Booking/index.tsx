@@ -8,25 +8,23 @@ import { DetailedViewTable, DateRangeInput } from "../../../components";
 interface BookingProps {
   onBack?: () => void;
   globalSearch?: string;
+  fromDate?: Date | null;
+  toDate?: Date | null;
 }
 
-const Booking: React.FC<BookingProps> = ({ onBack, globalSearch }) => {
-  // Get first day of current month and today's date
-  const getDefaultFromDate = (): Date => {
-    const now = new Date();
-    // return new Date(now.getFullYear(), now.getMonth(), 1);
-    return now;
-  };
-
-  const getDefaultToDate = (): Date => {
-    return new Date();
-  };
-
+const Booking: React.FC<BookingProps> = ({
+  onBack,
+  globalSearch,
+  fromDate: propFromDate,
+  toDate: propToDate,
+}) => {
   const [bookingData, setBookingData] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [fromDate, setFromDate] = useState<Date | null>(getDefaultFromDate());
-  const [toDate, setToDate] = useState<Date | null>(getDefaultToDate());
   const isMountedRef = useRef(false);
+
+  // Use props if provided, otherwise use defaults
+  const fromDate = propFromDate;
+  const toDate = propToDate;
 
   const loadBookingData = async (from?: Date | null, to?: Date | null) => {
     try {
@@ -44,40 +42,15 @@ const Booking: React.FC<BookingProps> = ({ onBack, globalSearch }) => {
     }
   };
 
-  // Load data on mount with default dates
+  // Load data on mount and when dates or search change
   useEffect(() => {
     if (!isMountedRef.current) {
       isMountedRef.current = true;
-      // Load with default dates (first day of month to today)
-      loadBookingData(fromDate, toDate);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Load data only when both dates are selected, or when dates are cleared, or when search changes
-  useEffect(() => {
-    if (isMountedRef.current) {
-      if (fromDate && toDate) {
-        // Both dates selected - load with payload
-        loadBookingData(fromDate, toDate);
-      } else if (!fromDate && !toDate) {
-        // Both dates cleared - load with empty payload
-        loadBookingData(null, null);
-      }
-      // If only one date is selected, don't make API call
-      // Note: globalSearch changes will trigger reload through the dependency array
-    }
+    // Load with dates from props
+    loadBookingData(fromDate, toDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate, globalSearch]);
-
-  // Handle date changes
-  const handleFromDateChange = (date: Date | null) => {
-    setFromDate(date);
-  };
-
-  const handleToDateChange = (date: Date | null) => {
-    setToDate(date);
-  };
 
   return (
     <DetailedViewTable
@@ -90,17 +63,20 @@ const Booking: React.FC<BookingProps> = ({ onBack, globalSearch }) => {
       showBackButton={false}
       showCloseButton={false}
       headerActions={
-        <DateRangeInput
-          fromDate={fromDate}
-          toDate={toDate}
-          onFromDateChange={handleFromDateChange}
-          onToDateChange={handleToDateChange}
-          fromLabel="From Date"
-          toLabel="To Date"
-          size="sm"
-          allowDeselection={true}
-          showRangeInCalendar={false}
-        />
+        // Commented out - can be used in future case
+        // Date filter is now common at top level
+        // <DateRangeInput
+        //   fromDate={fromDate}
+        //   toDate={toDate}
+        //   onFromDateChange={handleFromDateChange}
+        //   onToDateChange={handleToDateChange}
+        //   fromLabel="From Date"
+        //   toLabel="To Date"
+        //   size="sm"
+        //   allowDeselection={true}
+        //   showRangeInCalendar={false}
+        // />
+        undefined
       }
     />
   );

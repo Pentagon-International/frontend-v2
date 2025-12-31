@@ -43,7 +43,7 @@ const CallEntry = ({
                   "linear-gradient(to right, #FFFFFF 0%, #EBF7FC 100%)",
                 border: "1px solid #EBF7FC",
                 transition: "all 0.3s ease",
-                height: "100px",
+                height: "85px",
                 flex: 1,
                 position: "relative",
               }}
@@ -66,7 +66,7 @@ const CallEntry = ({
                   Today
                 </Text>
                 <Text
-                  size="2rem"
+                  size="1.75rem"
                   fw={700}
                   c="#105476"
                   style={{ lineHeight: 1 }}
@@ -87,7 +87,7 @@ const CallEntry = ({
                   "linear-gradient(to right, #FFFFFF 0%, #ECFCEB 100%)",
                 border: "1px solid #ECFCEB",
                 transition: "all 0.3s ease",
-                height: "100px",
+                height: "85px",
                 flex: 1,
                 position: "relative",
               }}
@@ -110,7 +110,7 @@ const CallEntry = ({
                   Closed
                 </Text>
                 <Text
-                  size="2rem"
+                  size="1.75rem"
                   fw={700}
                   c="#308028"
                   style={{ lineHeight: 1 }}
@@ -134,7 +134,7 @@ const CallEntry = ({
                   "linear-gradient(to right, #FFFFFF 0%, #FCF7EB 100%)",
                 border: "1px solid #FCF7EB",
                 transition: "all 0.3s ease",
-                height: "100px",
+                height: "85px",
                 flex: 1,
                 position: "relative",
               }}
@@ -157,7 +157,7 @@ const CallEntry = ({
                   Upcoming
                 </Text>
                 <Text
-                  size="2rem"
+                  size="1.75rem"
                   fw={700}
                   c="#B5891B"
                   style={{ lineHeight: 1 }}
@@ -178,7 +178,7 @@ const CallEntry = ({
                   "linear-gradient(to right, #FFFFFF 0%, #FCEBED 100%)",
                 border: "1px solid #FCEBED",
                 transition: "all 0.3s ease",
-                height: "100px",
+                height: "85px",
                 flex: 1,
                 position: "relative",
               }}
@@ -201,7 +201,7 @@ const CallEntry = ({
                   Overdue
                 </Text>
                 <Text
-                  size="2rem"
+                  size="1.75rem"
                   fw={700}
                   c="#8A000D"
                   style={{ lineHeight: 1 }}

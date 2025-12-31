@@ -233,6 +233,16 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       "cc_mail",
     ]);
 
+    // Helper function to capitalize headers properly (first letter of each word)
+    const capitalizeHeader = (text: string): string => {
+      return text
+        .split(" ")
+        .map(
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        )
+        .join(" ");
+    };
+
     // Define field name mappings for better display
     const fieldNameMappings: Record<string, string> = {
       sno: "S.No",
@@ -260,17 +270,36 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       followup_action: "Follow-Up Action",
       created_by: "Created By",
       expected_profit: "Expected Profit",
-      total_enquiries: "TOTAL ENQUIRIES",
-      total_enquiry: "TOTAL ENQUIRY",
-      gain_percentage: "GAIN PERCENTAGE",
-      loss_percentage: "LOSS PERCENTAGE",
-      active_percentage: "ACTIVE PERCENTAGE",
-      quoted_percentage: "QUOTED PERCENTAGE",
+      total_enquiries: "Total Enquiries",
+      total_enquiry: "Total Enquiry",
+      gain_percentage: "Gain Percentage",
+      loss_percentage: "Loss Percentage",
+      active_percentage: "Active Percentage",
+      quoted_percentage: "Quoted Percentage",
       salesperson: "Salesperson",
       region: "Region",
       product: "Product",
       volume: "Volume",
       date: "Booking Date",
+      OVERDUE: "Overdue",
+      TODAY: "Today",
+      UPCOMING: "Upcoming",
+      CLOSED: "Closed",
+      // Pipeline Report fields
+      potential: "Potential",
+      pipeline: "Pipeline",
+      gained: "Gained",
+      lost: "Lost",
+      quote: "Quoted",
+      quoted: "Quoted",
+      quoted_created: "Quoted",
+      expected: "Expected",
+      POTENTIAL: "Potential",
+      PIPELINE: "Pipeline",
+      GAINED: "Gained",
+      LOST: "Lost",
+      QUOTED: "Quoted",
+      EXPECTED: "Expected",
     };
 
     // Generate columns dynamically using MantineReactTable format
@@ -291,7 +320,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         console.log("value : array", value);
         columnDefs.push({
           accessorKey: key,
-          header: key.replace(/_/g, " ").toUpperCase(),
+          header: capitalizeHeader(
+            fieldNameMappings[key] || key.replace(/_/g, " ")
+          ),
           Cell: ({ row }) => (
             <Stack gap="xs">
               {row.original[key]?.map((location: string, index: number) => (
@@ -311,7 +342,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       ) {
         columnDefs.push({
           accessorKey: key,
-          header: key.replace(/_/g, " ").toUpperCase(),
+          header: capitalizeHeader(
+            fieldNameMappings[key] || key.replace(/_/g, " ")
+          ),
           Cell: ({ row }) => {
             const cellValue = row.original[key];
             const displayValue =
@@ -342,11 +375,15 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         key === "incentive_amount"
       ) {
         // Special styling for actual_budget, sales_budget, and incentive_amount columns - display as badges
-        const getHeaderText = () => {
-          if (key === "actual_budget") return "ACTUAL";
-          if (key === "sales_budget") return "BUDGET";
-          if (key === "incentive_amount") return "APPLICABLE INCENTIVE";
-          return key.toUpperCase();
+        const getHeaderText = (): string => {
+          if (key === "actual_budget") return "Actual";
+          if (key === "sales_budget") return "Budget";
+          if (key === "incentive_amount") return "Applicable Incentive";
+          // key is a string from Object.keys(), so we can safely use it
+          const mappedText = fieldNameMappings[key as string];
+          return capitalizeHeader(
+            mappedText || (key as string).replace(/_/g, " ")
+          );
         };
 
         const getBadgeColor = () => {
@@ -401,7 +438,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         };
         columnDefs.push({
           accessorKey: key,
-          header: key.replace(/_/g, " ").toUpperCase(),
+          header: capitalizeHeader(
+            fieldNameMappings[key] || key.replace(/_/g, " ")
+          ),
           Cell: ({ row }) => {
             const cellValue = row.original[key];
             return (
@@ -418,7 +457,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       } else if (key === "total_customers") {
         columnDefs.push({
           accessorKey: key,
-          header: key.replace(/_/g, " ").toUpperCase(),
+          header: capitalizeHeader(
+            fieldNameMappings[key] || key.replace(/_/g, " ")
+          ),
           Cell: ({ row }) => {
             return (
               <Badge color="#e74c3c" size="md" variant="filled">
@@ -537,10 +578,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
         columnDefs.push({
           accessorKey: key,
-          header:
-            key === "quote" || key === "quote_created" || key === "quoted"
-              ? "QUOTED"
-              : key.toUpperCase(),
+          header: capitalizeHeader(
+            fieldNameMappings[key] || key.replace(/_/g, " ")
+          ),
           Cell: ({ row }) => {
             const cellValue = row.original[key];
             const displayValue =
@@ -803,7 +843,13 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         // Handle percentage columns - display with special formatting
         columnDefs.push({
           accessorKey: key,
-          header: fieldNameMappings[key] || key.toUpperCase(),
+          header: (fieldNameMappings[key] || key.toUpperCase())
+            .split(" ")
+            .map(
+              (word) =>
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            )
+            .join(" "),
           Cell: ({ row }) => {
             const cellValue = row.original[key];
             // Cell value is already a string with '%' (e.g., "75%")
@@ -886,6 +932,14 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
             )
             .join(" ");
+
+        // Ensure first letter of each word is capitalized (apply to fieldNameMappings values too)
+        headerText = headerText
+          .split(" ")
+          .map(
+            (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          )
+          .join(" ");
 
         // Special header handling for salesperson column when company name is available
         if (
@@ -1328,7 +1382,15 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         </Group>
       </Group>
 
-      <MantineReactTable key={columnOrder.join(",")} table={table} />
+      <Box
+        style={{
+          borderTopLeftRadius: "8px",
+          borderTopRightRadius: "8px",
+          overflow: "hidden",
+        }}
+      >
+        <MantineReactTable key={columnOrder.join(",")} table={table} />
+      </Box>
 
       {/* Custom Pagination for Customer Not Visited (EnquiryMaster style) */}
       {isPaginationEnabled && (

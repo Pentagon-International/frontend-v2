@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Select, Text, Box, Group, Button, Tabs, SegmentedControl } from "@mantine/core";
+import {
+  Text,
+  Box,
+  Group,
+  Button,
+  Tabs,
+  SegmentedControl,
+} from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
+import dayjs from "dayjs";
 import {
   getPipelineReportData,
   getPotentialCustomersData,
@@ -30,12 +38,16 @@ interface PipelineReportProps {
     selectedColumnType?: string | null;
   };
   globalSearch?: string;
+  fromDate?: Date | null;
+  toDate?: Date | null;
 }
 
 const PipelineReport: React.FC<PipelineReportProps> = ({
   onBack,
   initialState,
   globalSearch,
+  fromDate,
+  toDate,
 }) => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -221,7 +233,9 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     useState(false);
   const [cellEditLoading, setCellEditLoading] = useState(false);
   const [period, setPeriod] = useState<string>("current-month");
-  const [calculation, setCalculation] = useState<"volume" | "no_of_shipments">("volume");
+  const [calculation, setCalculation] = useState<"volume" | "no_of_shipments">(
+    "volume"
+  );
   const [sectorDrillLevel, setSectorDrillLevel] = useState<0 | 1 | 2>(0);
   const [productDrillLevel, setProductDrillLevel] = useState<0 | 1 | 2>(0);
   const [selectedService, setSelectedService] = useState<string | null>(null);
@@ -230,26 +244,50 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   );
   const [activeTab, setActiveTab] = useState<string>("salesperson");
 
-
   // Helper function to convert service_type to title case (e.g., "IMPORT" -> "Import")
   const toTitleCase = (str: string): string => {
     if (!str) return str;
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
   };
 
+  // Helper function to build date filter object
+  const buildDateFilters = () => {
+    const dateFilters: { date_from?: string; date_to?: string } = {};
+    if (fromDate && toDate) {
+      dateFilters.date_from = dayjs(fromDate).format("DD-MM-YYYY");
+      dateFilters.date_to = dayjs(toDate).format("DD-MM-YYYY");
+    }
+    return dateFilters;
+  };
+
   // Helper function to replace null/undefined values with '-' for display
-  const transformNullValues = <T extends Record<string, any>>(data: T[]): T[] => {
-    return data.map(item => {
+  const transformNullValues = <T extends Record<string, any>>(
+    data: T[]
+  ): T[] => {
+    return data.map((item) => {
       const transformed: any = {};
-      Object.keys(item).forEach(key => {
+      Object.keys(item).forEach((key) => {
         const value = item[key];
         // For string fields, replace null/undefined/empty with '-'
         // For numeric fields, keep as is (0 is a valid value)
-        if (value === null || value === undefined || value === '') {
+        if (value === null || value === undefined || value === "") {
           // Check if the key suggests it's a numeric field
-          const numericKeys = ['potential', 'pipeline', 'gained', 'lost', 'quote', 'expected', 'total', 'profit', 'count', 'id'];
-          const isNumericField = numericKeys.some(numKey => key.toLowerCase().includes(numKey));
-          transformed[key] = isNumericField ? 0 : '-';
+          const numericKeys = [
+            "potential",
+            "pipeline",
+            "gained",
+            "lost",
+            "quote",
+            "expected",
+            "total",
+            "profit",
+            "count",
+            "id",
+          ];
+          const isNumericField = numericKeys.some((numKey) =>
+            key.toLowerCase().includes(numKey)
+          );
+          transformed[key] = isNumericField ? 0 : "-";
         } else {
           transformed[key] = value;
         }
@@ -298,21 +336,26 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         if (!companyName) return;
 
         const normalizedColumnType =
-          selectedColumnType === "quote" ? "quoted_created" : selectedColumnType;
+          selectedColumnType === "quote"
+            ? "quoted_created"
+            : selectedColumnType;
 
         const filters: PipelineReportFilters = {
           company: companyName,
           salesperson: selectedSalesperson,
           type: normalizedColumnType,
-          period,
+          // period, // Commented out - can be used in future case
+          ...buildDateFilters(),
           ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+          ...(globalSearch &&
+            globalSearch.trim() && { search: globalSearch.trim() }),
         };
 
         if (selectedCustomer) filters.customer_code = selectedCustomer;
         if (selectedSector) filters.region = selectedSector;
         if (selectedService) filters.service = selectedService;
-        if (selectedServiceType) filters.service_type = toTitleCase(selectedServiceType);
+        if (selectedServiceType)
+          filters.service_type = toTitleCase(selectedServiceType);
 
         setDrilldownLoading(true);
 
@@ -338,8 +381,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalSearch]);
-
+  }, [globalSearch, fromDate, toDate]);
 
   // Restore pipeline state based on drill level
   const restorePipelineState = async (state: {
@@ -378,9 +420,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             company: companyName,
             salesperson: state.selectedSalesperson || "",
             type: state.selectedColumnType || "",
-            period,
+            // period, // Commented out - can be used in future case
+            ...buildDateFilters(),
             ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+            ...(globalSearch &&
+              globalSearch.trim() && { search: globalSearch.trim() }),
           };
 
           const response = await getPotentialCustomersData(filters);
@@ -413,9 +457,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       const filters: PipelineReportFilters = {
         company: companyName,
-        period: periodValue || period,
+        // period: periodValue || period, // Commented out - can be used in future case
+        ...buildDateFilters(),
         ...(salesperson && { salesperson }),
-        ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+        ...(globalSearch &&
+          globalSearch.trim() && { search: globalSearch.trim() }),
         ...(user?.pulse_id === "P2CCI" && { calculation }),
       };
 
@@ -426,8 +472,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         const customerData = (
           response.data as PipelineReportCustomerItem[]
         ).map((item) => ({
-          customer_code: item.customer_code || '-',
-          customer_name: item.customer_name || '-',
+          customer_code: item.customer_code || "-",
+          customer_name: item.customer_name || "-",
           potential: item.potential_profit || 0,
           pipeline: item.pipeline_profit || 0,
           gained: item.gained || 0,
@@ -446,7 +492,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         // Initial data - map salesperson data with badge colors
         const salespersonData = (response.data as PipelineReportItem[]).map(
           (item) => ({
-            salesperson: item.salesperson || '-',
+            salesperson: item.salesperson || "-",
             potential: item.potential_profit || 0,
             pipeline: item.pipeline_profit || 0,
             gained: item.gained_profit || 0,
@@ -474,7 +520,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     }
   };
 
-  const loadSectorData = async (periodValue?: string, region?: string, type?: string) => {
+  const loadSectorData = async (
+    periodValue?: string,
+    region?: string,
+    type?: string
+  ) => {
     try {
       if (region) {
         setSectorSalespersonLoading(true);
@@ -486,10 +536,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       const response = await getPipelineReportRegionalData({
         company: companyName,
-        period: periodValue || period,
+        // period: periodValue || period, // Commented out - can be used in future case
+        ...buildDateFilters(),
         ...(region && { region }),
         ...(type && { type }),
-        ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+        ...(globalSearch &&
+          globalSearch.trim() && { search: globalSearch.trim() }),
         ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
@@ -503,7 +555,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             const salespersonData = (
               data as unknown as PipelineReportItem[]
             ).map((item) => ({
-              salesperson: item.salesperson || '-',
+              salesperson: item.salesperson || "-",
               potential: item.potential_profit || 0,
               pipeline: item.pipeline_profit || 0,
               gained: item.gained_profit || 0,
@@ -521,13 +573,14 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           } else if ("customer_code" in firstItem) {
             // Customer data - map field names correctly based on API response
             const customerData = (data as any[]).map((item) => ({
-              customer_code: item.customer_code || '-',
-              customer_name: item.customer_name || '-',
+              customer_code: item.customer_code || "-",
+              customer_name: item.customer_name || "-",
               potential: item.potential_profit || item.potential || 0,
               pipeline: item.pipeline_profit || item.pipeline || 0,
               gained: item.gained_profit || item.gained || 0,
               lost: item.lost_profit || item.lost || 0,
-              quote: item.quoted_profit || item.quoted_created || item.quote || 0,
+              quote:
+                item.quoted_profit || item.quoted_created || item.quote || 0,
               expected: item.expected_profit || item.expected || 0,
             }));
             setSectorDrilldownData(customerData);
@@ -591,23 +644,25 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       const response = await getPipelineReportRegionalData({
         company: companyName,
-        period: periodValue || period,
+        // period: periodValue || period, // Commented out - can be used in future case
+        ...buildDateFilters(),
         region: selectedSector,
         salesperson: salesperson,
         ...(type && { type }),
-        ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+        ...(globalSearch &&
+          globalSearch.trim() && { search: globalSearch.trim() }),
         ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
       const data = response.data || [];
-      
+
       if (data.length > 0) {
         // Check if response is customer data or salesperson data
         if ("customer_code" in data[0]) {
           // Customer data - map field names correctly based on API response
           const customerData = (data as any[]).map((item) => ({
-            customer_code: item.customer_code || '-',
-            customer_name: item.customer_name || '-',
+            customer_code: item.customer_code || "-",
+            customer_name: item.customer_name || "-",
             potential: item.potential_profit || item.potential || 0,
             pipeline: item.pipeline_profit || item.pipeline || 0,
             gained: item.gained_profit || item.gained || 0,
@@ -625,10 +680,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         } else if ("salesperson" in data[0]) {
           // API returned salesperson data instead of customer data
           // This means we need to drill down further or the type filter affected the response
-          console.warn("API returned salesperson data instead of customer data - may need different approach");
+          console.warn(
+            "API returned salesperson data instead of customer data - may need different approach"
+          );
           // Still try to display it
           const salespersonData = (data as any[]).map((item) => ({
-            salesperson: item.salesperson || '-',
+            salesperson: item.salesperson || "-",
             potential: item.potential_profit || item.potential || 0,
             pipeline: item.pipeline_profit || item.pipeline || 0,
             gained: item.gained_profit || item.gained || 0,
@@ -675,11 +732,13 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       const response = await getPipelineReportProductData({
         company: companyName,
-        period: periodValue || period,
+        // period: periodValue || period, // Commented out - can be used in future case
+        ...buildDateFilters(),
         ...(service && { service }),
         ...(serviceType && { service_type: toTitleCase(serviceType) }),
         ...(type && { type }),
-        ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+        ...(globalSearch &&
+          globalSearch.trim() && { search: globalSearch.trim() }),
         ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
@@ -691,10 +750,10 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           const salespersonData = (
             data as PipelineReportProductSalespersonItem[]
           ).map((item) => ({
-            salesperson: item.salesperson || '-',
-            service: `${item.service || '-'} ${item.service_type || '-'}`, // Combined: "FCL Import", "FCL Export", etc.
-            service_type: item.service_type || '-', // Keep for reference but will be hidden
-            service_original: item.service || '-', // Store original service for click handling
+            salesperson: item.salesperson || "-",
+            service: `${item.service || "-"} ${item.service_type || "-"}`, // Combined: "FCL Import", "FCL Export", etc.
+            service_type: item.service_type || "-", // Keep for reference but will be hidden
+            service_original: item.service || "-", // Store original service for click handling
             potential: item.potential_profit || 0,
             pipeline: item.pipeline_profit || 0,
             gained: item.gained_profit || 0,
@@ -716,8 +775,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           if ("service" in firstCustomerItem) {
             // Product customer data - use gained_profit, lost_profit, quoted_profit
             const customerData = (data as any[]).map((item) => ({
-              customer_code: item.customer_code || '-',
-              customer_name: item.customer_name || '-',
+              customer_code: item.customer_code || "-",
+              customer_name: item.customer_name || "-",
               potential: item.potential_profit || 0,
               pipeline: item.pipeline_profit || 0,
               gained: item.gained_profit || 0,
@@ -729,13 +788,14 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           } else {
             // Customer data - use robust field name fallbacks
             const customerData = (data as any[]).map((item) => ({
-              customer_code: item.customer_code || '-',
-              customer_name: item.customer_name || '-',
+              customer_code: item.customer_code || "-",
+              customer_name: item.customer_name || "-",
               potential: item.potential_profit || item.potential || 0,
               pipeline: item.pipeline_profit || item.pipeline || 0,
               gained: item.gained_profit || item.gained || 0,
               lost: item.lost_profit || item.lost || 0,
-              quote: item.quoted_profit || item.quoted_created || item.quote || 0,
+              quote:
+                item.quoted_profit || item.quoted_created || item.quote || 0,
               expected: item.expected_profit || item.expected || 0,
             }));
             setProductDrilldownData(customerData);
@@ -751,9 +811,9 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           // Base product data - combine service and service_type
           const productTableData = (data as PipelineReportProductItem[]).map(
             (item) => ({
-              service: `${item.service || '-'} ${item.service_type || '-'}`, // Combined: "FCL Import", "FCL Export", etc.
-              service_type: item.service_type || '-', // Keep for reference but will be hidden
-              service_original: item.service || '-', // Store original service for click handling
+              service: `${item.service || "-"} ${item.service_type || "-"}`, // Combined: "FCL Import", "FCL Export", etc.
+              service_type: item.service_type || "-", // Keep for reference but will be hidden
+              service_original: item.service || "-", // Store original service for click handling
               potential: item.potential_profit || 0,
               pipeline: item.pipeline_profit || 0,
               gained: item.gained_profit || 0,
@@ -810,14 +870,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       const response = await getPipelineReportProductData({
         company: companyName,
-        period: periodValue || period,
+        // period: periodValue || period, // Commented out - can be used in future case
+        ...buildDateFilters(),
         service: selectedService,
         service_type: selectedServiceType
           ? toTitleCase(selectedServiceType)
           : undefined,
         salesperson: salesperson,
         ...(type && { type }),
-        ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+        ...(globalSearch &&
+          globalSearch.trim() && { search: globalSearch.trim() }),
         ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
@@ -825,8 +887,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       if (data.length > 0 && "customer_code" in data[0]) {
         // Product customer data - use gained_profit, lost_profit, quoted_profit from API response
         const customerData = (data as any[]).map((item) => ({
-          customer_code: item.customer_code || '-',
-          customer_name: item.customer_name || '-',
+          customer_code: item.customer_code || "-",
+          customer_name: item.customer_name || "-",
           potential: item.potential_profit || 0,
           pipeline: item.pipeline_profit || 0,
           gained: item.gained_profit || 0,
@@ -905,10 +967,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       }
       // Handle financial column click at drill level 0 - drill down to customer list for that salesperson
       // Check if additionalData is a salesperson row
-      if (
-        additionalData &&
-        "salesperson" in additionalData
-      ) {
+      if (additionalData && "salesperson" in additionalData) {
         const salespersonData = additionalData as PipelineSalespersonRow;
         setSelectedSalesperson(salespersonData.salesperson);
         // Normalize "quote" to "quoted_created" for API
@@ -924,9 +983,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             company: companyName,
             salesperson: salespersonData.salesperson,
             type: normalizedColumnType,
-            period,
+            // period, // Commented out - can be used in future case
+            ...buildDateFilters(),
             ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+            ...(globalSearch &&
+              globalSearch.trim() && { search: globalSearch.trim() }),
           };
 
           const response = await getPotentialCustomersData(filters);
@@ -974,9 +1035,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             company: companyName,
             salesperson: selectedSalesperson || "",
             type: normalizedColumnType,
-            period,
+            // period, // Commented out - can be used in future case
+            ...buildDateFilters(),
             ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+            ...(globalSearch &&
+              globalSearch.trim() && { search: globalSearch.trim() }),
           };
           if (customerData.customer_code) {
             filters.customer_code = customerData.customer_code;
@@ -1144,7 +1207,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       setSelectedSector(sectorData.region);
       setSelectedCustomer(`Sector: ${sectorData.region}`); // Set for title display
       // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType = columnType === "quote" ? "quoted_created" : columnType;
+      const normalizedColumnType =
+        columnType === "quote" ? "quoted_created" : columnType;
       setSelectedColumnType(normalizedColumnType);
       setDrillLevel(2); // Go to detailed transaction view
       setDrilldownLoading(true);
@@ -1155,9 +1219,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           company: companyName,
           region: sectorData.region,
           type: normalizedColumnType,
-          period,
+          // period, // Commented out - can be used in future case
+          ...buildDateFilters(),
           ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+          ...(globalSearch &&
+            globalSearch.trim() && { search: globalSearch.trim() }),
         };
 
         const response = await getPotentialCustomersDataForRegional(filters);
@@ -1188,11 +1254,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       // Get salesperson info from additionalData
       const salespersonData = additionalData as PipelineSectorSalespersonRow;
       const salespersonName = salespersonData.salesperson;
-      
+
       setSelectedSalesperson(salespersonName);
       setSelectedCustomer(`Sector: ${selectedSector} - ${salespersonName}`); // Set for title display
       // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType = columnType === "quote" ? "quoted_created" : columnType;
+      const normalizedColumnType =
+        columnType === "quote" ? "quoted_created" : columnType;
       setSelectedColumnType(normalizedColumnType);
       setDrillLevel(2); // Go to detailed transaction view (main drill level)
       setDrilldownLoading(true);
@@ -1204,15 +1271,20 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           region: selectedSector || "",
           salesperson: salespersonName,
           type: normalizedColumnType,
-          period,
+          // period, // Commented out - can be used in future case
+          ...buildDateFilters(),
           ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+          ...(globalSearch &&
+            globalSearch.trim() && { search: globalSearch.trim() }),
         };
 
         const response = await getPotentialCustomersDataForRegional(filters);
         setPotentialCustomersData(transformNullValues(response.data || []));
       } catch (error) {
-        console.error("Error loading sector salesperson financial detail data:", error);
+        console.error(
+          "Error loading sector salesperson financial detail data:",
+          error
+        );
         setPotentialCustomersData([]);
       } finally {
         setDrilldownLoading(false);
@@ -1245,7 +1317,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const customerData = additionalData as PipelineCustomerRow;
       const customerCode = customerData.customer_code;
       const customerName = customerData.customer_name;
-      
+
       setSelectedCustomer(customerName || "Customer");
       // Normalize "quote" to "quoted_created" for API
       const normalizedColumnType =
@@ -1262,15 +1334,20 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           salesperson: selectedSalesperson || "",
           customer_code: customerCode,
           type: normalizedColumnType,
-          period,
+          // period, // Commented out - can be used in future case
+          ...buildDateFilters(),
           ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+          ...(globalSearch &&
+            globalSearch.trim() && { search: globalSearch.trim() }),
         };
 
         const response = await getPotentialCustomersDataForRegional(filters);
         setPotentialCustomersData(transformNullValues(response.data || []));
       } catch (error) {
-        console.error("Error loading sector customer financial column data:", error);
+        console.error(
+          "Error loading sector customer financial column data:",
+          error
+        );
         setPotentialCustomersData([]);
       } finally {
         setDrilldownLoading(false);
@@ -1406,16 +1483,28 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         selectedServiceType &&
         selectedSalesperson
       ) {
-        loadProductCustomerData(selectedSalesperson, period, selectedColumnType || undefined);
+        loadProductCustomerData(
+          selectedSalesperson,
+          period,
+          selectedColumnType || undefined
+        );
       }
     } else if (sectorDrillLevel > 0) {
       if (sectorDrillLevel === 1 && selectedSector) {
         loadSectorData(period, selectedSector, selectedColumnType || undefined);
       } else if (sectorDrillLevel === 2 && selectedSector) {
         if (selectedSalesperson) {
-          loadSectorCustomerData(selectedSalesperson, period, selectedColumnType || undefined);
+          loadSectorCustomerData(
+            selectedSalesperson,
+            period,
+            selectedColumnType || undefined
+          );
         } else {
-          loadSectorData(period, selectedSector, selectedColumnType || undefined);
+          loadSectorData(
+            period,
+            selectedSector,
+            selectedColumnType || undefined
+          );
         }
       }
     } else if (drillLevel === 1 && selectedSalesperson) {
@@ -1428,16 +1517,23 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const normalizedColumnType =
         selectedColumnType === "quote" ? "quoted_created" : selectedColumnType;
 
-        const filters: PipelineReportFilters = {
-          company: companyName,
-          salesperson: selectedSalesperson || "",
-          type: normalizedColumnType,
-          period,
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
-        };
+      const filters: PipelineReportFilters = {
+        company: companyName,
+        salesperson: selectedSalesperson || "",
+        type: normalizedColumnType,
+        // period, // Commented out - can be used in future case
+        ...buildDateFilters(),
+        ...(user?.pulse_id === "P2CCI" && { calculation }),
+        ...(globalSearch &&
+          globalSearch.trim() && { search: globalSearch.trim() }),
+      };
 
-      if (selectedCustomer && typeof selectedCustomer === 'string' && !selectedCustomer.startsWith('Sector:') && !selectedCustomer.includes(' - ')) {
+      if (
+        selectedCustomer &&
+        typeof selectedCustomer === "string" &&
+        !selectedCustomer.startsWith("Sector:") &&
+        !selectedCustomer.includes(" - ")
+      ) {
         // Extract customer_code if available
         const customerRow = drilldownData.find(
           (row) => row.customer_name === selectedCustomer
@@ -1448,7 +1544,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       }
       if (selectedSector) filters.region = selectedSector;
       if (selectedService) filters.service = selectedService;
-      if (selectedServiceType) filters.service_type = toTitleCase(selectedServiceType);
+      if (selectedServiceType)
+        filters.service_type = toTitleCase(selectedServiceType);
 
       setDrilldownLoading(true);
       (async () => {
@@ -1539,7 +1636,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     // Coming back from detailed transaction view (drillLevel === 2)
     if (drillLevel === 2 && selectedColumnType && selectedSector) {
       // Check if we came from sector level 1 (salesperson badge click)
-      if (selectedSalesperson && selectedCustomer && typeof selectedCustomer === 'string' && selectedCustomer.includes(' - ')) {
+      if (
+        selectedSalesperson &&
+        selectedCustomer &&
+        typeof selectedCustomer === "string" &&
+        selectedCustomer.includes(" - ")
+      ) {
         // Coming back from detailed view accessed from sector level 1 (salesperson badge click)
         setDrillLevel(0);
         setSelectedSalesperson(null);
@@ -1550,9 +1652,14 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         if (selectedSector) {
           loadSectorData(period, selectedSector);
         }
-      } 
+      }
       // Check if we came from sector level 0 (region badge click)
-      else if (!selectedSalesperson && selectedCustomer && typeof selectedCustomer === 'string' && selectedCustomer.startsWith('Sector:')) {
+      else if (
+        !selectedSalesperson &&
+        selectedCustomer &&
+        typeof selectedCustomer === "string" &&
+        selectedCustomer.startsWith("Sector:")
+      ) {
         // Coming back from detailed view accessed from sector level 0 (region badge click)
         setDrillLevel(0);
         setSectorDrillLevel(0);
@@ -1564,7 +1671,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         loadSectorData();
       }
       // Check if we came from sector level 2 (customer badge click)
-      else if (selectedSalesperson && selectedCustomer && !selectedCustomer.includes(' - ') && !selectedCustomer.startsWith('Sector:')) {
+      else if (
+        selectedSalesperson &&
+        selectedCustomer &&
+        !selectedCustomer.includes(" - ") &&
+        !selectedCustomer.startsWith("Sector:")
+      ) {
         // Coming back from detailed view accessed from sector level 2 (customer badge click)
         setDrillLevel(0);
         setSelectedCustomer(null);
@@ -1598,7 +1710,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         // Reload initial sector data
         loadSectorData();
       }
-    } 
+    }
     // Coming back from sector level 1 (salesperson list) to level 0 (region list)
     else if (sectorDrillLevel === 1) {
       setSectorDrillLevel(0);
@@ -1715,9 +1827,10 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       // Get product info from additionalData
       const productData = additionalData as PipelineProductRow;
       // Extract service and service_type
-      const service = productData.service_original || productData.service.split(" ")[0];
+      const service =
+        productData.service_original || productData.service.split(" ")[0];
       const serviceType = productData.service_type;
-      
+
       setSelectedService(service);
       setSelectedServiceType(serviceType);
       // Normalize "quote" to "quoted_created" for API
@@ -1729,9 +1842,17 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       try {
         // Load salesperson data with type filter
-        await loadProductData(period, service, toTitleCase(serviceType), normalizedColumnType);
+        await loadProductData(
+          period,
+          service,
+          toTitleCase(serviceType),
+          normalizedColumnType
+        );
       } catch (error) {
-        console.error("Error loading product salesperson data with type filter:", error);
+        console.error(
+          "Error loading product salesperson data with type filter:",
+          error
+        );
       } finally {
         setProductSalespersonLoading(false);
       }
@@ -1755,13 +1876,18 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       // Get salesperson info from additionalData
       const salespersonData = additionalData as PipelineProductSalespersonRow;
       const salespersonName = salespersonData.salesperson;
-      
+
       setSelectedSalesperson(salespersonName);
       // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType = columnType === "quote" ? "quoted_created" : columnType;
+      const normalizedColumnType =
+        columnType === "quote" ? "quoted_created" : columnType;
       setSelectedColumnType(normalizedColumnType); // Keep type filter for customer list
       setProductDrillLevel(2); // Navigate to customer list (level 2)
-      await loadProductCustomerData(salespersonName, period, normalizedColumnType);
+      await loadProductCustomerData(
+        salespersonName,
+        period,
+        normalizedColumnType
+      );
     } else if (columnType === "salesperson" && productDrillLevel === 1) {
       // Handle salesperson click in product drilldown (level 1)
       setSelectedSalesperson(value);
@@ -1790,7 +1916,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const customerData = additionalData as PipelineCustomerRow;
       const customerCode = customerData.customer_code;
       const customerName = customerData.customer_name;
-      
+
       setSelectedCustomer(customerName || "Customer");
       // Normalize "quote" to "quoted_created" for API
       const normalizedColumnType =
@@ -1804,19 +1930,26 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         const filters: PipelineReportFilters = {
           company: companyName,
           service: selectedService || "",
-          service_type: selectedServiceType ? toTitleCase(selectedServiceType) : "",
+          service_type: selectedServiceType
+            ? toTitleCase(selectedServiceType)
+            : "",
           salesperson: selectedSalesperson || "",
           customer_code: customerCode,
           type: normalizedColumnType,
-          period,
+          // period, // Commented out - can be used in future case
+          ...buildDateFilters(),
           ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+          ...(globalSearch &&
+            globalSearch.trim() && { search: globalSearch.trim() }),
         };
 
         const response = await getPotentialCustomersDataForProduct(filters);
         setPotentialCustomersData(transformNullValues(response.data || []));
       } catch (error) {
-        console.error("Error loading product customer financial column data:", error);
+        console.error(
+          "Error loading product customer financial column data:",
+          error
+        );
         setPotentialCustomersData([]);
       } finally {
         setDrilldownLoading(false);
@@ -1853,7 +1986,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   // Handle product back navigation
   const handleProductBack = () => {
     // Coming back from detailed transaction view (drillLevel === 2)
-    if (drillLevel === 2 && selectedColumnType && selectedService && selectedServiceType) {
+    if (
+      drillLevel === 2 &&
+      selectedColumnType &&
+      selectedService &&
+      selectedServiceType
+    ) {
       // Check if we came from product level 2 (customer badge click)
       if (selectedSalesperson && selectedCustomer) {
         // Coming back from detailed view accessed from product level 2 (customer badge click)
@@ -1866,7 +2004,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           loadProductCustomerData(selectedSalesperson);
         }
       }
-      // Check if we came from product level 1 (salesperson badge click) 
+      // Check if we came from product level 1 (salesperson badge click)
       else if (selectedSalesperson && !selectedCustomer) {
         // Coming back from detailed view accessed from product level 1 (salesperson badge click)
         setDrillLevel(0);
@@ -1909,7 +2047,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           toTitleCase(selectedServiceType)
         );
       }
-    } 
+    }
     // Coming back from product level 1 (salesperson list) to level 0 (product list)
     else if (productDrillLevel === 1) {
       setProductDrillLevel(0);
@@ -1934,28 +2072,38 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       lost: "Lost",
       expected: "Expected",
     };
-    
+
     if (productDrillLevel > 0) {
       if (productDrillLevel === 1) {
-        const typeFilter = selectedColumnType ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}` : '';
+        const typeFilter = selectedColumnType
+          ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}`
+          : "";
         return `Pipeline Report - Product: ${selectedService} - ${selectedServiceType}${typeFilter}`;
       } else if (productDrillLevel === 2) {
-        const typeFilter = selectedColumnType ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}` : '';
+        const typeFilter = selectedColumnType
+          ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}`
+          : "";
         return `Pipeline Report - Product: ${selectedService} - ${selectedServiceType} - ${selectedSalesperson}${typeFilter}`;
       }
     }
     if (sectorDrillLevel > 0) {
       if (sectorDrillLevel === 1) {
-        const typeFilter = selectedColumnType ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}` : '';
+        const typeFilter = selectedColumnType
+          ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}`
+          : "";
         return `Pipeline Report - Sector: ${selectedSector}${typeFilter}`;
       } else if (sectorDrillLevel === 2) {
         // Check if we have a salesperson selected
         if (selectedSalesperson) {
-          const typeFilter = selectedColumnType ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}` : '';
+          const typeFilter = selectedColumnType
+            ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}`
+            : "";
           return `Pipeline Report - Sector: ${selectedSector} - ${selectedSalesperson}${typeFilter}`;
         } else {
           // Came directly from level 0 - showing customers for region with type filter
-          const typeFilter = selectedColumnType ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}` : '';
+          const typeFilter = selectedColumnType
+            ? ` - ${columnTypeMap[selectedColumnType] || selectedColumnType}`
+            : "";
           return `Pipeline Report - Sector: ${selectedSector}${typeFilter}`;
         }
       }
@@ -1963,9 +2111,10 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     if (drillLevel === 0) return "Pipeline Report";
     if (drillLevel === 1) return `Pipeline Report - ${selectedSalesperson}`;
     if (drillLevel === 2) {
-      const columnTitle =
-        columnTypeMap[selectedColumnType || ""] ? `${columnTypeMap[selectedColumnType || ""]} Customers` : "Customer Details";
-      return `${columnTitle} - ${selectedCustomer ? selectedCustomer : ''} ${selectedSalesperson ? selectedSalesperson : ""}`;
+      const columnTitle = columnTypeMap[selectedColumnType || ""]
+        ? `${columnTypeMap[selectedColumnType || ""]} Customers`
+        : "Customer Details";
+      return `${columnTitle} - ${selectedCustomer ? selectedCustomer : ""} ${selectedSalesperson ? selectedSalesperson : ""}`;
     }
     return "Pipeline Report";
   };
@@ -1994,19 +2143,35 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         selectedServiceType &&
         selectedSalesperson
       ) {
-        await loadProductCustomerData(selectedSalesperson, value, selectedColumnType || undefined);
+        await loadProductCustomerData(
+          selectedSalesperson,
+          value,
+          selectedColumnType || undefined
+        );
       }
     } else if (sectorDrillLevel > 0) {
       // Handle period change for sector drill levels
       if (sectorDrillLevel === 1 && selectedSector) {
-        await loadSectorData(value, selectedSector, selectedColumnType || undefined);
+        await loadSectorData(
+          value,
+          selectedSector,
+          selectedColumnType || undefined
+        );
       } else if (sectorDrillLevel === 2 && selectedSector) {
         if (selectedSalesperson) {
           // Level 2 with salesperson - came from level 1
-          await loadSectorCustomerData(selectedSalesperson, value, selectedColumnType || undefined);
+          await loadSectorCustomerData(
+            selectedSalesperson,
+            value,
+            selectedColumnType || undefined
+          );
         } else {
           // Level 2 without salesperson - came directly from level 0 with type filter
-          await loadSectorData(value, selectedSector, selectedColumnType || undefined);
+          await loadSectorData(
+            value,
+            selectedSector,
+            selectedColumnType || undefined
+          );
         }
       }
     } else if (drillLevel === 1 && selectedSalesperson) {
@@ -2020,7 +2185,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           salesperson: selectedSalesperson || "",
           type: selectedColumnType || undefined,
           ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch && globalSearch.trim() && { search: globalSearch.trim() }),
+          ...(globalSearch &&
+            globalSearch.trim() && { search: globalSearch.trim() }),
           period: value,
         };
         // Include region for sector drilldown
@@ -2160,7 +2326,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       // After successful API call, refetch sector customer data at current drill level
       if (selectedSalesperson && selectedSector) {
-        await loadSectorCustomerData(selectedSalesperson, period, selectedColumnType || undefined);
+        await loadSectorCustomerData(
+          selectedSalesperson,
+          period,
+          selectedColumnType || undefined
+        );
       }
     } catch (error) {
       console.error("Error updating expected profit:", error);
@@ -2223,7 +2393,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       // After successful API call, refetch product customer data at current drill level
       if (selectedSalesperson && selectedService && selectedServiceType) {
-        await loadProductCustomerData(selectedSalesperson, period, selectedColumnType || undefined);
+        await loadProductCustomerData(
+          selectedSalesperson,
+          period,
+          selectedColumnType || undefined
+        );
       }
     } catch (error) {
       console.error("Error updating expected profit:", error);
@@ -2244,7 +2418,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   // Map sector data to table format - exclude total at base level
   const sectorTableData = sectorData.map((item) => {
     const baseData = {
-      region: item.region || '-',
+      region: item.region || "-",
       potential: item.potential_profit || 0,
       pipeline: item.pipeline_profit || 0,
       gained: item.gained_profit || 0,
@@ -2314,12 +2488,13 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const displaySectorData = useMemo(() => {
     // When there's a type filter, show totals at drill level 2 but not at other levels
     if (selectedColumnType) {
-      const data = sectorDrillLevel === 0
-        ? sectorTableData
-        : sectorDrillLevel === 1
-          ? sectorSalespersonData
-          : sectorDrilldownData;
-      
+      const data =
+        sectorDrillLevel === 0
+          ? sectorTableData
+          : sectorDrillLevel === 1
+            ? sectorSalespersonData
+            : sectorDrilldownData;
+
       // Show total row at drill level 2 even with type filter
       if (sectorDrillLevel === 2 && sectorDrilldownSummary) {
         return addTotalRowFromSummary(
@@ -2328,7 +2503,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           "customer_name"
         );
       }
-      
+
       return data;
     }
 
@@ -2410,12 +2585,13 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const displayProductData = useMemo(() => {
     // When there's a type filter, show totals at drill level 2 but not at other levels
     if (selectedColumnType) {
-      const data = productDrillLevel === 0
-        ? productData
-        : productDrillLevel === 1
-          ? productSalespersonData
-          : productDrilldownData;
-      
+      const data =
+        productDrillLevel === 0
+          ? productData
+          : productDrillLevel === 1
+            ? productSalespersonData
+            : productDrilldownData;
+
       // Show total row at drill level 2 even with type filter
       if (productDrillLevel === 2 && productDrilldownSummary) {
         return addTotalRowFromSummary(
@@ -2424,7 +2600,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           "customer_name"
         );
       }
-      
+
       return data;
     }
 
@@ -2471,7 +2647,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     } else if (selectedService) {
       backHandler = handleProductBack;
     }
-    
+
     return (
       <DetailedViewTable
         data={potentialCustomersData}
@@ -2512,7 +2688,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 },
               }}
             /> */}
-            <Select
+            {/* Commented out - can be used in future case */}
+            {/* <Select
               placeholder="Select period"
               data={[
                 { value: "current-month", label: "Current month" },
@@ -2524,7 +2701,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               onChange={handlePeriodChange}
               size="xs"
               style={{ width: "150px" }}
-            />
+            /> */}
           </Group>
         }
         onCellEdit={undefined}
@@ -2579,7 +2756,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 },
               }}
             /> */}
-            <Select
+            {/* Commented out - can be used in future case */}
+            {/* <Select
               placeholder="Select period"
               data={[
                 { value: "current-month", label: "Current month" },
@@ -2591,7 +2769,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               onChange={handlePeriodChange}
               size="xs"
               style={{ width: "150px" }}
-            />
+            /> */}
           </Group>
         }
         onCellEdit={handleProductCellEdit}
@@ -2646,7 +2824,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 },
               }}
             /> */}
-            <Select
+            {/* Commented out - can be used in future case */}
+            {/* <Select
               placeholder="Select period"
               data={[
                 { value: "current-month", label: "Current month" },
@@ -2658,7 +2837,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               onChange={handlePeriodChange}
               size="xs"
               style={{ width: "150px" }}
-            />
+            /> */}
           </Group>
         }
         onCellEdit={handleSectorCellEdit}
@@ -2687,41 +2866,44 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   if (drillLevel === 0) {
     return (
       <Box>
-        <Group justify="space-between" align="center" mb="md">
+        <Group justify="space-between" align="center" >
           <Text size="lg" fw={600} c="#105476">
-            Pipeline Report
+            {/* Pipeline Report */}
           </Text>
           <Group gap="md" align="center">
-           {user?.pulse_id === "P2CCI" && <SegmentedControl
-              value={calculation}
-              onChange={(value) => {
-                setCalculation(value as "volume" | "no_of_shipments");
-              }}
-              data={[
-                { label: "Volume", value: "volume" },
-                { label: "No. of Shipments", value: "no_of_shipments" },
-              ]}
-              size="xs"
-              color="#105476"
-              styles={{
-                root: {
-                  backgroundColor: "#f0f0f0",
-                },
-                indicator: {
-                  backgroundColor: "#105476",
-                },
-                label: {
-                  color: "#105476",
-                  fontWeight: 500,
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                  "&[data-active]": {
-                    color: "white",
+            {user?.pulse_id === "P2CCI" && (
+              <SegmentedControl
+                value={calculation}
+                onChange={(value) => {
+                  setCalculation(value as "volume" | "no_of_shipments");
+                }}
+                data={[
+                  { label: "Volume", value: "volume" },
+                  { label: "No. of Shipments", value: "no_of_shipments" },
+                ]}
+                size="xs"
+                color="#105476"
+                styles={{
+                  root: {
+                    backgroundColor: "#f0f0f0",
                   },
-                },
-              }}
-            />}
-            <Select
+                  indicator: {
+                    backgroundColor: "#105476",
+                  },
+                  label: {
+                    color: "#105476",
+                    fontWeight: 500,
+                    fontSize: "12px",
+                    padding: "4px 8px",
+                    "&[data-active]": {
+                      color: "white",
+                    },
+                  },
+                }}
+              />
+            )}
+            {/* Commented out - can be used in future case */}
+            {/* <Select
               placeholder="Select period"
               data={[
                 { value: "current-month", label: "Current month" },
@@ -2733,7 +2915,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               onChange={handlePeriodChange}
               size="xs"
               style={{ width: "150px" }}
-            />
+            /> */}
           </Group>
         </Group>
         <Tabs value={activeTab} onChange={handleTabChange}>
@@ -2941,7 +3123,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               },
             }}
           /> */}
-          <Select
+          {/* Commented out - can be used in future case */}
+          {/* <Select
             placeholder="Select period"
             data={[
               { value: "current-month", label: "Current month" },
@@ -2953,7 +3136,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             onChange={handlePeriodChange}
             size="xs"
             style={{ width: "150px" }}
-          />
+          /> */}
         </Group>
       }
       onCellEdit={handleCellEdit}
