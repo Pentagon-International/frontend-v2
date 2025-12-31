@@ -123,14 +123,14 @@ const OutstandingBarChart = ({
     >
       <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
         <Text
-          size="lg"
+          size="md"
           fw={500}
           c="#22252B"
           style={{ fontFamily: "Inter, sans-serif" }}
         >
           Outstanding vs Overdue
         </Text>
-      
+
         <Text
           size="sm"
           c="#105476"

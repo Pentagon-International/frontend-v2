@@ -1,5 +1,12 @@
 import { useMemo } from "react";
-import { Card, Group, Text, Button, Select, SegmentedControl } from "@mantine/core";
+import {
+  Card,
+  Group,
+  Text,
+  Button,
+  Select,
+  SegmentedControl,
+} from "@mantine/core";
 import { BarChart, BarChartDataItem } from "../../../components";
 import dayjs from "dayjs";
 import {
@@ -165,11 +172,11 @@ const BudgetBarChart = ({
     >
       {/* Title and Controls */}
       <Group justify="space-between" align="center" mb="md">
-        <Text 
-        size="lg"
-        fw={500}
-        c="#22252B"
-        style={{ fontFamily: "Inter, sans-serif" }}
+        <Text
+          size="md"
+          fw={500}
+          c="#22252B"
+          style={{ fontFamily: "Inter, sans-serif" }}
         >
           Budget vs Actual
         </Text>
@@ -194,64 +201,60 @@ const BudgetBarChart = ({
               },
             }}
           />
-            <Group gap="xs" align="center">
-        <Select
-            placeholder="Select Period"
-            value={selectedYear}
-            onChange={(value) =>
-              setSelectedYear(value)
-            }
-            w={150}
-            size="xs"
-            data={[
-              { value: "2023", label: "2023" },
-              { value: "2024", label: "2024" },
-              { value: "2025", label: "2025" },
-            ]}
-            styles={{
-              input: { fontSize: "12px", fontFamily: "Inter, sans-serif" },
-            }}
-          />
-          <Select
-            placeholder="From Month"
-            data={fromMonthOptions}
-            value={budgetStartMonth}
-            onChange={(value) => {
-              if (value) {
-                const endMonth =
-                  !budgetEndMonth || budgetEndMonth < value
-                    ? value
-                    : budgetEndMonth;
-                handleBudgetMonthFilterChange(value, endMonth);
-              }
-            }}
-            size="xs"
-            w={110}
-            withAsterisk
-            required
-          />
-          <Select
-            placeholder="To Month"
-            data={toMonthOptions}
-            value={budgetEndMonth}
-            onChange={(value) => {
-              if (value) {
-                handleBudgetMonthFilterChange(budgetStartMonth, value);
-              }
-            }}
-            size="xs"
-            w={110}
-            withAsterisk
-            required
-          />
-        </Group>
-      
+          <Group gap="xs" align="center">
+            <Select
+              placeholder="Select Period"
+              value={selectedYear}
+              onChange={(value) => setSelectedYear(value)}
+              w={150}
+              size="xs"
+              data={[
+                { value: "2023", label: "2023" },
+                { value: "2024", label: "2024" },
+                { value: "2025", label: "2025" },
+              ]}
+              styles={{
+                input: { fontSize: "12px", fontFamily: "Inter, sans-serif" },
+              }}
+            />
+            <Select
+              placeholder="From Month"
+              data={fromMonthOptions}
+              value={budgetStartMonth}
+              onChange={(value) => {
+                if (value) {
+                  const endMonth =
+                    !budgetEndMonth || budgetEndMonth < value
+                      ? value
+                      : budgetEndMonth;
+                  handleBudgetMonthFilterChange(value, endMonth);
+                }
+              }}
+              size="xs"
+              w={110}
+              withAsterisk
+              required
+            />
+            <Select
+              placeholder="To Month"
+              data={toMonthOptions}
+              value={budgetEndMonth}
+              onChange={(value) => {
+                if (value) {
+                  handleBudgetMonthFilterChange(budgetStartMonth, value);
+                }
+              }}
+              size="xs"
+              w={110}
+              withAsterisk
+              required
+            />
+          </Group>
         </Group>
       </Group>
 
       {/* Header row: Month filters + View All */}
       <Group justify="end" align="center" mb="sm" gap="xs">
-      
         <Text
           size="sm"
           c="#105476"
@@ -336,4 +339,3 @@ const BudgetBarChart = ({
 };
 
 export default BudgetBarChart;
-

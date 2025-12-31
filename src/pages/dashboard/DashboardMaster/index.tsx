@@ -225,6 +225,12 @@ const Dashboard = () => {
     useState<string>("quarterly");
   const [newCustomerTotalRecords, setNewCustomerTotalRecords] = useState(0);
 
+  // Store original response data for Customer Interaction Status cards
+  const [gainOriginalData, setGainOriginalData] = useState<any>(null);
+  const [lostOriginalData, setLostOriginalData] = useState<any>(null);
+  const [notVisitedOriginalData, setNotVisitedOriginalData] =
+    useState<any>(null);
+
   // Original full lists
   const [originalCompanies, setOriginalCompanies] = useState<string[]>([]);
   const [originalLocations, setOriginalLocations] = useState<string[]>([]);
@@ -1138,15 +1144,16 @@ const Dashboard = () => {
         date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
       });
 
+      // Store original response data for drill-down
+      setGainOriginalData(response);
+
       // Transform response to table data format
-      const tableData = (response.data || []).map(
-        (item: any, index: number) => ({
-          // SNO: index + 1,
-          USER_NAME: item.user_name || "",
-          EMAIL: item.email || "",
-          CUSTOMER_COUNT: item.customer_count || 0,
-        })
-      );
+      const tableData = (response.data || []).map((item: any) => ({
+        SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
+        USER_NAME: item.user_name || "",
+        EMAIL: item.email || "",
+        CUSTOMER_COUNT: item.customer_count || 0,
+      }));
 
       setDetailedViewData(tableData);
       setShowDetailedView(true);
@@ -1179,15 +1186,16 @@ const Dashboard = () => {
         date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
       });
 
+      // Store original response data for drill-down
+      setLostOriginalData(response);
+
       // Transform response to table data format
-      const tableData = (response.data || []).map(
-        (item: any, index: number) => ({
-          // SNO: index + 1,
-          USER_NAME: item.user_name || "",
-          EMAIL: item.email || "",
-          CUSTOMER_COUNT: item.customer_count || 0,
-        })
-      );
+      const tableData = (response.data || []).map((item: any) => ({
+        SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
+        USER_NAME: item.user_name || "",
+        EMAIL: item.email || "",
+        CUSTOMER_COUNT: item.customer_count || 0,
+      }));
 
       setDetailedViewData(tableData);
       setShowDetailedView(true);
@@ -1222,14 +1230,18 @@ const Dashboard = () => {
         limit: 1000, // Get all records for initial view
       });
 
+      // Store original response data for drill-down
+      setNotVisitedOriginalData(response);
+
       // Transform response to table data format
       // The data array contains CustomerNotVisitedSalesperson objects
       const salespersonData = (response.data || []).filter(
         (item: any) => item.salesperson !== undefined
       );
-      const tableData = salespersonData.map((item: any, index: number) => ({
-        // SNO: item.sno || index + 1,
+      const tableData = salespersonData.map((item: any) => ({
+        SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
         SALESPERSON: item.salesperson || "",
+        EMAIL: item.email || "",
         COUNT: item.count || 0,
       }));
 
@@ -4198,6 +4210,95 @@ const Dashboard = () => {
       // Module-specific validation and filter building
       let filterData: DashboardFilters = {};
 
+      // Handle salesperson clicks for Customer Interaction Status cards
+      if (
+        (detailedViewType === "newCustomer" ||
+          detailedViewType === "lostCustomer" ||
+          detailedViewType === "customerNotVisited") &&
+        columnType === "salesperson" &&
+        detailedViewDrillLevel === 0
+      ) {
+        // Extract salesperson name from value or additionalData
+        const salespersonName =
+          value ||
+          additionalData?.USER_NAME ||
+          additionalData?.user_name ||
+          additionalData?.SALESPERSON ||
+          additionalData?.salesperson;
+
+        if (!salespersonName) {
+          toast.error("Salesperson name not found");
+          setIsLoadingDetailedView(false);
+          return;
+        }
+
+        setDetailedViewSelectedSalesperson(salespersonName);
+        setDetailedViewDrillLevel(1);
+
+        // Extract customer data from original response
+        let originalData: any = null;
+        if (detailedViewType === "newCustomer") {
+          originalData = gainOriginalData;
+        } else if (detailedViewType === "lostCustomer") {
+          originalData = lostOriginalData;
+        } else if (detailedViewType === "customerNotVisited") {
+          originalData = notVisitedOriginalData;
+        }
+
+        if (!originalData || !originalData.data) {
+          toast.error("Original data not found");
+          setIsLoadingDetailedView(false);
+          return;
+        }
+
+        // Find the salesperson data
+        const salespersonData = originalData.data.find(
+          (item: any) =>
+            item.user_name === salespersonName ||
+            item.salesperson === salespersonName
+        );
+
+        if (!salespersonData || !salespersonData.customers) {
+          toast.error("Customer data not found for this salesperson");
+          setIsLoadingDetailedView(false);
+          return;
+        }
+
+        // Transform customer data to table format
+        let tableData: any[] = [];
+        if (
+          detailedViewType === "newCustomer" ||
+          detailedViewType === "lostCustomer"
+        ) {
+          // For Gain and Lost: sno, customer_name, job_date
+          tableData = salespersonData.customers.map((customer: any) => ({
+            SNO:
+              customer.sno !== undefined && customer.sno !== null
+                ? customer.sno
+                : 0,
+            CUSTOMER_NAME: customer.customer_name || "-",
+            JOB_DATE: customer.job_date || "-",
+          }));
+          setDetailedViewTitle(
+            `${detailedViewType === "newCustomer" ? "Gain" : "Lost"} - Customers - ${salespersonName}`
+          );
+        } else if (detailedViewType === "customerNotVisited") {
+          // For Not Visited: sno, customer_name
+          tableData = salespersonData.customers.map((customer: any) => ({
+            SNO:
+              customer.sno !== undefined && customer.sno !== null
+                ? customer.sno
+                : 0,
+            CUSTOMER_NAME: customer.customer_name || "-",
+          }));
+          setDetailedViewTitle(`Not Visited - Customers - ${salespersonName}`);
+        }
+
+        setDetailedViewData(tableData);
+        setIsLoadingDetailedView(false);
+        return;
+      }
+
       if (detailedViewType === "outstanding") {
         // Handle send email action
         if (columnType === "send_email") {
@@ -5875,29 +5976,65 @@ const Dashboard = () => {
       } else if (detailedViewType === "lostCustomer") {
         if (detailedViewDrillLevel === 1) {
           // Go back from customer to salesperson level
-          const response = await getLostCustomerData({
-            company:
-              user?.company?.company_name ||
-              selectedCompany ||
-              "PENTAGON INDIA",
-            period: lostCustomerPeriod,
-          });
-          const tableData = convertLostCustomerToTableData(response, 0);
+          if (!lostOriginalData) {
+            toast.error("Original data not found");
+            setIsLoadingDetailedView(false);
+            return;
+          }
+          // Transform response to table data format using stored original data
+          const tableData = (lostOriginalData.data || []).map((item: any) => ({
+            SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
+            USER_NAME: item.user_name || "",
+            EMAIL: item.email || "",
+            CUSTOMER_COUNT: item.customer_count || 0,
+          }));
           setDetailedViewData(tableData);
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(0);
+          setDetailedViewTitle("Lost Customers");
         }
       } else if (detailedViewType === "newCustomer") {
         if (detailedViewDrillLevel === 1) {
-          // Go back to initial View All state
-          const response = await getNewCustomerData({
-            company: user?.company?.company_name || "PENTAGON Dubai",
-            period: newCustomerPeriod,
-          });
-          const tableData = convertNewCustomerToTableData(response, 0);
+          // Go back from customer to salesperson level
+          if (!gainOriginalData) {
+            toast.error("Original data not found");
+            setIsLoadingDetailedView(false);
+            return;
+          }
+          // Transform response to table data format using stored original data
+          const tableData = (gainOriginalData.data || []).map((item: any) => ({
+            SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
+            USER_NAME: item.user_name || "",
+            EMAIL: item.email || "",
+            CUSTOMER_COUNT: item.customer_count || 0,
+          }));
           setDetailedViewData(tableData);
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(0);
+          setDetailedViewTitle("Gain - New Customers");
+        }
+      } else if (detailedViewType === "customerNotVisited") {
+        if (detailedViewDrillLevel === 1) {
+          // Go back from customer to salesperson level
+          if (!notVisitedOriginalData) {
+            toast.error("Original data not found");
+            setIsLoadingDetailedView(false);
+            return;
+          }
+          // Transform response to table data format using stored original data
+          const salespersonData = (notVisitedOriginalData.data || []).filter(
+            (item: any) => item.salesperson !== undefined
+          );
+          const tableData = salespersonData.map((item: any) => ({
+            SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
+            SALESPERSON: item.salesperson || "",
+            EMAIL: item.email || "",
+            COUNT: item.count || 0,
+          }));
+          setDetailedViewData(tableData);
+          setDetailedViewSelectedSalesperson(null);
+          setDetailedViewDrillLevel(0);
+          setDetailedViewTitle("Not Visited Customers");
         }
       } else if (detailedViewType === "callentry") {
         if (callEntryDrillLevel === 2) {
@@ -7047,11 +7184,6 @@ const Dashboard = () => {
                     : detailedViewType === "newCustomer"
                       ? newCustomerTotalRecords
                       : undefined
-              }
-              onPaginationChange={
-                detailedViewType === "customerNotVisited"
-                  ? handleCustomerNotVisitedPaginationChange
-                  : undefined
               }
               onColumnClick={handleDetailedViewColumnClick}
               onBack={handleDetailedViewBack}
