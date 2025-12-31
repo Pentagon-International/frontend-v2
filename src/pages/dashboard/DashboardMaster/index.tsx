@@ -626,9 +626,10 @@ const Dashboard = () => {
                 company: companyName,
                 date_from: dateRange.date_from,
                 date_to: dateRange.date_to,
-                ...(dashboardState.callEntryFilterType !== "all" && {
-                  type: dashboardState.callEntryFilterType,
-                }),
+                // Commented out - type filter not needed when clicking cards
+                // ...(dashboardState.callEntryFilterType !== "all" && {
+                //   type: dashboardState.callEntryFilterType,
+                // }),
               });
               const tableData = (
                 response.data as CallEntrySalespersonData[]
@@ -672,9 +673,10 @@ const Dashboard = () => {
                 salesperson: dashboardState.callEntrySelectedSalesperson,
                 date_from: dateRange.date_from,
                 date_to: dateRange.date_to,
-                ...(dashboardState.callEntryFilterType !== "all" && {
-                  type: dashboardState.callEntryFilterType,
-                }),
+                // Commented out - type filter not needed when clicking cards
+                // ...(dashboardState.callEntryFilterType !== "all" && {
+                //   type: dashboardState.callEntryFilterType,
+                // }),
               });
               const statsResponse = response as CallEntryStatisticsResponse;
               const salespersonEmail = statsResponse.salesperson_email || "";
@@ -682,7 +684,7 @@ const Dashboard = () => {
 
               const tableData = (response.data as CallEntryCustomerData[]).map(
                 (item) => ({
-                  CUSTOMER_CODE: item.customer_code,
+                  CUSTOMER_CODE: item.customer_code, // Removed from drill level display
                   CUSTOMER_NAME: item.customer_name,
                   OVERDUE: item.total_overdue,
                   TODAY: item.total_today,
@@ -724,9 +726,10 @@ const Dashboard = () => {
                 customer_code: dashboardState.callEntrySelectedCustomer.code,
                 date_from: dateRange.date_from,
                 date_to: dateRange.date_to,
-                ...(dashboardState.callEntryFilterType !== "all" && {
-                  type: dashboardState.callEntryFilterType,
-                }),
+                // Commented out - type filter not needed when clicking cards
+                // ...(dashboardState.callEntryFilterType !== "all" && {
+                //   type: dashboardState.callEntryFilterType,
+                // }),
               });
               const tableData = (response.data as CallEntryDetailData[]).map(
                 (item) => ({
@@ -1111,6 +1114,133 @@ const Dashboard = () => {
       toast.error("Failed to fetch customer interaction status");
     } finally {
       setIsLoadingCustomerInteraction(false);
+    }
+  };
+
+  // Handler for Gain card click
+  const handleGainClick = async () => {
+    if (!customerInteractionFromDate || !customerInteractionToDate) {
+      toast.error("Please select date range");
+      return;
+    }
+    try {
+      setIsLoadingDetailedView(true);
+      setDetailedViewType("newCustomer");
+      setDetailedViewDrillLevel(0);
+      setDetailedViewTitle("Gain - New Customers");
+
+      const companyName =
+        user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+      const response = await getNewCustomerData({
+        company: companyName,
+        date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+        date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+      });
+
+      // Transform response to table data format
+      const tableData = (response.data || []).map(
+        (item: any, index: number) => ({
+          // SNO: index + 1,
+          USER_NAME: item.user_name || "",
+          EMAIL: item.email || "",
+          CUSTOMER_COUNT: item.customer_count || 0,
+        })
+      );
+
+      setDetailedViewData(tableData);
+      setShowDetailedView(true);
+    } catch (error) {
+      console.error("Error fetching gain data:", error);
+      toast.error("Failed to fetch gain data");
+    } finally {
+      setIsLoadingDetailedView(false);
+    }
+  };
+
+  // Handler for Lost card click
+  const handleLostClick = async () => {
+    if (!customerInteractionFromDate || !customerInteractionToDate) {
+      toast.error("Please select date range");
+      return;
+    }
+    try {
+      setIsLoadingDetailedView(true);
+      setDetailedViewType("lostCustomer");
+      setDetailedViewDrillLevel(0);
+      setDetailedViewTitle("Lost Customers");
+
+      const companyName =
+        user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+      const response = await getLostCustomerData({
+        company: companyName,
+        date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+        date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+      });
+
+      // Transform response to table data format
+      const tableData = (response.data || []).map(
+        (item: any, index: number) => ({
+          // SNO: index + 1,
+          USER_NAME: item.user_name || "",
+          EMAIL: item.email || "",
+          CUSTOMER_COUNT: item.customer_count || 0,
+        })
+      );
+
+      setDetailedViewData(tableData);
+      setShowDetailedView(true);
+    } catch (error) {
+      console.error("Error fetching lost data:", error);
+      toast.error("Failed to fetch lost data");
+    } finally {
+      setIsLoadingDetailedView(false);
+    }
+  };
+
+  // Handler for Not Visited card click
+  const handleNotVisitedClick = async () => {
+    if (!customerInteractionFromDate || !customerInteractionToDate) {
+      toast.error("Please select date range");
+      return;
+    }
+    try {
+      setIsLoadingDetailedView(true);
+      setDetailedViewType("customerNotVisited");
+      setDetailedViewDrillLevel(0);
+      setDetailedViewTitle("Not Visited Customers");
+
+      const companyName =
+        user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+      const response = await getCustomerNotVisitedData({
+        company: companyName,
+        date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+        date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+        index: 0,
+        limit: 1000, // Get all records for initial view
+      });
+
+      // Transform response to table data format
+      // The data array contains CustomerNotVisitedSalesperson objects
+      const salespersonData = (response.data || []).filter(
+        (item: any) => item.salesperson !== undefined
+      );
+      const tableData = salespersonData.map((item: any, index: number) => ({
+        // SNO: item.sno || index + 1,
+        SALESPERSON: item.salesperson || "",
+        COUNT: item.count || 0,
+      }));
+
+      setDetailedViewData(tableData);
+      setCustomerNotVisitedTotalRecords(response.pagination_total || 0);
+      setShowDetailedView(true);
+    } catch (error) {
+      console.error("Error fetching not visited data:", error);
+      toast.error("Failed to fetch not visited data");
+    } finally {
+      setIsLoadingDetailedView(false);
     }
   };
 
@@ -2032,7 +2162,8 @@ const Dashboard = () => {
         company: companyName,
         date_from: dateRange.date_from,
         date_to: dateRange.date_to,
-        ...(filterType !== "all" && { type: filterType }),
+        // Commented out - type filter not needed when clicking cards
+        // ...(filterType !== "all" && { type: filterType }),
         ...(globalSearch?.trim() && { search: globalSearch.trim() }),
       });
 
@@ -2759,7 +2890,7 @@ const Dashboard = () => {
 
           list.map((item: any) => {
             tableData.push({
-              customer_code: item.customer_code,
+              // customer_code removed - not needed for outstanding drill level
               customer_name: item.customer_name,
               send_email: "send_email", // Add send_email action
               outstanding: parseFloat(item.local_outstanding || 0),
@@ -2914,15 +3045,12 @@ const Dashboard = () => {
           item.customer_code !== undefined ||
           item.customer_name !== undefined
         ) {
-          const active = extractNumericValue(item.active);
-          const gained = extractNumericValue(item.gained);
-          const lost = extractNumericValue(item.lost);
-          const quoteCreated = extractNumericValue(item.quote_created);
-          const totalEnquiries = active + gained + lost + quoteCreated;
+          // Use total_enquiry from API response instead of calculating
+          const totalEnquiries = item.total_enquiry || 0;
 
           tableData.push({
             customer_name: item?.customer_name || "-",
-            customer_code: item?.customer_code || "-",
+            customer_code: item?.customer_code || "-", // Removed from drill level display
             active: item.active,
             gained: item.gained,
             lost: item.lost,
@@ -2948,11 +3076,8 @@ const Dashboard = () => {
             //     : "0%",
           });
         } else if (item.salesperson !== undefined) {
-          const active = extractNumericValue(item.active);
-          const gained = extractNumericValue(item.gained);
-          const lost = extractNumericValue(item.lost);
-          const quoteCreated = extractNumericValue(item.quote_created);
-          const totalEnquiries = active + gained + lost + quoteCreated;
+          // Use total_enquiry from API response instead of calculating
+          const totalEnquiries = item.total_enquiry || 0;
           tableData.push({
             salesperson: item.salesperson || "-",
             active: item.active || 0,
@@ -3301,9 +3426,10 @@ const Dashboard = () => {
               salesperson: callEntrySelectedSalesperson,
               date_from: dateRange.date_from,
               date_to: dateRange.date_to,
-              ...(callEntryFilterType !== "all" && {
-                type: callEntryFilterType,
-              }),
+              // Commented out - type filter not needed when clicking cards
+              // ...(callEntryFilterType !== "all" && {
+              //   type: callEntryFilterType,
+              // }),
               ...(search.trim() && { search: search.trim() }),
             });
             const statsResponse = response as CallEntryStatisticsResponse;
@@ -3312,7 +3438,7 @@ const Dashboard = () => {
 
             const tableData = (response.data as CallEntryCustomerData[]).map(
               (item) => ({
-                CUSTOMER_CODE: item.customer_code,
+                CUSTOMER_CODE: item.customer_code, // Removed from drill level display
                 CUSTOMER_NAME: item.customer_name,
                 OVERDUE: item.total_overdue,
                 TODAY: item.total_today,
@@ -3338,9 +3464,10 @@ const Dashboard = () => {
               customer_code: callEntrySelectedCustomer.code,
               date_from: dateRange.date_from,
               date_to: dateRange.date_to,
-              ...(callEntryFilterType !== "all" && {
-                type: callEntryFilterType,
-              }),
+              // Commented out - type filter not needed when clicking cards
+              // ...(callEntryFilterType !== "all" && {
+              //   type: callEntryFilterType,
+              // }),
               ...(search.trim() && { search: search.trim() }),
             });
             const tableData = (response.data as CallEntryDetailData[]).map(
@@ -3391,7 +3518,7 @@ const Dashboard = () => {
 
   const handleCloseDetailedView = () => {
     const wasDetailedViewTypeBudget = detailedViewType === "budget";
-    
+
     setShowDetailedView(false);
     setDetailedViewData([]);
     setDetailedViewTitle("");
@@ -3412,14 +3539,14 @@ const Dashboard = () => {
       setBudgetDrillLevel(1);
       setBudgetSelectedSalesperson(null);
       setBudgetSelectedMonth(null);
-      
+
       // Reload budget data at level 1 (salesperson level)
       const companyName =
         budgetSelectedCompany ||
         user?.company?.company_name ||
         selectedCompany ||
         "PENTAGON INDIA";
-      
+
       setIsLoadingBudget(true);
       getFilteredBudgetData({
         company: companyName,
@@ -4815,11 +4942,8 @@ const Dashboard = () => {
           // If conversion returns empty but response has data, use raw data
           if (tableData.length === 0 && response.data.length > 0) {
             tableData = response.data.map((item: any) => {
-              const active = extractNumericValue(item.active);
-              const gained = extractNumericValue(item.gained);
-              const lost = extractNumericValue(item.lost);
-              const quoteCreated = extractNumericValue(item.quote_created);
-              const totalEnquiries = active + gained + lost + quoteCreated;
+              // Use total_enquiry from API response instead of calculating
+              const totalEnquiries = item.total_enquiry || 0;
               return {
                 salesperson: item.salesperson || "-",
                 active: item.active || 0,
@@ -5052,9 +5176,10 @@ const Dashboard = () => {
               salesperson: salespersonToFilter,
               date_from: dateRange.date_from,
               date_to: dateRange.date_to,
-              ...(callEntryFilterType !== "all" && {
-                type: callEntryFilterType,
-              }),
+              // Commented out - type filter not needed when clicking cards
+              // ...(callEntryFilterType !== "all" && {
+              //   type: callEntryFilterType,
+              // }),
             });
 
             // Extract email metadata for the selected salesperson
@@ -5064,7 +5189,7 @@ const Dashboard = () => {
 
             const tableData = (response.data as CallEntryCustomerData[]).map(
               (item) => ({
-                CUSTOMER_CODE: item.customer_code,
+                CUSTOMER_CODE: item.customer_code, // Removed from drill level display
                 CUSTOMER_NAME: item.customer_name,
                 OVERDUE: item.total_overdue,
                 TODAY: item.total_today,
@@ -5554,7 +5679,9 @@ const Dashboard = () => {
           // Reset budget drill level to 1 and update budget chart data
           setBudgetDrillLevel(1);
           setBudgetRawData(response);
-          setBudgetDateRange(response?.data?.[0]?.date_range || budgetDateRange);
+          setBudgetDateRange(
+            response?.data?.[0]?.date_range || budgetDateRange
+          );
           const agg = calculateBudgetAggregatedData(response);
           setBudgetAggregatedData(agg);
           // Update title for salesperson wise view
@@ -5580,7 +5707,7 @@ const Dashboard = () => {
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
           setBudgetSelectedCompany(companyName);
-          
+
           // Reload level 1 data for budget chart
           const budgetFilterData = {
             company: companyName,
@@ -5588,9 +5715,13 @@ const Dashboard = () => {
             ...(budgetEndMonth && { end_month: budgetEndMonth }),
             type: budgetType,
           };
-          const budgetResp = await getFilteredBudgetData(budgetFilterData as any);
+          const budgetResp = await getFilteredBudgetData(
+            budgetFilterData as any
+          );
           setBudgetRawData(budgetResp);
-          setBudgetDateRange(budgetResp?.data?.[0]?.date_range || budgetDateRange);
+          setBudgetDateRange(
+            budgetResp?.data?.[0]?.date_range || budgetDateRange
+          );
           const budgetAgg = calculateBudgetAggregatedData(budgetResp);
           setBudgetAggregatedData(budgetAgg);
           setBudgetDrillLevel(1);
@@ -5785,7 +5916,8 @@ const Dashboard = () => {
             salesperson: callEntrySelectedSalesperson!,
             date_from: dateRange.date_from,
             date_to: dateRange.date_to,
-            ...(callEntryFilterType !== "all" && { type: callEntryFilterType }),
+            // Commented out - type filter not needed when clicking cards
+            // ...(callEntryFilterType !== "all" && { type: callEntryFilterType }),
           });
 
           // Extract email metadata for the selected salesperson
@@ -5795,7 +5927,7 @@ const Dashboard = () => {
 
           const tableData = (response.data as CallEntryCustomerData[]).map(
             (item) => ({
-              CUSTOMER_CODE: item.customer_code,
+              CUSTOMER_CODE: item.customer_code, // Removed from drill level display
               CUSTOMER_NAME: item.customer_name,
               OVERDUE: item.total_overdue,
               TODAY: item.total_today,
@@ -6461,8 +6593,8 @@ const Dashboard = () => {
           setBudgetDrillLevel(1);
         } else if (budgetDrillLevel === 1) {
           const fullSalespersonName =
-          budgetRawData?.data?.[0]?.budget?.[params?.dataIndex]?.salesperson ||
-          params?.name;
+            budgetRawData?.data?.[0]?.budget?.[params?.dataIndex]
+              ?.salesperson || params?.name;
           setBudgetSelectedSalesperson(fullSalespersonName);
           setSearchSalesman(fullSalespersonName);
 
@@ -6508,7 +6640,7 @@ const Dashboard = () => {
           setIsLoadingDetailedView(false);
         } else if (budgetDrillLevel === 2) {
           const clickedMonth =
-          budgetRawData?.data?.[0]?.budget?.[params?.dataIndex]?.month;
+            budgetRawData?.data?.[0]?.budget?.[params?.dataIndex]?.month;
 
           if (clickedMonth) {
             // Show detailed view for the selected month
@@ -6957,6 +7089,9 @@ const Dashboard = () => {
                     setToDate={setCustomerInteractionToDate}
                     // Date filter is now common at top level, so hide it here
                     hideDateFilter={true}
+                    onGainClick={handleGainClick}
+                    onLostClick={handleLostClick}
+                    onNotVisitedClick={handleNotVisitedClick}
                   />
                 </Grid.Col>
                 <Grid.Col span={6}>

@@ -228,6 +228,12 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           ]
         : []),
 
+      // Hide customer_code from display for enquiry and callentry modules
+      // (but keep it in data for navigation purposes)
+      ...(moduleType === "enquiry" || moduleType === "callentry"
+        ? ["customer_code", "CUSTOMER_CODE"]
+        : []),
+
       // Hide email-related fields - salesperson_email and cc_mail
       "salesperson_email",
       "cc_mail",
@@ -896,15 +902,16 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         // Check if this is a clickable column (excluding 'id' which will be checked per row)
         // Service and service_type are only clickable at drill level 0 (base level)
         // Financial columns (potential, pipeline, gained, lost, quoted, expected) are only clickable at drill level 2 (customer level)
+        // Exclude SALESPERSON from being clickable for customerNotVisited module
         const isClickableColumn =
           key === "company_name" ||
           key === "company" ||
           key === "location" ||
           key === "Location" ||
-          key === "salesperson" ||
-          key === "salesman_name" ||
-          key === "salesman" ||
-          key === "SALESPERSON" ||
+          (key === "salesperson" && moduleType !== "customerNotVisited") ||
+          (key === "salesman_name" && moduleType !== "customerNotVisited") ||
+          (key === "salesman" && moduleType !== "customerNotVisited") ||
+          (key === "SALESPERSON" && moduleType !== "customerNotVisited") ||
           key === "region" ||
           ((key === "service" ||
             key === "services" ||

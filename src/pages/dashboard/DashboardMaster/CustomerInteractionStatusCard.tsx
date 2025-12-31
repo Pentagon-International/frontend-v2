@@ -13,11 +13,17 @@ interface CustomerInteractionStatusCardProps {
   data: CustomerInteractionData | null;
   loading: boolean;
   onViewAll?: () => void;
+  onGainClick?: () => void;
+  onLostClick?: () => void;
+  onNotVisitedClick?: () => void;
 }
 
 const CustomerInteractionStatusCard = ({
   data,
   loading,
+  onGainClick,
+  onLostClick,
+  onNotVisitedClick,
 }: CustomerInteractionStatusCardProps) => {
   return (
     <Box>
@@ -34,13 +40,14 @@ const CustomerInteractionStatusCard = ({
               p="md"
               radius="md"
               style={{
-                cursor: "default",
+                cursor: "pointer",
                 background: "#F5FAF5",
                 border: "1px solid transparent",
                 borderImage: "linear-gradient(135deg, #EFFFED, #ECFCEB) 1",
                 transition: "all 0.3s ease",
                 height: "85px",
               }}
+              onClick={onGainClick}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
                 e.currentTarget.style.boxShadow =
@@ -77,13 +84,14 @@ const CustomerInteractionStatusCard = ({
               p="md"
               radius="md"
               style={{
-                cursor: "default",
+                cursor: "pointer",
                 background: "#FAF8F5",
                 border: "1px solid transparent",
                 borderImage: "linear-gradient(135deg, #FFFAED, #FCF7EB) 1",
                 transition: "all 0.3s ease",
                 height: "85px",
               }}
+              onClick={onNotVisitedClick}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
                 e.currentTarget.style.boxShadow =
@@ -120,13 +128,14 @@ const CustomerInteractionStatusCard = ({
               p="md"
               radius="md"
               style={{
-                cursor: "default",
+                cursor: "pointer",
                 background: "#FAF5F5",
                 border: "1px solid transparent",
                 borderImage: "linear-gradient(135deg, #FFEDEF, #FFEDEF) 1",
                 transition: "all 0.3s ease",
                 height: "85px",
               }}
+              onClick={onLostClick}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
                 e.currentTarget.style.boxShadow =
