@@ -25,6 +25,10 @@ interface CustomerInteractionStatusProps {
   setToDate: (date: Date | null) => void;
   // Hide date filter if it's common at top level
   hideDateFilter?: boolean;
+  // Click handlers for cards
+  onGainClick?: () => void;
+  onLostClick?: () => void;
+  onNotVisitedClick?: () => void;
 }
 
 const CustomerInteractionStatus = ({
@@ -36,6 +40,9 @@ const CustomerInteractionStatus = ({
   setFromDate,
   setToDate,
   hideDateFilter = false,
+  onGainClick,
+  onLostClick,
+  onNotVisitedClick,
 }: CustomerInteractionStatusProps) => {
   return (
     <Box
@@ -117,6 +124,9 @@ const CustomerInteractionStatus = ({
           data={data}
           loading={loading}
           onViewAll={handleViewAll}
+          onGainClick={onGainClick}
+          onLostClick={onLostClick}
+          onNotVisitedClick={onNotVisitedClick}
         />
       </Box>
     </Box>

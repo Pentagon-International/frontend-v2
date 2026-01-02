@@ -8,17 +8,11 @@ import {
   Badge,
   Center,
   Loader,
-  Select,
   ActionIcon,
   TextInput,
   Tooltip,
 } from "@mantine/core";
-import {
-  IconArrowLeft,
-  IconChevronLeft,
-  IconChevronRight,
-  IconSend,
-} from "@tabler/icons-react";
+import { IconArrowLeft, IconSend } from "@tabler/icons-react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -105,37 +99,46 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
   const [originalCellValue, setOriginalCellValue] = useState<
     string | number | null
   >(null);
-  // Pagination state - track internally for UI, sync with parent via callback
-  const [currentPageIndex, setCurrentPageIndex] = useState(0);
-  const [currentPageSize, setCurrentPageSize] = useState(10);
-
-  // Enable pagination only for customerNotVisited module
-  const isPaginationEnabled = moduleType === "customerNotVisited";
   // Generate columns dynamically using MantineReactTable format
   const columns = useMemo<MRT_ColumnDef<any>[]>(() => {
     if (!data || data.length === 0) return [];
     const columnDefs: MRT_ColumnDef<any>[] = [];
     // Always add 'S.No' as the first column, from API data
+    // Use accessorFn to handle both lowercase and uppercase SNO keys
     columnDefs.push({
-      accessorKey: "sno",
+      id: "sno",
       header: "S.No",
       size: 70,
       enableColumnOrdering: false,
+      accessorFn: (row: any) => {
+        // Check for SNO in various case formats
+        return row?.sno ?? row?.SNO ?? row?.s_no ?? row?.S_No ?? null;
+      },
       Cell: ({ row }) => {
         console.log("row :", row.original);
-        // Prefer API-provided value (with casing variants); fall back to row index
+        // Prefer API-provided value (with casing variants)
         const apiSno =
           row?.original?.sno ??
           row?.original?.SNO ??
           row?.original?.s_no ??
           row?.original?.S_No;
 
+        // For customerNotVisited, newCustomer, and lostCustomer modules, use only API value (no fallback)
+        const useApiValueOnly =
+          moduleType === "customerNotVisited" ||
+          moduleType === "newCustomer" ||
+          moduleType === "lostCustomer";
+
         const displayValue =
           row.original?._isTotalRow === true
             ? "" // keep total rows clean
-            : apiSno !== undefined && apiSno !== null && apiSno !== ""
-              ? apiSno
-              : row.index + 1;
+            : useApiValueOnly
+              ? apiSno !== undefined && apiSno !== null && apiSno !== ""
+                ? apiSno
+                : ""
+              : apiSno !== undefined && apiSno !== null && apiSno !== ""
+                ? apiSno
+                : row.index + 1;
 
         return (
           <Text size="sm" style={{ fontWeight: 500 }}>
@@ -228,6 +231,12 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           ]
         : []),
 
+      // Hide customer_code from display for enquiry and callentry modules
+      // (but keep it in data for navigation purposes)
+      ...(moduleType === "enquiry" || moduleType === "callentry"
+        ? ["customer_code", "CUSTOMER_CODE"]
+        : []),
+
       // Hide email-related fields - salesperson_email and cc_mail
       "salesperson_email",
       "cc_mail",
@@ -304,7 +313,10 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
     // Generate columns dynamically using MantineReactTable format
     Object.keys(firstItem).forEach((key) => {
-      if (key === "sno") return; // Already added as the first column, skip
+      // Skip sno/SNO - already added as the first column (S.No)
+      if (key === "sno" || key === "SNO" || key === "s_no" || key === "S_No") {
+        return;
+      }
       console.log("key :", key);
       console.log("firstItem :", firstItem);
       // Skip hidden fields
@@ -896,15 +908,23 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         // Check if this is a clickable column (excluding 'id' which will be checked per row)
         // Service and service_type are only clickable at drill level 0 (base level)
         // Financial columns (potential, pipeline, gained, lost, quoted, expected) are only clickable at drill level 2 (customer level)
+        // USER_NAME and SALESPERSON are clickable for newCustomer, lostCustomer, customerNotVisited at drill level 0
         const isClickableColumn =
           key === "company_name" ||
           key === "company" ||
           key === "location" ||
           key === "Location" ||
-          key === "salesperson" ||
-          key === "salesman_name" ||
-          key === "salesman" ||
-          key === "SALESPERSON" ||
+          (key === "salesperson" && moduleType !== "customerNotVisited") ||
+          (key === "salesman_name" && moduleType !== "customerNotVisited") ||
+          (key === "salesman" && moduleType !== "customerNotVisited") ||
+          (key === "SALESPERSON" &&
+            (moduleType !== "customerNotVisited" ||
+              (moduleType === "customerNotVisited" && drillLevel === 0))) ||
+          (key === "USER_NAME" &&
+            (moduleType === "newCustomer" ||
+              moduleType === "lostCustomer" ||
+              moduleType === "customerNotVisited") &&
+            drillLevel === 0) ||
           key === "region" ||
           ((key === "service" ||
             key === "services" ||
@@ -986,7 +1006,8 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                       key === "salesperson" ||
                       key === "salesman_name" ||
                       key === "salesman" ||
-                      key === "SALESPERSON"
+                      key === "SALESPERSON" ||
+                      key === "USER_NAME"
                     ) {
                       onColumnClick("salesperson", cellValue, row.original);
                     } else if (key === "region") {
@@ -1181,7 +1202,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         fontSize: "13px",
         width: "100%",
         minHeight: "300px",
-        maxHeight: isPaginationEnabled ? "49vh" : "59vh",
+        maxHeight: "59vh",
         overflowY: "auto",
         overflowX: "auto",
         position: "relative",
@@ -1224,32 +1245,6 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
     table.setColumnOrder(desiredOrder);
   }, [columns, table]);
-
-  // Handle pagination changes
-  const handlePageChange = (newPage: number) => {
-    const newPageIndex = newPage - 1;
-    setCurrentPageIndex(newPageIndex);
-    if (onPaginationChange) {
-      onPaginationChange({
-        pageIndex: newPageIndex * currentPageSize, // Convert to 0, 10, 20, 30... format
-        pageSize: currentPageSize,
-      });
-    }
-  };
-
-  const handlePageSizeChange = (newPageSize: number) => {
-    setCurrentPageSize(newPageSize);
-    setCurrentPageIndex(0); // Reset to first page
-    if (onPaginationChange) {
-      onPaginationChange({
-        pageIndex: 0, // Reset to first page
-        pageSize: newPageSize,
-      });
-    }
-  };
-
-  const currentPage = currentPageIndex + 1;
-  const totalPages = Math.max(1, Math.ceil(totalRecords / currentPageSize));
 
   if (loading) {
     return (
@@ -1391,77 +1386,6 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       >
         <MantineReactTable key={columnOrder.join(",")} table={table} />
       </Box>
-
-      {/* Custom Pagination for Customer Not Visited (EnquiryMaster style) */}
-      {isPaginationEnabled && (
-        <Group
-          w="100%"
-          justify="space-between"
-          align="center"
-          px="md"
-          py="xs"
-          style={{ borderTop: "1px solid #e9ecef" }}
-          wrap="nowrap"
-          mt="xs"
-        >
-          {/* Rows per page and range */}
-          <Group gap="sm" align="center" wrap="nowrap" mt={10}>
-            <Text size="sm" c="dimmed">
-              Rows per page
-            </Text>
-            <Select
-              size="xs"
-              data={["10", "25", "50"]}
-              value={String(currentPageSize)}
-              onChange={(val) => {
-                if (!val) return;
-                handlePageSizeChange(Number(val));
-              }}
-              w={110}
-              styles={{ input: { fontSize: 12, height: 30 } } as any}
-            />
-            <Text size="sm" c="dimmed">
-              {(() => {
-                if (totalRecords === 0) return "0–0 of 0";
-                const start = currentPageIndex * currentPageSize + 1;
-                const end = Math.min(
-                  (currentPageIndex + 1) * currentPageSize,
-                  totalRecords
-                );
-                return `${start}–${end} of ${totalRecords}`;
-              })()}
-            </Text>
-          </Group>
-
-          {/* Page controls */}
-          <Group gap="xs" align="center" wrap="nowrap" mt={10}>
-            <ActionIcon
-              variant="default"
-              size="sm"
-              onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-              disabled={currentPage === 1}
-            >
-              <IconChevronLeft size={16} />
-            </ActionIcon>
-            <Text size="sm" ta="center" style={{ width: 26 }}>
-              {currentPage}
-            </Text>
-            <Text size="sm" c="dimmed">
-              of {totalPages}
-            </Text>
-            <ActionIcon
-              variant="default"
-              size="sm"
-              onClick={() =>
-                handlePageChange(Math.min(totalPages, currentPage + 1))
-              }
-              disabled={currentPage >= totalPages}
-            >
-              <IconChevronRight size={16} />
-            </ActionIcon>
-          </Group>
-        </Group>
-      )}
 
       {/* </Card> */}
     </>
