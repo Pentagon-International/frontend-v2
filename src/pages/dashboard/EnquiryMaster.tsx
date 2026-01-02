@@ -2,9 +2,9 @@ import {
   ActionIcon,
   Box,
   Button,
-  Card,
   Group,
   Menu,
+  Pagination,
   Stack,
   Text,
   TextInput,
@@ -15,21 +15,23 @@ import {
   Center,
   Badge,
   Modal,
+  Tabs,
+  Breadcrumbs,
+  Anchor,
+  Card,
 } from "@mantine/core";
 import {
   IconDotsVertical,
   IconEdit,
   IconEye,
-  IconFilterOff,
   IconPlus,
   IconSearch,
   IconFilter,
   IconX,
+  IconTag,
+  IconDownload,
   IconChevronRight,
   IconChevronLeft,
-  IconTag,
-  IconArrowLeft,
-  IconDownload,
 } from "@tabler/icons-react";
 import {
   MantineReactTable,
@@ -39,7 +41,6 @@ import {
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
-import { getAPICall } from "../../service/getApiCall";
 import { API_HEADER } from "../../store/storeKeys";
 import { URL } from "../../api/serverUrls";
 import { apiCallProtected } from "../../api/axios";
@@ -166,6 +167,15 @@ function EnquiryMaster() {
   // Detailed view pagination (completely separate)
   const [previewCurrentPage, setPreviewCurrentPage] = useState(1);
   const [previewPageSize, setPreviewPageSize] = useState(25);
+
+  const listPaginationInfo = useMemo(() => {
+    const total = listTotalRecords || 0;
+    const totalPages = Math.max(1, Math.ceil(total / listPageSize || 1));
+    const start = total === 0 ? 0 : (listCurrentPage - 1) * listPageSize + 1;
+    const end = total === 0 ? 0 : Math.min(listCurrentPage * listPageSize, total);
+    return { start, end, total, totalPages };
+  }, [listCurrentPage, listPageSize, listTotalRecords]);
+
 
   const previewColumnToKeyMap: Record<string, string> = {
     "Enquiry ID": "enquiry_id",
@@ -727,43 +737,6 @@ function EnquiryMaster() {
     refetchOnWindowFocus: false,
   });
 
-  const {
-    data: rawTermsOfShipmentData,
-    isLoading: termsOfShipmentDataLoading,
-  } = useQuery({
-    queryKey: ["termsOfShipment"],
-    queryFn: async () => {
-      try {
-        const termsResponse = (await getAPICall(
-          URL.termsOfShipment,
-          API_HEADER
-        )) as any[];
-        return termsResponse || [];
-      } catch (error) {
-        console.error("Error fetching terms of shipment data:", error);
-        return [];
-      }
-    },
-    staleTime: 10 * 60 * 1000, // 10 minutes
-    gcTime: 30 * 60 * 1000, // 30 minutes
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
-
-  const termsOfShipmentOptionsData = useMemo(() => {
-    if (!rawTermsOfShipmentData) return [];
-    return rawTermsOfShipmentData
-      .filter((item: any) => item?.tos_name && item?.tos_code)
-      .map((item: any) => ({
-        value: String(item.tos_name),
-        label: `${item.tos_name} (${item.tos_code})`,
-      }))
-      .filter(
-        (option, index, self) =>
-          index === self.findIndex((o) => o.value === option.value)
-      );
-  }, [rawTermsOfShipmentData]);
-
   // Fetch salespersons data
   const { data: salespersonsData = [], isLoading: salespersonsLoading } =
     useQuery({
@@ -937,6 +910,16 @@ function EnquiryMaster() {
     initialPreviewData,
   ]);
 
+  const previewPaginationInfo = useMemo(() => {
+    const total = displayPreviewData?.total || 0;
+    const totalPages = Math.max(1, Math.ceil(total / previewPageSize || 1));
+    const start =
+      total === 0 ? 0 : (previewCurrentPage - 1) * previewPageSize + 1;
+    const end =
+      total === 0 ? 0 : Math.min(previewCurrentPage * previewPageSize, total);
+    return { start, end, total, totalPages };
+  }, [displayPreviewData, previewCurrentPage, previewPageSize]);
+
   // Loading state - include refreshing state
   const isLoading =
     enquiryLoading ||
@@ -965,73 +948,36 @@ function EnquiryMaster() {
   // Create preview table using MantineReactTable
   const previewTable = useMantineReactTable({
     columns: (() => {
-      // Filter out "No of Containers" and prepare column order
-      const filteredColumns = (displayPreviewData?.columns || []).filter(
-        (col: string) => col !== "No of Containers"
+      const desiredOrder = [
+        "Customer Name",
+        "Enquiry ID",
+        "Reference No",
+        "Sales Person",
+        "Enquiry Date",
+        "Shipment",
+        "Location",
+        "Service",
+        "Origin",
+        "Destination",
+      ];
+
+      const availableColumns = (displayPreviewData?.columns || []).filter(
+        (col: string) =>
+          !["No of Containers", "sno", "S.No", "SNO", "S No"].includes(col)
       );
 
-      // Ensure "Reference No" is always included in the columns
-      const columnsWithReferenceNo = [...filteredColumns];
-      if (!columnsWithReferenceNo.includes("Reference No")) {
-        columnsWithReferenceNo.push("Reference No");
+      if (!availableColumns.includes("Reference No")) {
+        availableColumns.push("Reference No");
       }
 
-      // Determine the customer column (prefer explicit "Customer Name")
-      const customerColumn =
-        columnsWithReferenceNo.find(
-          (col) =>
-            col === "Customer Name" ||
-            col === "customer_name" ||
-            col.toLowerCase().includes("customer")
-        ) || null;
-
-      // Build ordered columns list: customer right after S.No, then the rest (skipping sno variants)
-      const orderedColumns: string[] = [];
-      if (customerColumn) {
-        orderedColumns.push(customerColumn);
-      }
-      orderedColumns.push(
-        ...columnsWithReferenceNo.filter(
-          (col) =>
-            col !== customerColumn &&
-            !["sno", "S.No", "SNO", "S No"].includes(col)
-        )
-      );
+      const orderedColumns: string[] = [
+        ...desiredOrder.filter((col: string) => availableColumns.includes(col)),
+        ...availableColumns.filter(
+          (col: string) => !desiredOrder.includes(col)
+        ),
+      ];
 
       const columnDefs: MRT_ColumnDef<any>[] = [];
-
-      // Add S.No as the first column (left of Customer Name)
-      columnDefs.push({
-        id: "sno",
-        header: "S.No",
-        size: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-        accessorFn: (row: any) => {
-          const apiSno =
-            row?.sno ?? row?.SNO ?? row?.s_no ?? row?.S_No ?? row?.["S.No"];
-          return apiSno !== undefined && apiSno !== null && apiSno !== ""
-            ? apiSno
-            : '';
-        },
-        Cell: ({ row }) => {
-          const apiSno =
-            row?.original?.sno ??
-            row?.original?.SNO ??
-            row?.original?.s_no ??
-            row?.original?.S_No ??
-            row?.original?.["S.No"];
-          const displayValue =
-            apiSno !== undefined && apiSno !== null && apiSno !== ""
-              ? apiSno
-              : '';
-          return (
-            <Text size="sm" style={{ fontWeight: 500 }}>
-              {displayValue}
-            </Text>
-          );
-        },
-      });
 
       orderedColumns.forEach((col: string) => {
         // Combine Service and Trade columns
@@ -1069,7 +1015,11 @@ function EnquiryMaster() {
           header: col,
           size:
             col === "Customer Name" || col.toLowerCase().includes("customer")
-              ? 200
+              ? 218
+              : col === "Enquiry ID"
+                ? 218
+                : col === "Sales Person"
+                  ? 120
               : col === "Enquiry Date"
                 ? 120
                 : col === "Remark"
@@ -1077,11 +1027,19 @@ function EnquiryMaster() {
                   : col === "Status"
                     ? 130
                     : col === "Shipment"
-                      ? 150
+                      ? 163
+                      : col === "Location"
+                        ? 218
+                        : col === "Service"
+                          ? 140
+                          : col === "Origin"
+                            ? 150
+                            : col === "Destination"
+                              ? 150
                       : col === "Cargo Details"
-                        ? 120
+                        ? 150
                         : col === "Reference No"
-                          ? 50
+                          ? 120
                           : 100,
           Cell: ({ cell, column }: any) => {
             const value = cell.getValue();
@@ -1115,8 +1073,7 @@ function EnquiryMaster() {
     enableColumnPinning: true,
     enableStickyHeader: true,
     initialState: {
-      columnPinning: { left: ["sno", "customer_name"] },
-      // Pin the customer name column by accessorKey
+      columnPinning: { left: ["customer_name"] },
     },
     layoutMode: "grid",
     mantineTableProps: {
@@ -1128,23 +1085,28 @@ function EnquiryMaster() {
     },
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
       radius: "md",
     },
     // Keep cell/head styles minimal to avoid interfering with built-in sticky behavior
     mantineTableBodyCellProps: {
       style: {
-        padding: "8px 12px",
-        fontSize: "13px",
+        padding: "8px 16px",
+        fontSize: "14px",
+        fontstyle: "regular",
+        fontFamily: "Inter",
+        color: "#333740",
         backgroundColor: "#ffffff",
       },
     },
     mantineTableHeadCellProps: {
       style: {
-        padding: "6px 12px",
-        fontSize: "12px",
-        backgroundColor: "#ffffff",
-        borderBottom: "1px solid #e9ecef",
+        padding: "8px 16px",
+        fontSize: "14px",
+        fontFamily: "Inter",
+        fontstyle: "bold",
+        color: "#444955",
+        backgroundColor: "#FBFBFB",
+        borderBottom: "1px solid #F3F3F3",
       },
     },
     mantineTableContainerProps: {
@@ -1715,15 +1677,6 @@ function EnquiryMaster() {
   const columns = useMemo<MRT_ColumnDef<any>[]>(
     () => [
       {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
         id: "enquiry_id",
         accessorKey: "enquiry_id",
         header: "Enquiry ID",
@@ -1733,7 +1686,6 @@ function EnquiryMaster() {
         accessorKey: "customer_name",
         header: "Customer",
       },
-
       {
         id: "sales_person",
         accessorKey: "sales_person",
@@ -1748,7 +1700,6 @@ function EnquiryMaster() {
           if (!services || !Array.isArray(services) || services.length === 0) {
             return "-";
           }
-          // Combine service and trade into "Service - Trade" format
           const serviceTradePairs = services
             .map((s) => {
               const service = s.service || "";
@@ -1771,7 +1722,6 @@ function EnquiryMaster() {
           );
         },
       },
-
       {
         id: "origin_list",
         accessorKey: "origin_list",
@@ -1857,38 +1807,25 @@ function EnquiryMaster() {
         },
       },
       {
-        id: "status",
-        accessorKey: "status",
-        header: "Status",
-        Cell: ({ cell }) => {
-          const { label, color } = getStatusBadge(cell.getValue<string>());
-          return (
-            <Badge color={color} size="xs">
-              {label}
-            </Badge>
-          );
-        },
-      },
-      {
         id: "actions",
         header: "Actions",
-            Cell: ({ row }) => {
+        Cell: ({ row }) => {
           const [menuOpened, setMenuOpened] = useState(false);
           return (
-          <Menu   
-          withinPortal
-           position="bottom-end" 
-           shadow="sm" 
-           radius={"md"}
-           opened={menuOpened}
-           onChange={setMenuOpened}
-           >
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
+            <Menu
+              withinPortal
+              position="bottom-end"
+              shadow="sm"
+              radius={"md"}
+              opened={menuOpened}
+              onChange={setMenuOpened}
+            >
+              <Menu.Target>
+                <ActionIcon variant="subtle" color="gray">
+                  <IconDotsVertical size={16} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
               <Box px={10} py={5}>
                 <UnstyledButton
                   onClick={() => {
@@ -2141,7 +2078,6 @@ function EnquiryMaster() {
     layoutMode: "grid",
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
       radius: "md",
     },
     mantineTableBodyCellProps: ({ column }) => {
@@ -2153,21 +2089,23 @@ function EnquiryMaster() {
             right: 0,
             minWidth: "30px",
             zIndex: 2,
+            borderLeft: "1px solid #F3F3F3",
+            boxShadow: "1px -2px 4px 0px #00000040",
           };
           break;
         case "enquiry_id":
           extraStyles = {
-            minWidth: "70px",
+            minWidth: "218px",
           };
           break;
         case "customer_name":
           extraStyles = {
-            minWidth: "120px",
+            minWidth: "218px",
           };
           break;
         case "sales_person":
           extraStyles = {
-            minWidth: "100px",
+            minWidth: "120px",
           };
           break;
         case "service_list":
@@ -2177,37 +2115,37 @@ function EnquiryMaster() {
           break;
         case "trade_list":
           extraStyles = {
-            minWidth: "80px",
+            minWidth: "100px",
           };
           break;
         case "origin_list":
           extraStyles = {
-            minWidth: "60px",
+            minWidth: "145px",
           };
           break;
         case "destination_list":
           extraStyles = {
-            minWidth: "60px",
+            minWidth: "181px",
           };
           break;
         case "reference_no":
           extraStyles = {
-            minWidth: "60px",
+            minWidth: "125px",
           };
           break;
         case "enquiry_received_date":
           extraStyles = {
-            minWidth: "100px",
+            minWidth: "120px",
           };
           break;
         case "remark_list":
           extraStyles = {
-            minWidth: "50px",
+            minWidth: "120px",
           };
           break;
         case "status":
           extraStyles = {
-            minWidth: "70px",
+            minWidth: "80px",
           };
           break;
 
@@ -2217,8 +2155,11 @@ function EnquiryMaster() {
       return {
         style: {
           width: "fit-content",
-          padding: "6px 8px",
-          fontSize: "13px",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontstyle: "regular",
+          fontFamily: "Inter",
+          color: "#333740",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -2231,33 +2172,36 @@ function EnquiryMaster() {
           extraStyles = {
             position: "sticky",
             right: 0,
-            minWidth: "30px",
+            minWidth: "80px",
             zIndex: 2,
+            backgroundColor: "#FBFBFB",
+            // borderLeft: "2px solid red",
+            boxShadow: "0px -2px 4px 0px #00000040",
           };
           break;
         case "enquiry_id":
           extraStyles = {
-            minWidth: "70px",
+            minWidth: "218px",
           };
           break;
         case "customer_name":
           extraStyles = {
-            minWidth: "120px",
+            minWidth: "218px",
           };
           break;
         case "sales_person":
           extraStyles = {
-            minWidth: "70px",
+            minWidth: "120px",
           };
           break;
         case "service_list":
           extraStyles = {
-            minWidth: "100px",
+            minWidth: "120px",
           };
           break;
         case "trade_list":
           extraStyles = {
-            minWidth: "80px",
+            minWidth: "100px",
           };
           break;
         case "remark_list":
@@ -2267,27 +2211,27 @@ function EnquiryMaster() {
           break;
         case "origin_list":
           extraStyles = {
-            minWidth: "60px",
+            minWidth: "145px",
           };
           break;
         case "destination_list":
           extraStyles = {
-            minWidth: "60px",
+            minWidth: "181px",
           };
           break;
         case "reference_no":
           extraStyles = {
-            minWidth: "60px",
+            minWidth: "125px",
           };
           break;
         case "enquiry_received_date":
           extraStyles = {
-            minWidth: "85px",
+            minWidth: "120px",
           };
           break;
         case "status":
           extraStyles = {
-            minWidth: "70px",
+            minWidth: "80px",
           };
           break;
 
@@ -2297,12 +2241,16 @@ function EnquiryMaster() {
       return {
         style: {
           width: "fit-content",
-          padding: "6px 8px",
-          fontSize: "12px",
-          backgroundColor: "#ffffff",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          fontstyle: "bold",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
+          // height: "38px",
           top: 0,
           zIndex: 3,
-          borderBottom: "1px solid #e9ecef",
+          borderBottom: "1px solid #F3F3F3",
           ...extraStyles,
         },
       };
@@ -2322,37 +2270,169 @@ function EnquiryMaster() {
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c={"#105476"}>
-            {showPreviewTable ? "Preview Enquiries" : "Enquiry Lists"}
-          </Text>
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
 
-          <Group gap="sm" wrap="nowrap">
-            {/* Always render primary controls */}
+      <Box mb="md">
+        {/* Breadcrumbs */}
+        <Breadcrumbs mb={8}>
+         {/* Title */}
+         <Text size="sm" style={{ fontFamily: "Inter",fontStyle: "regular", color:"#000000"}}>
+          Enquiry
+        </Text>
+          <Anchor href="#" size="sm" c="dimmed" >
+          <Text size="sm" style={{ color: "#105476", fontFamily: "Inter", fontStyle: "regular" , marginRight: "4px" }}>
+          Core
+        </Text>           
+          </Anchor>
+          <Anchor href="#" size="sm" c="dimmed" style={{  color: "#105476", fontFamily: "Inter", fontStyle: "regular" , marginRight: "4px" }}>
+          <Text size="sm" style={{ color: "#105476", fontFamily: "Inter", fontStyle: "regular" , marginRight: "4px" }}>
+          Sale
+        </Text>
+          </Anchor>
+          <Text size="sm" c="dimmed" style={{ fontFamily: "Inter", fontStyle: "regular" , marginRight: "4px" }}>
+            Enquiry
+          </Text>
+        </Breadcrumbs>
+
+       
+
+        {/* Tabs and Actions */}
+        <Group justify="space-between" align="center" mb="md">
+          <Tabs
+            value={showPreviewTable ? "detailed" : "summary"}
+            onChange={(value) => {
+              if (value === "detailed" && !showPreviewTable) {
+                openPreview();
+              } else if (value === "summary" && showPreviewTable) {
+                closePreview();
+              }
+            }}
+            styles={{
+              tab: {
+                padding: "8px 8px",
+                fontSize: "14px",
+                fontFamily: "Inter",
+                fontstyle: "semibold",
+                color: "#444955",
+                "&[data-active]": {
+                  color: "#105476",
+                  borderBottom: "0px",
+                  backgroundColor: "#E0F5FF",
+                },
+                "&:hover": {
+                  backgroundColor: "#f8f9fa",
+                  borderBottom: "0px",
+                  color: "#444955",
+                  // borderColor: "transparent",
+                },
+                "&[data-active]:hover": {
+                  backgroundColor: "#E0F5FF",
+                  borderBottom: "0px",
+                  color: "#105476",
+                },
+              },
+              list: {
+                borderBottom: "0px",
+              },
+            }}
+          >
+            <Tabs.List style={{border: "1px solid #E0E0E0", borderRadius: "6px",borderBottom: "0px",}}>
+              <Tabs.Tab value="summary" style={{borderBottom: "0px",}}>Summary</Tabs.Tab>
+              <Tabs.Tab value="detailed" style={{borderBottom: "0px",}}>Detailed</Tabs.Tab>
+            </Tabs.List>
+          </Tabs>
+
+          <Group gap="xs" wrap="nowrap">
             <TextInput
-              placeholder="Search"
+              placeholder="Search..."
               leftSection={<IconSearch size={16} />}
-              w={{ sm: 150, md: 300 }}
-              radius="sm"
-              size="xs"
+              w={248}
+              size="sm"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.currentTarget.value)}
+              styles={{ 
+                input: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontstyle: "regular",
+                  color: "#333740",
+                  minWidth: "24px",
+                  minHeight: "24px",
+                  width: "248px",
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  "&:focus": {
+                    border: "1px solid #105476",
+                  },
+                  
+                },
+              }}
             />
 
-            <Button
+            <ActionIcon
               variant={showFilters ? "filled" : "outline"}
-              leftSection={<IconFilter size={16} />}
-              size="xs"
-              color="#105476"
+              size={36}
+              color={showFilters ? "#E0F5FF" : "gray"}
               onClick={toggleFilters}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                  border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  // "&:hover": {
+                  //   backgroundColor: "#105476",
+                  //   color: "#FFFFFF",
+                  // },
+                  // "&:focus": {
+                  //   border: "1px solid #105476",
+                  //   color: "#FFFFFF",
+                  // },
+                  "&:active": {
+                    border: "1px solid #105476",                    color: "#FFFFFF",
+                  },
+                },
+              }}
             >
-              Filters
-            </Button>
+              <IconFilter size={18} />
+            </ActionIcon>
+
+            {showPreviewTable && (
+              <ActionIcon
+                variant="outline"
+                size={36}
+                color="gray"
+                onClick={downloadExcel}
+                loading={downloading}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    borderColor: "#737780",
+                    color: "#737780",
+                  },
+                }}
+              >
+                <IconDownload size={18} />
+              </ActionIcon>
+            )}
+
             <Button
-              color={"#105476"}
               leftSection={<IconPlus size={16} />}
-              size="xs"
+              size="sm"
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  color: "#FFFFFF",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontstyle: "semibold",
+                  "&:hover": {
+                    backgroundColor: "#105476",
+                  },
+                },
+              }}
               onClick={() => {
                 const currentFilterState = {
                   filters,
@@ -2368,665 +2448,670 @@ function EnquiryMaster() {
                 navigate("/enquiry-create", {
                   state: {
                     preserveFilters: currentFilterState,
-                    fromEnquiry: true, // Flag to indicate navigation from enquiry page
+                    fromEnquiry: true,
                   },
                 });
               }}
             >
               Create New
             </Button>
-            <Button
-              variant={"outline"}
-              color={"#105476"}
-              size="xs"
-              leftSection={<IconEye size={16} />}
-              onClick={() => {
-                if (showPreviewTable) {
-                  closePreview();
-                } else {
-                  openPreview();
-                }
-              }}
-            >
-              {showPreviewTable ? "Summary View" : "Detailed View"}
-            </Button>
-
-            {/* Extra controls shown only in preview */}
-            {showPreviewTable && user?.is_staff && (
-              <>
-                <Button
-                  size="xs"
-                  color="#105476"
-                  loading={downloading}
-                  variant={downloading ? "filled" : "outline"}
-                  onClick={downloadExcel}
-                >
-                  Download
-                </Button>
-              </>
-            )}
           </Group>
         </Group>
+      </Box>
 
-        {/* Filter Section */}
-        {showFilters && (
-          <Card
-            shadow="xs"
-            padding="md"
-            radius="md"
-            withBorder
-            mb="md"
-            bg="#f8f9fa"
-            // style={{
-            // position: "absolute",
-            // top: 45,
-            // zIndex: 5,
-            //   width: "calc(100% - 16px)",
-            // }}
-          >
-            <Group justify="space-between" align="center">
-              <Group align="center" gap="xs">
-                <IconFilter size={16} color="#105476" />
-                <Text size="sm" fw={500} c="#105476">
-                  Filters
-                </Text>
+      {/* Filter Section */}
+      {showFilters && (
+        <Box
+          mb="md"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+          }}
+        >
+          <Group justify="space-between" align="center" mb="lg" style={{ backgroundColor: "#FAFAFA", padding: "8px 8px",  borderRadius: "8px" }}>
+            <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
+          </Group>
+
+          {showPreviewTable ? (
+            <>
+              <Grid gutter="md" px="md">
+                {/* Row 1 */}
+                <Grid.Col span={2.4} >
+                  <SearchableSelect
+                    size="xs"
+                    label="Customer Name"
+                    placeholder="Select Service"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_code", "customer_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={previewFilters.customer_name}
+                    displayValue={previewCustomerDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updatePreviewFilter("customer_name", value || null);
+                      setPreviewCustomerDisplayValue(
+                        selectedData?.label || null
+                      );
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+              
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Origin"
+                    placeholder="Type Origin Code"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={previewFilters.origin_name}
+                    displayValue={previewOriginDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updatePreviewFilter("origin_name", value || null);
+                      setPreviewOriginDisplayValue(
+                        selectedData?.label || null
+                      );
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Destination"
+                    placeholder="Type destination cod"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={previewFilters.destination_name}
+                    displayValue={previewDestinationDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updatePreviewFilter(
+                        "destination_name",
+                        value || null
+                      );
+                      setPreviewDestinationDisplayValue(
+                        selectedData?.label || null
+                      );
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+                  />
+                </Grid.Col>
+                <Grid.Col span={{base: 6, md: 4.7}}>
+                  <DateRangeInput
+                    key={`preview-date-range-${previewFilters.enquiry_received_date?.getTime() || "null"}-${previewFilters.enquiry_received_date_to?.getTime() || "null"}`}
+                    fromDate={previewFilters.enquiry_received_date}
+                    toDate={previewFilters.enquiry_received_date_to}
+                    onFromDateChange={(date) =>
+                      updatePreviewFilter("enquiry_received_date", date)
+                    }
+                    onToDateChange={(date) =>
+                      updatePreviewFilter("enquiry_received_date_to", date)
+                    }
+                    fromLabel="From Date"
+                    toLabel="To Date"
+                    size="xs"
+                    allowDeselection={true}
+                    showRangeInCalendar={false}
+                    inputWidth={260}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4} >
+                  <Select
+                    key={`preview-sales-person-${previewFilters.sales_person}`}
+                    label="Sales Person"
+                    placeholder={
+                      salespersonsLoading
+                        ? "Loading salespersons..."
+                        : "Select Service"
+                    }
+                    searchable
+                    clearable
+                    size="xs"
+                    data={salespersonOptions}
+                    disabled={salespersonsLoading}
+                    value={previewFilters.sales_person}
+                    onChange={(value) =>
+                      updatePreviewFilter("sales_person", value || null)
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <Select
+                    key={`preview-service-${previewFilters.service}`}
+                    label="Service"
+                    placeholder="Select Service"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={serviceOptions}
+                    value={previewFilters.service}
+                    onChange={(value) =>
+                      updatePreviewFilter("service", value || null)
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Row 2 */}
+
+                <Grid.Col span={2.4}>
+                  <Select
+                    key={`preview-trade-${previewFilters.trade}`}
+                    label="Trade"
+                    placeholder="Select Service"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={tradeOptions}
+                    value={previewFilters.trade}
+                    onChange={(value) =>
+                      updatePreviewFilter("trade", value || null)
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <Select
+                    key={`preview-status-${previewFilters.status}`}
+                    label="Status"
+                    placeholder="Active"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={statusOptions}
+                    value={previewFilters.status}
+                    onChange={(value) =>
+                      updatePreviewFilter("status", value || "all")
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <TextInput
+                    label="Enquiry ID"
+                    placeholder="Placeholder"
+                    size="xs"
+                    value={previewFilters.enquiry_id || ""}
+                    onChange={(e) =>
+                      updatePreviewFilter(
+                        "enquiry_id",
+                        e.currentTarget.value || null
+                      )
+                    }
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <TextInput
+                    label="Reference No"
+                    placeholder="Placeholder"
+                    size="xs"
+                    value={previewFilters.reference_no || ""}
+                    onChange={(e) =>
+                      updatePreviewFilter(
+                        "reference_no",
+                        e.currentTarget.value || null
+                      )
+                    }
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+              </Grid>
+              <Group justify="flex-end" mt="lg" gap="sm" style={{ margin: "8px 8px" }}>
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={clearAllFilters}
+                  styles={{
+                    root: {
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      fontWeight: 600,
+                      backgroundColor: "#FFFFFF",
+                      // height: "36px",
+                      border: "1px solid #D0D1D4",
+                      color: "#444955",
+                    },
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button
+                  size="xs"
+                  onClick={applyFilters}
+                  loading={isPreviewLoading}
+                  disabled={isPreviewLoading}
+                  styles={{
+                    root: {
+                      backgroundColor: "#105476",
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      fontWeight: 600,
+                      // height: "36px",
+                      "&:hover": {
+                        backgroundColor: "#0d4261",
+                      },
+                    },
+                  }}
+                >
+                  Apply
+                </Button>
               </Group>
-            </Group>
+            </>
+          ) : (
+            <>
+              <Grid gutter="md" px="md" >
+                {/* Row 1 */}
+                <Grid.Col span={2.4}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Customer Name"
+                    placeholder="Select Service"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_code", "customer_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={filters.customer_code}
+                    displayValue={customerDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updateFilter("customer_code", value || null);
+                      setCustomerDisplayValue(selectedData?.label || null);
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+                  />
+                </Grid.Col>
+              
+                <Grid.Col span={2.4}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Origin"
+                    placeholder="Type Origin Code"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={filters.origin_code}
+                    displayValue={originDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updateFilter("origin_code", value || null);
+                      setOriginDisplayValue(selectedData?.label || null);
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Destination"
+                    placeholder="Type destination cod"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={filters.destination_code}
+                    displayValue={destinationDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updateFilter("destination_code", value || null);
+                      setDestinationDisplayValue(
+                        selectedData?.label || null
+                      );
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+                  />
+                </Grid.Col>
+                <Grid.Col span={{base: 6, md: 4.7}} >
+                  <DateRangeInput
+                    fromDate={fromDate}
+                    toDate={toDate}
+                    onFromDateChange={setFromDate}
+                    onToDateChange={setToDate}
+                    fromLabel="From Date"
+                    toLabel="To Date"
+                    size="xs"
+                    allowDeselection={true}
+                    showRangeInCalendar={false}
+                    inputWidth={260}
+                  />
+                </Grid.Col>
 
-            {showPreviewTable ? (
-              <Grid>
-                <Grid.Col span={12}>
-                  <Grid>
-                    {/* Detailed view: 7 filters */}
-                    <Grid.Col span={2}>
-                      <SearchableSelect
-                        size="xs"
-                        label="Customer Name"
-                        placeholder="Type customer name"
-                        apiEndpoint={URL.customer}
-                        searchFields={["customer_code", "customer_name"]}
-                        displayFormat={(item: any) => ({
-                          value: String(item.customer_code),
-                          label: String(item.customer_name), // Show only customer name
-                        })}
-                        value={previewFilters.customer_name}
-                        displayValue={previewCustomerDisplayValue}
-                        onChange={(value, selectedData) => {
-                          updatePreviewFilter("customer_name", value || null);
-                          setPreviewCustomerDisplayValue(
-                            selectedData?.label || null
-                          );
-                        }}
-                        minSearchLength={3}
-                        className="filter-searchable-select"
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <Select
-                        key={`preview-sales-person-${previewFilters.sales_person}`}
-                        label="Sales Person"
-                        placeholder={
-                          salespersonsLoading
-                            ? "Loading salespersons..."
-                            : "Select Sales Person"
-                        }
-                        searchable
-                        clearable
-                        size="xs"
-                        data={salespersonOptions}
-                        disabled={salespersonsLoading}
-                        value={previewFilters.sales_person}
-                        onChange={(value) =>
-                          updatePreviewFilter("sales_person", value || null)
-                        }
-                        onFocus={(event) => {
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={4.8}>
-                      <DateRangeInput
-                        key={`preview-date-range-${previewFilters.enquiry_received_date?.getTime() || "null"}-${previewFilters.enquiry_received_date_to?.getTime() || "null"}`}
-                        fromDate={previewFilters.enquiry_received_date}
-                        toDate={previewFilters.enquiry_received_date_to}
-                        onFromDateChange={(date) =>
-                          updatePreviewFilter("enquiry_received_date", date)
-                        }
-                        onToDateChange={(date) =>
-                          updatePreviewFilter("enquiry_received_date_to", date)
-                        }
-                        fromLabel="From Date"
-                        toLabel="To Date"
-                        size="xs"
-                        allowDeselection={true}
-                        showRangeInCalendar={false}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <Select
-                        key={`preview-terms-of-shipment-${previewFilters.terms_of_shipment}-${termsOfShipmentDataLoading}-${termsOfShipmentOptionsData.length}`}
-                        label="Terms of Shipment"
-                        placeholder={
-                          termsOfShipmentDataLoading
-                            ? "Loading terms..."
-                            : "Select Terms"
-                        }
-                        searchable
-                        clearable
-                        size="xs"
-                        data={termsOfShipmentOptionsData}
-                        limit={10}
-                        maxDropdownHeight={400}
-                        nothingFoundMessage={
-                          termsOfShipmentDataLoading
-                            ? "Loading terms..."
-                            : "No terms found"
-                        }
-                        disabled={termsOfShipmentDataLoading}
-                        value={previewFilters.terms_of_shipment}
-                        onChange={(value) =>
-                          updatePreviewFilter(
-                            "terms_of_shipment",
-                            value || null
-                          )
-                        }
-                        onFocus={(event) => {
-                          // Auto-select all text when input is focused
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <Select
-                        key={`preview-service-${previewFilters.service}`}
-                        label="Service"
-                        placeholder="Select Service"
-                        searchable
-                        clearable
-                        size="xs"
-                        data={serviceOptions}
-                        value={previewFilters.service}
-                        onChange={(value) =>
-                          updatePreviewFilter("service", value || null)
-                        }
-                        onFocus={(event) => {
-                          // Auto-select all text when input is focused
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <Select
-                        key={`preview-trade-${previewFilters.trade}`}
-                        label="Trade"
-                        placeholder="Select Trade"
-                        searchable
-                        clearable
-                        size="xs"
-                        data={tradeOptions}
-                        value={previewFilters.trade}
-                        onChange={(value) =>
-                          updatePreviewFilter("trade", value || null)
-                        }
-                        onFocus={(event) => {
-                          // Auto-select all text when input is focused
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <SearchableSelect
-                        size="xs"
-                        label="Origin Name"
-                        placeholder="Type origin code or name"
-                        apiEndpoint={URL.portMaster}
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: any) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={previewFilters.origin_name}
-                        displayValue={previewOriginDisplayValue}
-                        onChange={(value, selectedData) => {
-                          updatePreviewFilter("origin_name", value || null);
-                          setPreviewOriginDisplayValue(
-                            selectedData?.label || null
-                          );
-                        }}
-                        minSearchLength={3}
-                        className="filter-searchable-select"
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <SearchableSelect
-                        size="xs"
-                        label="Destination Name"
-                        placeholder="Type destination code or name"
-                        apiEndpoint={URL.portMaster}
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: any) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={previewFilters.destination_name}
-                        displayValue={previewDestinationDisplayValue}
-                        onChange={(value, selectedData) => {
-                          updatePreviewFilter(
-                            "destination_name",
-                            value || null
-                          );
-                          setPreviewDestinationDisplayValue(
-                            selectedData?.label || null
-                          );
-                        }}
-                        minSearchLength={3}
-                        className="filter-searchable-select"
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <Select
-                        key={`preview-status-${previewFilters.status}`}
-                        label="Status"
-                        placeholder="Select Status"
-                        searchable
-                        clearable
-                        size="xs"
-                        data={statusOptions}
-                        value={previewFilters.status}
-                        onChange={(value) =>
-                          updatePreviewFilter("status", value || "all")
-                        }
-                        onFocus={(event) => {
-                          // Auto-select all text when input is focused
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <TextInput
-                        label="Enquiry ID"
-                        placeholder="Enter enquiry ID"
-                        size="xs"
-                        value={previewFilters.enquiry_id || ""}
-                        onChange={(e) =>
-                          updatePreviewFilter(
-                            "enquiry_id",
-                            e.currentTarget.value || null
-                          )
-                        }
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <TextInput
-                        label="Reference No"
-                        placeholder="Enter reference number"
-                        size="xs"
-                        value={previewFilters.reference_no || ""}
-                        onChange={(e) =>
-                          updatePreviewFilter(
-                            "reference_no",
-                            e.currentTarget.value || null
-                          )
-                        }
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                  </Grid>
+                {/* Row 2 */}
+                <Grid.Col span={2.4}>
+                  <Select
+                    key={`sales-person-${filters.sales_person}`}
+                    label="Sales Person"
+                    placeholder={
+                      salespersonsLoading
+                        ? "Loading salespersons..."
+                        : "Select Service"
+                    }
+                    searchable
+                    clearable
+                    size="xs"
+                    data={salespersonOptions}
+                    disabled={salespersonsLoading}
+                    value={filters.sales_person}
+                    onChange={(value) =>
+                      updateFilter("sales_person", value || null)
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <Select
+                    key={`service-${filters.service}`}
+                    label="Service"
+                    placeholder="Select Service"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={serviceOptions}
+                    value={filters.service}
+                    onChange={(value) =>
+                      updateFilter("service", value || null)
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <Select
+                    key={`trade-${filters.trade}`}
+                    label="Trade"
+                    placeholder="Select Service"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={tradeOptions}
+                    value={filters.trade}
+                    onChange={(value) =>
+                      updateFilter("trade", value || null)
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <Select
+                    key={`status-${filters.status}`}
+                    label="Status"
+                    placeholder="Active"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={statusOptions}
+                    value={filters.status}
+                    onChange={(value) =>
+                      updateFilter("status", value || "all")
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <TextInput
+                    label="Enquiry ID"
+                    placeholder="Placeholder"
+                    size="xs"
+                    value={filters.enquiry_id || ""}
+                    onChange={(e) =>
+                      updateFilter(
+                        "enquiry_id",
+                        e.currentTarget.value || null
+                      )
+                    }
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <TextInput
+                    label="Reference No"
+                    placeholder="Placeholder"
+                    size="xs"
+                    value={filters.reference_no || ""}
+                    onChange={(e) =>
+                      updateFilter(
+                        "reference_no",
+                        e.currentTarget.value || null
+                      )
+                    }
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
                 </Grid.Col>
               </Grid>
-            ) : (
-              <Grid>
-                <Grid.Col span={12}>
-                  <Grid>
-                    {/* Customer Name (by code) */}
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <SearchableSelect
-                        size="xs"
-                        label="Customer Name"
-                        placeholder="Type customer name"
-                        apiEndpoint={URL.customer}
-                        searchFields={["customer_code", "customer_name"]}
-                        displayFormat={(item: any) => ({
-                          value: String(item.customer_code),
-                          label: String(item.customer_name), // Show only customer name
-                        })}
-                        value={filters.customer_code}
-                        displayValue={customerDisplayValue}
-                        onChange={(value, selectedData) => {
-                          updateFilter("customer_code", value || null);
-                          setCustomerDisplayValue(selectedData?.label || null);
-                        }}
-                        minSearchLength={3}
-                        className="filter-searchable-select"
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <Select
-                        key={`sales-person-${filters.sales_person}`}
-                        label="Sales Person"
-                        placeholder={
-                          salespersonsLoading
-                            ? "Loading salespersons..."
-                            : "Select Sales Person"
-                        }
-                        searchable
-                        clearable
-                        size="xs"
-                        data={salespersonOptions}
-                        disabled={salespersonsLoading}
-                        value={filters.sales_person}
-                        onChange={(value) =>
-                          updateFilter("sales_person", value || null)
-                        }
-                        onFocus={(event) => {
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <SearchableSelect
-                        size="xs"
-                        label="Origin"
-                        placeholder="Type origin code or name"
-                        apiEndpoint={URL.portMaster}
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: any) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={filters.origin_code}
-                        displayValue={originDisplayValue}
-                        onChange={(value, selectedData) => {
-                          updateFilter("origin_code", value || null);
-                          setOriginDisplayValue(selectedData?.label || null);
-                        }}
-                        minSearchLength={3}
-                        className="filter-searchable-select"
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <SearchableSelect
-                        size="xs"
-                        label="Destination"
-                        placeholder="Type destination code or name"
-                        apiEndpoint={URL.portMaster}
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: any) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={filters.destination_code}
-                        displayValue={destinationDisplayValue}
-                        onChange={(value, selectedData) => {
-                          updateFilter("destination_code", value || null);
-                          setDestinationDisplayValue(
-                            selectedData?.label || null
-                          );
-                        }}
-                        minSearchLength={3}
-                        className="filter-searchable-select"
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <Select
-                        key={`service-${filters.service}`}
-                        label="Service"
-                        placeholder="Select Service"
-                        searchable
-                        clearable
-                        size="xs"
-                        data={serviceOptions}
-                        value={filters.service}
-                        onChange={(value) =>
-                          updateFilter("service", value || null)
-                        }
-                        onFocus={(event) => {
-                          // Auto-select all text when input is focused
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, md: 6, lg: 6, xl: 4.8 }}>
-                      <DateRangeInput
-                        fromDate={fromDate}
-                        toDate={toDate}
-                        onFromDateChange={setFromDate}
-                        onToDateChange={setToDate}
-                        fromLabel="From Date"
-                        toLabel="To Date"
-                        size="xs"
-                        allowDeselection={true}
-                        showRangeInCalendar={false}
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <Select
-                        key={`trade-${filters.trade}`}
-                        label="Trade"
-                        placeholder="Select Trade"
-                        searchable
-                        clearable
-                        size="xs"
-                        data={tradeOptions}
-                        value={filters.trade}
-                        onChange={(value) =>
-                          updateFilter("trade", value || null)
-                        }
-                        onFocus={(event) => {
-                          // Auto-select all text when input is focused
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <Select
-                        key={`status-${filters.status}`}
-                        label="Status"
-                        placeholder="Select Status"
-                        searchable
-                        clearable
-                        size="xs"
-                        data={statusOptions}
-                        value={filters.status}
-                        onChange={(value) =>
-                          updateFilter("status", value || "all")
-                        }
-                        onFocus={(event) => {
-                          // Auto-select all text when input is focused
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <TextInput
-                        label="Enquiry ID"
-                        placeholder="Enter enquiry ID"
-                        size="xs"
-                        value={filters.enquiry_id || ""}
-                        onChange={(e) =>
-                          updateFilter(
-                            "enquiry_id",
-                            e.currentTarget.value || null
-                          )
-                        }
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4, lg: 3, xl: 2 }}>
-                      <TextInput
-                        label="Reference No"
-                        placeholder="Enter reference number"
-                        size="xs"
-                        value={filters.reference_no || ""}
-                        onChange={(e) =>
-                          updateFilter(
-                            "reference_no",
-                            e.currentTarget.value || null
-                          )
-                        }
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                  </Grid>
-                </Grid.Col>
-              </Grid>
-            )}
-
-            <Group justify="end" mt="sm">
-              <Button
-                size="xs"
-                variant="outline"
-                color="#105476"
-                leftSection={<IconFilterOff size={14} />}
-                onClick={clearAllFilters}
-              >
-                Clear Filters
-              </Button>
-              <Button
-                size="xs"
-                variant="filled"
-                color="#105476"
-                leftSection={
-                  isLoading ? <Loader size={14} /> : <IconFilter size={14} />
-                }
-                onClick={applyFilters}
-                loading={isLoading}
-                disabled={isLoading}
-              >
-                Apply Filters
-              </Button>
-            </Group>
-          </Card>
-        )}
+              <Group justify="flex-end" mt="lg" gap="sm" style={{ margin: "8px 8px" }}>
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={clearAllFilters}
+                  styles={{
+                    root: {
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      fontWeight: 600,
+                      height: "36px",
+                      border: "1px solid #D0D1D4",
+                      color: "#444955",
+                    },
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={applyFilters}
+                  loading={isLoading}
+                  disabled={isLoading}
+                  styles={{
+                    root: {
+                      backgroundColor: "#105476",
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      fontWeight: 600,
+                      height: "36px",
+                      "&:hover": {
+                        backgroundColor: "#0d4261",
+                      },
+                    },
+                  }}
+                >
+                  Apply
+                </Button>
+              </Group>
+            </>
+          )}
+        </Box>
+      )}
 
         {isLoading || isPreviewLoading ? (
           <Center
@@ -3069,7 +3154,7 @@ function EnquiryMaster() {
               <>
                 <MantineReactTable table={previewTable} />
 
-                {/* Preview Pagination - Show pagination for preview table too */}
+                {/* Preview Pagination - unified design */}
                 <Group
                   w="100%"
                   justify="space-between"
@@ -3080,8 +3165,8 @@ function EnquiryMaster() {
                   wrap="nowrap"
                   mt="xs"
                 >
-                  {/* Left side: Back to Dashboard Button or Rows per page */}
-                  <Group gap="sm" align="center" wrap="nowrap" mt={10}>
+                         {/* Left side: Back to Dashboard Button or Rows per page */}
+                         <Group gap="sm" align="center" wrap="nowrap" mt={10}>
                     {location.state?.returnToDashboard ||
                     returnToDashboardRef.current ? (
                       <Button
@@ -3111,23 +3196,23 @@ function EnquiryMaster() {
                       </Button>
                     ) : (
                       <>
-                        <Text size="sm" c="dimmed">
-                          Rows per page
-                        </Text>
-                        <Select
-                          size="xs"
-                          data={["10", "25", "50"]}
-                          value={String(previewPageSize)}
-                          onChange={(val) => {
-                            if (!val) return;
-                            handlePreviewPageSizeChange(Number(val));
-                          }}
-                          w={110}
-                          styles={
-                            { input: { fontSize: 12, height: 30 } } as any
-                          }
-                        />
-                        <Text size="sm" c="dimmed">
+                    <Text size="sm" c="dimmed">
+                      Rows per page
+                    </Text>
+                    <Select
+                      size="xs"
+                      data={["10", "25", "50"]}
+                      value={String(previewPageSize)}
+                      onChange={(val) => {
+                        if (!val) return;
+                        handlePreviewPageSizeChange(Number(val));
+                      }}
+                      w={110}
+                      styles={
+                        { input: { fontSize: 12, height: 30 } } as any
+                      }   
+                                       />
+                                                               <Text size="sm" c="dimmed">
                           {(() => {
                             const total = displayPreviewData?.total || 0;
                             if (total === 0) return "0–0 of 0";
@@ -3144,8 +3229,8 @@ function EnquiryMaster() {
                     )}
                   </Group>
 
-                  {/* Right side: Page controls or Rows per page (if button is shown) */}
-                  <Group gap="xs" align="center" wrap="nowrap" mt={10}>
+ {/* Right side: Page controls or Rows per page (if button is shown) */}
+ <Group gap="xs" align="center" wrap="nowrap" mt={10}>
                     {(location.state?.returnToDashboard ||
                       returnToDashboardRef.current) && (
                       <>
@@ -3164,9 +3249,9 @@ function EnquiryMaster() {
                           styles={
                             { input: { fontSize: 12, height: 30 } } as any
                           }
-                        />
-                        <Text size="sm" c="dimmed">
-                          {(() => {
+/>
+                    <Text size="sm" c="dimmed">
+                    {(() => {
                             const total = displayPreviewData?.total || 0;
                             if (total === 0) return "0–0 of 0";
                             const start =
@@ -3176,9 +3261,9 @@ function EnquiryMaster() {
                               total
                             );
                             return `${start}–${end} of ${total}`;
-                          })()}
-                        </Text>
-                      </>
+                          })()}                    
+                          </Text>
+                          </>
                     )}
                     <ActionIcon
                       variant="default"
@@ -3248,8 +3333,8 @@ function EnquiryMaster() {
               wrap="nowrap"
               pt="md"
             >
-              {/* Left side: Back to Dashboard Button or Rows per page */}
-              <Group gap="sm" align="center" wrap="nowrap">
+           {/* Left side: Back to Dashboard Button or Rows per page */}
+           <Group gap="sm" align="center" wrap="nowrap">
                 {location.state?.returnToDashboard ||
                 returnToDashboardRef.current ? (
                   <Button
@@ -3279,21 +3364,21 @@ function EnquiryMaster() {
                   </Button>
                 ) : (
                   <>
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(listPageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        handlePageSizeChange(Number(val));
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } } as any}
-                    />
-                    <Text size="sm" c="dimmed">
+                                  <Text size="sm" c="dimmed">
+                  Rows per page
+                </Text>
+                <Select
+                  size="xs"
+                  data={["10", "25", "50"]}
+                  value={String(listPageSize)}
+                  onChange={(val) => {
+                    if (!val) return;
+                    handlePageSizeChange(Number(val));
+                  }}
+                  w={110}
+                  styles={{ input: { fontSize: 12, height: 30 } } as any}
+                />
+                                    <Text size="sm" c="dimmed">
                       {(() => {
                         const total = listTotalRecords || 0;
                         if (total === 0) return "0–0 of 0";
@@ -3327,9 +3412,9 @@ function EnquiryMaster() {
                       }}
                       w={110}
                       styles={{ input: { fontSize: 12, height: 30 } } as any}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
+                />
+                <Text size="sm" c="dimmed">
+                {(() => {
                         const total = listTotalRecords || 0;
                         if (total === 0) return "0–0 of 0";
                         const start = (listCurrentPage - 1) * listPageSize + 1;
@@ -3339,8 +3424,8 @@ function EnquiryMaster() {
                         );
                         return `${start}–${end} of ${total}`;
                       })()}
-                    </Text>
-                  </>
+                      </Text>
+                      </>
                 )}
                 <ActionIcon
                   variant="default"
@@ -3380,9 +3465,9 @@ function EnquiryMaster() {
                 </ActionIcon>
               </Group>
             </Group>
-          </>
-        )}
-      </Card>
+        </>
+      )}
+            </Card>
 
       {/* PDF Preview Modal */}
       <Modal

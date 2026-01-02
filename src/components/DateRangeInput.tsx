@@ -20,6 +20,7 @@ export interface DateRangeInputProps {
   showRangeInCalendar?: boolean;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   containerStyle?: React.CSSProperties;
+  inputWidth?: number | string;
   disabled?: boolean;
   minDate?: Date;
   maxDate?: Date;
@@ -42,6 +43,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
   minDate,
   maxDate,
   containerStyle,
+  inputWidth,
   hideLabels = false,
 }) => {
   // Helper to check if date is selected
@@ -177,7 +179,17 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
       style={containerStyle}
     >
       <DateInput
+        style={inputWidth ? { width: inputWidth } : undefined}
         label={hideLabels ? undefined : fromLabel}
+        labelProps={{
+          style: {
+            fontSize: "13px",
+            fontWeight: 500,
+            color: "#000000",
+            marginBottom: "4px",
+            fontFamily: "Inter",
+          },
+        }}
         placeholder={fromPlaceholder}
         value={fromDate}
         onChange={handleFromDateChange}
@@ -236,7 +248,17 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         styles={getDateStyles()}
       />
       <DateInput
+        style={inputWidth ? { width: inputWidth } : undefined}
         label={hideLabels ? undefined : toLabel}
+        labelProps={{
+          style: {
+            fontSize: "13px",
+            fontWeight: 500,
+            color: "#000000",
+            marginBottom: "4px",
+            fontFamily: "Inter",
+          },
+        }}
         placeholder={toPlaceholder}
         value={toDate}
         onChange={handleToDateChange}

@@ -323,6 +323,16 @@ export default function SearchableSelect({
     <>
       <Select
         label={label}
+        styles={{
+          // input: { fontSize: "13px", height: "36px" },
+          label: {
+            fontSize: "13px",
+            fontWeight: 500,
+            color: "#000000",
+            marginBottom: "4px",
+            fontFamily: "Inter",
+          },
+        }}
         searchable
         data={data}
         value={selected}
