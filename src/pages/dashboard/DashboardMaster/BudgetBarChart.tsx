@@ -12,6 +12,8 @@ import dayjs from "dayjs";
 import {
   getFilteredBudgetData,
   calculateBudgetAggregatedData,
+  calculateFinancialYearBudgetRangeForYear,
+  calculateStartMonthFromEndMonth,
   BudgetAggregatedData,
 } from "../../../service/dashboard.service";
 
@@ -32,6 +34,7 @@ interface BudgetBarChartProps {
   budgetEndMonth: string;
   budgetType: "salesperson" | "non-salesperson";
   selectedYear: string | null;
+  yearOptions: { value: string; label: string }[];
   fromMonthOptions: { value: string; label: string }[];
   toMonthOptions: { value: string; label: string }[];
 
@@ -67,6 +70,7 @@ const BudgetBarChart = ({
   budgetEndMonth,
   budgetType,
   selectedYear,
+  yearOptions,
   fromMonthOptions,
   toMonthOptions,
   setBudgetDrillLevel,
@@ -203,16 +207,24 @@ const BudgetBarChart = ({
           />
           <Group gap="xs" align="center">
             <Select
-              placeholder="Select Period"
+              placeholder="Select Year"
               value={selectedYear}
-              onChange={(value) => setSelectedYear(value)}
+              onChange={(value) => {
+                if (value) {
+                  setSelectedYear(value);
+                  // When year changes, recalculate month range for that financial year
+                  const yearRange = calculateFinancialYearBudgetRangeForYear(
+                    parseInt(value)
+                  );
+                  handleBudgetMonthFilterChange(
+                    yearRange.start_month,
+                    yearRange.end_month
+                  );
+                }
+              }}
               w={150}
               size="xs"
-              data={[
-                { value: "2023", label: "2023" },
-                { value: "2024", label: "2024" },
-                { value: "2025", label: "2025" },
-              ]}
+              data={yearOptions}
               styles={{
                 input: { fontSize: "12px", fontFamily: "Inter, sans-serif" },
               }}
@@ -241,7 +253,9 @@ const BudgetBarChart = ({
               value={budgetEndMonth}
               onChange={(value) => {
                 if (value) {
-                  handleBudgetMonthFilterChange(budgetStartMonth, value);
+                  // Calculate start month based on end month (financial year logic)
+                  // This will be handled in handleBudgetMonthFilterChange
+                  handleBudgetMonthFilterChange(null, value);
                 }
               }}
               size="xs"
