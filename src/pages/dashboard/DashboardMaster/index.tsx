@@ -38,6 +38,10 @@ import {
   calculateFilteredEnquiryConversionAggregatedData,
   getFilteredBudgetData,
   calculateBudgetAggregatedData,
+  calculateFinancialYearBudgetRange,
+  calculateFinancialYearBudgetRangeForYear,
+  calculateStartMonthFromEndMonth,
+  getFinancialYearOptions,
   getCustomerNotVisitedData,
   getLostCustomerData,
   getNewCustomerData,
@@ -241,9 +245,9 @@ const Dashboard = () => {
   const [searchSalesman, setSearchSalesman] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
-  const [selectedYear, setSelectedYear] = useState<string | null>(
-    dayjs().year().toString()
-  );
+  // const [selectedYear, setSelectedYear] = useState<string | null>(
+  //   dayjs().year().toString()
+  // );
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // Global search state - separate input value from actual search query
@@ -256,19 +260,48 @@ const Dashboard = () => {
   const [isDropdownLoading, setIsDropdownLoading] = useState<boolean>(false);
   const [debouncedSearch] = useDebouncedValue(searchInputValue, 400);
 
-  // Budget month filters - Set proper defaults
-  const currentYear = dayjs().year().toString();
-  const currentMonth = dayjs().month() + 1;
-  const prevMonth = currentMonth - 1;
-  const defaultStartMonth = `${currentYear}-04`;
-  const defaultEndMonth =
-    prevMonth > 0
-      ? `${currentYear}-${String(prevMonth).padStart(2, "0")}`
-      : `${parseInt(currentYear) - 1}-12`;
+  // Calculate current financial year start year for default selection
+  const getCurrentFinancialYearStart = () => {
+    const today = dayjs();
+    const currentMonth = today.month() + 1;
+    const currentYear = today.year();
+    if (currentMonth >= 1 && currentMonth <= 3) {
+      return (currentYear - 1).toString();
+    }
+    return currentYear.toString();
+  };
+
+  const [selectedYear, setSelectedYear] = useState<string | null>(
+    getCurrentFinancialYearStart()
+  );
+
+  // Budget month filters - Calculate based on end month logic
+  // Get previous month (end month)
+  const today = dayjs();
+  const currentMonth = today.month() + 1;
+  const currentYear = today.year();
+
+  let endMonth: number;
+  let endYear: number;
+
+  if (currentMonth === 1) {
+    endMonth = 12;
+    endYear = currentYear - 1;
+  } else {
+    endMonth = currentMonth - 1;
+    endYear = currentYear;
+  }
+
+  const initialEndMonth = `${endYear}-${String(endMonth).padStart(2, "0")}`;
+
+  // Calculate start month based on end month
+  // If end month is Jan-Mar, start year = end year - 1
+  // If end month is Apr-Dec, start year = end year
+  const initialStartMonth = calculateStartMonthFromEndMonth(initialEndMonth);
 
   const [budgetStartMonth, setBudgetStartMonth] =
-    useState<string>(defaultStartMonth);
-  const [budgetEndMonth, setBudgetEndMonth] = useState<string>(defaultEndMonth);
+    useState<string>(initialStartMonth);
+  const [budgetEndMonth, setBudgetEndMonth] = useState<string>(initialEndMonth);
 
   // Call entry states
   const [callEntryAggregatedData, setCallEntryAggregatedData] =
@@ -945,19 +978,32 @@ const Dashboard = () => {
         setBudgetSelectedSalesperson(null);
         setBudgetSelectedMonth(null);
 
-        // Extract month parts from existing budgetStartMonth and budgetEndMonth
-        const existingStartMonth = budgetStartMonth
-          ? budgetStartMonth.split("-")[1]
-          : "04";
-        const existingEndMonth = budgetEndMonth
-          ? budgetEndMonth.split("-")[1]
-          : "09";
+        // Calculate financial year range for the selected year
+        // First, get the end month (previous month of current date)
+        const today = dayjs();
+        const currentMonth = today.month() + 1;
+        const currentYear = today.year();
 
-        const startMonth = `${selectedYear}-${existingStartMonth}`;
-        const endMonth = `${selectedYear}-${existingEndMonth}`;
+        let endMonth: number;
+        let endYear: number;
+
+        if (currentMonth === 1) {
+          endMonth = 12;
+          endYear = currentYear - 1;
+        } else {
+          endMonth = currentMonth - 1;
+          endYear = currentYear;
+        }
+
+        const endMonthStr = `${endYear}-${String(endMonth).padStart(2, "0")}`;
+
+        // Calculate start month based on end month
+        // If end month is Jan-Mar, start year = end year - 1
+        // If end month is Apr-Dec, start year = end year
+        const startMonth = calculateStartMonthFromEndMonth(endMonthStr);
 
         setBudgetStartMonth(startMonth);
-        setBudgetEndMonth(endMonth);
+        setBudgetEndMonth(endMonthStr);
 
         // Get company name from user's auth data
         const companyName =
@@ -966,9 +1012,9 @@ const Dashboard = () => {
         const budgetResponse = await getFilteredBudgetData(
           addSearchToFilters({
             ...(companyName && { company: companyName }),
-            year: parseInt(selectedYear),
+            ...(selectedYear && { year: parseInt(selectedYear) }),
             start_month: startMonth,
-            end_month: endMonth,
+            end_month: endMonthStr,
             type: budgetType,
           } as any)
         );
@@ -1527,24 +1573,49 @@ const Dashboard = () => {
       setIsLoadingEnquiryConversion(true);
       setIsLoadingCallEntry(true);
 
-      const currentYear = dayjs().year().toString();
-      const startMonth = `${currentYear}-04`;
-      const currentMonth = dayjs().month() + 1;
-      const prevMonth = currentMonth - 1;
-      const endMonth =
-        prevMonth > 0
-          ? `${currentYear}-${String(prevMonth).padStart(2, "0")}`
-          : `${parseInt(currentYear) - 1}-12`;
+      // Calculate budget month range using end month logic
+      const today = dayjs();
+      const currentYear = today.year();
+      const currentMonth = today.month() + 1; // dayjs month is 0-indexed, so +1
+      let endMonth: number;
+      let endYear: number;
+
+      if (currentMonth === 1) {
+        // If current month is January, previous month is December of previous year
+        endMonth = 12;
+        endYear = currentYear - 1;
+      } else {
+        // Otherwise, previous month is current month - 1 of current year
+        endMonth = currentMonth - 1;
+        endYear = currentYear;
+      }
+
+      const endMonthStr = `${endYear}-${String(endMonth).padStart(2, "0")}`;
+
+      // Calculate start month based on end month
+      // If end month is Jan-Mar, start year = end year - 1
+      // If end month is Apr-Dec, start year = end year
+      const startMonth = calculateStartMonthFromEndMonth(endMonthStr);
 
       setBudgetStartMonth(startMonth);
-      setBudgetEndMonth(endMonth);
+      setBudgetEndMonth(endMonthStr);
 
       const budgetPayload = {
         start_month: startMonth,
-        end_month: endMonth,
+        end_month: endMonthStr,
         type: "salesperson",
       };
       console.log("🔥 Initial Budget Payload:", budgetPayload);
+      console.log(
+        "🔥 Debug - currentYear:",
+        currentYear,
+        "currentMonth:",
+        currentMonth,
+        "endYear:",
+        endYear,
+        "endMonth:",
+        endMonth
+      );
 
       // Get company name from user's auth data
       const companyName =
@@ -6842,13 +6913,18 @@ const Dashboard = () => {
     ]
   );
 
-  const yearOptions = Array.from({ length: 10 }, (_, i) => {
-    const year = new Date().getFullYear() - i;
-    return { value: year.toString(), label: year.toString() };
-  });
+  // Dynamic year options for financial year dropdown
+  const yearOptions = getFinancialYearOptions();
 
   const getFromMonthOptions = (year: string | null) => {
-    const selectedYear = year || dayjs().year().toString();
+    // Use year from budgetStartMonth if available, otherwise use selectedYear or current year
+    let selectedYearValue: string;
+    if (budgetStartMonth) {
+      selectedYearValue = budgetStartMonth.split("-")[0];
+    } else {
+      selectedYearValue = year || getCurrentFinancialYearStart();
+    }
+
     const months = [
       "January",
       "February",
@@ -6867,9 +6943,9 @@ const Dashboard = () => {
     const options: { value: string; label: string }[] = [];
 
     // Start from April (index 3)
-    for (let i = 3; i < 12; i++) {
+    for (let i = 0; i < 12; i++) {
       const monthNumber = String(i + 1).padStart(2, "0");
-      const monthValue = `${selectedYear}-${monthNumber}`;
+      const monthValue = `${selectedYearValue}-${monthNumber}`;
 
       options.push({
         value: monthValue,
@@ -6881,9 +6957,27 @@ const Dashboard = () => {
   };
 
   const getToMonthOptions = (year: string | null) => {
-    const selectedYear = year || dayjs().year().toString();
-    const currentYear = dayjs().year().toString();
+    // Use year from budgetEndMonth if available, otherwise use selectedYear or current financial year start
+    let selectedYearValue: string;
+    if (budgetEndMonth) {
+      selectedYearValue = budgetEndMonth.split("-")[0];
+    } else {
+      selectedYearValue = year || getCurrentFinancialYearStart();
+    }
+
+    const currentYear = dayjs().year();
     const currentMonth = dayjs().month() + 1;
+
+    // Calculate previous month (end_month should be previous month)
+    let maxMonth: number;
+    let maxYear: number;
+    if (currentMonth === 1) {
+      maxMonth = 12;
+      maxYear = currentYear - 1;
+    } else {
+      maxMonth = currentMonth - 1;
+      maxYear = currentYear;
+    }
 
     const months = [
       "January",
@@ -6901,34 +6995,26 @@ const Dashboard = () => {
     ];
 
     const options: { value: string; label: string }[] = [];
+    const selectedYearNum = parseInt(selectedYearValue);
 
-    // Get the start month from budgetStartMonth
-    const startMonthIndex = budgetStartMonth
-      ? parseInt(budgetStartMonth.split("-")[1]) - 1
-      : 3; // Default to April (index 3)
-
-    months.forEach((month, index) => {
+    // Show all months from January to December, but cap at previous month of current date
+    for (let index = 0; index < 12; index++) {
       const monthNumber = String(index + 1).padStart(2, "0");
-      const monthValue = `${selectedYear}-${monthNumber}`;
+      const monthValue = `${selectedYearNum}-${monthNumber}`;
 
-      // Only show months from the selected start month onwards
-      if (index < startMonthIndex) {
-        return;
-      }
-
-      if (selectedYear === currentYear && index + 1 >= currentMonth) {
-        return;
-      }
-
-      if (parseInt(selectedYear) > parseInt(currentYear)) {
-        return;
+      // Check if this month exceeds the max allowed (previous month)
+      if (
+        selectedYearNum > maxYear ||
+        (selectedYearNum === maxYear && index + 1 > maxMonth)
+      ) {
+        break;
       }
 
       options.push({
         value: monthValue,
-        label: `${month}`,
+        label: months[index],
       });
-    });
+    }
 
     return options;
   };
@@ -7308,6 +7394,7 @@ const Dashboard = () => {
                 budgetEndMonth={budgetEndMonth}
                 budgetType={budgetType}
                 selectedYear={selectedYear}
+                yearOptions={yearOptions}
                 fromMonthOptions={fromMonthOptions}
                 toMonthOptions={toMonthOptions}
                 setBudgetDrillLevel={setBudgetDrillLevel}

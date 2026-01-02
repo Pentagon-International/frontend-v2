@@ -940,10 +940,8 @@ export const getFilteredBudgetData = async (
     // Add start_month and end_month to payload
     if (filters.start_month) payload.start_month = filters.start_month;
     if (filters.end_month) {
-      // Convert end_month to previous month for API call
-      const endMonthDate = dayjs(filters.end_month);
-      const previousMonth = endMonthDate.format("YYYY-MM");
-      payload.end_month = previousMonth;
+      // Use end_month as-is (already in YYYY-MM format)
+      payload.end_month = filters.end_month;
     }
     // Add search parameter
     if (filters.search) payload.search = filters.search;
@@ -995,6 +993,174 @@ export const calculateBudgetAggregatedData = (
     totalActualBudget,
     totalSalesBudget,
   };
+};
+
+/**
+ * Calculate financial year date range for budget
+ * Financial year: April (04) of a year to March of next year
+ * start_month: Always April (04) of the financial year start year
+ * end_month: Previous month (current month - 1)
+ * 
+ * Example: If today is 01-01-2026 (January 2026)
+ * - Financial year: April 2025 to March 2026
+ * - start_month: 2025-04
+ * - end_month: 2025-12 (December 2025, previous month)
+ */
+export const calculateFinancialYearBudgetRange = (): {
+  start_month: string;
+  end_month: string;
+} => {
+  const today = dayjs();
+  const currentMonth = today.month() + 1; // dayjs month is 0-indexed, so +1
+  const currentYear = today.year();
+
+  let financialYearStartYear: number;
+  
+  // Determine financial year start year
+  // If current month is Jan-Mar (1-3), financial year started in previous year
+  // If current month is Apr-Dec (4-12), financial year started in current year
+  if (currentMonth >= 1 && currentMonth <= 3) {
+    // Jan-Mar: Financial year started in previous year
+    financialYearStartYear = currentYear - 1;
+  } else {
+    // Apr-Dec: Financial year started in current year
+    financialYearStartYear = currentYear;
+  }
+
+  // start_month is always April (04) of the financial year start year
+  const start_month = `${financialYearStartYear}-04`;
+
+  // end_month is previous month (current month - 1)
+  let endMonth: number;
+  let endYear: number;
+
+  if (currentMonth === 1) {
+    // If current month is January, previous month is December of previous year
+    endMonth = 12;
+    endYear = currentYear - 1;
+  } else {
+    // Otherwise, previous month is current month - 1 of current year
+    endMonth = currentMonth - 1;
+    endYear = currentYear;
+  }
+
+  const end_month = `${endYear}-${String(endMonth).padStart(2, "0")}`;
+
+  return { start_month, end_month };
+};
+
+/**
+ * Calculate financial year start month based on end month
+ * If end month is Jan, Feb, or March, then start year = end year - 1
+ * If end month is April-December, then start year = end year (same year)
+ * 
+ * @param endMonth - End month in format "YYYY-MM"
+ * @returns Start month in format "YYYY-04" (always April)
+ * 
+ * Example: 
+ * - If endMonth is "2026-01" (January 2026), start_month = "2025-04"
+ * - If endMonth is "2026-04" (April 2026), start_month = "2026-04"
+ */
+export const calculateStartMonthFromEndMonth = (
+  endMonth: string
+): string => {
+  const [endYearStr, endMonthStr] = endMonth.split("-");
+  const endYear = parseInt(endYearStr);
+  const endMonthNum = parseInt(endMonthStr);
+
+  let startYear: number;
+
+  // If end month is Jan, Feb, or March (01, 02, 03), start year = end year - 1
+  // If end month is April-December (04-12), start year = end year (same year)
+  if (endMonthNum >= 1 && endMonthNum <= 3) {
+    startYear = endYear - 1;
+  } else {
+    startYear = endYear;
+  }
+
+  // start_month is always April (04) of the calculated start year
+  return `${startYear}-04`;
+};
+
+/**
+ * Calculate financial year date range for a specific financial year start year
+ * This is used when user selects a year from the dropdown
+ * 
+ * @param financialYearStartYear - The year when the financial year starts (April)
+ * @returns Object with start_month and end_month
+ * 
+ * Example: If financialYearStartYear is 2025
+ * - start_month: 2025-04
+ * - end_month: Based on current date (previous month), but capped at March 2026
+ */
+export const calculateFinancialYearBudgetRangeForYear = (
+  financialYearStartYear: number
+): {
+  start_month: string;
+  end_month: string;
+} => {
+  const today = dayjs();
+  const currentMonth = today.month() + 1;
+  const currentYear = today.year();
+
+  // start_month is always April (04) of the financial year start year
+  const start_month = `${financialYearStartYear}-04`;
+
+  // end_month is previous month (current month - 1), but should not exceed March of next year
+  let endMonth: number;
+  let endYear: number;
+
+  if (currentMonth === 1) {
+    // If current month is January, previous month is December of previous year
+    endMonth = 12;
+    endYear = currentYear - 1;
+  } else {
+    // Otherwise, previous month is current month - 1 of current year
+    endMonth = currentMonth - 1;
+    endYear = currentYear;
+  }
+
+  // Cap end_month to March of the financial year end (next year after start year)
+  const financialYearEndYear = financialYearStartYear + 1;
+  if (endYear > financialYearEndYear || (endYear === financialYearEndYear && endMonth > 3)) {
+    // If end_month exceeds March of financial year end, cap it to March
+    endMonth = 3;
+    endYear = financialYearEndYear;
+  }
+
+  const end_month = `${endYear}-${String(endMonth).padStart(2, "0")}`;
+
+  return { start_month, end_month };
+};
+
+/**
+ * Get dynamic year options for financial year dropdown
+ * Returns financial year start years (current and past years)
+ */
+export const getFinancialYearOptions = (): { value: string; label: string }[] => {
+  const today = dayjs();
+  const currentMonth = today.month() + 1;
+  const currentYear = today.year();
+
+  // Determine current financial year start year
+  let currentFinancialYearStart: number;
+  if (currentMonth >= 1 && currentMonth <= 3) {
+    currentFinancialYearStart = currentYear - 1;
+  } else {
+    currentFinancialYearStart = currentYear;
+  }
+
+  // Generate options: current financial year and 5 years back
+  const options: { value: string; label: string }[] = [];
+  for (let i = 0; i <= 5; i++) {
+    const year = currentFinancialYearStart - i;
+    options.push({
+      value: year.toString(),
+      label: year.toString(),
+    });
+  }
+
+  return options;
 };
 
 // Customer Not Visited interfaces
