@@ -13,13 +13,11 @@ import {
   Radio,
   Select,
   Stack,
-  Stepper,
   Text,
   TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
-  IconArrowLeft,
   IconCalendar,
   IconCheck,
   IconChevronLeft,
@@ -30,6 +28,9 @@ import {
   IconTrash,
   IconUpload,
   IconX,
+  IconUser,
+  IconTruckDelivery,
+  IconCircleCheck,
 } from "@tabler/icons-react";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -2824,27 +2825,130 @@ function EnquiryCreate() {
       <Box
       // py={"2%"}
       // w={"80%"}
+      style={{ backgroundColor: "#F8F8F8" ,}}
       >
-        <Box p="md" maw={1200} mx="auto">
+        <Box p="xs" maw={1200} mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
           {/* Header */}
-          <Text size="xl" fw={600} c="#105476" mb="lg">
+
+
+          <Flex gap="lg" align="flex-start" style={{ minHeight: "calc(100vh - 100px)" }}>
+            {/* Vertical Stepper Sidebar */}
+            <Box style={{ minWidth: 240, height: "calc(100vh - 100px)", alignSelf: "stretch" , backgroundColor: "#FFFFFF", position: "sticky", top: 0 }}>
+              <Stack gap="sm" style={{ height: "100%" ,padding: "10px" }}>
+                <Box
+                  onClick={() => setActive(0)}
+                  style={{
+                    cursor: "pointer",
+                    padding: "4px 0",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  <Box>
+                    <Text size="md" fw={600} c="#105476" mb="xs" style={{ fontFamily: "Inter", fontStyle: "medium" , fontSize: "16px", color: "#105476" }}>
             {enq?.actionType === "edit" || enq?.actionType === "editQuotation"
               ? "Edit Enquiry"
               : "Create New Enquiry"}
           </Text>
+                  </Box>
+                  <Flex align="center" gap="sm">
+                    
+                    <Box
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: "50%",
+                        backgroundColor: active > 0 ? "#EAF9F1" : "#E6F2F8",
+                        border: active > 0 ? "none" : active === 0 ? "2px solid #105476" : "2px solid #d1d5db",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "16px",
+                        fontWeight: 600,
+                        color: active > 0 ? "white" : active === 0 ? "#105476" : "#9ca3af",
+                        transition: "all 0.2s",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {active > 0 ? 
+                      <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
+                      // <IconCheck size={20} /> 
+                      : <IconUser size={20} color="#105476" fill="#E6F2F8" />}
+                    </Box>
+                    <Text size="sm" fw={400} c="#105476" style={{ lineHeight: 1.3 , fontFamily: "Inter", fontStyle: "regular" , fontSize: "13px", color: "#105476" }}>
+                      Customer Details
+                    </Text>
+                  </Flex>
+                </Box>
 
-          <Stepper
-            color="#105476"
-            active={active}
-            onStepClick={setActive}
-            orientation="horizontal"
-            allowNextStepsSelect={false}
-          >
-            {/* Step 1 */}
-            <Stepper.Step label="1" description="Customer Details">
-              <Box mt="md">
-                <Grid>
-                  <Grid.Col span={4}>
+                {/* Vertical dotted line connector */}
+                <Box
+                  style={{
+                    height: "24px",
+                    width: "40px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginLeft: "0",
+                    position: "relative",
+                  }}
+                >
+                  <Box
+                    style={{
+                      width: "2px",
+                      height: "100%",
+                      borderLeft: "2px dotted #d1d5db",
+                      // marginLeft: "19px", // Center it with the icon (40px / 2 = 20px, minus 1px for border)
+                    }}
+                  />
+                </Box>
+
+                <Box
+                  onClick={() => {
+                    if (active >= 1) setActive(1);
+                  }}
+                  style={{
+                    cursor: active >= 1 ? "pointer" : "not-allowed",
+                    padding: "4px 0",
+                    transition: "all 0.2s",
+                    opacity: active >= 1 ? 1 : 0.6,
+                  }}
+                >
+                  <Flex align="center" gap="sm">
+                    <Box
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: "50%",
+                        backgroundColor: active > 1 ? "#EAF9F1" : "#fff",
+                        border: active > 1 ? "none" : active === 1 ? "2px solid #105476" : "2px solid #d1d5db",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "16px",
+                        fontWeight: 600,
+                        color: active > 1 ? "white" : active === 1 ? "#105476" : "#9ca3af",
+                        transition: "all 0.2s",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {active > 1 ? <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
+: <IconTruckDelivery size={20} color="#105476" fill="#E6F2F8" />}
+                    </Box>
+                    <Text size="sm" fw={400} c="#374151" style={{ lineHeight: 1.3 , fontFamily: "Inter", fontStyle: "regular" , fontSize: "13px", color: "#105476" }}>
+                      Service & Cargo Details
+                    </Text>
+                  </Flex>
+                </Box>
+              </Stack>
+            </Box>
+
+            {/* Main Content Area */}
+            <Box style={{ flex: 1, backgroundColor: "#ffffff", borderRadius: "8px", display: "flex", flexDirection: "column", height: "calc(100vh - 100px)", overflow: "hidden" }}>
+              {active === 0 && (
+                <>
+                <Box style={{ flex: 1, overflowY: "auto", paddingBottom: "16px", backgroundColor: "#F8F8F8" }}>
+                  <Grid style={{ backgroundColor: "#FFFFFF", padding: "10px" }}>
+                    <Grid.Col span={6}>
                     <Flex gap="sm" align="flex-end">
                       <div
                         style={{
@@ -3860,7 +3964,7 @@ function EnquiryCreate() {
                     </Drawer>
                   </Grid.Col>
 
-                  <Grid.Col span={4}>
+                  <Grid.Col span={6}>
                     <Box
                       // maw={300}
                       mx="auto"
@@ -3895,6 +3999,20 @@ function EnquiryCreate() {
                         nextIcon={<IconChevronRight size={16} />}
                         previousIcon={<IconChevronLeft size={16} />}
                         styles={{
+                          input: {
+                            height: "36px",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
                           day: {
                             width: "2.25rem",
                             height: "2.25rem",
@@ -3922,9 +4040,24 @@ function EnquiryCreate() {
                       />
                     </Box>
                   </Grid.Col>
-                  <Grid.Col span={4}>
+                  <Grid.Col span={6}>
                     <Dropdown
-                      label="Sales person"
+                      label="Sales Person"
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },  
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
                       key={customerForm.key("sales_person")}
                       withAsterisk
                       placeholder="Select Salesperson"
@@ -3962,9 +4095,24 @@ function EnquiryCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={4}>
+                  <Grid.Col span={6}>
                     <TextInput
                       label="Sales Co-ordinator"
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
                       key={customerForm.key("sales_coordinator")}
                       value={customerForm.values.sales_coordinator}
                       onChange={(e) => {
@@ -3977,7 +4125,7 @@ function EnquiryCreate() {
                       error={customerForm.errors.sales_coordinator}
                     />
                   </Grid.Col>
-                  <Grid.Col span={4}>
+                  <Grid.Col span={6}>
                     <TextInput
                       label="Customer Service"
                       key={customerForm.key("customer_services")}
@@ -3990,18 +4138,50 @@ function EnquiryCreate() {
                         );
                       }}
                       error={customerForm.errors.customer_services}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={4}>
+                  <Grid.Col span={6}>
                     <TextInput
                       label="Reference No"
                       key={customerForm.key("reference_no")}
                       placeholder="Enter reference number"
                       maxLength={100}
                       {...customerForm.getInputProps("reference_no")}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+
                     />
                   </Grid.Col>
-                  <Grid.Col span={4}>
+                  {/* Customer Address field is hidden in the new design */}
+                  {/* <Grid.Col span={6}>
                     <TextInput
                       label="Customer Address"
                       key={customerForm.key("customer_address")}
@@ -4016,111 +4196,144 @@ function EnquiryCreate() {
                       }}
                       error={customerForm.errors.customer_address}
                     />
-                  </Grid.Col>
+                  </Grid.Col> */}
                 </Grid>
 
-                <Group justify="space-between" mt="xl">
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    leftSection={<IconArrowLeft size={16} />}
-                    onClick={() => {
-                      // Restore filter state if preserved
-                      const preserveFilters = (location.state as any)
-                        ?.preserveFilters;
-                      // Check if we came from enquiry or quotation
-                      const fromEnquiry = (location.state as any)?.fromEnquiry;
-                      const actionType = (location.state as any)?.actionType;
-
-                      // Navigate to the correct list based on source
-                      // If came from call entry (actionType === "createEnquiry"), go back to call entry list
-                      if (actionType === "createEnquiry") {
-                        // Came from call entry list, go back to call entry list
-                        if (preserveFilters) {
-                          navigate("/call-entry", {
-                            state: {
-                              restoreFilters: preserveFilters,
-                              refreshData: true,
-                            },
-                          });
-                        } else {
-                          navigate("/call-entry", {
-                            state: { refreshData: true },
-                          });
-                        }
-                      } else if (fromEnquiry || actionType === "edit") {
-                        // Came from enquiry list or editing enquiry, go back to enquiry list
-                        if (preserveFilters) {
-                          navigate("/enquiry", {
-                            state: {
-                              restoreFilters: preserveFilters,
-                              refreshData: true,
-                            },
-                          });
-                        } else {
-                          navigate("/enquiry", {
-                            state: { refreshData: true },
-                          });
-                        }
-                      } else {
-                        // Default: navigate to quotation list (from quotation or new)
-                        if (preserveFilters) {
-                          navigate("/quotation", {
-                            state: {
-                              restoreFilters: preserveFilters,
-                              refreshData: true,
-                            },
-                          });
-                        } else {
-                          navigate("/quotation", {
-                            state: { refreshData: true },
-                          });
-                        }
-                      }
-                    }}
-                  >
-                    Back to List
-                  </Button>
-                  <Button
-                    onClick={() =>
-                      // setActive(1)
-                      handleNext()
-                    }
-                    color="#105476"
-                  >
-                    Next
-                  </Button>
-                </Group>
               </Box>
-            </Stepper.Step>
+                
+                {/* Buttons for Step 0 */}
+                <Box style={{ borderTop: "1px solid #e9ecef", padding: "20px 32px", backgroundColor: "#ffffff" }}>
+                  <Group justify="space-between">
+                    <Group gap="sm">
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
+                        onClick={() => {
+                          // Restore filter state if preserved
+                          const preserveFilters = (location.state as any)
+                            ?.preserveFilters;
+                          // Check if we came from enquiry or quotation
+                          const fromEnquiry = (location.state as any)?.fromEnquiry;
+                          const actionType = (location.state as any)?.actionType;
 
-            {/* Step 2 - Merged Service Details and Cargo Details */}
-            <Stepper.Step label="2" description="Service & Cargo Details">
-              <Box mt="md">
-                {/* Service Details Section */}
+                          // Navigate to the correct list based on source
+                          // If came from call entry (actionType === "createEnquiry"), go back to call entry list
+                          if (actionType === "createEnquiry") {
+                            // Came from call entry list, go back to call entry list
+                            if (preserveFilters) {
+                              navigate("/call-entry", {
+                                state: {
+                                  restoreFilters: preserveFilters,
+                                  refreshData: true,
+                                },
+                              });
+                            } else {
+                              navigate("/call-entry", {
+                                state: { refreshData: true },
+                              });
+                            }
+                          } else if (fromEnquiry || actionType === "edit") {
+                            // Came from enquiry list or editing enquiry, go back to enquiry list
+                            if (preserveFilters) {
+                              navigate("/enquiry", {
+                                state: {
+                                  restoreFilters: preserveFilters,
+                                  refreshData: true,
+                                },
+                              });
+                            } else {
+                              navigate("/enquiry", {
+                                state: { refreshData: true },
+                              });
+                            }
+                          } else {
+                            // Default: navigate to quotation list (from quotation or new)
+                            if (preserveFilters) {
+                              navigate("/quotation", {
+                                state: {
+                                  restoreFilters: preserveFilters,
+                                  refreshData: true,
+                                },
+                              });
+                            } else {
+                              navigate("/quotation", {
+                                state: { refreshData: true },
+                              });
+                            }
+                          }
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
+                        onClick={() => {
+                          customerForm.reset();
+                          setCustomerDisplayName(null);
+                          setSelectedCustomerName(null);
+                        }}
+                      >
+                        Clear all
+                      </Button>
+                    </Group>
+                    <Group gap="sm">
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        disabled
+                        styles={{ root: { borderColor: "#e0e0e0", color: "#999", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        onClick={() => handleNext()}
+                        size="sm"
+                        style={{ backgroundColor: "#105476", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" }}
+                      >
+                        Next
+                      </Button>
+                    </Group>
+                  </Group>
+                </Box>
 
-                {/* Dynamic Service Details */}
-                <Stack gap="xl">
+              </>
+            )}
+
+            {active === 1 && (
+              <>
+                <Box style={{ flex: 1, overflowY: "auto", padding: "32px", paddingBottom: "16px", backgroundColor: "#F8F8F8" }}>
+                  {/* Service Details Section */}
+
+                  {/* Dynamic Service Details */}
+                  <Stack gap="lg" style={{ backgroundColor: "#F8F8F8" }}>
                   {serviceForm.values.service_details.map(
                     (serviceDetail, serviceIndex) => (
-                      <Box key={(serviceDetail as any).id || serviceIndex}>
-                        <Flex justify="space-between" align="center" mb="md">
-                          <Text
-                            size="md"
-                            fw={600}
-                            c="#105476"
-                            style={{
-                              paddingBottom: "4px",
-                            }}
-                          >
-                            Service Detail
+                      <Box
+                        key={(serviceDetail as any).id || serviceIndex}
+                        style={{
+                          border: "1px solid #e9ecef",
+                          borderRadius: "8px",
+                          padding: "24px",
+                          backgroundColor: "#FFFFFF",
+                        }}
+                      >
+                        <Flex justify="space-between" align="center" mb="lg">
+                          <Text size="md" fw={600} c="#333" style={{ fontFamily: "Inter", fontStyle: "medium" , fontSize: "16px", color: "#22252B" }}>
+                            {`Service ${serviceIndex + 1}`}
                           </Text>
                           {serviceForm.values.service_details.length > 1 && (
                             <Button
-                              variant="light"
+                              variant="subtle"
                               color="red"
                               size="xs"
-                              leftSection={<IconTrash size={14} />}
+                              p={0}
+                              styles={{ root: { minWidth: "auto", height: "auto" } }}
                               onClick={() => {
                                 serviceForm.removeListItem(
                                   "service_details",
@@ -4128,15 +4341,31 @@ function EnquiryCreate() {
                                 );
                               }}
                             >
-                              Remove
+                              <IconTrash size={20} color="#dc3545" />
                             </Button>
                           )}
                         </Flex>
 
                         <Grid>
-                          <Grid.Col span={3}>
+                          <Grid.Col span={6}>
                             <Dropdown
                               label="Service"
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+
                               searchable
                               withAsterisk
                               placeholder="Select Service"
@@ -4251,10 +4480,26 @@ function EnquiryCreate() {
                               }
                             />
                           </Grid.Col>
-                          <Grid.Col span={3}>
+                          <Grid.Col span={6}>
                             {serviceForm.values.service_details[serviceIndex]?.service === "OTHERS" ? (
                               <Dropdown
                                 label="Service Name"
+                                styles={{
+                                  input: {
+                                    fontSize: "13px",
+                                    fontFamily: "Inter",
+                                    height: "36px",
+                                  },
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }}
+
                                 placeholder="Select Service Name"
                                 searchable
                                 withAsterisk
@@ -4382,6 +4627,29 @@ function EnquiryCreate() {
                             ) : (
                               <Dropdown
                                 label="Trade"
+                                styles={{
+                                  input: {
+                                    fontSize: "13px",
+                                    fontFamily: "Inter",
+                                    height: "36px",
+                                  },
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                  root: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }}
                                 placeholder="Select Trade"
                                 searchable
                                 withAsterisk
@@ -4417,8 +4685,9 @@ function EnquiryCreate() {
                               />
                             )}
                           </Grid.Col>
-                          <Grid.Col span={3}>
+                          <Grid.Col span={6}>
                             <SearchableSelect
+
                               label="Origin"
                               required
                               apiEndpoint={URL.portMaster}
@@ -4440,16 +4709,6 @@ function EnquiryCreate() {
                                       serviceIndex
                                     ]?.origin_code
                               }
-                              onClear={() => {
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.origin_code`,
-                                  ""
-                                );
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.origin_name`,
-                                  ""
-                                );
-                              }}
                               onChange={(value, selectedData) => {
                                 serviceForm.setFieldValue(
                                   `service_details.${serviceIndex}.origin_code`,
@@ -4475,10 +4734,19 @@ function EnquiryCreate() {
                               minSearchLength={3}
                             />
                           </Grid.Col>
-                          <Grid.Col span={3}>
+                          <Grid.Col span={6}>
                             <Radio.Group
-                              ml={35}
                               label="Pickup"
+                              styles={{
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
                               key={serviceForm.key(
                                 `service_details.${serviceIndex}.pickup`
                               )}
@@ -4487,13 +4755,31 @@ function EnquiryCreate() {
                               )}
                             >
                               <Group mt={10}>
-                                <Radio value="true" label="Yes" />
-                                <Radio value="false" label="No" />
+                                <Radio value="true" label="Yes" styles={{
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }} />
+                                <Radio value="false" label="No" styles={{
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }} />
                               </Group>
                             </Radio.Group>
                           </Grid.Col>
 
-                          <Grid.Col span={3}>
+                          <Grid.Col span={6}>
                             <SearchableSelect
                               label="Destination"
                               required
@@ -4516,16 +4802,6 @@ function EnquiryCreate() {
                                       serviceIndex
                                     ]?.destination_code
                               }
-                              onClear={() => {
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.destination_code`,
-                                  ""
-                                );
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.destination_name`,
-                                  ""
-                                );
-                              }}
                               onChange={(value, selectedData) => {
                                 serviceForm.setFieldValue(
                                   `service_details.${serviceIndex}.destination_code`,
@@ -4553,9 +4829,24 @@ function EnquiryCreate() {
                             />
                           </Grid.Col>
 
-                          <Grid.Col span={3}>
+                          <Grid.Col span={6}>
                             <Dropdown
                               placeholder="Select Shipment Terms"
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
                               searchable
                               withAsterisk
                               key={serviceForm.key(
@@ -4568,11 +4859,26 @@ function EnquiryCreate() {
                               )}
                             />
                           </Grid.Col>
-                          <Grid.Col span={3}>
+                          <Grid.Col span={6}>
                             <Dropdown
                               key={serviceForm.key(
                                 `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
                               )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
                               searchable
                               label="Hazardous Cargo"
                               withAsterisk
@@ -4583,29 +4889,86 @@ function EnquiryCreate() {
                               )}
                             />
                           </Grid.Col>
-                          <Grid.Col span={3}>
-                            <Group ml={35}>
-                              <Radio.Group
-                                label="Delivery"
-                                key={serviceForm.key(
-                                  `service_details.${serviceIndex}.delivery`
-                                )}
-                                {...serviceForm.getInputProps(
-                                  `service_details.${serviceIndex}.delivery`
-                                )}
-                              >
-                                <Group mt={10}>
-                                  <Radio value="true" label="Yes" />
-                                  <Radio value="false" label="No" />
-                                </Group>
-                              </Radio.Group>
-                            </Group>
+                          <Grid.Col span={6}>
+                            <Radio.Group
+                              label="Delivery"
+                              styles={{
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                              key={serviceForm.key(
+                                `service_details.${serviceIndex}.delivery`
+                              )}
+                              value={
+                                serviceForm.values.service_details[serviceIndex]
+                                  ?.delivery
+                              }
+                              onChange={(value) => {
+                                serviceForm.setFieldValue(
+                                  `service_details.${serviceIndex}.delivery`,
+                                  value
+                                );
+
+                                // Clear delivery_location if "false" is selected
+                                if (value === "false") {
+                                  serviceForm.setFieldValue(
+                                    `service_details.${serviceIndex}.delivery_location`,
+                                    ""
+                                  );
+                                }
+                              }}
+                            >
+                              <Group mt={10}>
+                                <Radio value="true" label="Yes" styles={{
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }} />
+                                <Radio value="false" label="No" styles={{
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }} />
+                              </Group>
+                            </Radio.Group>
                           </Grid.Col>
                           {serviceForm.values.service_details[serviceIndex]
                             ?.pickup === "true" && (
                             <Grid.Col span={6}>
                               <TextInput
                                 label="Pickup Location"
+                                styles={{
+                                  input: {
+                                    fontSize: "13px",
+                                    fontFamily: "Inter",
+                                    height: "36px",
+                                  },
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }}
+
                                 key={serviceForm.key(
                                   `service_details.${serviceIndex}.pickup_location`
                                 )}
@@ -4639,6 +5002,22 @@ function EnquiryCreate() {
                                   `service_details.${serviceIndex}.delivery_location`
                                 )}
                                 label="Delivery Location"
+                                styles={{
+                                  input: {
+                                    fontSize: "13px",
+                                    fontFamily: "Inter",
+                                    height: "36px",
+                                  },
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }}
+
                                 value={
                                   serviceForm.values.service_details[
                                     serviceIndex
@@ -4661,9 +5040,24 @@ function EnquiryCreate() {
                               />
                             </Grid.Col>
                           )}
-                          <Grid.Col span={3}>
+                          <Grid.Col span={6}>
                             <TextInput
                               label="Service Remark"
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
                               key={serviceForm.key(
                                 `service_details.${serviceIndex}.service_remark`
                               )}
@@ -4690,6 +5084,21 @@ function EnquiryCreate() {
                           <Grid.Col span={3}>
                             <TextInput
                               label="Commodity"
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
                               key={serviceForm.key(
                                 `service_details.${serviceIndex}.commodity`
                               )}
@@ -4715,6 +5124,21 @@ function EnquiryCreate() {
                           </Grid.Col>
                           <Grid.Col span={3}>
                             <Dropdown
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
                               key={serviceForm.key(
                                 `service_details.${serviceIndex}.cargo_details.0.stackable`
                               )}
@@ -4765,6 +5189,10 @@ function EnquiryCreate() {
                                 c="#105476"
                                 style={{
                                   paddingBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "semibold",
+                                  fontSize: "16px",
+                                  color: "#105476",
                                 }}
                               >
                                 Cargo Details
@@ -4919,6 +5347,15 @@ function EnquiryCreate() {
                                     variant="light"
                                     color="#105476"
                                     leftSection={<IconPlus size={16} />}
+                                    styles={{
+                                      root: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#105476",
+                                        fontFamily: "Inter",
+                                        fontStyle: "semibold",
+                                      },
+                                    }}
                                     onClick={() => {
                                       const unit =
                                         serviceForm.values.service_details[
@@ -5030,11 +5467,36 @@ function EnquiryCreate() {
                                       )
                                         ? {
                                             input: {
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
                                               backgroundColor: "#f8f9fa",
                                               cursor: "not-allowed",
                                             },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
                                           }
-                                        : undefined
+                                        : {
+                                            input: {
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }
                                     }
                                     {...serviceForm.getInputProps(
                                       `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
@@ -5045,7 +5507,22 @@ function EnquiryCreate() {
                                 <Grid.Col span={3}>
                                   <NumberInput
                                     hideControls
-                                    key={serviceForm.key(
+                                    styles={{
+                                      input: {
+                                        cursor: "not-allowed",
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
+                                      },
+                                    }}     key={serviceForm.key(
                                       `service_details.${serviceIndex}.cargo_details.0.gross_weight`
                                     )}
                                     label="Gross Weight (kg)"
@@ -5080,9 +5557,34 @@ function EnquiryCreate() {
                                             input: {
                                               backgroundColor: "#f8f9fa",
                                               cursor: "not-allowed",
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
                                             },
                                           }
-                                        : undefined
+                                        : {
+                                            input: {
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }
                                     }
                                     {...serviceForm.getInputProps(
                                       `service_details.${serviceIndex}.cargo_details.0.volume_weight`
@@ -5101,16 +5603,30 @@ function EnquiryCreate() {
                                     readOnly
                                     styles={{
                                       input: {
-                                        backgroundColor: "#f8f9fa",
                                         cursor: "not-allowed",
                                         color: "#495057",
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
                                       },
                                     }}
                                     {...serviceForm.getInputProps(
                                       `service_details.${serviceIndex}.cargo_details.0.chargable_weight`
                                     )}
                                   />
-                                  <Text size="xs" c="dimmed" mt="xs">
+                                  <Text size="xs" c="dimmed" mt="xs" style={{
+                                    fontSize: "13px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  }}>
                                     Max of Gross Weight and Volume Weight
                                   </Text>
                                 </Grid.Col>
@@ -5130,6 +5646,9 @@ function EnquiryCreate() {
                                           style={{
                                             fontWeight: 600,
                                             color: "#105476",
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
                                           }}
                                         >
                                           <Grid.Col span={1.5}>Pieces</Grid.Col>
@@ -5155,6 +5674,13 @@ function EnquiryCreate() {
                                               <Grid.Col span={1.5}>
                                                 <NumberInput
                                                   hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
                                                   value={row?.pieces ?? null}
                                                   onChange={(val) => {
                                                     const list = [
@@ -5211,6 +5737,13 @@ function EnquiryCreate() {
                                                 <NumberInput
                                                   hideControls
                                                   value={row?.length ?? null}
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
                                                   onChange={(val) => {
                                                     const list = [
                                                       ...((serviceForm.values
@@ -5265,6 +5798,13 @@ function EnquiryCreate() {
                                               <Grid.Col span={1.5}>
                                                 <NumberInput
                                                   hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
                                                   value={row?.width ?? null}
                                                   onChange={(val) => {
                                                     const list = [
@@ -5320,6 +5860,13 @@ function EnquiryCreate() {
                                               <Grid.Col span={1.5}>
                                                 <NumberInput
                                                   hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
                                                   value={row?.height ?? null}
                                                   onChange={(val) => {
                                                     const list = [
@@ -5375,6 +5922,13 @@ function EnquiryCreate() {
                                               <Grid.Col span={2}>
                                                 <NumberInput
                                                   hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
                                                   decimalScale={4}
                                                   value={row?.value ?? null}
                                                   readOnly
@@ -5389,6 +5943,13 @@ function EnquiryCreate() {
                                               <Grid.Col span={2.5}>
                                                 <NumberInput
                                                   hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
                                                   decimalScale={4}
                                                   value={
                                                     row?.vol_weight ?? null
@@ -5479,9 +6040,34 @@ function EnquiryCreate() {
                                             input: {
                                               backgroundColor: "#f8f9fa",
                                               cursor: "not-allowed",
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
                                             },
                                           }
-                                        : undefined
+                                        : {
+                                            input: {
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }
                                     }
                                     {...serviceForm.getInputProps(
                                       `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
@@ -5494,6 +6080,22 @@ function EnquiryCreate() {
                                     key={serviceForm.key(
                                       `service_details.${serviceIndex}.cargo_details.0.gross_weight`
                                     )}
+                                    styles={{
+                                      input: {
+                                        cursor: "not-allowed",
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
+                                      },
+                                    }}
                                     label="Gross Weight (kg)"
                                     min={1}
                                     withAsterisk
@@ -5526,9 +6128,34 @@ function EnquiryCreate() {
                                             input: {
                                               backgroundColor: "#f8f9fa",
                                               cursor: "not-allowed",
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
                                             },
                                           }
-                                        : undefined
+                                        : {
+                                            input: {
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }
                                     }
                                     {...serviceForm.getInputProps(
                                       `service_details.${serviceIndex}.cargo_details.0.volume`
@@ -5546,16 +6173,30 @@ function EnquiryCreate() {
                                     readOnly
                                     styles={{
                                       input: {
-                                        backgroundColor: "#f8f9fa",
                                         cursor: "not-allowed",
                                         color: "#495057",
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
                                       },
                                     }}
                                     {...serviceForm.getInputProps(
                                       `service_details.${serviceIndex}.cargo_details.0.chargable_volume`
                                     )}
                                   />
-                                  <Text size="xs" c="dimmed" mt="xs">
+                                  <Text size="xs" c="dimmed" mt="xs" style={{
+                                    fontSize: "13px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  }}>
                                     Max of (Gross Weight ÷ 1000) and Volume
                                   </Text>
                                 </Grid.Col>
@@ -5574,6 +6215,9 @@ function EnquiryCreate() {
                                           style={{
                                             fontWeight: 600,
                                             color: "#105476",
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
                                           }}
                                         >
                                           <Grid.Col span={1.5}>Pieces</Grid.Col>
@@ -5599,6 +6243,21 @@ function EnquiryCreate() {
                                               <Grid.Col span={1.5}>
                                                 <NumberInput
                                                   hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
+                                                    },
+                                                  }}
                                                   value={row?.pieces ?? null}
                                                   onChange={(val) => {
                                                     const list = [
@@ -5654,7 +6313,22 @@ function EnquiryCreate() {
                                               <Grid.Col span={1.5}>
                                                 <NumberInput
                                                   hideControls
-                                                  value={row?.length ?? null}
+                                                  value={row?.length ?? null} 
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
+                                                    },
+                                                  }}
                                                   onChange={(val) => {
                                                     const list = [
                                                       ...((serviceForm.values
@@ -5710,6 +6384,21 @@ function EnquiryCreate() {
                                                 <NumberInput
                                                   hideControls
                                                   value={row?.width ?? null}
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
+                                                    },
+                                                  }}
                                                   onChange={(val) => {
                                                     const list = [
                                                       ...((serviceForm.values
@@ -5765,6 +6454,21 @@ function EnquiryCreate() {
                                                 <NumberInput
                                                   hideControls
                                                   value={row?.height ?? null}
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
+                                                    },
+                                                  }}
                                                   onChange={(val) => {
                                                     const list = [
                                                       ...((serviceForm.values
@@ -5826,6 +6530,17 @@ function EnquiryCreate() {
                                                     input: {
                                                       backgroundColor:
                                                         "#f8f9fa",
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
                                                     },
                                                   }}
                                                 />
@@ -5842,6 +6557,17 @@ function EnquiryCreate() {
                                                     input: {
                                                       backgroundColor:
                                                         "#f8f9fa",
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
                                                     },
                                                   }}
                                                 />
@@ -5944,6 +6670,22 @@ function EnquiryCreate() {
                                             key={serviceForm.key(
                                               `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
                                             )}
+                                            styles={{
+                                              input: {
+                                                cursor: "not-allowed",
+                                                fontSize: "13px",
+                                                fontFamily: "Inter",
+                                                height: "36px",
+                                              },
+                                              label: {
+                                                fontSize: "13px",
+                                                fontWeight: 500,
+                                                color: "#424242",
+                                                marginBottom: "4px",
+                                                fontFamily: "Inter",
+                                                fontStyle: "medium",
+                                              },
+                                            }}
                                             label="Gross Weight (kg)"
                                             withAsterisk
                                             placeholder="Enter gross weight"
@@ -6019,31 +6761,34 @@ function EnquiryCreate() {
                           </>
                         )}
 
-                        {/* Add bottom spacing for service detail separation */}
-                        <Box
-                          style={{
-                            borderBottom: "1px solid #e0e0e0",
-                            marginTop: "16px",
-                            marginBottom: "8px",
-                          }}
-                        />
                       </Box>
                     )
                   )}
                 </Stack>
                 <Flex justify="end" align="center" mb="md" mt="md">
-                  {/* <Text size="md" fw={600} c="#105476">
-                    Service Details
-                  </Text> */}
                   <Button
-                    variant="light"
+                    variant="subtle"
                     color="#105476"
+                    size="sm"
                     leftSection={<IconPlus size={16} />}
+                    styles={{ 
+                      root: { 
+                        color: "#105476",
+                        fontWeight: 500,
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
                     onClick={() =>
                       serviceForm.insertListItem("service_details", {
                         id: "",
-                        // Date.now().toString() +
-                        // Math.random().toString(36).substr(2, 9),
                         service: "",
                         trade: "",
                         service_code: "",
@@ -6077,124 +6822,122 @@ function EnquiryCreate() {
                       })
                     }
                   >
-                    Add Service Detail
+                    Add Service
                   </Button>
                 </Flex>
+                </Box>
 
-                <Group justify="space-between" mt="xl">
-                  <Button
-                    variant="default"
-                    onClick={() => setActive((current) => current - 1)}
-                  >
-                    Back
-                  </Button>
+                {/* Buttons for Step 1 */}
+                <Box style={{ borderTop: "1px solid #e9ecef", padding: "20px 32px", backgroundColor: "#ffffff" }}>
+                  <Group justify="space-between">
+                    <Group gap="sm">
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
+                        onClick={() => {
+                          // Restore filter state if preserved
+                          const preserveFilters = (location.state as any)
+                            ?.preserveFilters;
+                          // Check if we came from enquiry or quotation
+                          const fromEnquiry = (location.state as any)?.fromEnquiry;
+                          const actionType = (location.state as any)?.actionType;
 
-                  <Group gap="md">
-                    <Button
-                      variant="outline"
-                      color="#105476"
-                      onClick={() => {
-                        // Initialize with one row if empty
-                        if (
-                          customerForm.values.supporting_documents.length === 0
-                        ) {
-                          customerForm.setFieldValue("supporting_documents", [
-                            { name: "", file: null },
-                          ]);
-                        }
-                        // Validate all existing files for size
-                        const newErrors: { [key: number]: string } = {};
-                        customerForm.values.supporting_documents.forEach(
-                          (doc, idx) => {
-                            if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                              newErrors[idx] =
-                                `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                          // Navigate to the correct list based on source
+                          // If came from call entry (actionType === "createEnquiry"), go back to call entry list
+                          if (actionType === "createEnquiry") {
+                            // Came from call entry list, go back to call entry list
+                            if (preserveFilters) {
+                              navigate("/call-entry", {
+                                state: {
+                                  restoreFilters: preserveFilters,
+                                  refreshData: true,
+                                },
+                              });
+                            } else {
+                              navigate("/call-entry", {
+                                state: { refreshData: true },
+                              });
+                            }
+                          } else if (fromEnquiry || actionType === "edit") {
+                            // Came from enquiry list or editing enquiry, go back to enquiry list
+                            if (preserveFilters) {
+                              navigate("/enquiry", {
+                                state: {
+                                  restoreFilters: preserveFilters,
+                                  refreshData: true,
+                                },
+                              });
+                            } else {
+                              navigate("/enquiry", {
+                                state: { refreshData: true },
+                              });
+                            }
+                          } else {
+                            // Default: navigate to quotation list (from quotation or new)
+                            if (preserveFilters) {
+                              navigate("/quotation", {
+                                state: {
+                                  restoreFilters: preserveFilters,
+                                  refreshData: true,
+                                },
+                              });
+                            } else {
+                              navigate("/quotation", {
+                                state: { refreshData: true },
+                              });
                             }
                           }
-                        );
-                        setFileErrors(newErrors);
-                        openDocumentsModal();
-                      }}
-                      disabled={isSubmitting}
-                    >
-                      Attach supporting document
-                    </Button>
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
+                        onClick={() => {
+                          serviceForm.reset();
+                        }}
+                      >
+                        Clear all
+                      </Button>
+                    </Group>
 
-                    {/* Show both Submit and Next buttons when quotation step is available */}
-                    {showQuotation ? (
-                      <>
-                        <Button
-                          rightSection={
-                            isSubmitting ? (
-                              <Loader size={16} color="white" />
-                            ) : (
-                              <IconCheck size={16} />
-                            )
-                          }
-                          onClick={() => handleNext()}
-                          color="teal"
-                          disabled={isSubmitting}
-                        >
-                          {isSubmitting ? "Submitting..." : "Submit"}
-                        </Button>
-                        <Button
-                          onClick={() => setActive(2)}
-                          color="#105476"
-                          disabled={isSubmitting}
-                        >
-                          Next
-                        </Button>
-                      </>
-                    ) : (
+                    <Group gap="sm">
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
+                        onClick={() => setActive((current) => current - 1)}
+                      >
+                        Back
+                      </Button>
+
                       <Button
                         rightSection={
                           isSubmitting ? (
                             <Loader size={16} color="white" />
-                          ) : (
-                            <IconCheck size={16} />
-                          )
+                          ) : null
                         }
                         onClick={() => handleNext()}
-                        color="teal"
+                        size="sm"
+                        style={{ backgroundColor: "#105476", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" }}
                         disabled={isSubmitting}
                       >
                         {isSubmitting ? "Submitting..." : "Submit"}
                       </Button>
-                    )}
+                    </Group>
                   </Group>
-                </Group>
-              </Box>
-            </Stepper.Step>
-            {showQuotation && (
-              <Stepper.Step description="Quotation" label="3">
-                <QuotationCreate
-                  enquiryData={{
-                    ...enq,
-                    // Override with current form values
-                    customer_code: customerForm.values.customer_code,
-                    customer_name: customerDisplayName || "",
-                    enquiry_received_date:
-                      customerForm.values.enquiry_received_date,
-                    sales_person: customerForm.values.sales_person,
-                    sales_coordinator: customerForm.values.sales_coordinator,
-                    customer_services: customerForm.values.customer_services,
-                    // Pass current service form values
-                    services: serviceForm.values.service_details.map(
-                      (service: any) => ({
-                        ...service,
-                        origin_code_read: service.origin_code,
-                        destination_code_read: service.destination_code,
-                        shipment_terms_code_read: service.shipment_terms_code,
-                      })
-                    ),
-                    // Pass quotation data if available (for edit quotation flow)
-                    quotation: enq?.quotation,
-                  }}
-                  goToStep={setActive}
-                />
-              </Stepper.Step>
+                </Box>
+              </>
             )}
-          </Stepper>
+            </Box>
+
+          </Flex>
         </Box>
 
         {/* Supporting Documents Modal */}
@@ -6549,7 +7292,7 @@ function EnquiryCreate() {
 
       >
         <Stack gap="md">
-          <Text size="sm" fw={400} c="gray">
+          <Text size="sm" fw={400} c="gray" style={{ fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" }}>
             The selected service and trade combination has a different salesperson assigned. 
             Would you like to update the form with the following information?
           </Text>
@@ -6577,12 +7320,36 @@ function EnquiryCreate() {
             <Button
               variant="outline"
               onClick={closeSalespersonModal}
+              styles={{
+                root: {
+                  fontSize: "13px",
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                  },  
+                  label: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                  },
+              }}
             >
               Cancel
             </Button>
             <Button
               color="#105476"
               onClick={handleUpdateSalespersonData}
+              styles={{
+                root: {
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                },
+                label: {
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                },
+              }}
             >
               Yes
             </Button>
