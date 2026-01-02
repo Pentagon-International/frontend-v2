@@ -31,6 +31,7 @@ import {
   IconUser,
   IconTruckDelivery,
   IconCircleCheck,
+  IconFileText,
 } from "@tabler/icons-react";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -2939,6 +2940,69 @@ function EnquiryCreate() {
                     </Text>
                   </Flex>
                 </Box>
+
+                {showQuotation && (
+                  <>
+                    {/* Vertical dotted line connector */}
+                    <Box
+                      style={{
+                        height: "24px",
+                        width: "40px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginLeft: "0",
+                        position: "relative",
+                      }}
+                    >
+                      <Box
+                        style={{
+                          width: "2px",
+                          height: "100%",
+                          borderLeft: "2px dotted #d1d5db",
+                        }}
+                      />
+                    </Box>
+
+                    <Box
+                      onClick={() => {
+                        if (active >= 2) setActive(2);
+                      }}
+                      style={{
+                        cursor: active >= 2 ? "pointer" : "not-allowed",
+                        padding: "4px 0",
+                        transition: "all 0.2s",
+                        opacity: active >= 2 ? 1 : 0.6,
+                      }}
+                    >
+                      <Flex align="center" gap="sm">
+                        <Box
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: "50%",
+                            backgroundColor: active > 2 ? "#EAF9F1" : "#fff",
+                            border: active > 2 ? "none" : active === 2 ? "2px solid #105476" : "2px solid #d1d5db",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "16px",
+                            fontWeight: 600,
+                            color: active > 2 ? "white" : active === 2 ? "#105476" : "#9ca3af",
+                            transition: "all 0.2s",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {active > 2 ? <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
+                            : <IconFileText size={20} color="#105476" fill="#E6F2F8" />}
+                        </Box>
+                        <Text size="sm" fw={400} c="#374151" style={{ lineHeight: 1.3 , fontFamily: "Inter", fontStyle: "regular" , fontSize: "13px", color: "#105476" }}>
+                          Quotation
+                        </Text>
+                      </Flex>
+                    </Box>
+                  </>
+                )}
               </Stack>
             </Box>
 
@@ -6639,6 +6703,21 @@ function EnquiryCreate() {
                                               `service_details.${serviceIndex}.cargo_details.${cargoIndex}.container_type_code`
                                             )}
                                             searchable
+                                            styles={{
+                                              input: {
+                                                fontSize: "13px",
+                                                fontFamily: "Inter",
+                                                height: "36px",
+                                              },
+                                              label: {
+                                                fontSize: "13px",
+                                                fontWeight: 500,
+                                                color: "#424242",
+                                                marginBottom: "4px",
+                                                fontFamily: "Inter",
+                                                fontStyle: "medium",
+                                              },
+                                            }}
                                             label="Container Type"
                                             placeholder="Select Container Type"
                                             withAsterisk
@@ -6656,6 +6735,21 @@ function EnquiryCreate() {
                                               `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
                                             )}
                                             label="No of Containers"
+                                            styles={{
+                                              input: {
+                                                fontSize: "13px",
+                                                fontFamily: "Inter",
+                                                height: "36px",
+                                              },
+                                              label: {
+                                                fontSize: "13px",
+                                                fontWeight: 500,
+                                                color: "#424242",
+                                                marginBottom: "4px",
+                                                fontFamily: "Inter",
+                                                fontStyle: "medium",
+                                              },
+                                            }}
                                             placeholder="Enter number of containers"
                                             min={1}
                                             withAsterisk
@@ -6934,6 +7028,36 @@ function EnquiryCreate() {
                   </Group>
                 </Box>
               </>
+            )}
+
+            {showQuotation && active === 2 && (
+              <Box style={{ flex: 1, overflowY: "auto", backgroundColor: "#F8F8F8" }}>
+                <QuotationCreate
+                  enquiryData={{
+                    ...enq,
+                    // Override with current form values
+                    customer_code: customerForm.values.customer_code,
+                    customer_name: customerDisplayName || "",
+                    enquiry_received_date:
+                      customerForm.values.enquiry_received_date,
+                    sales_person: customerForm.values.sales_person,
+                    sales_coordinator: customerForm.values.sales_coordinator,
+                    customer_services: customerForm.values.customer_services,
+                    // Pass current service form values
+                    services: serviceForm.values.service_details.map(
+                      (service: any) => ({
+                        ...service,
+                        origin_code_read: service.origin_code,
+                        destination_code_read: service.destination_code,
+                        shipment_terms_code_read: service.shipment_terms_code,
+                      })
+                    ),
+                    // Pass quotation data if available (for edit quotation flow)
+                    quotation: enq?.quotation,
+                  }}
+                  goToStep={setActive}
+                />
+              </Box>
             )}
             </Box>
 
