@@ -84,6 +84,8 @@ type FilterState = {
   sales_person: string | null;
   city: string | null;
   area: string | null;
+  date_from: string | null;
+  date_to: string | null;
 };
 
 function CallEntry() {
@@ -107,6 +109,10 @@ function CallEntry() {
   const [toDate, setToDate] = useState<Date | null>(getDefaultToDate());
   const isMountedRef = useRef(false);
 
+  // Store initial dates for the main query (these won't change when user modifies dates)
+  const initialFromDateRef = useRef<Date | null>(getDefaultFromDate());
+  const initialToDateRef = useRef<Date | null>(getDefaultToDate());
+
   // Filter form to minimize state variables
   const filterForm = useForm<FilterState>({
     initialValues: {
@@ -118,6 +124,8 @@ function CallEntry() {
       sales_person: null,
       city: null,
       area: null,
+      date_from: null,
+      date_to: null,
     },
   });
 
@@ -165,16 +173,19 @@ function CallEntry() {
     isLoading: callEntryLoading,
     refetch: refetchCallEntries,
   } = useQuery({
-    queryKey: ["callEntries", pageIndex, pageSize, fromDate, toDate],
+    queryKey: ["callEntries", pageIndex, pageSize],
     queryFn: async () => {
       try {
-        let requestBody: { filters: any } = { filters: {} };
+        // Use initial date values in payload (stored in ref, won't change when user modifies dates)
+        // Dates are not in queryKey so changes won't trigger refetch
+        // Only Apply Filters button will use the new dates via appliedFilters
+        const requestBody: { filters: any } = { filters: {} };
 
-        // Only add date filters if both dates are selected
-        if (fromDate && toDate) {
+        // Add date range if both initial dates are selected
+        if (initialFromDateRef.current && initialToDateRef.current) {
           requestBody.filters = {
-            date_from: dayjs(fromDate).format("YYYY-MM-DD"),
-            date_to: dayjs(toDate).format("YYYY-MM-DD"),
+            date_from: dayjs(initialFromDateRef.current).format("YYYY-MM-DD"),
+            date_to: dayjs(initialToDateRef.current).format("YYYY-MM-DD"),
           };
         }
 
@@ -213,6 +224,8 @@ function CallEntry() {
     sales_person: null,
     city: null,
     area: null,
+    date_from: null,
+    date_to: null,
   });
 
   // Separate query for filtered data - only runs when filters are applied
@@ -228,10 +241,10 @@ function CallEntry() {
 
         const payload: any = {};
 
-        // Add date range if both dates are selected
-        if (fromDate && toDate) {
-          payload.date_from = dayjs(fromDate).format("YYYY-MM-DD");
-          payload.date_to = dayjs(toDate).format("YYYY-MM-DD");
+        // Add date range if both dates are selected (use appliedFilters dates, not current state)
+        if (appliedFilters.date_from && appliedFilters.date_to) {
+          payload.date_from = appliedFilters.date_from;
+          payload.date_to = appliedFilters.date_to;
         }
 
         if (appliedFilters.customer)
@@ -369,6 +382,8 @@ function CallEntry() {
         call_mode: null,
         city: null,
         area: null,
+        date_from: initialFilters.date_from || null,
+        date_to: initialFilters.date_to || null,
       });
 
       setFiltersApplied(true);
@@ -530,6 +545,8 @@ function CallEntry() {
         sales_person: restoreFiltersData.filters?.sales_person || null,
         city: restoreFiltersData.filters?.city || null,
         area: restoreFiltersData.filters?.area || null,
+        date_from: restoreFiltersData.filters?.date_from || null,
+        date_to: restoreFiltersData.filters?.date_to || null,
       });
 
       // Restore filters applied state
@@ -758,7 +775,7 @@ function CallEntry() {
       console.log("Applying filters...");
       console.log("Current filters:", filterForm.values);
 
-      // Check if there are any actual filter values
+      // Check if there are any actual filter values (including date range)
       const hasFilterValues =
         filterForm.values.customer ||
         filterForm.values.call_date ||
@@ -767,7 +784,8 @@ function CallEntry() {
         filterForm.values.status ||
         filterForm.values.sales_person ||
         filterForm.values.city ||
-        filterForm.values.area;
+        filterForm.values.area ||
+        (fromDate && toDate);
 
       if (!hasFilterValues) {
         // If no filter values, show unfiltered data
@@ -781,6 +799,8 @@ function CallEntry() {
           sales_person: null,
           city: null,
           area: null,
+          date_from: null,
+          date_to: null,
         });
 
         // Invalidate and refetch unfiltered data
@@ -807,6 +827,10 @@ function CallEntry() {
         sales_person: filterForm.values.sales_person,
         city: filterForm.values.city,
         area: filterForm.values.area,
+        // Only add date filters if both dates are selected
+        date_from:
+          fromDate && toDate ? dayjs(fromDate).format("YYYY-MM-DD") : null,
+        date_to: fromDate && toDate ? dayjs(toDate).format("YYYY-MM-DD") : null,
       });
 
       // Enable the filtered query and refetch
@@ -840,6 +864,8 @@ function CallEntry() {
       sales_person: null,
       city: null,
       area: null,
+      date_from: null,
+      date_to: null,
     });
 
     // Clear display values
@@ -1482,7 +1508,7 @@ function CallEntry() {
                 c="#000000"
                 style={{ fontFamily: "Inter", fontSize: "14px" }}
               >
-                Filter
+                Filters
               </Text>
               <ActionIcon
                 variant="subtle"
@@ -1573,6 +1599,9 @@ function CallEntry() {
                   size="xs"
                   allowDeselection={true}
                   showRangeInCalendar={false}
+                  containerStyle={{
+                    gap: "8px",
+                  }}
                 />
               </Grid.Col>
 
@@ -1627,11 +1656,17 @@ function CallEntry() {
                   clearable
                   styles={
                     {
-                      input: { fontSize: "12px" },
+                      input: {
+                        fontSize: "13px",
+                        height: "36px",
+                        fontFamily: "Inter",
+                      },
                       label: {
-                        fontSize: "12px",
+                        fontSize: "13px",
                         fontWeight: 500,
-                        color: "#495057",
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
                       },
                       calendar: {
                         padding: "1rem",
@@ -1762,7 +1797,7 @@ function CallEntry() {
 
             <Group justify="end" mt="md" p="md" pb="md">
               <Button
-                size="sm"
+                size="xs"
                 variant="outline"
                 styles={{
                   root: {
@@ -1783,7 +1818,7 @@ function CallEntry() {
                 Clear Filters
               </Button>
               <Button
-                size="sm"
+                size="xs"
                 variant="filled"
                 styles={{
                   root: {

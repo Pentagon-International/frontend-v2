@@ -136,9 +136,16 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
           borderRadius: "12px",
           padding: "16px",
           border: "1px solid rgba(16, 84, 118, 0.1)",
+          overflow: "hidden",
         }}
       >
-        <Group justify="center" align="center" gap="lg">
+        <Group
+          justify="center"
+          align="center"
+          gap="sm"
+          wrap="nowrap"
+          style={{ width: "100%" }}
+        >
           {/* Previous Button */}
           <ActionIcon
             variant="filled"
@@ -150,13 +157,19 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
               color: "white",
               boxShadow: "0 2px 8px rgba(16, 84, 118, 0.2)",
               transition: "all 0.3s ease",
+              flexShrink: 0,
             }}
           >
             <IconChevronLeft size={20} />
           </ActionIcon>
 
           {/* Service Cards */}
-          <Group gap="md" justify="center" style={{ minWidth: "800px" }}>
+          <Group
+            gap="md"
+            justify="center"
+            style={{ flex: 1, minWidth: 0 }}
+            wrap="nowrap"
+          >
             {visibleServices.map(({ service, index }) => {
               const isSelected = index === selectedServiceIndex;
 
@@ -266,6 +279,7 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
               color: "white",
               boxShadow: "0 2px 8px rgba(16, 84, 118, 0.2)",
               transition: "all 0.3s ease",
+              flexShrink: 0,
             }}
           >
             <IconChevronRight size={20} />

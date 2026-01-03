@@ -1900,80 +1900,24 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     },
     mantineTableBodyCellProps: ({ column }) => {
       let extraStyles = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-          };
-          break;
-        case "customer_name":
-          extraStyles = {
-            minWidth: "70px",
-          };
-          break;
-        case "sales_person":
-          extraStyles = {
-            minWidth: "60px",
-          };
-          break;
-        case "origin_list":
-          extraStyles = {
-            minWidth: "50px",
-          };
-          break;
-        case "destination_list":
-          extraStyles = {
-            minWidth: "50px",
-          };
-          break;
-        case "quote_type_list":
-          extraStyles = {
-            minWidth: "50px",
-          };
-          break;
-        case "status":
-          extraStyles = {
-            minWidth: "100px",
-          };
-          break;
-        case "reject_remark":
-          extraStyles = {
-            minWidth: "70px",
-          };
-          break;
-        case "revision":
-          extraStyles = {
-            minWidth: "70px",
-            width: "fit-content",
-          };
-          break;
-        case "created_at":
-          extraStyles = {
-            minWidth: "85px",
-          };
-          break;
-        case "valid_upto_list":
-          extraStyles = {
-            minWidth: "85px",
-          };
-          break;
-        case "reference_no":
-          extraStyles = {
-            minWidth: "50px",
-          };
-          break;
-
-        default:
-          extraStyles = {};
+      if (column.id === "actions") {
+        extraStyles = {
+          position: "sticky",
+          right: 0,
+          minWidth: "30px",
+          zIndex: 2,
+          borderLeft: "1px solid #F3F3F3",
+          boxShadow: "1px -2px 4px 0px #00000040",
+        };
       }
       return {
         style: {
           width: "fit-content",
-          padding: "6px 4px",
-          fontSize: "13px",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontstyle: "regular",
+          fontFamily: "Inter",
+          color: "#333740",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -1981,84 +1925,28 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     },
     mantineTableHeadCellProps: ({ column }) => {
       let extraStyles = {};
-      switch (column.id) {
-        case "created_at":
-          extraStyles = {
-            minWidth: "85px",
-          };
-          break;
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-          };
-          break;
-        case "customer_name":
-          extraStyles = {
-            minWidth: "60px",
-          };
-          break;
-        case "sales_person":
-          extraStyles = {
-            minWidth: "60px",
-          };
-          break;
-        case "origin_list":
-          extraStyles = {
-            minWidth: "50px",
-          };
-          break;
-        case "destination_list":
-          extraStyles = {
-            minWidth: "50px",
-          };
-          break;
-        case "quote_type_list":
-          extraStyles = {
-            minWidth: "50px",
-          };
-          break;
-        case "status":
-          extraStyles = {
-            minWidth: "70px",
-          };
-          break;
-        case "revision":
-          extraStyles = {
-            minWidth: "70px",
-            width: "fit-content",
-          };
-          break;
-        case "reject_remark":
-          extraStyles = {
-            minWidth: "98px",
-          };
-          break;
-        case "valid_upto_list":
-          extraStyles = {
-            minWidth: "65px",
-          };
-          break;
-        case "reference_no":
-          extraStyles = {
-            minWidth: "90px",
-          };
-          break;
-
-        default:
-          extraStyles = {};
+      if (column.id === "actions") {
+        extraStyles = {
+          position: "sticky",
+          right: 0,
+          minWidth: "80px",
+          zIndex: 2,
+          backgroundColor: "#FBFBFB",
+          boxShadow: "0px -2px 4px 0px #00000040",
+        };
       }
       return {
         style: {
           width: "fit-content",
-          padding: "6px 4px",
-          fontSize: "12px",
-          backgroundColor: "#ffffff",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          fontstyle: "bold",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
           top: 0,
           zIndex: 3,
-          borderBottom: "1px solid #e9ecef",
+          borderBottom: "1px solid #F3F3F3",
           ...extraStyles,
         },
       };
@@ -2095,436 +1983,520 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   return (
     <>
       <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c={"#105476"}>
-            {pageTitle}
-          </Text>
-
-          <Group gap="sm" wrap="nowrap">
-            <TextInput
-              placeholder="Search"
-              leftSection={<IconSearch size={16} />}
-              style={{ width: 300 }}
-              radius="sm"
-              size="xs"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.currentTarget.value)}
-            />
-
-            <Button
-              variant="outline"
-              leftSection={<IconFilter size={16} />}
-              size="xs"
-              color="#105476"
-              onClick={() => setShowFilters(!showFilters)}
+        <Box mb="md">
+          <Group justify="space-between" align="center" mb="md">
+            <Text
+              size="md"
+              fw={600}
+              c={"#444955"}
+              style={{ fontFamily: "Inter", fontSize: "16px" }}
             >
-              Filters
-            </Button>
+              {pageTitle}
+            </Text>
 
-            {user?.is_staff && (
-              <DownloadComponent
-                columns={downloadColumns}
-                fileName="quotation_data"
-                fileExtension="xlsx"
-                buttonText="Download"
-                fetchData={fetchDownloadData}
-                expandQuotations={false}
+            <Group gap="xs" wrap="nowrap">
+              <TextInput
+                placeholder="Search..."
+                leftSection={<IconSearch size={16} />}
+                w={248}
+                size="sm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                styles={{
+                  input: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontstyle: "regular",
+                    color: "#333740",
+                    minWidth: "24px",
+                    minHeight: "24px",
+                    width: "248px",
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    "&:focus": {
+                      border: "1px solid #105476",
+                    },
+                  },
+                }}
               />
-            )}
+
+              <ActionIcon
+                variant={showFilters ? "filled" : "outline"}
+                size={36}
+                color={showFilters ? "#E0F5FF" : "gray"}
+                onClick={() => setShowFilters(!showFilters)}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                    border: showFilters
+                      ? "1px solid #105476"
+                      : "1px solid #737780",
+                    color: showFilters ? "#105476" : "#737780",
+                  },
+                }}
+              >
+                <IconFilter size={18} />
+              </ActionIcon>
+
+              {user?.is_staff && (
+                <DownloadComponent
+                  columns={downloadColumns}
+                  fileName="quotation_data"
+                  fileExtension="xlsx"
+                  buttonText="Download"
+                  fetchData={fetchDownloadData}
+                  expandQuotations={false}
+                />
+              )}
+            </Group>
           </Group>
-        </Group>
+        </Box>
 
         {/* Filter Section */}
         {showFilters && (
-          <Card
-            shadow="xs"
-            padding="md"
-            radius="md"
-            withBorder
+          <Box
             mb="md"
-            bg="#f8f9fa"
+            style={{
+              borderRadius: "8px",
+              border: "1px solid #E0E0E0",
+            }}
           >
-            <Group justify="space-between" align="center">
-              <Group align="center" gap="xs">
-                <IconFilter size={16} color="#105476" />
-                <Text size="sm" fw={500} c="#105476">
-                  Filters
-                </Text>
-              </Group>
+            <Group
+              justify="space-between"
+              align="center"
+              mb="lg"
+              style={{
+                backgroundColor: "#FAFAFA",
+                padding: "8px 8px",
+                borderRadius: "8px",
+              }}
+            >
+              <Text
+                size="sm"
+                fw={600}
+                c="#000000"
+                style={{ fontFamily: "Inter", fontSize: "14px" }}
+              >
+                Filters
+              </Text>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={() => setShowFilters(false)}
+                aria-label="Close filters"
+                size="sm"
+              >
+                <IconX size={18} />
+              </ActionIcon>
             </Group>
 
-            <Grid>
-              <Grid.Col span={12}>
-                <Grid>
-                  {/* Customer Name Filter */}
-                  <Grid.Col span={2}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Customer Name"
-                      placeholder="Type customer name"
-                      apiEndpoint={URL.customer}
-                      searchFields={["customer_code", "customer_name"]}
-                      displayFormat={(item: any) => ({
-                        value: String(item.customer_code),
-                        label: String(item.customer_name),
-                      })}
-                      value={filters.customer_code}
-                      displayValue={customerDisplayValue}
-                      onChange={(value, selectedData) => {
-                        setFilters((prev) => ({
-                          ...prev,
-                          customer_code: value || null,
-                        }));
-                        setCustomerDisplayValue(selectedData?.label || null);
-                      }}
-                      minSearchLength={3}
-                      className="filter-searchable-select"
-                    />
-                  </Grid.Col>
+            <Grid gutter="md" px="md">
+              {/* Customer Name Filter */}
+              <Grid.Col span={2.4}>
+                <SearchableSelect
+                  size="xs"
+                  label="Customer Name"
+                  placeholder="Type customer name"
+                  apiEndpoint={URL.customer}
+                  searchFields={["customer_code", "customer_name"]}
+                  displayFormat={(item: any) => ({
+                    value: String(item.customer_code),
+                    label: String(item.customer_name),
+                  })}
+                  value={filters.customer_code}
+                  displayValue={customerDisplayValue}
+                  onChange={(value, selectedData) => {
+                    setFilters((prev) => ({
+                      ...prev,
+                      customer_code: value || null,
+                    }));
+                    setCustomerDisplayValue(selectedData?.label || null);
+                  }}
+                  minSearchLength={3}
+                  className="filter-searchable-select"
+                />
+              </Grid.Col>
 
-                  {/* Sales Person Filter */}
-                  <Grid.Col span={2}>
-                    <Select
-                      key={`sales-person-${filters.sales_person}`}
-                      label="Sales Person"
-                      placeholder={
-                        salespersonsLoading
-                          ? "Loading salespersons..."
-                          : "Select Sales Person"
-                      }
-                      searchable
-                      clearable
-                      size="xs"
-                      data={salespersonOptions}
-                      disabled={salespersonsLoading}
-                      value={filters.sales_person}
-                      onChange={(value) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          sales_person: value || null,
-                        }))
-                      }
-                      onFocus={(event) => {
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+              {/* Sales Person Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  key={`sales-person-${filters.sales_person}`}
+                  label="Sales Person"
+                  placeholder={
+                    salespersonsLoading
+                      ? "Loading salespersons..."
+                      : "Select Sales Person"
+                  }
+                  searchable
+                  clearable
+                  size="xs"
+                  data={salespersonOptions}
+                  disabled={salespersonsLoading}
+                  value={filters.sales_person}
+                  onChange={(value) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      sales_person: value || null,
+                    }))
+                  }
+                  onFocus={(event) => {
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* Origin Filter */}
-                  <Grid.Col span={2}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Origin"
-                      placeholder="Type origin code or name"
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_code", "port_name"]}
-                      displayFormat={(item: any) => ({
-                        value: String(item.port_code),
-                        label: `${item.port_name} (${item.port_code})`,
-                      })}
-                      value={filters.origin_code}
-                      displayValue={originDisplayValue}
-                      onChange={(value, selectedData) => {
-                        setFilters((prev) => ({
-                          ...prev,
-                          origin_code: value || null,
-                        }));
-                        setOriginDisplayValue(selectedData?.label || null);
-                      }}
-                      minSearchLength={3}
-                      className="filter-searchable-select"
-                    />
-                  </Grid.Col>
+              {/* Origin Filter */}
+              <Grid.Col span={2.4}>
+                <SearchableSelect
+                  size="xs"
+                  label="Origin"
+                  placeholder="Type origin code or name"
+                  apiEndpoint={URL.portMaster}
+                  searchFields={["port_code", "port_name"]}
+                  displayFormat={(item: any) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filters.origin_code}
+                  displayValue={originDisplayValue}
+                  onChange={(value, selectedData) => {
+                    setFilters((prev) => ({
+                      ...prev,
+                      origin_code: value || null,
+                    }));
+                    setOriginDisplayValue(selectedData?.label || null);
+                  }}
+                  minSearchLength={3}
+                  className="filter-searchable-select"
+                />
+              </Grid.Col>
 
-                  {/* Destination Filter */}
-                  <Grid.Col span={2}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Destination"
-                      placeholder="Type destination code or name"
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_code", "port_name"]}
-                      displayFormat={(item: any) => ({
-                        value: String(item.port_code),
-                        label: `${item.port_name} (${item.port_code})`,
-                      })}
-                      value={filters.destination_code}
-                      displayValue={destinationDisplayValue}
-                      onChange={(value, selectedData) => {
-                        setFilters((prev) => ({
-                          ...prev,
-                          destination_code: value || null,
-                        }));
-                        setDestinationDisplayValue(selectedData?.label || null);
-                      }}
-                      minSearchLength={3}
-                      className="filter-searchable-select"
-                    />
-                  </Grid.Col>
+              {/* Destination Filter */}
+              <Grid.Col span={2.4}>
+                <SearchableSelect
+                  size="xs"
+                  label="Destination"
+                  placeholder="Type destination code or name"
+                  apiEndpoint={URL.portMaster}
+                  searchFields={["port_code", "port_name"]}
+                  displayFormat={(item: any) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filters.destination_code}
+                  displayValue={destinationDisplayValue}
+                  onChange={(value, selectedData) => {
+                    setFilters((prev) => ({
+                      ...prev,
+                      destination_code: value || null,
+                    }));
+                    setDestinationDisplayValue(selectedData?.label || null);
+                  }}
+                  minSearchLength={3}
+                  className="filter-searchable-select"
+                />
+              </Grid.Col>
 
-                  {/* Quote Date Filter */}
-                  <Grid.Col span={2}>
-                    <DateInput
-                      key={`quote-date-${filters.valid_upto}`}
-                      label="Quote Date"
-                      placeholder="YYYY-MM-DD"
-                      size="xs"
-                      value={filters.valid_upto}
-                      onChange={(date) =>
-                        setFilters((prev) => ({ ...prev, valid_upto: date }))
-                      }
-                      valueFormat="YYYY-MM-DD"
-                      leftSection={<IconCalendar size={14} />}
-                      leftSectionPointerEvents="none"
-                      radius="md"
-                      nextIcon={<IconChevronRight size={16} />}
-                      previousIcon={<IconChevronLeft size={16} />}
-                      clearable
-                      styles={
-                        {
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                          calendar: {
-                            padding: "1rem",
-                            gap: "0.5rem",
-                            minWidth: "300px",
-                          },
-                          day: {
-                            width: "2.5rem",
-                            height: "2.5rem",
-                            fontSize: "0.9rem",
-                            margin: "0.1rem",
-                          },
-                          calendarHeaderLevel: {
-                            fontSize: "1.1rem",
-                            fontWeight: 600,
-                            marginBottom: "0.8rem",
-                            flex: 1,
-                            textAlign: "center",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            height: "2.5rem",
-                          },
-                          calendarHeaderControl: {
-                            width: "2.5rem",
-                            height: "2.5rem",
-                            margin: "0 0.5rem",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          },
-                          calendarHeader: {
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "0.5rem",
-                            marginBottom: "0.5rem",
-                            padding: "0.5rem 0",
-                            height: "3rem",
-                          },
-                          monthsListControl: {
-                            width: "2.5rem",
-                            height: "2.5rem",
-                            fontSize: "0.9rem",
-                          },
-                          yearsListControl: {
-                            width: "2.5rem",
-                            height: "2.5rem",
-                            fontSize: "0.9rem",
-                          },
-                        } as any
-                      }
-                    />
-                  </Grid.Col>
+              {/* Quote Date Filter */}
+              <Grid.Col span={2.4}>
+                <DateInput
+                  key={`quote-date-${filters.valid_upto}`}
+                  label="Quote Date"
+                  placeholder="YYYY-MM-DD"
+                  size="xs"
+                  value={filters.valid_upto}
+                  onChange={(date) =>
+                    setFilters((prev) => ({ ...prev, valid_upto: date }))
+                  }
+                  valueFormat="YYYY-MM-DD"
+                  leftSection={<IconCalendar size={14} />}
+                  leftSectionPointerEvents="none"
+                  radius="md"
+                  nextIcon={<IconChevronRight size={16} />}
+                  previousIcon={<IconChevronLeft size={16} />}
+                  clearable
+                  styles={
+                    {
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                      calendar: {
+                        padding: "1rem",
+                        gap: "0.5rem",
+                        minWidth: "300px",
+                      },
+                      day: {
+                        width: "2.5rem",
+                        height: "2.5rem",
+                        fontSize: "0.9rem",
+                        margin: "0.1rem",
+                      },
+                      calendarHeaderLevel: {
+                        fontSize: "1.1rem",
+                        fontWeight: 600,
+                        marginBottom: "0.8rem",
+                        flex: 1,
+                        textAlign: "center",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        height: "2.5rem",
+                      },
+                      calendarHeaderControl: {
+                        width: "2.5rem",
+                        height: "2.5rem",
+                        margin: "0 0.5rem",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      },
+                      calendarHeader: {
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "0.5rem",
+                        marginBottom: "0.5rem",
+                        padding: "0.5rem 0",
+                        height: "3rem",
+                      },
+                      monthsListControl: {
+                        width: "2.5rem",
+                        height: "2.5rem",
+                        fontSize: "0.9rem",
+                      },
+                      yearsListControl: {
+                        width: "2.5rem",
+                        height: "2.5rem",
+                        fontSize: "0.9rem",
+                      },
+                    } as any
+                  }
+                />
+              </Grid.Col>
 
-                  {/* Date Range Filter */}
-                  <Grid.Col span={4.3}>
-                    <DateRangeInput
-                      fromDate={fromDate}
-                      toDate={toDate}
-                      onFromDateChange={setFromDate}
-                      onToDateChange={setToDate}
-                      fromLabel="From Date"
-                      toLabel="To Date"
-                      size="xs"
-                      allowDeselection={true}
-                      showRangeInCalendar={false}
-                    />
-                  </Grid.Col>
+              {/* Date Range Filter */}
+              <Grid.Col span={2.4}>
+                <DateRangeInput
+                  fromDate={fromDate}
+                  toDate={toDate}
+                  onFromDateChange={setFromDate}
+                  onToDateChange={setToDate}
+                  fromLabel="From Date"
+                  toLabel="To Date"
+                  size="xs"
+                  allowDeselection={true}
+                  showRangeInCalendar={false}
+                />
+              </Grid.Col>
 
-                  {/* Quote Type Filter */}
-                  <Grid.Col span={2}>
-                    <Select
-                      key={`quote-type-${filters.quote_type}`}
-                      label="Quote Type"
-                      placeholder="Select Quote Type"
-                      searchable
-                      clearable
-                      size="xs"
-                      data={[
-                        { value: "Standard", label: "Standard" },
-                        { value: "All Inclusive", label: "All Inclusive" },
-                        { value: "Lumpsum", label: "Lumpsum" },
-                        { value: "all", label: "All" },
-                      ]}
-                      value={filters.quote_type}
-                      onChange={(value) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          quote_type: value || null,
-                        }))
-                      }
-                      onFocus={(event) => {
-                        // Auto-select all text when input is focused
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+              {/* Quote Type Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  key={`quote-type-${filters.quote_type}`}
+                  label="Quote Type"
+                  placeholder="Select Quote Type"
+                  searchable
+                  clearable
+                  size="xs"
+                  data={[
+                    { value: "Standard", label: "Standard" },
+                    { value: "All Inclusive", label: "All Inclusive" },
+                    { value: "Lumpsum", label: "Lumpsum" },
+                    { value: "all", label: "All" },
+                  ]}
+                  value={filters.quote_type}
+                  onChange={(value) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      quote_type: value || null,
+                    }))
+                  }
+                  onFocus={(event) => {
+                    // Auto-select all text when input is focused
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* Approval Status Filter */}
-                  <Grid.Col span={2}>
-                    <Select
-                      key={`approval-status-${filters.status}`}
-                      label="Approval Status"
-                      placeholder="Select Status"
-                      searchable
-                      clearable
-                      size="xs"
-                      data={[
-                        { value: "GAINED", label: "Gained" },
-                        { value: "LOST", label: "Lost" },
-                        { value: "QUOTE CREATED", label: "Quote Created" },
-                        { value: "all", label: "All" },
-                      ]}
-                      value={filters.status}
-                      onChange={(value) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          status: value || null,
-                        }))
-                      }
-                      onFocus={(event) => {
-                        // Auto-select all text when input is focused
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+              {/* Approval Status Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  key={`approval-status-${filters.status}`}
+                  label="Approval Status"
+                  placeholder="Select Status"
+                  searchable
+                  clearable
+                  size="xs"
+                  data={[
+                    { value: "GAINED", label: "Gained" },
+                    { value: "LOST", label: "Lost" },
+                    { value: "QUOTE CREATED", label: "Quote Created" },
+                    { value: "all", label: "All" },
+                  ]}
+                  value={filters.status}
+                  onChange={(value) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      status: value || null,
+                    }))
+                  }
+                  onFocus={(event) => {
+                    // Auto-select all text when input is focused
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* Remark Filter */}
-                  <Grid.Col span={2}>
-                    <TextInput
-                      label="Remark"
-                      placeholder="Search Remark"
-                      size="xs"
-                      value={filters.remark || ""}
-                      onChange={(e) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          remark: e.currentTarget.value,
-                        }))
-                      }
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={2}>
-                    <TextInput
-                      label="Revision"
-                      placeholder="Search Revision"
-                      size="xs"
-                      value={filters.revision || ""}
-                      onChange={(e) => {
-                        const val = e.currentTarget.value;
-                        if (/^\d*$/.test(val)) {
-                          setFilters((prev) => ({
-                            ...prev,
-                            revision: val,
-                          }));
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                </Grid>
+              {/* Remark Filter */}
+              <Grid.Col span={2.4}>
+                <TextInput
+                  label="Remark"
+                  placeholder="Search Remark"
+                  size="xs"
+                  value={filters.remark || ""}
+                  onChange={(e) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      remark: e.currentTarget.value,
+                    }))
+                  }
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
+              <Grid.Col span={2.4}>
+                <TextInput
+                  label="Revision"
+                  placeholder="Search Revision"
+                  size="xs"
+                  value={filters.revision || ""}
+                  onChange={(e) => {
+                    const val = e.currentTarget.value;
+                    if (/^\d*$/.test(val)) {
+                      setFilters((prev) => ({
+                        ...prev,
+                        revision: val,
+                      }));
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
               </Grid.Col>
             </Grid>
 
-            <Group justify="end" mt="sm">
+            <Group justify="end" mt="md" p="md" pb="md">
               <Button
-                size="xs"
+                size="sm"
                 variant="outline"
                 color="#105476"
-                leftSection={<IconFilterOff size={14} />}
+                leftSection={<IconFilterOff size={16} />}
                 onClick={clearAllFilters}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontstyle: "semibold",
+                    borderColor: "#105476",
+                    color: "#105476",
+                    "&:hover": {
+                      backgroundColor: "#E0F5FF",
+                    },
+                  },
+                }}
               >
                 Clear Filters
               </Button>
               <Button
-                size="xs"
+                size="sm"
                 variant="filled"
                 color="#105476"
                 leftSection={
-                  isLoading ? <Loader size={14} /> : <IconFilter size={14} />
+                  isLoading ? <Loader size={16} /> : <IconFilter size={16} />
                 }
                 onClick={applyFilters}
                 loading={isLoading}
                 disabled={isLoading}
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontstyle: "semibold",
+                    "&:hover": {
+                      backgroundColor: "#105476",
+                    },
+                  },
+                }}
               >
                 Apply Filters
               </Button>
             </Group>
-          </Card>
+          </Box>
         )}
 
         {isLoading ? (
@@ -2601,15 +2573,13 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           w="100%"
           justify="space-between"
           align="center"
-          px="md"
-          py="xs"
-          style={{ borderTop: "1px solid #e9ecef" }}
+          p="xs"
           wrap="nowrap"
-          mt="xs"
+          pt="md"
         >
           {/* Rows per page and range */}
-          <Group gap="sm" align="center" wrap="nowrap" mt={10}>
-            <Text size="sm" c="dimmed">
+          <Group gap="sm" align="center" wrap="nowrap">
+            <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
               Rows per page
             </Text>
             <Select
@@ -2622,9 +2592,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                 table.setPageIndex(0);
               }}
               w={110}
-              styles={{ input: { fontSize: 12, height: 30 } } as any}
+              styles={{
+                input: {
+                  fontSize: "13px",
+                  height: "30px",
+                  fontFamily: "Inter",
+                },
+              }}
             />
-            <Text size="sm" c="dimmed">
+            <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
               {(() => {
                 const { pageIndex, pageSize } = table.getState().pagination;
                 const total = table.getPrePaginationRowModel().rows.length || 0;
@@ -2650,10 +2626,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             >
               <IconChevronLeft size={16} />
             </ActionIcon>
-            <Text size="sm" ta="center" style={{ width: 26 }}>
+            <Text
+              size="sm"
+              ta="center"
+              style={{ width: 26, fontFamily: "Inter" }}
+            >
               {table.getState().pagination.pageIndex + 1}
             </Text>
-            <Text size="sm" c="dimmed">
+            <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
               of{" "}
               {Math.max(
                 1,

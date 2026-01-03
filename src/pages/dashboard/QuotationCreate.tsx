@@ -19,6 +19,10 @@ import {
   Badge,
   Table,
   ScrollArea,
+  Flex,
+  Menu,
+  ActionIcon,
+  Checkbox,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useForm, yupResolver } from "@mantine/form";
@@ -30,6 +34,11 @@ import {
   IconTrash,
   IconChevronDown,
   IconHistory,
+  IconDotsVertical,
+  IconChartBar,
+  IconDatabase,
+  IconBook,
+  IconNotes,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { getAPICall } from "../../service/getApiCall";
@@ -447,7 +456,8 @@ function QuotationCreate({
         pickup_location: "",
         delivery_location: "",
         hazardous_cargo: quotation.hazardous_cargo || false,
-        stackable: quotation.stackable !== undefined ? quotation.stackable : true, // Include stackable
+        stackable:
+          quotation.stackable !== undefined ? quotation.stackable : true, // Include stackable
         shipment_terms_code_read: quotation.shipment_terms_code || "",
         shipment_terms_name: quotation.shipment_terms || "",
         // Add FCL specific details if available
@@ -464,51 +474,49 @@ function QuotationCreate({
               }))
             : // For OTHERS, include fcl_details if cargo_details has container_type_code
               // EnquiryCreate will determine the correct structure based on service_code
-              (quotation.service_type === "OTHERS" && 
-               quotation.cargo_details && 
-               quotation.cargo_details.some((c: any) => c.container_type_code))
-            ? quotation.cargo_details.map((cargo: any) => ({
-                container_type_code: cargo.container_type_code,
-                container_type: cargo.container_type || "",
-                container_name: cargo.container_type || "",
-                no_of_containers: cargo.no_of_containers || 0,
-                gross_weight: cargo.gross_weight || null,
-              }))
-            : undefined,
+              quotation.service_type === "OTHERS" &&
+                quotation.cargo_details &&
+                quotation.cargo_details.some((c: any) => c.container_type_code)
+              ? quotation.cargo_details.map((cargo: any) => ({
+                  container_type_code: cargo.container_type_code,
+                  container_type: cargo.container_type || "",
+                  container_name: cargo.container_type || "",
+                  no_of_containers: cargo.no_of_containers || 0,
+                  gross_weight: cargo.gross_weight || null,
+                }))
+              : undefined,
         // Add AIR/LCL specific details if available
         // For OTHERS, pass all cargo details - EnquiryCreate will determine structure
         no_of_packages:
           (quotation.service_type !== "FCL" &&
             quotation.cargo_details?.[0]?.no_of_packages) ||
           null,
-        gross_weight:
-          quotation.cargo_details?.[0]?.gross_weight ||
-          null,
+        gross_weight: quotation.cargo_details?.[0]?.gross_weight || null,
         volume_weight:
           (quotation.service_type === "AIR" ||
-           (quotation.service_type === "OTHERS" && 
-            quotation.cargo_details?.[0]?.volume_weight)) &&
+            (quotation.service_type === "OTHERS" &&
+              quotation.cargo_details?.[0]?.volume_weight)) &&
           quotation.cargo_details?.[0]?.volume_weight
             ? quotation.cargo_details[0].volume_weight
             : null,
         chargeable_weight:
           (quotation.service_type === "AIR" ||
-           (quotation.service_type === "OTHERS" && 
-            quotation.cargo_details?.[0]?.chargeable_weight)) &&
+            (quotation.service_type === "OTHERS" &&
+              quotation.cargo_details?.[0]?.chargeable_weight)) &&
           quotation.cargo_details?.[0]?.chargeable_weight
             ? quotation.cargo_details[0].chargeable_weight
             : null,
         volume:
           (quotation.service_type === "LCL" ||
-           (quotation.service_type === "OTHERS" && 
-            quotation.cargo_details?.[0]?.volume)) &&
+            (quotation.service_type === "OTHERS" &&
+              quotation.cargo_details?.[0]?.volume)) &&
           quotation.cargo_details?.[0]?.volume
             ? quotation.cargo_details[0].volume
             : null,
         chargeable_volume:
           (quotation.service_type === "LCL" ||
-           (quotation.service_type === "OTHERS" && 
-            quotation.cargo_details?.[0]?.chargeable_volume)) &&
+            (quotation.service_type === "OTHERS" &&
+              quotation.cargo_details?.[0]?.chargeable_volume)) &&
           quotation.cargo_details?.[0]?.chargeable_volume
             ? quotation.cargo_details[0].chargeable_volume
             : null,
@@ -3235,12 +3243,20 @@ function QuotationCreate({
             }
 
             // If not found, try selectedService.fcl_details (edit mode from quotation)
-            if (!cargoDetails && selectedService?.fcl_details && Array.isArray(selectedService.fcl_details)) {
+            if (
+              !cargoDetails &&
+              selectedService?.fcl_details &&
+              Array.isArray(selectedService.fcl_details)
+            ) {
               cargoDetails = selectedService.fcl_details;
             }
 
             // If still not found, try selectedService.cargo_details (fallback)
-            if (!cargoDetails && selectedService?.cargo_details && Array.isArray(selectedService.cargo_details)) {
+            if (
+              !cargoDetails &&
+              selectedService?.cargo_details &&
+              Array.isArray(selectedService.cargo_details)
+            ) {
               cargoDetails = selectedService.cargo_details;
             }
 
@@ -3711,330 +3727,774 @@ function QuotationCreate({
   // }
 
   return (
-    <Box
-      // maw={1200}a
-      mx="auto"
-      // p="sm"
-    >
-      {/* Service Details Slider */}
-      {services.length > 0 && (
-        <ServiceDetailsSlider
-          services={services}
-          selectedServiceIndex={selectedServiceIndex}
-          onServiceSelect={handleServiceSelect}
-        />
-      )}
-
-      {/* Tariff Submission Loading Overlay */}
-      {isSubmittingTariff && (
-        <Box
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-        >
-          <Stack align="center" gap="md">
-            <Loader size="xl" color="#105476" />
-            <Text size="lg" color="white" fw={500}>
-              Getting tariff chargers...
-            </Text>
-          </Stack>
-        </Box>
-      )}
-
-      {/* Debug: Display charges data */}
-      {/* {location.state?.quotationData?.charges && (
-        <Box
-          p="md"
-          style={{
-            backgroundColor: "#f0f0f0",
-            border: "1px solid #ccc",
-            marginBottom: "1rem",
-          }}
-        >
-          <Text fw={600}>Debug: Charges Data Received</Text>
-          <Text size="sm">
-            Number of charges: {location.state.quotationData.charges.length}
-          </Text>
-          <Text size="sm">
-            Charges:{" "}
-            {JSON.stringify(location.state.quotationData.charges, null, 2)}
-          </Text>
-        </Box>
-      )} */}
-
-      <Modal
-        opened={opened}
-        onClose={() => {
-          setTempSelectedCarrier(null);
-          close();
-        }}
-        title={
-          <Text size="lg" fw={600} c="#105476">
-            Select Destination Option
-          </Text>
-        }
-        centered
-        overlayProps={{
-          backgroundOpacity: 0.55,
-          blur: 3,
-        }}
-        styles={{
-          content: {
-            border: "1px solid #105476",
-            borderRadius: 12,
-            padding: "20px",
-          },
-        }}
-      >
-        <Stack gap="md">
-          <Radio.Group
-            {...tariffOption.getInputProps("tariffVal")}
-            name="tariffVal"
+    <Box style={{ backgroundColor: "#F8F8F8" }}>
+      <Box p="xs" maw={1200} mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+        {isEditMode ? (
+          <Flex
+            gap="lg"
+            align="flex-start"
+            style={{ minHeight: "calc(100vh - 100px)" }}
           >
-            <Stack>
-              <Radio
-                value="all_inclusive"
-                label="All Inclusive"
-                styles={{
-                  label: { color: "#105476", fontWeight: 500 },
-                  radio: { accentColor: "#105476" },
-                }}
-              />
-              <Radio
-                value="per_container"
-                label="Per container"
-                styles={{
-                  label: { color: "#105476", fontWeight: 500 },
-                  radio: { accentColor: "#105476" },
-                }}
-              />
-              <Radio
-                value="as_per_tariff"
-                label="As per tariff"
-                styles={{
-                  label: { color: "#105476", fontWeight: 500 },
-                  radio: { accentColor: "#105476" },
-                }}
-              />
-            </Stack>
-            {/* {tariffOption.errors.tariffVal && (
-              <Text c="red" size="sm">
-                {tariffOption.errors.tariffVal}
-              </Text>
-            )} */}
-          </Radio.Group>
-
-          <Group justify="flex-end" mt="md">
-            <Button
-              variant="default"
-              onClick={() => {
-                setTempSelectedCarrier(null);
-                close();
+            {/* Left Pane - Title */}
+            <Box
+              style={{
+                minWidth: 180,
+                height: "calc(100vh - 100px)",
+                alignSelf: "stretch",
+                backgroundColor: "#FFFFFF",
+                position: "sticky",
+                top: 0,
               }}
-              disabled={isSubmittingTariff}
             >
-              Cancel
-            </Button>
-            <Button
-              style={{ backgroundColor: "#105476", color: "white" }}
-              onClick={() => {
-                tariffSubmit();
+              <Box
+                style={{
+                  padding: "10px 20px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  Edit Quotation
+                </Text>
+              </Box>
+            </Box>
+
+            {/* Right Pane - Quotation Form */}
+            <Box
+              style={{
+                flex: 1,
+                backgroundColor: "#ffffff",
+                borderRadius: "8px",
+                display: "flex",
+                flexDirection: "column",
+                height: "calc(100vh - 100px)",
+                overflow: "hidden",
               }}
-              disabled={isSubmittingTariff}
-              leftSection={
-                isSubmittingTariff ? <Loader size="xs" color="white" /> : null
-              }
             >
-              {isSubmittingTariff ? "Submitting..." : "Submit"}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+              <Box
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  paddingBottom: "16px",
+                  backgroundColor: "#F8F8F8",
+                }}
+              >
+                <Box style={{ backgroundColor: "#FFFFFF", padding: "24px" }}>
+                  {/* Service Details Slider */}
+                  {services.length > 0 && (
+                    <ServiceDetailsSlider
+                      services={services}
+                      selectedServiceIndex={selectedServiceIndex}
+                      onServiceSelect={handleServiceSelect}
+                    />
+                  )}
 
-      {/* <Title order={4} mb="md" c={"#105476"}>
-        Quotation
-      </Title> */}
+                  {/* Tariff Submission Loading Overlay */}
+                  {isSubmittingTariff && (
+                    <Box
+                      style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: "rgba(0, 0, 0, 0.5)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 1000,
+                      }}
+                    >
+                      <Stack align="center" gap="md">
+                        <Loader size="xl" color="#105476" />
+                        <Text
+                          size="lg"
+                          color="white"
+                          fw={500}
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          Getting tariff chargers...
+                        </Text>
+                      </Stack>
+                    </Box>
+                  )}
 
-      {/* Quotation Form */}
-      <Grid mb={30} key={`quotation-form-${currentServiceId}`}>
-        <Grid.Col span={1.75}>
-          <Dropdown
-            key={`${currentServiceId}-quote-currency`}
-            label="Quote Currency"
-            searchable
-            placeholder="Select currency"
-            data={quoteCurrency}
-            {...quotationForm.getInputProps("quote_currency_country_code")}
-          />
-        </Grid.Col>
-        <Grid.Col span={1.75}>
-          <Box maw={300} mx="auto">
-            <DateInput
-              label="Date"
-              key={`${currentServiceId}-valid-upto`}
-              placeholder="YYYY-MM-DD"
-              value={
-                quotationForm.values.valid_upto
-                  ? new Date(quotationForm.values.valid_upto)
-                  : null
-              }
-              onChange={(date) => {
-                const formatted = date ? dayjs(date).format("YYYY-MM-DD") : "";
-                quotationForm.setFieldValue("valid_upto", formatted);
-              }}
-              valueFormat="YYYY-MM-DD"
-              leftSection={<IconCalendar size={18} />}
-              leftSectionPointerEvents="none"
-              radius="md"
-              size="sm"
-              // dropdownType="popover"
-              styles={{
-                day: {
-                  width: "2.25rem",
-                  height: "2.25rem",
-                  fontSize: "0.9rem",
-                },
-                calendarHeaderLevel: {
-                  fontSize: "1rem",
-                  fontWeight: 500,
-                  marginBottom: "0.5rem",
-                },
-                calendarHeaderControl: {
-                  width: "2rem",
-                  height: "2rem",
-                },
-              }}
-              error={quotationForm.errors.valid_upto}
-            />
-          </Box>
-        </Grid.Col>
-        <Grid.Col span={1.25}>
-          <Text size="md" fw={500} my={2}>
-            Multi Carrier
-          </Text>
-          <SegmentedControl
-            size="xs"
-            key={`${currentServiceId}-multi-carrier`}
-            data={[
-              { label: "No", value: "false" },
-              { label: "Yes", value: "true" },
-            ]}
-            {...quotationForm.getInputProps("multi_carrier")}
-          />
-        </Grid.Col>
-        <Grid.Col span={1.25}>
-          <Dropdown
-            label="Quote Type"
-            searchable
-            key={quotationForm.key("quote_type")}
-            placeholder="Enter Quote Type"
-            data={["Standard", "Lumpsum", "All Inclusive"]}
-            {...quotationForm.getInputProps("quote_type")}
-          />
-        </Grid.Col>
-        {selectedService?.service !== "LCL" && (
-          <Grid.Col span={1.25}>
-            <Dropdown
-              label="Carrier"
-              placeholder="Carrier"
-              searchable
-              // withAsterisk
-              data={carrierData}
-              {...quotationForm.getInputProps("carrier_code")}
-            />
-          </Grid.Col>
-        )}
-        {selectedService?.service !== "LCL" && (
-          <Grid.Col span={1}>
-            <Dropdown
-              label="ICD"
-              placeholder="ICD"
-              searchable
-              // withAsterisk
-              data={icdData}
-              {...quotationForm.getInputProps("icd")}
-            />
-          </Grid.Col>
-        )}
-        <Grid.Col span={1.65}>
-          <Dropdown
-            label="Status"
-            placeholder="Select Status"
-            searchable
-            data={[
-              { value: "QUOTE CREATED", label: "Quote Created" },
-              { value: "GAINED", label: "Gained" },
-              { value: "LOST", label: "Lost" },
-            ]}
-            {...quotationForm.getInputProps("status")}
-          />
-        </Grid.Col>
-        <Grid.Col span={1.25}>
-          <TextInput
-            label="Remark"
-            withAsterisk={isRemarkRequired}
-            placeholder="Enter remark"
-            value={quotationForm.values.remark}
-            onChange={(e) => {
-              const formattedValue = toTitleCase(e.target.value);
-              quotationForm.setFieldValue("remark", formattedValue);
-            }}
-            error={quotationForm.errors.remark}
-          />
-        </Grid.Col>
-      </Grid>
+                  {/* Quotation Form */}
+                  <Grid mb={30} key={`quotation-form-${currentServiceId}`}>
+                    <Grid.Col span={1.75}>
+                      <Dropdown
+                        key={`${currentServiceId}-quote-currency`}
+                        label="Quote Currency"
+                        searchable
+                        placeholder="Select currency"
+                        data={quoteCurrency}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                        {...quotationForm.getInputProps(
+                          "quote_currency_country_code"
+                        )}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1.75}>
+                      <Box maw={300} mx="auto">
+                        <DateInput
+                          label="Date"
+                          key={`${currentServiceId}-valid-upto`}
+                          placeholder="YYYY-MM-DD"
+                          value={
+                            quotationForm.values.valid_upto
+                              ? new Date(quotationForm.values.valid_upto)
+                              : null
+                          }
+                          onChange={(date) => {
+                            const formatted = date
+                              ? dayjs(date).format("YYYY-MM-DD")
+                              : "";
+                            quotationForm.setFieldValue(
+                              "valid_upto",
+                              formatted
+                            );
+                          }}
+                          valueFormat="YYYY-MM-DD"
+                          leftSection={<IconCalendar size={18} />}
+                          leftSectionPointerEvents="none"
+                          radius="sm"
+                          size="sm"
+                          // dropdownType="popover"
+                          styles={{
+                            input: {
+                              height: "36px",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                            day: {
+                              width: "2.25rem",
+                              height: "2.25rem",
+                              fontSize: "0.9rem",
+                            },
+                            calendarHeaderLevel: {
+                              fontSize: "1rem",
+                              fontWeight: 500,
+                              marginBottom: "0.5rem",
+                              flex: 1,
+                              textAlign: "center",
+                            },
+                            calendarHeaderControl: {
+                              width: "2rem",
+                              height: "2rem",
+                              margin: "0 0.5rem",
+                            },
+                            calendarHeader: {
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "0.5rem",
+                            },
+                          }}
+                          error={quotationForm.errors.valid_upto}
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={1.25}>
+                      <Checkbox
+                        key={`${currentServiceId}-multi-carrier`}
+                        label="Multi Carrier"
+                        checked={quotationForm.values.multi_carrier === "true"}
+                        onChange={(event) => {
+                          quotationForm.setFieldValue(
+                            "multi_carrier",
+                            event.currentTarget.checked ? "true" : "false"
+                          );
+                        }}
+                        styles={{
+                          label: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                            color: "#424242",
+                            fontWeight: 500,
+                          },
+                          input: {
+                            cursor: "pointer",
+                          },
+                        }}
+                        mt={28}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1.25}>
+                      <Dropdown
+                        label="Quote Type"
+                        searchable
+                        key={quotationForm.key("quote_type")}
+                        placeholder="Enter Quote Type"
+                        data={["Standard", "Lumpsum", "All Inclusive"]}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                        {...quotationForm.getInputProps("quote_type")}
+                      />
+                    </Grid.Col>
+                    {selectedService?.service !== "LCL" && (
+                      <Grid.Col span={1.25}>
+                        <Dropdown
+                          label="Carrier"
+                          placeholder="Carrier"
+                          searchable
+                          // withAsterisk
+                          data={carrierData}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          {...quotationForm.getInputProps("carrier_code")}
+                        />
+                      </Grid.Col>
+                    )}
+                    {selectedService?.service !== "LCL" && (
+                      <Grid.Col span={1}>
+                        <Dropdown
+                          label="ICD"
+                          placeholder="ICD"
+                          searchable
+                          // withAsterisk
+                          data={icdData}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          {...quotationForm.getInputProps("icd")}
+                        />
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={1.65}>
+                      <Dropdown
+                        label="Status"
+                        placeholder="Select Status"
+                        searchable
+                        data={[
+                          { value: "QUOTE CREATED", label: "Quote Created" },
+                          { value: "GAINED", label: "Gained" },
+                          { value: "LOST", label: "Lost" },
+                        ]}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                        {...quotationForm.getInputProps("status")}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={2}>
+                      <Flex gap="sm" align="flex-end">
+                        <div style={{ flex: 1 }}>
+                          <TextInput
+                            label="Remark"
+                            withAsterisk={isRemarkRequired}
+                            placeholder="Enter remark"
+                            value={quotationForm.values.remark}
+                            onChange={(e) => {
+                              const formattedValue = toTitleCase(
+                                e.target.value
+                              );
+                              quotationForm.setFieldValue(
+                                "remark",
+                                formattedValue
+                              );
+                            }}
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                                fontStyle: "medium",
+                              },
+                            }}
+                            error={quotationForm.errors.remark}
+                          />
+                        </div>
+                        <Menu shadow="md" width={220} position="bottom-end">
+                          <Menu.Target>
+                            <ActionIcon
+                              variant="subtle"
+                              color="#105476"
+                              size="lg"
+                              styles={{
+                                root: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  border: "1px solid #E9ECEF",
+                                  borderRadius: "8px",
+                                  "&:hover": {
+                                    backgroundColor: "#F8F9FA",
+                                  },
+                                },
+                              }}
+                            >
+                              <IconDotsVertical size={18} />
+                            </ActionIcon>
+                          </Menu.Target>
+                          <Menu.Dropdown
+                            styles={{
+                              dropdown: {
+                                border: "1px solid #E9ECEF",
+                                borderRadius: "8px",
+                                padding: "8px",
+                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                              },
+                            }}
+                          >
+                            <Menu.Item
+                              leftSection={
+                                <Box
+                                  style={{
+                                    backgroundColor: "#E7F5FF",
+                                    borderRadius: "6px",
+                                    padding: "6px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconNotes size={16} color="#105476" />
+                                </Box>
+                              }
+                              styles={{
+                                item: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  borderRadius: "6px",
+                                  padding: "10px 12px",
+                                  marginBottom: "4px",
+                                  "&:hover": {
+                                    backgroundColor: "#F8F9FA",
+                                  },
+                                },
+                                itemLabel: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                },
+                              }}
+                              onClick={handleOpenNotesConditionsModal}
+                            >
+                              Notes & Conditions
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={
+                                <Box
+                                  style={{
+                                    backgroundColor: "#E7F5FF",
+                                    borderRadius: "6px",
+                                    padding: "6px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconChartBar size={16} color="#105476" />
+                                </Box>
+                              }
+                              disabled={selectedService?.service === "LCL"}
+                              styles={{
+                                item: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  borderRadius: "6px",
+                                  padding: "10px 12px",
+                                  marginBottom: "4px",
+                                  "&:hover": {
+                                    backgroundColor: "#F8F9FA",
+                                  },
+                                },
+                                itemLabel: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                },
+                              }}
+                              onClick={() => {
+                                if (!carrierComparisonData) {
+                                  fetchCarrierComparison();
+                                }
+                                openCarrierModal();
+                              }}
+                            >
+                              Check carrier comparison
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={
+                                <Box
+                                  style={{
+                                    backgroundColor: "#E7F5FF",
+                                    borderRadius: "6px",
+                                    padding: "6px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconDatabase size={16} color="#105476" />
+                                </Box>
+                              }
+                              disabled={
+                                selectedService?.service === "FCL" &&
+                                !quotationForm.values.carrier_code
+                              }
+                              styles={{
+                                item: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  borderRadius: "6px",
+                                  padding: "10px 12px",
+                                  marginBottom: "4px",
+                                  "&:hover": {
+                                    backgroundColor: "#F8F9FA",
+                                  },
+                                },
+                                itemLabel: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                },
+                              }}
+                              onClick={() => open()}
+                            >
+                              Get tariff data
+                            </Menu.Item>
+                            {isStandaloneEdit && (
+                              <>
+                                <Menu.Divider />
+                                <Menu.Item
+                                  leftSection={
+                                    <Box
+                                      style={{
+                                        backgroundColor: "#E7F5FF",
+                                        borderRadius: "6px",
+                                        padding: "6px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <IconBook size={16} color="#105476" />
+                                    </Box>
+                                  }
+                                  styles={{
+                                    item: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      borderRadius: "6px",
+                                      padding: "10px 12px",
+                                      marginBottom: "4px",
+                                      "&:hover": {
+                                        backgroundColor: "#F8F9FA",
+                                      },
+                                    },
+                                    itemLabel: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                    },
+                                  }}
+                                  onClick={() => {
+                                    handleCreateBooking();
+                                  }}
+                                >
+                                  Create Booking
+                                </Menu.Item>
+                                <Menu.Item
+                                  leftSection={
+                                    <Box
+                                      style={{
+                                        backgroundColor: "#E7F5FF",
+                                        borderRadius: "6px",
+                                        padding: "6px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <IconHistory size={16} color="#105476" />
+                                    </Box>
+                                  }
+                                  styles={{
+                                    item: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      borderRadius: "6px",
+                                      padding: "10px 12px",
+                                      marginBottom: "4px",
+                                      "&:hover": {
+                                        backgroundColor: "#F8F9FA",
+                                      },
+                                    },
+                                    itemLabel: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                    },
+                                  }}
+                                  onClick={fetchChargeHistory}
+                                >
+                                  Check charge history
+                                </Menu.Item>
+                              </>
+                            )}
+                          </Menu.Dropdown>
+                        </Menu>
+                      </Flex>
+                    </Grid.Col>
+                  </Grid>
 
-      {/* Dynamic Charges */}
-      <Stack justify="lg" key={`dynamic-form-${currentServiceId}`} px={0}>
-        {dynamicForm.values.charges.length > 0 && (
-          <Grid
-            // mt="md"
-            // mb="xs"
-            style={{
-              fontWeight: 600,
-              color: "#105476",
-            }}
-            gutter="sm"
-          >
-            <Grid.Col span={1.5}>Charge Name</Grid.Col>
-            <Grid.Col span={1}>Currency</Grid.Col>
-            <Grid.Col span={1}>ROE</Grid.Col>
-            <Grid.Col span={1}>Unit</Grid.Col>
-            <Grid.Col span={1}>No of Units</Grid.Col>
-            <Grid.Col span={1}>Sell Per Unit</Grid.Col>
-            <Grid.Col span={1}>Min Sell</Grid.Col>
-            <Grid.Col span={1}>Cost Per Unit</Grid.Col>
-            <Grid.Col span={1}>
-              Total Sell{userCurrencyCode ? ` (${userCurrencyCode})` : ""}
-            </Grid.Col>
-            <Grid.Col span={1}>
-              Total Cost{userCurrencyCode ? ` (${userCurrencyCode})` : ""}
-            </Grid.Col>
-          </Grid>
-        )}
-        {dynamicForm.values.charges.map((_, index) => (
-          <Box
-            key={index}
-            // style={{
-            //   border: "1px solid #eee",
-            //   borderRadius: 8,
-            //   boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-            // }}
-            // p="lg"
-            // mt={"md"}
-          >
-            <Grid gutter="sm">
-              <Grid.Col span={1.5}>
-                {/* <Select
+                  {/* Dynamic Charges */}
+                  <Stack
+                    justify="lg"
+                    key={`dynamic-form-${currentServiceId}`}
+                    px={0}
+                  >
+                    {dynamicForm.values.charges.length > 0 && (
+                      <Grid
+                        // mt="md"
+                        // mb="xs"
+                        style={{
+                          fontWeight: 600,
+                          color: "#105476",
+                        }}
+                        gutter="sm"
+                      >
+                        <Grid.Col span={1.5}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Charge Name
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Currency
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            ROE
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Unit
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            No of Units
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Sell Per Unit
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Min Sell
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Cost Per Unit
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Total Sell
+                            {userCurrencyCode ? ` (${userCurrencyCode})` : ""}
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Total Cost
+                            {userCurrencyCode ? ` (${userCurrencyCode})` : ""}
+                          </Text>
+                        </Grid.Col>
+                      </Grid>
+                    )}
+                    {dynamicForm.values.charges.map((_, index) => (
+                      <Box
+                        key={index}
+                        // style={{
+                        //   border: "1px solid #eee",
+                        //   borderRadius: 8,
+                        //   boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                        // }}
+                        // p="lg"
+                        // mt={"md"}
+                      >
+                        <Grid gutter="sm">
+                          <Grid.Col span={1.5}>
+                            {/* <Select
                   label="Charge Name"
                   key={
                     dynamicForm.values.charges[index].charge_name ||
@@ -4044,138 +4504,211 @@ function QuotationCreate({
                   // data={chargesData}
                   {...dynamicForm.getInputProps(`charges.${index}.charge_name`)}
                 /> */}
-                <TextInput
-                  key={`charge-name-${index}`}
-                  // label="Charge Name"
-                  placeholder="Charge Name"
-                  // data={quoteCurrency}
-                  {...dynamicForm.getInputProps(`charges.${index}.charge_name`)}
-                />
-              </Grid.Col>
-              <Grid.Col span={1}>
-                <Dropdown
-                  placeholder="Select Currency"
-                  searchable
-                  key={
-                    // dynamicForm.values.charges[index]?.currency_country_code ||
-                    `unit-${index}-currency_country_code`
-                  }
-                  data={currency}
-                  {...dynamicForm.getInputProps(
-                    `charges.${index}.currency_country_code`
-                  )}
-                  onChange={(value) => {
-                    // Set currency value
-                    dynamicForm.setFieldValue(
-                      `charges.${index}.currency_country_code`,
-                      value || ""
-                    );
-                    // Automatically set ROE based on currency and user's country
-                    if (value) {
-                      const calculatedRoe = getRoeValue(value);
-                      dynamicForm.setFieldValue(
-                        `charges.${index}.roe`,
-                        calculatedRoe
-                      );
-                    }
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={1}>
-                <TextInput
-                  key={
-                    // dynamicForm.values.charges[index]?.roe ||
-                    `unit-${index}-roe`
-                  }
-                  min={1}
-                  // decimalScale={2}
-                  {...dynamicForm.getInputProps(`charges.${index}.roe`)}
-                />
-              </Grid.Col>
-              <Grid.Col span={1}>
-                <Dropdown
-                  searchable
-                  placeholder="Select Unit"
-                  data={unitData}
-                  key={
-                    // dynamicForm.values.charges[index]?.unit ||
-                    `unit-${index}-no_of_units`
-                  }
-                  {...dynamicForm.getInputProps(`charges.${index}.unit`)}
-                  onChange={(value) => {
-                    // Set unit value
-                    dynamicForm.setFieldValue(
-                      `charges.${index}.unit`,
-                      value || ""
-                    );
+                            <TextInput
+                              key={`charge-name-${index}`}
+                              // label="Charge Name"
+                              placeholder="Charge Name"
+                              // data={quoteCurrency}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.charge_name`
+                              )}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={1}>
+                            <Dropdown
+                              placeholder="Select Currency"
+                              searchable
+                              key={
+                                // dynamicForm.values.charges[index]?.currency_country_code ||
+                                `unit-${index}-currency_country_code`
+                              }
+                              data={currency}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.currency_country_code`
+                              )}
+                              onChange={(value) => {
+                                // Set currency value
+                                dynamicForm.setFieldValue(
+                                  `charges.${index}.currency_country_code`,
+                                  value || ""
+                                );
+                                // Automatically set ROE based on currency and user's country
+                                if (value) {
+                                  const calculatedRoe = getRoeValue(value);
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.roe`,
+                                    calculatedRoe
+                                  );
+                                }
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={1}>
+                            <TextInput
+                              key={
+                                // dynamicForm.values.charges[index]?.roe ||
+                                `unit-${index}-roe`
+                              }
+                              min={1}
+                              // decimalScale={2}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.roe`
+                              )}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={1}>
+                            <Dropdown
+                              searchable
+                              placeholder="Select Unit"
+                              data={unitData}
+                              key={
+                                // dynamicForm.values.charges[index]?.unit ||
+                                `unit-${index}-no_of_units`
+                              }
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.unit`
+                              )}
+                              onChange={(value) => {
+                                // Set unit value
+                                dynamicForm.setFieldValue(
+                                  `charges.${index}.unit`,
+                                  value || ""
+                                );
 
-                    // Auto-calculate and set no_of_units based on service and unit
-                    if (value && selectedService) {
-                      const calculatedNoOfUnits = calculateNoOfUnits(
-                        selectedService.service,
-                        value,
-                        selectedService.id
-                      );
-                      if (calculatedNoOfUnits) {
-                        dynamicForm.setFieldValue(
-                          `charges.${index}.no_of_units`,
-                          calculatedNoOfUnits
-                        );
-                      }
-                    }
-                  }}
-                  disabled={isLoadingUnitData}
-                />
-              </Grid.Col>
-              <Grid.Col span={1}>
-                <TextInput
-                  key={`unit-${index}-no_of_units`}
-                  //placeholder={"100"}
-                  min={1}
-                  {...dynamicForm.getInputProps(`charges.${index}.no_of_units`)}
-                  disabled={dynamicForm.values.charges[index]?.toBeDisabled}
-                />
-              </Grid.Col>
-              <Grid.Col span={1}>
-                <TextInput
-                  key={
-                    // dynamicForm.values.charges[index]?.sell_per_unit ||
-                    `unit-${index}-sell_per_unit`
-                  }
-                  //placeholder={"100"}
-                  min={0}
-                  {...dynamicForm.getInputProps(
-                    `charges.${index}.sell_per_unit`
-                  )}
-                />
-              </Grid.Col>
-              <Grid.Col span={1}>
-                <TextInput
-                  key={
-                    // dynamicForm.values.charges[index]?.min_sell ||
-                    `unit-${index}-min_sell`
-                  }
-                  disabled={dynamicForm.values.charges[index]?.toBeDisabled}
-                  min={0}
-                  //placeholder={"100"}
-                  {...dynamicForm.getInputProps(`charges.${index}.min_sell`)}
-                />
-              </Grid.Col>
-              <Grid.Col span={1}>
-                <TextInput
-                  key={
-                    // dynamicForm.values.charges[index]?.cost_per_unit ||
-                    `unit-${index}-cost_per_unit`
-                  }
-                  disabled={dynamicForm.values.charges[index]?.toBeDisabled}
-                  //placeholder={"100"}
-                  min={0}
-                  {...dynamicForm.getInputProps(
-                    `charges.${index}.cost_per_unit`
-                  )}
-                />
-              </Grid.Col>
-              {/* <Grid.Col span={1}>
+                                // Auto-calculate and set no_of_units based on service and unit
+                                if (value && selectedService) {
+                                  const calculatedNoOfUnits =
+                                    calculateNoOfUnits(
+                                      selectedService.service,
+                                      value,
+                                      selectedService.id
+                                    );
+                                  if (calculatedNoOfUnits) {
+                                    dynamicForm.setFieldValue(
+                                      `charges.${index}.no_of_units`,
+                                      calculatedNoOfUnits
+                                    );
+                                  }
+                                }
+                              }}
+                              disabled={isLoadingUnitData}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={1}>
+                            <TextInput
+                              key={`unit-${index}-no_of_units`}
+                              //placeholder={"100"}
+                              min={1}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.no_of_units`
+                              )}
+                              disabled={
+                                dynamicForm.values.charges[index]?.toBeDisabled
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={1}>
+                            <TextInput
+                              key={
+                                // dynamicForm.values.charges[index]?.sell_per_unit ||
+                                `unit-${index}-sell_per_unit`
+                              }
+                              //placeholder={"100"}
+                              min={0}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.sell_per_unit`
+                              )}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={1}>
+                            <TextInput
+                              key={
+                                // dynamicForm.values.charges[index]?.min_sell ||
+                                `unit-${index}-min_sell`
+                              }
+                              disabled={
+                                dynamicForm.values.charges[index]?.toBeDisabled
+                              }
+                              min={0}
+                              //placeholder={"100"}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.min_sell`
+                              )}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={1}>
+                            <TextInput
+                              key={
+                                // dynamicForm.values.charges[index]?.cost_per_unit ||
+                                `unit-${index}-cost_per_unit`
+                              }
+                              disabled={
+                                dynamicForm.values.charges[index]?.toBeDisabled
+                              }
+                              //placeholder={"100"}
+                              min={0}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.cost_per_unit`
+                              )}
+                            />
+                          </Grid.Col>
+                          {/* <Grid.Col span={1}>
                 <TextInput
                   key={
                     dynamicForm.values.charges[index]?.min_cost ||
@@ -4187,10 +4720,10 @@ function QuotationCreate({
                   {...dynamicForm.getInputProps(`charges.${index}.min_cost`)}
                 />
               </Grid.Col> */}
-              {/* {quotationForm.values.carrier_code &&
+                          {/* {quotationForm.values.carrier_code &&
                 tariffOption.values.tariffVal === "as_per_tariff" && (
                   <> */}
-              {/* <Grid.Col span={1}>
+                          {/* <Grid.Col span={1}>
                       <TextInput
                         key={`unit-${index}-total_cost`}
                         type="number"
@@ -4226,360 +4759,1743 @@ function QuotationCreate({
                         }}
                       />
                     </Grid.Col> */}
-              <Grid.Col span={1}>
-                <TextInput
-                  key={`unit-${index}-total_sell`}
-                  value={
-                    dynamicForm.values.charges[index]?.total_sell ?? "0.00"
-                  }
-                  readOnly
-                  // disabled
-                />
-              </Grid.Col>
-              <Grid.Col span={1}>
-                <TextInput
-                  key={`unit-${index}-total_cost`}
-                  value={
-                    dynamicForm.values.charges[index]?.total_cost ?? "0.00"
-                  }
-                  readOnly
-                  // disabled
-                />
-              </Grid.Col>
+                          <Grid.Col span={1}>
+                            <TextInput
+                              key={`unit-${index}-total_sell`}
+                              value={
+                                dynamicForm.values.charges[index]?.total_sell ??
+                                "0.00"
+                              }
+                              readOnly
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                  backgroundColor: "#f8f9fa",
+                                  cursor: "not-allowed",
+                                },
+                              }}
+                              // disabled
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={1}>
+                            <TextInput
+                              key={`unit-${index}-total_cost`}
+                              value={
+                                dynamicForm.values.charges[index]?.total_cost ??
+                                "0.00"
+                              }
+                              readOnly
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                  backgroundColor: "#f8f9fa",
+                                  cursor: "not-allowed",
+                                },
+                              }}
+                              // disabled
+                            />
+                          </Grid.Col>
 
-              {/* </>
+                          {/* </>
                 )} */}
 
-              {dynamicForm.values.charges.length - 1 === index && (
-                <Grid.Col span={0.75}>
-                  <Button
-                    radius={"sm"}
-                    variant="light"
-                    color="#105476"
-                    onClick={() =>
-                      dynamicForm.insertListItem("charges", {
-                        charge_name: "",
-                        currency_country_code: "",
-                        roe: 1,
-                        unit: "",
-                        no_of_units: "",
-                        sell_per_unit: "",
-                        min_sell: "",
-                        cost_per_unit: "",
-                        // min_cost: "",
-                      })
-                    }
-                  >
-                    <IconPlus size={16} />
-                  </Button>
-                </Grid.Col>
-              )}
-              <Grid.Col span={0.75}>
-                {dynamicForm.values.charges.length > 1 ? (
-                  <Button
-                    variant="light"
-                    color="red"
-                    onClick={() => dynamicForm.removeListItem("charges", index)}
-                  >
-                    <IconTrash size={16} />
-                  </Button>
-                ) : (
-                  ""
-                )}
-              </Grid.Col>
-            </Grid>
-          </Box>
-        ))}
+                          {dynamicForm.values.charges.length - 1 === index && (
+                            <Grid.Col span={0.75}>
+                              <Button
+                                radius={"sm"}
+                                variant="light"
+                                color="#105476"
+                                onClick={() =>
+                                  dynamicForm.insertListItem("charges", {
+                                    charge_name: "",
+                                    currency_country_code: "",
+                                    roe: 1,
+                                    unit: "",
+                                    no_of_units: "",
+                                    sell_per_unit: "",
+                                    min_sell: "",
+                                    cost_per_unit: "",
+                                    // min_cost: "",
+                                  })
+                                }
+                              >
+                                <IconPlus size={16} />
+                              </Button>
+                            </Grid.Col>
+                          )}
+                          <Grid.Col span={0.75}>
+                            {dynamicForm.values.charges.length > 1 ? (
+                              <Button
+                                variant="light"
+                                color="red"
+                                onClick={() =>
+                                  dynamicForm.removeListItem("charges", index)
+                                }
+                              >
+                                <IconTrash size={16} />
+                              </Button>
+                            ) : (
+                              ""
+                            )}
+                          </Grid.Col>
+                        </Grid>
+                      </Box>
+                    ))}
 
-        <Grid
-          // mt="xs"
-          // justify="flex-end"
-          style={{
-            fontWeight: 600,
-            color: "#105476",
-            // borderTop: "1px solid #ccc",
-            paddingTop: "0.5rem",
-          }}
-        >
-          <Grid.Col span={7.5} />
-          <Grid.Col span={1} ml={10}>
-            {" "}
-            Total:
-          </Grid.Col>
-          <Grid.Col span={1}>{netSell.toFixed(2)}</Grid.Col>
-          <Grid.Col span={1}> {netCost.toFixed(2)}</Grid.Col>
-        </Grid>
-        <Grid
-          mt={8}
-          style={{
-            fontWeight: 600,
-            color: profit >= 0 ? "green" : "red",
-          }}
-        >
-          <Grid.Col span={7.5} />
+                    <Grid
+                      // mt="xs"
+                      // justify="flex-end"
+                      style={{
+                        fontWeight: 600,
+                        color: "#105476",
+                        // borderTop: "1px solid #ccc",
+                        paddingTop: "0.5rem",
+                      }}
+                    >
+                      <Grid.Col span={7.5} />
+                      <Grid.Col span={1} ml={10}>
+                        {" "}
+                        Total:
+                      </Grid.Col>
+                      <Grid.Col span={1}>{netSell.toFixed(2)}</Grid.Col>
+                      <Grid.Col span={1}> {netCost.toFixed(2)}</Grid.Col>
+                    </Grid>
+                    <Grid
+                      mt={8}
+                      style={{
+                        fontWeight: 600,
+                        color: profit >= 0 ? "green" : "red",
+                      }}
+                    >
+                      <Grid.Col span={7.5} />
 
-          <Grid.Col span={1} ml={10}>
-            Profit=
-          </Grid.Col>
-          <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
-        </Grid>
-      </Stack>
+                      <Grid.Col span={1} ml={10}>
+                        Profit=
+                      </Grid.Col>
+                      <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
+                    </Grid>
+                  </Stack>
 
-      <Group justify="space-between" mt="xl" pb={65}>
-        <Group>
-          <Button
-            variant="outline"
-            color="#000"
-            onClick={() => {
-              if (goToStep) {
-                goToStep(1);
-              } else if (
-                isStandaloneEdit &&
-                (actualEnquiryData?.enquiry_id ||
-                  quotationData?.enquiry_id ||
-                  fetchedQuotationData?.enquiry_id)
-              ) {
-                const serviceDataSnapshot = snapshotServiceQuotationData();
-                // When editing quotation, navigate to enquiry edit with all data prefilled
-                const preserveFilters = location.state?.preserveFilters;
-                // Track source - check if we came from enquiry or quotation
-                const fromQuotation = !location.state?.fromEnquiry;
-                const fromEnquiry = location.state?.fromEnquiry;
+                  <Group justify="space-between" mt="xl" pb={65}>
+                    <Group>
+                      <Button
+                        variant="outline"
+                        color="#000"
+                        onClick={() => {
+                          if (goToStep) {
+                            goToStep(1);
+                          } else if (
+                            isStandaloneEdit &&
+                            (actualEnquiryData?.enquiry_id ||
+                              quotationData?.enquiry_id ||
+                              fetchedQuotationData?.enquiry_id)
+                          ) {
+                            const serviceDataSnapshot =
+                              snapshotServiceQuotationData();
+                            // When editing quotation, navigate to enquiry edit with all data prefilled
+                            const preserveFilters =
+                              location.state?.preserveFilters;
+                            // Track source - check if we came from enquiry or quotation
+                            const fromQuotation = !location.state?.fromEnquiry;
+                            const fromEnquiry = location.state?.fromEnquiry;
 
-                // Get all available data sources
-                const dataSource =
-                  actualEnquiryData || fetchedQuotationData || quotationData;
-                const enquiryId =
-                  dataSource?.enquiry_id ||
-                  quotationData?.enquiry_id ||
-                  fetchedQuotationData?.enquiry_id;
+                            // Get all available data sources
+                            const dataSource =
+                              actualEnquiryData ||
+                              fetchedQuotationData ||
+                              quotationData;
+                            const enquiryId =
+                              dataSource?.enquiry_id ||
+                              quotationData?.enquiry_id ||
+                              fetchedQuotationData?.enquiry_id;
 
-                // For enquiry edit, we need enquiry_pk (enquiry ID), not quotation id
-                // data[0].id is quotation ID, data[0].enquiry_pk is enquiry ID
-                // Priority: enquiry_pk (enquiry ID) > enquiry_id (string) > id (only if not from quotation)
-                const enquiryIdForNav =
-                  quotationData?.enquiry_pk || // First check quotation data for enquiry_pk
-                  fetchedQuotationData?.enquiry_pk || // Then check fetched data for enquiry_pk
-                  dataSource?.enquiry_pk || // Then check dataSource for enquiry_pk
-                  quotationData?.enquiry_id || // Fallback to enquiry_id string
-                  fetchedQuotationData?.enquiry_id ||
-                  dataSource?.enquiry_id ||
-                  // Only use id if it's from actualEnquiryData (enquiry object), not quotationData
-                  (actualEnquiryData?.id && !quotationData
-                    ? actualEnquiryData.id
-                    : null) ||
-                  (fetchedQuotationData?.id && !quotationData
-                    ? fetchedQuotationData.id
-                    : null);
+                            // For enquiry edit, we need enquiry_pk (enquiry ID), not quotation id
+                            // data[0].id is quotation ID, data[0].enquiry_pk is enquiry ID
+                            // Priority: enquiry_pk (enquiry ID) > enquiry_id (string) > id (only if not from quotation)
+                            const enquiryIdForNav =
+                              quotationData?.enquiry_pk || // First check quotation data for enquiry_pk
+                              fetchedQuotationData?.enquiry_pk || // Then check fetched data for enquiry_pk
+                              dataSource?.enquiry_pk || // Then check dataSource for enquiry_pk
+                              quotationData?.enquiry_id || // Fallback to enquiry_id string
+                              fetchedQuotationData?.enquiry_id ||
+                              dataSource?.enquiry_id ||
+                              // Only use id if it's from actualEnquiryData (enquiry object), not quotationData
+                              (actualEnquiryData?.id && !quotationData
+                                ? actualEnquiryData.id
+                                : null) ||
+                              (fetchedQuotationData?.id && !quotationData
+                                ? fetchedQuotationData.id
+                                : null);
 
-                // Map services to enquiry format - use 'services' array format for proper cargo handling
-                const serviceDetails = services.map((service) => ({
-                  id: service.id,
-                  service: service.service,
-                  service_type: service.service_type || service.service, // Include service_type for OTHERS detection
-                  trade: service.trade,
-                  service_code: service.service_code || "", // Include service_code for OTHERS
-                  service_name: service.service_name || "", // Include service_name for OTHERS
-                  origin_code: service.origin_code_read || "",
-                  origin_code_read: service.origin_code_read || "",
-                  origin_name: service.origin_name || "",
-                  destination_code: service.destination_code_read || "",
-                  destination_code_read: service.destination_code_read || "",
-                  destination_name: service.destination_name || "",
-                  pickup: service.pickup,
-                  delivery: service.delivery,
-                  pickup_location: service.pickup_location || "",
-                  delivery_location: service.delivery_location || "",
-                  hazardous_cargo: service.hazardous_cargo || false,
-                  stackable: service.stackable !== undefined ? service.stackable : true, // Include stackable
-                  shipment_terms_code: service.shipment_terms_code_read || "",
-                  shipment_terms_code_read:
-                    service.shipment_terms_code_read || "",
-                  shipment_terms_name: service.shipment_terms_name || "",
-                  // Pass cargo details in the format EnquiryCreate expects
-                  fcl_details: service.fcl_details,
-                  no_of_packages: service.no_of_packages,
-                  gross_weight: service.gross_weight,
-                  volume_weight: service.volume_weight,
-                  chargeable_weight: service.chargeable_weight,
-                  volume: service.volume,
-                  chargeable_volume: service.chargeable_volume,
-                }));
+                            // Map services to enquiry format - use 'services' array format for proper cargo handling
+                            const serviceDetails = services.map((service) => ({
+                              id: service.id,
+                              service: service.service,
+                              service_type:
+                                service.service_type || service.service, // Include service_type for OTHERS detection
+                              trade: service.trade,
+                              service_code: service.service_code || "", // Include service_code for OTHERS
+                              service_name: service.service_name || "", // Include service_name for OTHERS
+                              origin_code: service.origin_code_read || "",
+                              origin_code_read: service.origin_code_read || "",
+                              origin_name: service.origin_name || "",
+                              destination_code:
+                                service.destination_code_read || "",
+                              destination_code_read:
+                                service.destination_code_read || "",
+                              destination_name: service.destination_name || "",
+                              pickup: service.pickup,
+                              delivery: service.delivery,
+                              pickup_location: service.pickup_location || "",
+                              delivery_location:
+                                service.delivery_location || "",
+                              hazardous_cargo: service.hazardous_cargo || false,
+                              stackable:
+                                service.stackable !== undefined
+                                  ? service.stackable
+                                  : true, // Include stackable
+                              shipment_terms_code:
+                                service.shipment_terms_code_read || "",
+                              shipment_terms_code_read:
+                                service.shipment_terms_code_read || "",
+                              shipment_terms_name:
+                                service.shipment_terms_name || "",
+                              // Pass cargo details in the format EnquiryCreate expects
+                              fcl_details: service.fcl_details,
+                              no_of_packages: service.no_of_packages,
+                              gross_weight: service.gross_weight,
+                              volume_weight: service.volume_weight,
+                              chargeable_weight: service.chargeable_weight,
+                              volume: service.volume,
+                              chargeable_volume: service.chargeable_volume,
+                            }));
 
-                // Prepare enquiry data with all fields from quotation
-                const enquiryDataToPass = {
-                  id: enquiryIdForNav,
-                  enquiry_id: enquiryId,
-                  actionType: "editQuotation", // Special action type to show quotation step
-                  customer_code:
-                    dataSource?.customer_code ||
-                    quotationData?.customer_code ||
-                    fetchedQuotationData?.customer_code,
-                  customer_code_read:
-                    dataSource?.customer_code ||
-                    quotationData?.customer_code ||
-                    fetchedQuotationData?.customer_code,
-                  customer_name:
-                    dataSource?.customer_name ||
-                    quotationData?.customer_name ||
-                    fetchedQuotationData?.customer_name,
-                  customer_address:
-                    dataSource?.customer_address ||
-                    quotationData?.customer_address ||
-                    fetchedQuotationData?.customer_address,
-                  sales_person:
-                    dataSource?.sales_person ||
-                    quotationData?.sales_person ||
-                    fetchedQuotationData?.sales_person,
-                  sales_coordinator:
-                    dataSource?.sales_coordinator ||
-                    quotationData?.sales_coordinator ||
-                    fetchedQuotationData?.sales_coordinator ||
-                    "",
-                  customer_services:
-                    dataSource?.customer_services ||
-                    quotationData?.customer_services ||
-                    fetchedQuotationData?.customer_services ||
-                    "",
-                  enquiry_received_date:
-                    dataSource?.enquiry_received_date ||
-                    quotationData?.enquiry_received_date ||
-                    fetchedQuotationData?.enquiry_received_date,
-                  reference_no:
-                    dataSource?.reference_no ||
-                    quotationData?.reference_no ||
-                    fetchedQuotationData?.reference_no ||
-                    "",
-                  services: serviceDetails, // Use 'services' array for proper cargo details handling
-                  preserveFilters,
-                  fromQuotation, // Track if we came from quotation list
-                  fromEnquiry, // Track if we came from enquiry list
-                  // Pass quotation data to preserve it
-                  quotation:
-                    dataSource?.quotation ||
-                    quotationData?.quotation ||
-                    fetchedQuotationData?.quotation,
-                  serviceQuotationState: serviceDataSnapshot,
-                  quotationId: quotationIdForEdit || undefined,
-                };
+                            // Prepare enquiry data with all fields from quotation
+                            const enquiryDataToPass = {
+                              id: enquiryIdForNav,
+                              enquiry_id: enquiryId,
+                              actionType: "editQuotation", // Special action type to show quotation step
+                              customer_code:
+                                dataSource?.customer_code ||
+                                quotationData?.customer_code ||
+                                fetchedQuotationData?.customer_code,
+                              customer_code_read:
+                                dataSource?.customer_code ||
+                                quotationData?.customer_code ||
+                                fetchedQuotationData?.customer_code,
+                              customer_name:
+                                dataSource?.customer_name ||
+                                quotationData?.customer_name ||
+                                fetchedQuotationData?.customer_name,
+                              customer_address:
+                                dataSource?.customer_address ||
+                                quotationData?.customer_address ||
+                                fetchedQuotationData?.customer_address,
+                              sales_person:
+                                dataSource?.sales_person ||
+                                quotationData?.sales_person ||
+                                fetchedQuotationData?.sales_person,
+                              sales_coordinator:
+                                dataSource?.sales_coordinator ||
+                                quotationData?.sales_coordinator ||
+                                fetchedQuotationData?.sales_coordinator ||
+                                "",
+                              customer_services:
+                                dataSource?.customer_services ||
+                                quotationData?.customer_services ||
+                                fetchedQuotationData?.customer_services ||
+                                "",
+                              enquiry_received_date:
+                                dataSource?.enquiry_received_date ||
+                                quotationData?.enquiry_received_date ||
+                                fetchedQuotationData?.enquiry_received_date,
+                              reference_no:
+                                dataSource?.reference_no ||
+                                quotationData?.reference_no ||
+                                fetchedQuotationData?.reference_no ||
+                                "",
+                              services: serviceDetails, // Use 'services' array for proper cargo details handling
+                              preserveFilters,
+                              fromQuotation, // Track if we came from quotation list
+                              fromEnquiry, // Track if we came from enquiry list
+                              // Pass quotation data to preserve it
+                              quotation:
+                                dataSource?.quotation ||
+                                quotationData?.quotation ||
+                                fetchedQuotationData?.quotation,
+                              serviceQuotationState: serviceDataSnapshot,
+                              quotationId: quotationIdForEdit || undefined,
+                            };
 
-                navigate("/enquiry-create", {
-                  state: enquiryDataToPass,
-                });
-              } else if (location.state?.fromEnquiry) {
-                // Navigate back to enquiry page with preserved filters
-                const preserveFilters = location.state?.preserveFilters;
-                if (preserveFilters) {
-                  navigate("/enquiry", {
-                    state: {
-                      restoreFilters: preserveFilters,
-                      refreshData: true,
-                    },
-                  });
-                } else {
-                  navigate("/enquiry", { state: { refreshData: true } });
-                }
-              } else if (location.state?.returnTo === "dashboard-pipeline") {
-                // Navigate back to dashboard with pipeline report state
-                navigate("/", {
-                  state: {
-                    returnToPipelineReport: true,
-                    pipelineReportState: location.state.pipelineReportState,
-                  },
-                });
-              } else if (location.state?.returnTo === "call-entry") {
-                // Navigate back to call-entry with the drawer open
-                navigate("/call-entry-create", {
-                  state: location.state.returnToState,
-                });
-              } else {
-                // Default: navigate back to originating list (quotation or approval)
-                navigateToPreferredList(location.state?.preserveFilters);
-              }
-            }}
-          >
-            Back
-          </Button>
-          <Button
-            variant="outline"
-            color="#105476"
-            onClick={handleOpenNotesConditionsModal}
-          >
-            Notes & Conditions
-          </Button>
-        </Group>
-        <Group>
-          <Button
-            variant="outline"
-            color="#105476"
-            disabled={selectedService?.service === "LCL"}
-            onClick={() => {
-              if (!carrierComparisonData) {
-                fetchCarrierComparison();
-              }
-              openCarrierModal();
-            }}
-          >
-            Check carrier comparison
-          </Button>
+                            navigate("/enquiry-create", {
+                              state: enquiryDataToPass,
+                            });
+                          } else if (location.state?.fromEnquiry) {
+                            // Navigate back to enquiry page with preserved filters
+                            const preserveFilters =
+                              location.state?.preserveFilters;
+                            if (preserveFilters) {
+                              navigate("/enquiry", {
+                                state: {
+                                  restoreFilters: preserveFilters,
+                                  refreshData: true,
+                                },
+                              });
+                            } else {
+                              navigate("/enquiry", {
+                                state: { refreshData: true },
+                              });
+                            }
+                          } else if (
+                            location.state?.returnTo === "dashboard-pipeline"
+                          ) {
+                            // Navigate back to dashboard with pipeline report state
+                            navigate("/", {
+                              state: {
+                                returnToPipelineReport: true,
+                                pipelineReportState:
+                                  location.state.pipelineReportState,
+                              },
+                            });
+                          } else if (
+                            location.state?.returnTo === "call-entry"
+                          ) {
+                            // Navigate back to call-entry with the drawer open
+                            navigate("/call-entry-create", {
+                              state: location.state.returnToState,
+                            });
+                          } else {
+                            // Default: navigate back to originating list (quotation or approval)
+                            navigateToPreferredList(
+                              location.state?.preserveFilters
+                            );
+                          }
+                        }}
+                      >
+                        Back
+                      </Button>
+                    </Group>
+                    <Group>
+                      <Button
+                        rightSection={
+                          isSubmittingQuotation ? (
+                            <Loader size={16} color="white" />
+                          ) : (
+                            <IconCheck size={16} />
+                          )
+                        }
+                        onClick={() => quotationSubmit()}
+                        color="teal"
+                        disabled={isSubmittingQuotation}
+                      >
+                        {isSubmittingQuotation
+                          ? isStandaloneEdit
+                            ? "Updating..."
+                            : "Submitting..."
+                          : isStandaloneEdit
+                            ? "Update"
+                            : "Submit"}
+                      </Button>
+                    </Group>
+                  </Group>
+                </Box>
+              </Box>
+            </Box>
+          </Flex>
+        ) : (
+          <>
+            {/* Service Details Slider */}
+            {services.length > 0 && (
+              <ServiceDetailsSlider
+                services={services}
+                selectedServiceIndex={selectedServiceIndex}
+                onServiceSelect={handleServiceSelect}
+              />
+            )}
 
-          <Button
-            variant="outline"
-            color="#105476"
-            disabled={
-              selectedService?.service === "FCL" &&
-              !quotationForm.values.carrier_code
-            }
-            onClick={() => open()}
-          >
-            Get tariff data
-          </Button>
-          {/* </Tooltip> */}
-
-          {isStandaloneEdit && (
-            <>
-              <Button
-                variant="outline"
-                color="#105476"
-                onClick={() => {
-                  handleCreateBooking();
+            {/* Tariff Submission Loading Overlay */}
+            {isSubmittingTariff && (
+              <Box
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(0, 0, 0, 0.5)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 1000,
                 }}
               >
-                Create Booking
-              </Button>
-              <Button
-                variant="outline"
-                color="#105476"
-                leftSection={<IconHistory size={16} />}
-                onClick={fetchChargeHistory}
-              >
-                Check charge history
-              </Button>
-            </>
-          )}
+                <Stack align="center" gap="md">
+                  <Loader size="xl" color="#105476" />
+                  <Text
+                    size="lg"
+                    color="white"
+                    fw={500}
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    Getting tariff chargers...
+                  </Text>
+                </Stack>
+              </Box>
+            )}
 
-          <Button
-            rightSection={
-              isSubmittingQuotation ? (
-                <Loader size={16} color="white" />
-              ) : (
-                <IconCheck size={16} />
-              )
-            }
-            onClick={() => quotationSubmit()}
-            color="teal"
-            disabled={isSubmittingQuotation}
-          >
-            {isSubmittingQuotation
-              ? isStandaloneEdit
-                ? "Updating..."
-                : "Submitting..."
-              : isStandaloneEdit
-                ? "Update"
-                : "Submit"}
-          </Button>
-        </Group>
-      </Group>
+            {/* Quotation Form */}
+            <Grid mb={30} key={`quotation-form-${currentServiceId}`}>
+              <Grid.Col span={1.75}>
+                <Dropdown
+                  key={`${currentServiceId}-quote-currency`}
+                  label="Quote Currency"
+                  searchable
+                  placeholder="Select currency"
+                  data={quoteCurrency}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
+                  {...quotationForm.getInputProps(
+                    "quote_currency_country_code"
+                  )}
+                />
+              </Grid.Col>
+              <Grid.Col span={1.75}>
+                <Box maw={300} mx="auto">
+                  <DateInput
+                    label="Date"
+                    key={`${currentServiceId}-valid-upto`}
+                    placeholder="YYYY-MM-DD"
+                    value={
+                      quotationForm.values.valid_upto
+                        ? new Date(quotationForm.values.valid_upto)
+                        : null
+                    }
+                    onChange={(date) => {
+                      const formatted = date
+                        ? dayjs(date).format("YYYY-MM-DD")
+                        : "";
+                      quotationForm.setFieldValue("valid_upto", formatted);
+                    }}
+                    valueFormat="YYYY-MM-DD"
+                    leftSection={<IconCalendar size={18} />}
+                    leftSectionPointerEvents="none"
+                    radius="sm"
+                    size="sm"
+                    styles={{
+                      input: {
+                        height: "36px",
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                      day: {
+                        width: "2.25rem",
+                        height: "2.25rem",
+                        fontSize: "0.9rem",
+                      },
+                      calendarHeaderLevel: {
+                        fontSize: "1rem",
+                        fontWeight: 500,
+                        marginBottom: "0.5rem",
+                        flex: 1,
+                        textAlign: "center",
+                      },
+                      calendarHeaderControl: {
+                        width: "2rem",
+                        height: "2rem",
+                        margin: "0 0.5rem",
+                      },
+                      calendarHeader: {
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "0.5rem",
+                      },
+                    }}
+                    error={quotationForm.errors.valid_upto}
+                  />
+                </Box>
+              </Grid.Col>
+              <Grid.Col span={1.25}>
+                <Checkbox
+                  key={`${currentServiceId}-multi-carrier`}
+                  label="Multi Carrier"
+                  checked={quotationForm.values.multi_carrier === "true"}
+                  onChange={(event) => {
+                    quotationForm.setFieldValue(
+                      "multi_carrier",
+                      event.currentTarget.checked ? "true" : "false"
+                    );
+                  }}
+                  styles={{
+                    label: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                      color: "#424242",
+                      fontWeight: 500,
+                    },
+                    input: {
+                      cursor: "pointer",
+                    },
+                  }}
+                  mt={28}
+                />
+              </Grid.Col>
+              <Grid.Col span={1.25}>
+                <Dropdown
+                  label="Quote Type"
+                  searchable
+                  key={quotationForm.key("quote_type")}
+                  placeholder="Enter Quote Type"
+                  data={["Standard", "Lumpsum", "All Inclusive"]}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
+                  {...quotationForm.getInputProps("quote_type")}
+                />
+              </Grid.Col>
+              {selectedService?.service !== "LCL" && (
+                <Grid.Col span={1.25}>
+                  <Dropdown
+                    label="Carrier"
+                    placeholder="Carrier"
+                    searchable
+                    data={carrierData}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    {...quotationForm.getInputProps("carrier_code")}
+                  />
+                </Grid.Col>
+              )}
+              {selectedService?.service !== "LCL" && (
+                <Grid.Col span={1}>
+                  <Dropdown
+                    label="ICD"
+                    placeholder="ICD"
+                    searchable
+                    data={icdData}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    {...quotationForm.getInputProps("icd")}
+                  />
+                </Grid.Col>
+              )}
+              <Grid.Col span={1.65}>
+                <Dropdown
+                  label="Status"
+                  placeholder="Select Status"
+                  searchable
+                  data={[
+                    { value: "QUOTE CREATED", label: "Quote Created" },
+                    { value: "GAINED", label: "Gained" },
+                    { value: "LOST", label: "Lost" },
+                  ]}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
+                  {...quotationForm.getInputProps("status")}
+                />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <Flex gap="sm" align="flex-end">
+                  <div style={{ flex: 1 }}>
+                    <TextInput
+                      label="Remark"
+                      withAsterisk={isRemarkRequired}
+                      placeholder="Enter remark"
+                      value={quotationForm.values.remark}
+                      onChange={(e) => {
+                        const formattedValue = toTitleCase(e.target.value);
+                        quotationForm.setFieldValue("remark", formattedValue);
+                      }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                      error={quotationForm.errors.remark}
+                    />
+                  </div>
+                  <Menu shadow="md" width={220} position="bottom-end">
+                    <Menu.Target>
+                      <ActionIcon
+                        variant="subtle"
+                        color="#105476"
+                        size="lg"
+                        styles={{
+                          root: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            border: "1px solid #E9ECEF",
+                            borderRadius: "8px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
+                          },
+                        }}
+                      >
+                        <IconDotsVertical size={18} />
+                      </ActionIcon>
+                    </Menu.Target>
+                    <Menu.Dropdown
+                      styles={{
+                        dropdown: {
+                          border: "1px solid #E9ECEF",
+                          borderRadius: "8px",
+                          padding: "8px",
+                          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                        },
+                      }}
+                    >
+                      <Menu.Item
+                        leftSection={
+                          <Box
+                            style={{
+                              backgroundColor: "#E7F5FF",
+                              borderRadius: "6px",
+                              padding: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconNotes size={16} color="#105476" />
+                          </Box>
+                        }
+                        styles={{
+                          item: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            borderRadius: "6px",
+                            padding: "10px 12px",
+                            marginBottom: "4px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
+                          },
+                          itemLabel: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                          },
+                        }}
+                        onClick={handleOpenNotesConditionsModal}
+                      >
+                        Notes & Conditions
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={
+                          <Box
+                            style={{
+                              backgroundColor: "#E7F5FF",
+                              borderRadius: "6px",
+                              padding: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconChartBar size={16} color="#105476" />
+                          </Box>
+                        }
+                        disabled={selectedService?.service === "LCL"}
+                        styles={{
+                          item: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            borderRadius: "6px",
+                            padding: "10px 12px",
+                            marginBottom: "4px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
+                          },
+                          itemLabel: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                          },
+                        }}
+                        onClick={() => {
+                          if (!carrierComparisonData) {
+                            fetchCarrierComparison();
+                          }
+                          openCarrierModal();
+                        }}
+                      >
+                        Check carrier comparison
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={
+                          <Box
+                            style={{
+                              backgroundColor: "#E7F5FF",
+                              borderRadius: "6px",
+                              padding: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconDatabase size={16} color="#105476" />
+                          </Box>
+                        }
+                        disabled={
+                          selectedService?.service === "FCL" &&
+                          !quotationForm.values.carrier_code
+                        }
+                        styles={{
+                          item: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            borderRadius: "6px",
+                            padding: "10px 12px",
+                            marginBottom: "4px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
+                          },
+                          itemLabel: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                          },
+                        }}
+                        onClick={() => open()}
+                      >
+                        Get tariff data
+                      </Menu.Item>
+                      {isStandaloneEdit && (
+                        <>
+                          <Menu.Divider />
+                          <Menu.Item
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconBook size={16} color="#105476" />
+                              </Box>
+                            }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                marginBottom: "4px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
+                            onClick={() => {
+                              handleCreateBooking();
+                            }}
+                          >
+                            Create Booking
+                          </Menu.Item>
+                          <Menu.Item
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconHistory size={16} color="#105476" />
+                              </Box>
+                            }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                marginBottom: "4px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
+                            onClick={fetchChargeHistory}
+                          >
+                            Check charge history
+                          </Menu.Item>
+                        </>
+                      )}
+                    </Menu.Dropdown>
+                  </Menu>
+                </Flex>
+              </Grid.Col>
+            </Grid>
+
+            {/* Dynamic Charges */}
+            <Stack justify="lg" key={`dynamic-form-${currentServiceId}`} px={0}>
+              {dynamicForm.values.charges.length > 0 && (
+                <Grid
+                  style={{
+                    fontWeight: 600,
+                    color: "#105476",
+                  }}
+                  gutter="sm"
+                >
+                  <Grid.Col span={1.5}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      Charge Name
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      Currency
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      ROE
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      Unit
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      No of Units
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      Sell Per Unit
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      Min Sell
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      Cost Per Unit
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      Total Sell
+                      {userCurrencyCode ? ` (${userCurrencyCode})` : ""}
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        color: "#000000",
+                      }}
+                    >
+                      Total Cost
+                      {userCurrencyCode ? ` (${userCurrencyCode})` : ""}
+                    </Text>
+                  </Grid.Col>
+                </Grid>
+              )}
+              {dynamicForm.values.charges.map((_, index) => (
+                <Box key={index}>
+                  <Grid gutter="sm">
+                    <Grid.Col span={1.5}>
+                      <TextInput
+                        key={`charge-name-${index}`}
+                        placeholder="Charge Name"
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                        {...dynamicForm.getInputProps(
+                          `charges.${index}.charge_name`
+                        )}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <Dropdown
+                        placeholder="Select Currency"
+                        searchable
+                        key={`unit-${index}-currency_country_code`}
+                        data={currency}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                        {...dynamicForm.getInputProps(
+                          `charges.${index}.currency_country_code`
+                        )}
+                        onChange={(value) => {
+                          dynamicForm.setFieldValue(
+                            `charges.${index}.currency_country_code`,
+                            value || ""
+                          );
+                          if (value) {
+                            const calculatedRoe = getRoeValue(value);
+                            dynamicForm.setFieldValue(
+                              `charges.${index}.roe`,
+                              calculatedRoe
+                            );
+                          }
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <TextInput
+                        key={`unit-${index}-roe`}
+                        min={1}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                        {...dynamicForm.getInputProps(`charges.${index}.roe`)}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <Dropdown
+                        searchable
+                        placeholder="Select Unit"
+                        data={unitData}
+                        key={`unit-${index}-no_of_units`}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                        {...dynamicForm.getInputProps(`charges.${index}.unit`)}
+                        onChange={(value) => {
+                          dynamicForm.setFieldValue(
+                            `charges.${index}.unit`,
+                            value || ""
+                          );
+                          if (value && selectedService) {
+                            const calculatedNoOfUnits = calculateNoOfUnits(
+                              selectedService.service,
+                              value,
+                              selectedService.id
+                            );
+                            if (calculatedNoOfUnits) {
+                              dynamicForm.setFieldValue(
+                                `charges.${index}.no_of_units`,
+                                calculatedNoOfUnits
+                              );
+                            }
+                          }
+                        }}
+                        disabled={isLoadingUnitData}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <TextInput
+                        key={`unit-${index}-no_of_units`}
+                        min={1}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                        {...dynamicForm.getInputProps(
+                          `charges.${index}.no_of_units`
+                        )}
+                        disabled={
+                          dynamicForm.values.charges[index]?.toBeDisabled
+                        }
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <TextInput
+                        key={`unit-${index}-sell_per_unit`}
+                        min={0}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                        {...dynamicForm.getInputProps(
+                          `charges.${index}.sell_per_unit`
+                        )}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <TextInput
+                        key={`unit-${index}-min_sell`}
+                        disabled={
+                          dynamicForm.values.charges[index]?.toBeDisabled
+                        }
+                        min={0}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                        {...dynamicForm.getInputProps(
+                          `charges.${index}.min_sell`
+                        )}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <TextInput
+                        key={`unit-${index}-cost_per_unit`}
+                        disabled={
+                          dynamicForm.values.charges[index]?.toBeDisabled
+                        }
+                        min={0}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                        {...dynamicForm.getInputProps(
+                          `charges.${index}.cost_per_unit`
+                        )}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <TextInput
+                        key={`unit-${index}-total_sell`}
+                        value={
+                          dynamicForm.values.charges[index]?.total_sell ??
+                          "0.00"
+                        }
+                        readOnly
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                            backgroundColor: "#f8f9fa",
+                            cursor: "not-allowed",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <TextInput
+                        key={`unit-${index}-total_cost`}
+                        value={
+                          dynamicForm.values.charges[index]?.total_cost ??
+                          "0.00"
+                        }
+                        readOnly
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                            backgroundColor: "#f8f9fa",
+                            cursor: "not-allowed",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+
+                    {dynamicForm.values.charges.length - 1 === index && (
+                      <Grid.Col span={0.75}>
+                        <Button
+                          radius={"sm"}
+                          variant="light"
+                          color="#105476"
+                          onClick={() =>
+                            dynamicForm.insertListItem("charges", {
+                              charge_name: "",
+                              currency_country_code: "",
+                              roe: 1,
+                              unit: "",
+                              no_of_units: "",
+                              sell_per_unit: "",
+                              min_sell: "",
+                              cost_per_unit: "",
+                            })
+                          }
+                        >
+                          <IconPlus size={16} />
+                        </Button>
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={0.75}>
+                      {dynamicForm.values.charges.length > 1 ? (
+                        <Button
+                          variant="light"
+                          color="red"
+                          onClick={() =>
+                            dynamicForm.removeListItem("charges", index)
+                          }
+                        >
+                          <IconTrash size={16} />
+                        </Button>
+                      ) : (
+                        ""
+                      )}
+                    </Grid.Col>
+                  </Grid>
+                </Box>
+              ))}
+
+              <Grid
+                style={{
+                  fontWeight: 600,
+                  color: "#105476",
+                  paddingTop: "0.5rem",
+                }}
+              >
+                <Grid.Col span={7.5} />
+                <Grid.Col span={1} ml={10}>
+                  Total:
+                </Grid.Col>
+                <Grid.Col span={1}>{netSell.toFixed(2)}</Grid.Col>
+                <Grid.Col span={1}> {netCost.toFixed(2)}</Grid.Col>
+              </Grid>
+              <Grid
+                mt={8}
+                style={{
+                  fontWeight: 600,
+                  color: profit >= 0 ? "green" : "red",
+                }}
+              >
+                <Grid.Col span={7.5} />
+                <Grid.Col span={1} ml={10}>
+                  Profit=
+                </Grid.Col>
+                <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
+              </Grid>
+            </Stack>
+
+            <Group justify="space-between" mt="xl" pb={65}>
+              <Group>
+                <Button
+                  variant="outline"
+                  color="#000"
+                  onClick={() => {
+                    if (goToStep) {
+                      goToStep(1);
+                    } else if (
+                      isStandaloneEdit &&
+                      (actualEnquiryData?.enquiry_id ||
+                        quotationData?.enquiry_id ||
+                        fetchedQuotationData?.enquiry_id)
+                    ) {
+                      const serviceDataSnapshot =
+                        snapshotServiceQuotationData();
+                      const preserveFilters = location.state?.preserveFilters;
+                      const fromQuotation = !location.state?.fromEnquiry;
+                      const fromEnquiry = location.state?.fromEnquiry;
+                      const dataSource =
+                        actualEnquiryData ||
+                        fetchedQuotationData ||
+                        quotationData;
+                      const enquiryId =
+                        dataSource?.enquiry_id ||
+                        quotationData?.enquiry_id ||
+                        fetchedQuotationData?.enquiry_id;
+                      const enquiryIdForNav =
+                        quotationData?.enquiry_pk ||
+                        fetchedQuotationData?.enquiry_pk ||
+                        dataSource?.enquiry_pk ||
+                        quotationData?.enquiry_id ||
+                        fetchedQuotationData?.enquiry_id ||
+                        dataSource?.enquiry_id ||
+                        (actualEnquiryData?.id && !quotationData
+                          ? actualEnquiryData.id
+                          : null) ||
+                        (fetchedQuotationData?.id && !quotationData
+                          ? fetchedQuotationData.id
+                          : null);
+                      const serviceDetails = services.map((service) => ({
+                        id: service.id,
+                        service: service.service,
+                        service_type: service.service_type || service.service,
+                        trade: service.trade,
+                        service_code: service.service_code || "",
+                        service_name: service.service_name || "",
+                        origin_code: service.origin_code_read || "",
+                        origin_code_read: service.origin_code_read || "",
+                        origin_name: service.origin_name || "",
+                        destination_code: service.destination_code_read || "",
+                        destination_code_read:
+                          service.destination_code_read || "",
+                        destination_name: service.destination_name || "",
+                        pickup: service.pickup,
+                        delivery: service.delivery,
+                        pickup_location: service.pickup_location || "",
+                        delivery_location: service.delivery_location || "",
+                        hazardous_cargo: service.hazardous_cargo || false,
+                        stackable:
+                          service.stackable !== undefined
+                            ? service.stackable
+                            : true,
+                        shipment_terms_code:
+                          service.shipment_terms_code_read || "",
+                        shipment_terms_code_read:
+                          service.shipment_terms_code_read || "",
+                        shipment_terms_name: service.shipment_terms_name || "",
+                        fcl_details: service.fcl_details,
+                        no_of_packages: service.no_of_packages,
+                        gross_weight: service.gross_weight,
+                        volume_weight: service.volume_weight,
+                        chargeable_weight: service.chargeable_weight,
+                        volume: service.volume,
+                        chargeable_volume: service.chargeable_volume,
+                      }));
+                      const enquiryDataToPass = {
+                        id: enquiryIdForNav,
+                        enquiry_id: enquiryId,
+                        actionType: "editQuotation",
+                        customer_code:
+                          dataSource?.customer_code ||
+                          quotationData?.customer_code ||
+                          fetchedQuotationData?.customer_code,
+                        customer_code_read:
+                          dataSource?.customer_code ||
+                          quotationData?.customer_code ||
+                          fetchedQuotationData?.customer_code,
+                        customer_name:
+                          dataSource?.customer_name ||
+                          quotationData?.customer_name ||
+                          fetchedQuotationData?.customer_name,
+                        customer_address:
+                          dataSource?.customer_address ||
+                          quotationData?.customer_address ||
+                          fetchedQuotationData?.customer_address,
+                        sales_person:
+                          dataSource?.sales_person ||
+                          quotationData?.sales_person ||
+                          fetchedQuotationData?.sales_person,
+                        sales_coordinator:
+                          dataSource?.sales_coordinator ||
+                          quotationData?.sales_coordinator ||
+                          fetchedQuotationData?.sales_coordinator ||
+                          "",
+                        customer_services:
+                          dataSource?.customer_services ||
+                          quotationData?.customer_services ||
+                          fetchedQuotationData?.customer_services ||
+                          "",
+                        enquiry_received_date:
+                          dataSource?.enquiry_received_date ||
+                          quotationData?.enquiry_received_date ||
+                          fetchedQuotationData?.enquiry_received_date,
+                        reference_no:
+                          dataSource?.reference_no ||
+                          quotationData?.reference_no ||
+                          fetchedQuotationData?.reference_no ||
+                          "",
+                        services: serviceDetails,
+                        preserveFilters,
+                        fromQuotation,
+                        fromEnquiry,
+                        quotation:
+                          dataSource?.quotation ||
+                          quotationData?.quotation ||
+                          fetchedQuotationData?.quotation,
+                        serviceQuotationState: serviceDataSnapshot,
+                        quotationId: quotationIdForEdit || undefined,
+                      };
+                      navigate("/enquiry-create", {
+                        state: enquiryDataToPass,
+                      });
+                    } else if (location.state?.fromEnquiry) {
+                      const preserveFilters = location.state?.preserveFilters;
+                      if (preserveFilters) {
+                        navigate("/enquiry", {
+                          state: {
+                            restoreFilters: preserveFilters,
+                            refreshData: true,
+                          },
+                        });
+                      } else {
+                        navigate("/enquiry", { state: { refreshData: true } });
+                      }
+                    } else if (
+                      location.state?.returnTo === "dashboard-pipeline"
+                    ) {
+                      navigate("/", {
+                        state: {
+                          returnToPipelineReport: true,
+                          pipelineReportState:
+                            location.state.pipelineReportState,
+                        },
+                      });
+                    } else if (location.state?.returnTo === "call-entry") {
+                      navigate("/call-entry-create", {
+                        state: location.state.returnToState,
+                      });
+                    } else {
+                      navigateToPreferredList(location.state?.preserveFilters);
+                    }
+                  }}
+                >
+                  Back
+                </Button>
+                <Menu shadow="md" width={220} position="bottom-end">
+                  <Menu.Target>
+                    <ActionIcon
+                      variant="subtle"
+                      color="#105476"
+                      size="lg"
+                      styles={{
+                        root: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          border: "1px solid #E9ECEF",
+                          borderRadius: "8px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                      }}
+                    >
+                      <IconDotsVertical size={18} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown
+                    styles={{
+                      dropdown: {
+                        border: "1px solid #E9ECEF",
+                        borderRadius: "8px",
+                        padding: "8px",
+                        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                      },
+                    }}
+                  >
+                    <Menu.Item
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconNotes size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
+                      onClick={handleOpenNotesConditionsModal}
+                    >
+                      Notes & Conditions
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconChartBar size={16} color="#105476" />
+                        </Box>
+                      }
+                      disabled={selectedService?.service === "LCL"}
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
+                      onClick={() => {
+                        if (!carrierComparisonData) {
+                          fetchCarrierComparison();
+                        }
+                        openCarrierModal();
+                      }}
+                    >
+                      Check carrier comparison
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconDatabase size={16} color="#105476" />
+                        </Box>
+                      }
+                      disabled={
+                        selectedService?.service === "FCL" &&
+                        !quotationForm.values.carrier_code
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
+                      onClick={() => open()}
+                    >
+                      Get tariff data
+                    </Menu.Item>
+                    {isStandaloneEdit && (
+                      <>
+                        <Menu.Divider />
+                        <Menu.Item
+                          leftSection={
+                            <Box
+                              style={{
+                                backgroundColor: "#E7F5FF",
+                                borderRadius: "6px",
+                                padding: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconBook size={16} color="#105476" />
+                            </Box>
+                          }
+                          styles={{
+                            item: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              borderRadius: "6px",
+                              padding: "10px 12px",
+                              marginBottom: "4px",
+                              "&:hover": {
+                                backgroundColor: "#F8F9FA",
+                              },
+                            },
+                            itemLabel: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                            },
+                          }}
+                          onClick={() => {
+                            handleCreateBooking();
+                          }}
+                        >
+                          Create Booking
+                        </Menu.Item>
+                        <Menu.Item
+                          leftSection={
+                            <Box
+                              style={{
+                                backgroundColor: "#E7F5FF",
+                                borderRadius: "6px",
+                                padding: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconHistory size={16} color="#105476" />
+                            </Box>
+                          }
+                          styles={{
+                            item: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              borderRadius: "6px",
+                              padding: "10px 12px",
+                              marginBottom: "4px",
+                              "&:hover": {
+                                backgroundColor: "#F8F9FA",
+                              },
+                            },
+                            itemLabel: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                            },
+                          }}
+                          onClick={fetchChargeHistory}
+                        >
+                          Check charge history
+                        </Menu.Item>
+                      </>
+                    )}
+                  </Menu.Dropdown>
+                </Menu>
+              </Group>
+              <Group>
+                <Button
+                  rightSection={
+                    isSubmittingQuotation ? (
+                      <Loader size={16} color="white" />
+                    ) : (
+                      <IconCheck size={16} />
+                    )
+                  }
+                  onClick={() => quotationSubmit()}
+                  color="teal"
+                  disabled={isSubmittingQuotation}
+                >
+                  {isSubmittingQuotation
+                    ? isStandaloneEdit
+                      ? "Updating..."
+                      : "Submitting..."
+                    : isStandaloneEdit
+                      ? "Update"
+                      : "Submit"}
+                </Button>
+              </Group>
+            </Group>
+          </>
+        )}
+      </Box>
 
       {/* Notes & Conditions Modal */}
       <Modal

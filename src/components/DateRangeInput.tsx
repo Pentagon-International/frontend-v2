@@ -245,7 +245,14 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
             },
           };
         }}
-        styles={getDateStyles()}
+        styles={{
+          ...getDateStyles(),
+          input: {
+            height: "36px",
+            fontSize: "13px",
+            fontFamily: "Inter",
+          },
+        }}
       />
       <DateInput
         style={inputWidth ? { width: inputWidth } : undefined}
@@ -339,7 +346,14 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
             },
           };
         }}
-        styles={getDateStyles()}
+        styles={{
+          ...getDateStyles(),
+          input: {
+            height: "36px",
+            fontSize: "13px",
+            fontFamily: "Inter",
+          },
+        }}
       />
     </Group>
   );

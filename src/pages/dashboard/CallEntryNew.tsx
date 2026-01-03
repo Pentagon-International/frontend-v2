@@ -1881,6 +1881,8 @@ function CallEntryNew() {
     mantineTableContainerProps: {
       style: {
         maxHeight: "400px",
+        overflowY: "auto",
+        overflowX: "auto",
       },
     },
     mantineTableBodyCellProps: {
@@ -2277,6 +2279,21 @@ function CallEntryNew() {
                               {...profilingForm.getInputProps(
                                 `profiles.${index}.service`
                               )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
                             />
                           </Grid.Col>
                           <Grid.Col span={4}>
