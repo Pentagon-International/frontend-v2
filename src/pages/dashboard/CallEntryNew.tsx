@@ -11,6 +11,7 @@ import {
   Grid,
   Group,
   Loader,
+  Menu,
   NumberInput,
   Select,
   Stack,
@@ -26,6 +27,7 @@ import {
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
+  IconDotsVertical,
   IconPlus,
   IconTrash,
   IconUserScan,
@@ -1614,25 +1616,38 @@ function CallEntryNew() {
 
   const nearbyCustomerTable = useMantineReactTable({
     columns: nearbyCustomerColumns,
-    data: nearbyCustomersData,
-    // manualPagination: true,
-    enableColumnFilters: false,
-    enablePagination: true,
-    enableTopToolbar: false,
+    data: nearbyCustomersData || [],
     enableColumnActions: false,
+    enableColumnFilters: false,
+    enablePagination: false,
+    enableTopToolbar: false,
     enableSorting: false,
     mantineTableContainerProps: {
       style: {
-        maxHeight: "500px",
-        overflowX: "auto",
-        overflowY: "auto",
+        maxHeight: "400px",
       },
     },
     mantineTableBodyCellProps: {
-      style: { padding: "6px 8px", fontSize: "13px", whiteSpace: "nowrap" },
+      style: {
+        padding: "12px 16px",
+        fontSize: "13px",
+        fontFamily: "Inter",
+        color: "#444955",
+        borderBottom: "1px solid #E9ECEF",
+        whiteSpace: "nowrap",
+      },
     },
     mantineTableHeadCellProps: {
-      style: { padding: "6px 8px", fontSize: "13px", whiteSpace: "nowrap" },
+      style: {
+        padding: "12px 16px",
+        fontSize: "13px",
+        fontFamily: "Inter",
+        fontWeight: 700,
+        color: "#000000",
+        backgroundColor: "#FAFAFA",
+        borderBottom: "1px solid #E9ECEF",
+        whiteSpace: "nowrap",
+      },
     },
     mantinePaginationProps: {
       size: "xs",
@@ -1737,11 +1752,30 @@ function CallEntryNew() {
       }
     },
     pageCount: Math.ceil(participantsTotalCount / participantsPageSize),
+    mantineTableContainerProps: {
+      style: {
+        maxHeight: "400px",
+      },
+    },
     mantineTableBodyCellProps: {
-      style: { padding: "6px 8px", fontSize: "13px" },
+      style: {
+        padding: "12px 16px",
+        fontSize: "13px",
+        fontFamily: "Inter",
+        color: "#444955",
+        borderBottom: "1px solid #E9ECEF",
+      },
     },
     mantineTableHeadCellProps: {
-      style: { padding: "6px 8px", fontSize: "13px" },
+      style: {
+        padding: "12px 16px",
+        fontSize: "13px",
+        fontFamily: "Inter",
+        fontWeight: 700,
+        color: "#000000",
+        backgroundColor: "#FAFAFA",
+        borderBottom: "1px solid #E9ECEF",
+      },
     },
     mantinePaginationProps: {
       size: "xs",
@@ -1812,7 +1846,6 @@ function CallEntryNew() {
     data,
     manualPagination: true,
     enableColumnFilters: false,
-    enablePagination: true,
     enableTopToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
@@ -1845,11 +1878,30 @@ function CallEntryNew() {
       }
     },
     pageCount: Math.ceil(profilingTotalCount / profilingPageSize),
+    mantineTableContainerProps: {
+      style: {
+        maxHeight: "400px",
+      },
+    },
     mantineTableBodyCellProps: {
-      style: { padding: "6px 8px", fontSize: "13px" },
+      style: {
+        padding: "12px 16px",
+        fontSize: "13px",
+        fontFamily: "Inter",
+        color: "#444955",
+        borderBottom: "1px solid #E9ECEF",
+      },
     },
     mantineTableHeadCellProps: {
-      style: { padding: "6px 8px", fontSize: "13px" },
+      style: {
+        padding: "12px 16px",
+        fontSize: "13px",
+        fontFamily: "Inter",
+        fontWeight: 700,
+        color: "#000000",
+        backgroundColor: "#FAFAFA",
+        borderBottom: "1px solid #E9ECEF",
+      },
     },
     mantinePaginationProps: {
       size: "xs",
@@ -1929,7 +1981,11 @@ function CallEntryNew() {
       >
         <Stack align="center" gap="xs">
           <Loader size="xl" color="#105476" />
-          <Text size="xl" color="dimmed">
+          <Text
+            size="xl"
+            color="dimmed"
+            style={{ fontFamily: "Inter, sans-serif" }}
+          >
             Loading call entry details...
           </Text>
         </Stack>
@@ -1940,10 +1996,73 @@ function CallEntryNew() {
   return (
     <Box
       component="form"
-      style={{ padding: "0 10%" }}
+      style={{ backgroundColor: "#F8F8F8" }}
       onSubmit={callEntryForm.onSubmit(handleCreateForm)}
     >
-      {/* {" "}
+      <Box p="xs" maw={1200} mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+        <Flex
+          gap="lg"
+          align="flex-start"
+          style={{ minHeight: "calc(100vh - 100px)" }}
+        >
+          {/* Vertical Stepper Sidebar */}
+          <Box
+            style={{
+              minWidth: 240,
+              height: "calc(100vh - 100px)",
+              alignSelf: "stretch",
+              backgroundColor: "#FFFFFF",
+              position: "sticky",
+              top: 0,
+            }}
+          >
+            <Box
+              style={{
+                padding: "20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                size="md"
+                fw={600}
+                c="#105476"
+                style={{
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                  fontSize: "16px",
+                  color: "#105476",
+                  textAlign: "center",
+                }}
+              >
+                {callEntryId ? "Edit Call Entry" : "Create Call Entry"}
+              </Text>
+            </Box>
+          </Box>
+
+          {/* Main Content Area */}
+          <Box
+            style={{
+              flex: 1,
+              backgroundColor: "#ffffff",
+              borderRadius: "8px",
+              display: "flex",
+              flexDirection: "column",
+              height: "calc(100vh - 100px)",
+              overflow: "hidden",
+            }}
+          >
+            <Box
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                paddingBottom: "16px",
+                backgroundColor: "#F8F8F8",
+              }}
+            >
+              <Grid style={{ backgroundColor: "#FFFFFF", padding: "24px" }}>
+                {/* {" "}
       {location.latitude && location.longitude ? (
         <p>
           Current Location: {location.latitude}, {location.longitude}
@@ -1953,904 +2072,1314 @@ function CallEntryNew() {
       ) : (
         <p>Fetching location...</p>
       )} */}
-      <Drawer
-        opened={opened}
-        onClose={close}
-        title="Profiling"
-        position="right"
-        size={"1250"}
-      >
-        <Divider mb={"md"} />
-        {data.length > 0 && (
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-              <Text size="md" fw={600}>
-                List of Profiling{" "}
-              </Text>
-            </Group>
-            {isLoadingProfiling ? (
-              <Center style={{ minHeight: "200px" }}>
-                <Loader size="lg" color="#105476" />
-              </Center>
-            ) : (
-              <>
-                <MantineReactTable table={table} />
-                {/* Custom Pagination Bar */}
-                <Group
-                  w="100%"
-                  justify="space-between"
-                  align="center"
-                  px="md"
-                  py="xs"
-                  style={{ borderTop: "1px solid #e9ecef" }}
-                  wrap="nowrap"
-                  mt="xs"
+                <Drawer
+                  opened={opened}
+                  onClose={close}
+                  title="Profiling"
+                  position="right"
+                  size={"1250"}
+                  styles={{
+                    title: { fontFamily: "Inter, sans-serif", fontWeight: 600 },
+                  }}
                 >
-                  {/* Rows per page and range */}
-                  <Group gap="sm" align="center" wrap="nowrap" mt={10}>
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(profilingPageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        const newPageSize = Number(val);
-                        setProfilingPageSize(newPageSize);
-                        setProfilingPageIndex(0);
-                        fetchProfiling(0, newPageSize);
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } }}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
-                        if (profilingTotalCount === 0) return "0–0 of 0";
-                        const start =
-                          profilingPageIndex * profilingPageSize + 1;
-                        const end = Math.min(
-                          (profilingPageIndex + 1) * profilingPageSize,
-                          profilingTotalCount
-                        );
-                        return `${start}–${end} of ${profilingTotalCount}`;
-                      })()}
-                    </Text>
-                  </Group>
+                  <Divider mb={"md"} />
+                  {data.length > 0 && (
+                    <Card shadow="sm" padding="lg" radius="md" withBorder>
+                      <Group
+                        justify="space-between"
+                        align="center"
+                        mb="md"
+                        wrap="nowrap"
+                      >
+                        <Text
+                          size="md"
+                          fw={600}
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          List of Profiling{" "}
+                        </Text>
+                      </Group>
+                      {isLoadingProfiling ? (
+                        <Center style={{ minHeight: "200px" }}>
+                          <Loader size="lg" color="#105476" />
+                        </Center>
+                      ) : (
+                        <>
+                          <MantineReactTable table={table} />
+                          {/* Custom Pagination Bar */}
+                          <Group
+                            w="100%"
+                            justify="space-between"
+                            align="center"
+                            px="md"
+                            py="xs"
+                            style={{ borderTop: "1px solid #e9ecef" }}
+                            wrap="nowrap"
+                            mt="xs"
+                          >
+                            {/* Rows per page and range */}
+                            <Group
+                              gap="sm"
+                              align="center"
+                              wrap="nowrap"
+                              mt={10}
+                            >
+                              <Text
+                                size="sm"
+                                c="dimmed"
+                                style={{ fontFamily: "Inter, sans-serif" }}
+                              >
+                                Rows per page
+                              </Text>
+                              <Select
+                                size="xs"
+                                data={["10", "25", "50"]}
+                                value={String(profilingPageSize)}
+                                onChange={(val) => {
+                                  if (!val) return;
+                                  const newPageSize = Number(val);
+                                  setProfilingPageSize(newPageSize);
+                                  setProfilingPageIndex(0);
+                                  fetchProfiling(0, newPageSize);
+                                }}
+                                w={110}
+                                styles={{
+                                  input: {
+                                    fontSize: 12,
+                                    height: 30,
+                                    fontFamily: "Inter, sans-serif",
+                                  },
+                                }}
+                              />
+                              <Text
+                                size="sm"
+                                c="dimmed"
+                                style={{ fontFamily: "Inter, sans-serif" }}
+                              >
+                                {(() => {
+                                  if (profilingTotalCount === 0)
+                                    return "0–0 of 0";
+                                  const start =
+                                    profilingPageIndex * profilingPageSize + 1;
+                                  const end = Math.min(
+                                    (profilingPageIndex + 1) *
+                                      profilingPageSize,
+                                    profilingTotalCount
+                                  );
+                                  return `${start}–${end} of ${profilingTotalCount}`;
+                                })()}
+                              </Text>
+                            </Group>
 
-                  {/* Page controls */}
-                  <Group gap="xs" align="center" wrap="nowrap" mt={10}>
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={() => {
-                        const newPage = Math.max(0, profilingPageIndex - 1);
-                        setProfilingPageIndex(newPage);
-                        fetchProfiling(newPage, profilingPageSize);
-                      }}
-                      disabled={profilingPageIndex === 0}
-                    >
-                      <IconChevronLeft size={16} />
-                    </ActionIcon>
-                    <Text size="sm" ta="center" style={{ width: 26 }}>
-                      {profilingPageIndex + 1}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      of{" "}
-                      {Math.max(
-                        1,
-                        Math.ceil(profilingTotalCount / profilingPageSize)
+                            {/* Page controls */}
+                            <Group
+                              gap="xs"
+                              align="center"
+                              wrap="nowrap"
+                              mt={10}
+                            >
+                              <ActionIcon
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  const newPage = Math.max(
+                                    0,
+                                    profilingPageIndex - 1
+                                  );
+                                  setProfilingPageIndex(newPage);
+                                  fetchProfiling(newPage, profilingPageSize);
+                                }}
+                                disabled={profilingPageIndex === 0}
+                              >
+                                <IconChevronLeft size={16} />
+                              </ActionIcon>
+                              <Text
+                                size="sm"
+                                ta="center"
+                                style={{
+                                  width: 26,
+                                  fontFamily: "Inter, sans-serif",
+                                }}
+                              >
+                                {profilingPageIndex + 1}
+                              </Text>
+                              <Text
+                                size="sm"
+                                c="dimmed"
+                                style={{ fontFamily: "Inter, sans-serif" }}
+                              >
+                                of{" "}
+                                {Math.max(
+                                  1,
+                                  Math.ceil(
+                                    profilingTotalCount / profilingPageSize
+                                  )
+                                )}
+                              </Text>
+                              <ActionIcon
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  const totalPages = Math.max(
+                                    1,
+                                    Math.ceil(
+                                      profilingTotalCount / profilingPageSize
+                                    )
+                                  );
+                                  const newPage = Math.min(
+                                    totalPages - 1,
+                                    profilingPageIndex + 1
+                                  );
+                                  setProfilingPageIndex(newPage);
+                                  fetchProfiling(newPage, profilingPageSize);
+                                }}
+                                disabled={
+                                  profilingPageIndex >=
+                                  Math.ceil(
+                                    profilingTotalCount / profilingPageSize
+                                  ) -
+                                    1
+                                }
+                              >
+                                <IconChevronRight size={16} />
+                              </ActionIcon>
+                            </Group>
+                          </Group>
+                        </>
                       )}
-                    </Text>
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={() => {
-                        const totalPages = Math.max(
-                          1,
-                          Math.ceil(profilingTotalCount / profilingPageSize)
-                        );
-                        const newPage = Math.min(
-                          totalPages - 1,
-                          profilingPageIndex + 1
-                        );
-                        setProfilingPageIndex(newPage);
-                        fetchProfiling(newPage, profilingPageSize);
-                      }}
-                      disabled={
-                        profilingPageIndex >=
-                        Math.ceil(profilingTotalCount / profilingPageSize) - 1
-                      }
-                    >
-                      <IconChevronRight size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Group>
-              </>
-            )}
-          </Card>
-        )}
-        <Box
-          px={"xl"}
-          component="form"
-          onSubmit={profilingForm.onSubmit(handleProfilingSubmit)}
-        >
-          <Text fw={500} mt={20}>
-            Add Profile
-          </Text>
-          {/* Profiling Dynamic form starts */}
-          {profilingForm.values.profiles.map((_, index) => (
-            <Grid key={index} p="sm" align="end">
-              <Grid.Col span={4}>
-                <Dropdown
-                  label="Service"
-                  placeholder="Select Service"
-                  withAsterisk
-                  searchable
-                  clearable
-                  data={["AIR", "FCL", "LCL"]}
-                  rightSection={<IconChevronDown />}
-                  {...profilingForm.getInputProps(`profiles.${index}.service`)}
-                />
-              </Grid.Col>
-              <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Origin"
-                  placeholder="Type origin port"
-                  apiEndpoint={URL.portMaster}
-                  searchFields={["port_name", "port_code"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
-                  value={profilingForm.values.profiles[index]?.origin || ""}
-                  onChange={(value) =>
-                    profilingForm.setFieldValue(
-                      `profiles.${index}.origin`,
-                      value || ""
-                    )
-                  }
-                  minSearchLength={2}
-                  required
-                />
-              </Grid.Col>
-              <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Destination"
-                  placeholder="Type destination port"
-                  apiEndpoint={URL.portMaster}
-                  searchFields={["port_name", "port_code"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
-                  value={
-                    profilingForm.values.profiles[index]?.destination || ""
-                  }
-                  onChange={(value) =>
-                    profilingForm.setFieldValue(
-                      `profiles.${index}.destination`,
-                      value || ""
-                    )
-                  }
-                  minSearchLength={2}
-                  required
-                />
-              </Grid.Col>
-
-              <Grid.Col span={4}>
-                <TextInput
-                  label="No. of Shipments"
-                  withAsterisk
-                  {...profilingForm.getInputProps(
-                    `profiles.${index}.no_of_shipments`
+                    </Card>
                   )}
-                />
-              </Grid.Col>
-              <Grid.Col span={4}>
-                <Dropdown
-                  label="Frequency"
-                  placeholder="Select Frequency"
-                  withAsterisk
-                  searchable
-                  clearable
-                  data={frequencyProfile}
-                  limit={50} // Limit initial display to 50 items
-                  maxDropdownHeight={400} // Limit dropdown height
-                  rightSection={<IconChevronDown />}
-                  {...profilingForm.getInputProps(
-                    `profiles.${index}.frequency`
-                  )}
-                />
-              </Grid.Col>
-              <Grid.Col span={4}>
-                <TextInput
-                  label="Volume/Containers"
-                  withAsterisk
-                  {...profilingForm.getInputProps(`profiles.${index}.volume`)}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={4}>
-                <TextInput
-                  label="Tier"
-                  placeholder="Enter Tier"
-                  withAsterisk
-                  {...profilingForm.getInputProps(`profiles.${index}.tier`)}
-                />
-              </Grid.Col>
-              <Grid.Col span={4}>
-                <TextInput
-                  label="Competitors"
-                  placeholder="Enter Competitors value"
-                  {...profilingForm.getInputProps(
-                    `profiles.${index}.competitors`
-                  )}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={4}>
-                <NumberInput
-                  label="Potential Profit"
-                  placeholder="Enter potential profit"
-                  hideControls
-                  {...profilingForm.getInputProps(
-                    `profiles.${index}.potential_profit`
-                  )}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={1}>
-                {profilingForm.values.profiles.length > 1 && (
-                  <Button
-                    color="red"
-                    variant="light"
-                    onClick={() => handleRemoveProfile(index)}
+                  <Box
+                    px={"xl"}
+                    component="form"
+                    onSubmit={profilingForm.onSubmit(handleProfilingSubmit)}
                   >
-                    <IconTrash size={16} />
-                  </Button>
-                )}
-              </Grid.Col>
+                    <Text
+                      fw={500}
+                      mt={20}
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Add Profile
+                    </Text>
+                    {/* Profiling Dynamic form starts */}
+                    {profilingForm.values.profiles.map((_, index) => (
+                      <Box key={index}>
+                        <Grid gutter="md" p="sm" align="end">
+                          <Grid.Col span={4}>
+                            <Dropdown
+                              label="Service"
+                              placeholder="Select Service"
+                              withAsterisk
+                              searchable
+                              clearable
+                              data={["AIR", "FCL", "LCL"]}
+                              rightSection={<IconChevronDown />}
+                              {...profilingForm.getInputProps(
+                                `profiles.${index}.service`
+                              )}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <SearchableSelect
+                              label="Origin"
+                              placeholder="Type origin port"
+                              apiEndpoint={URL.portMaster}
+                              searchFields={["port_name", "port_code"]}
+                              displayFormat={(item: any) => ({
+                                value: String(item.port_code),
+                                label: `${item.port_name} (${item.port_code})`,
+                              })}
+                              value={
+                                profilingForm.values.profiles[index]?.origin ||
+                                ""
+                              }
+                              onChange={(value) =>
+                                profilingForm.setFieldValue(
+                                  `profiles.${index}.origin`,
+                                  value || ""
+                                )
+                              }
+                              minSearchLength={2}
+                              required
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <SearchableSelect
+                              label="Destination"
+                              placeholder="Type destination port"
+                              apiEndpoint={URL.portMaster}
+                              searchFields={["port_name", "port_code"]}
+                              displayFormat={(item: any) => ({
+                                value: String(item.port_code),
+                                label: `${item.port_name} (${item.port_code})`,
+                              })}
+                              value={
+                                profilingForm.values.profiles[index]
+                                  ?.destination || ""
+                              }
+                              onChange={(value) =>
+                                profilingForm.setFieldValue(
+                                  `profiles.${index}.destination`,
+                                  value || ""
+                                )
+                              }
+                              minSearchLength={2}
+                              required
+                            />
+                          </Grid.Col>
 
-              <Divider my="lg" />
-            </Grid>
-          ))}
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="No. of Shipments"
+                              withAsterisk
+                              {...profilingForm.getInputProps(
+                                `profiles.${index}.no_of_shipments`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <Dropdown
+                              label="Frequency"
+                              placeholder="Select Frequency"
+                              withAsterisk
+                              searchable
+                              clearable
+                              data={frequencyProfile}
+                              limit={50}
+                              maxDropdownHeight={400}
+                              rightSection={<IconChevronDown />}
+                              {...profilingForm.getInputProps(
+                                `profiles.${index}.frequency`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="Volume/Containers"
+                              withAsterisk
+                              {...profilingForm.getInputProps(
+                                `profiles.${index}.volume`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
 
-          <Group mt="md" justify="apart">
-            <Button
-              variant="outline"
-              c={"#105476"}
-              leftSection={<IconPlus size={16} />}
-              onClick={handleAddProfile}
-            >
-              Add More
-            </Button>
-          </Group>
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="Tier"
+                              placeholder="Enter Tier"
+                              withAsterisk
+                              {...profilingForm.getInputProps(
+                                `profiles.${index}.tier`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="Competitors"
+                              placeholder="Enter Competitors value"
+                              {...profilingForm.getInputProps(
+                                `profiles.${index}.competitors`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
 
-          <Group justify="end">
-            <Group>
-              <Button
-                variant="outline"
-                c="#105476"
-                styles={{
-                  root: {
-                    color: "#105476",
-                    borderColor: "#105476",
-                  },
-                }}
-                onClick={close}
-              >
-                Save
-              </Button>
-            </Group>
-          </Group>
-        </Box>
-      </Drawer>
-      <Drawer
-        opened={openedParticipant}
-        onClose={closeParticipant}
-        title="Participants"
-        position="right"
-        size={"1250"}
-      >
-        <Divider mb={"md"} />
-        {participantsData.length > 0 && (
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-              <Text size="md" fw={600}>
-                List of Participants{" "}
-              </Text>
-            </Group>
-            {isLoadingParticipants ? (
-              <Center style={{ minHeight: "200px" }}>
-                <Loader size="lg" color="#105476" />
-              </Center>
-            ) : (
-              <>
-                <MantineReactTable table={participantsTable} />
-                {/* Custom Pagination Bar */}
-                <Group
-                  w="100%"
-                  justify="space-between"
-                  align="center"
-                  px="md"
-                  py="xs"
-                  style={{ borderTop: "1px solid #e9ecef" }}
-                  wrap="nowrap"
-                  mt="xs"
+                          <Grid.Col span={4}>
+                            <NumberInput
+                              label="Potential Profit"
+                              placeholder="Enter potential profit"
+                              hideControls
+                              {...profilingForm.getInputProps(
+                                `profiles.${index}.potential_profit`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+
+                          <Grid.Col span={1}>
+                            {profilingForm.values.profiles.length > 1 && (
+                              <Button
+                                color="red"
+                                variant="light"
+                                onClick={() => handleRemoveProfile(index)}
+                                styles={{
+                                  root: { fontFamily: "Inter, sans-serif" },
+                                }}
+                              >
+                                <IconTrash size={16} />
+                              </Button>
+                            )}
+                          </Grid.Col>
+                        </Grid>
+                        <Divider my="lg" />
+                      </Box>
+                    ))}
+
+                    <Group mt="md" justify="apart">
+                      <Button
+                        variant="outline"
+                        c={"#105476"}
+                        leftSection={<IconPlus size={16} />}
+                        onClick={handleAddProfile}
+                        styles={{
+                          root: { fontFamily: "Inter, sans-serif" },
+                        }}
+                      >
+                        Add More
+                      </Button>
+                    </Group>
+
+                    <Group justify="end">
+                      <Group>
+                        <Button
+                          variant="outline"
+                          c="#105476"
+                          styles={{
+                            root: {
+                              color: "#105476",
+                              borderColor: "#105476",
+                              fontFamily: "Inter, sans-serif",
+                            },
+                          }}
+                          onClick={close}
+                        >
+                          Save
+                        </Button>
+                      </Group>
+                    </Group>
+                  </Box>
+                </Drawer>
+                <Drawer
+                  opened={openedParticipant}
+                  onClose={closeParticipant}
+                  title="Participants"
+                  position="right"
+                  size={"1250"}
+                  styles={{
+                    title: { fontFamily: "Inter, sans-serif", fontWeight: 600 },
+                  }}
                 >
-                  {/* Rows per page and range */}
-                  <Group gap="sm" align="center" wrap="nowrap" mt={10}>
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(participantsPageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        const newPageSize = Number(val);
-                        setParticipantsPageSize(newPageSize);
-                        setParticipantsPageIndex(0);
-                        fetchParticipants(0, newPageSize);
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } }}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
-                        if (participantsTotalCount === 0) return "0–0 of 0";
-                        const start =
-                          participantsPageIndex * participantsPageSize + 1;
-                        const end = Math.min(
-                          (participantsPageIndex + 1) * participantsPageSize,
-                          participantsTotalCount
-                        );
-                        return `${start}–${end} of ${participantsTotalCount}`;
-                      })()}
-                    </Text>
-                  </Group>
+                  <Divider mb={"md"} />
+                  {participantsData.length > 0 && (
+                    <Card shadow="sm" padding="lg" radius="md" withBorder>
+                      <Group
+                        justify="space-between"
+                        align="center"
+                        mb="md"
+                        wrap="nowrap"
+                      >
+                        <Text size="md" fw={600}>
+                          List of Participants{" "}
+                        </Text>
+                      </Group>
+                      {isLoadingParticipants ? (
+                        <Center style={{ minHeight: "200px" }}>
+                          <Loader size="lg" color="#105476" />
+                        </Center>
+                      ) : (
+                        <>
+                          <MantineReactTable table={participantsTable} />
+                          {/* Custom Pagination Bar */}
+                          <Group
+                            w="100%"
+                            justify="space-between"
+                            align="center"
+                            px="md"
+                            py="xs"
+                            style={{ borderTop: "1px solid #e9ecef" }}
+                            wrap="nowrap"
+                            mt="xs"
+                          >
+                            {/* Rows per page and range */}
+                            <Group
+                              gap="sm"
+                              align="center"
+                              wrap="nowrap"
+                              mt={10}
+                            >
+                              <Text size="sm" c="dimmed">
+                                Rows per page
+                              </Text>
+                              <Select
+                                size="xs"
+                                data={["10", "25", "50"]}
+                                value={String(participantsPageSize)}
+                                onChange={(val) => {
+                                  if (!val) return;
+                                  const newPageSize = Number(val);
+                                  setParticipantsPageSize(newPageSize);
+                                  setParticipantsPageIndex(0);
+                                  fetchParticipants(0, newPageSize);
+                                }}
+                                w={110}
+                                styles={{ input: { fontSize: 12, height: 30 } }}
+                              />
+                              <Text size="sm" c="dimmed">
+                                {(() => {
+                                  if (participantsTotalCount === 0)
+                                    return "0–0 of 0";
+                                  const start =
+                                    participantsPageIndex *
+                                      participantsPageSize +
+                                    1;
+                                  const end = Math.min(
+                                    (participantsPageIndex + 1) *
+                                      participantsPageSize,
+                                    participantsTotalCount
+                                  );
+                                  return `${start}–${end} of ${participantsTotalCount}`;
+                                })()}
+                              </Text>
+                            </Group>
 
-                  {/* Page controls */}
-                  <Group gap="xs" align="center" wrap="nowrap" mt={10}>
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={() => {
-                        const newPage = Math.max(0, participantsPageIndex - 1);
-                        setParticipantsPageIndex(newPage);
-                        fetchParticipants(newPage, participantsPageSize);
-                      }}
-                      disabled={participantsPageIndex === 0}
-                    >
-                      <IconChevronLeft size={16} />
-                    </ActionIcon>
-                    <Text size="sm" ta="center" style={{ width: 26 }}>
-                      {participantsPageIndex + 1}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      of{" "}
-                      {Math.max(
-                        1,
-                        Math.ceil(participantsTotalCount / participantsPageSize)
+                            {/* Page controls */}
+                            <Group
+                              gap="xs"
+                              align="center"
+                              wrap="nowrap"
+                              mt={10}
+                            >
+                              <ActionIcon
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  const newPage = Math.max(
+                                    0,
+                                    participantsPageIndex - 1
+                                  );
+                                  setParticipantsPageIndex(newPage);
+                                  fetchParticipants(
+                                    newPage,
+                                    participantsPageSize
+                                  );
+                                }}
+                                disabled={participantsPageIndex === 0}
+                              >
+                                <IconChevronLeft size={16} />
+                              </ActionIcon>
+                              <Text size="sm" ta="center" style={{ width: 26 }}>
+                                {participantsPageIndex + 1}
+                              </Text>
+                              <Text size="sm" c="dimmed">
+                                of{" "}
+                                {Math.max(
+                                  1,
+                                  Math.ceil(
+                                    participantsTotalCount /
+                                      participantsPageSize
+                                  )
+                                )}
+                              </Text>
+                              <ActionIcon
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  const totalPages = Math.max(
+                                    1,
+                                    Math.ceil(
+                                      participantsTotalCount /
+                                        participantsPageSize
+                                    )
+                                  );
+                                  const newPage = Math.min(
+                                    totalPages - 1,
+                                    participantsPageIndex + 1
+                                  );
+                                  setParticipantsPageIndex(newPage);
+                                  fetchParticipants(
+                                    newPage,
+                                    participantsPageSize
+                                  );
+                                }}
+                                disabled={
+                                  participantsPageIndex >=
+                                  Math.ceil(
+                                    participantsTotalCount /
+                                      participantsPageSize
+                                  ) -
+                                    1
+                                }
+                              >
+                                <IconChevronRight size={16} />
+                              </ActionIcon>
+                            </Group>
+                          </Group>
+                        </>
                       )}
-                    </Text>
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={() => {
-                        const totalPages = Math.max(
-                          1,
-                          Math.ceil(
-                            participantsTotalCount / participantsPageSize
-                          )
-                        );
-                        const newPage = Math.min(
-                          totalPages - 1,
-                          participantsPageIndex + 1
-                        );
-                        setParticipantsPageIndex(newPage);
-                        fetchParticipants(newPage, participantsPageSize);
-                      }}
-                      disabled={
-                        participantsPageIndex >=
-                        Math.ceil(
-                          participantsTotalCount / participantsPageSize
-                        ) -
-                          1
-                      }
-                    >
-                      <IconChevronRight size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Group>
-              </>
-            )}
-          </Card>
-        )}
+                    </Card>
+                  )}
 
-        <Box
-          px="xl"
-          component="form"
-          onSubmit={participantForm.onSubmit(handleParticipantSubmit)}
-        >
-          <Text fw={500} mt={20}>
-            Add Participant
-          </Text>
-
-          {participantForm.values.participants.map((_, index) => (
-            <>
-              <Grid key={index} p="sm">
-                <Grid.Col span={4}>
-                  <TextInput
-                    label="First Name"
-                    placeholder="Enter First Name"
-                    value={
-                      participantForm.values.participants[index]?.first_name ||
-                      ""
-                    }
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.target.value);
-                      participantForm.setFieldValue(
-                        `participants.${index}.first_name`,
-                        formattedValue
-                      );
-                    }}
-                    error={
-                      participantForm.errors[
-                        `participants.${index}.first_name`
-                      ] as string
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <TextInput
-                    label="Last Name"
-                    placeholder="Enter Last Name"
-                    value={
-                      participantForm.values.participants[index]?.last_name ||
-                      ""
-                    }
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.target.value);
-                      participantForm.setFieldValue(
-                        `participants.${index}.last_name`,
-                        formattedValue
-                      );
-                    }}
-                    error={
-                      participantForm.errors[
-                        `participants.${index}.last_name`
-                      ] as string
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <TextInput
-                    label="Designation"
-                    placeholder="Enter designation"
-                    value={
-                      participantForm.values.participants[index]?.designation ||
-                      ""
-                    }
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.target.value);
-                      participantForm.setFieldValue(
-                        `participants.${index}.designation`,
-                        formattedValue
-                      );
-                    }}
-                    error={
-                      participantForm.errors[
-                        `participants.${index}.designation`
-                      ] as string
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <TextInput
-                    label="Mobile Number"
-                    placeholder="Enter Mobile Number"
-                    {...participantForm.getInputProps(
-                      `participants.${index}.mobile_no`
-                    )}
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <TextInput
-                    label="Email"
-                    placeholder="Enter Email ID"
-                    {...participantForm.getInputProps(
-                      `participants.${index}.email`
-                    )}
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <TextInput
-                    label="Department"
-                    placeholder="Enter Department"
-                    {...participantForm.getInputProps(
-                      `participants.${index}.department`
-                    )}
-                  />
-                </Grid.Col>
-              </Grid>
-              <Group justify="end" mb="xs" mr="md">
-                {participantForm.values.participants.length > 1 && (
-                  <Button
-                    variant="light"
-                    color="red"
-                    size="xs"
-                    leftSection={<IconTrash size={14} />}
-                    onClick={() => removeParticipant(index)}
+                  <Box
+                    px="xl"
+                    component="form"
+                    onSubmit={participantForm.onSubmit(handleParticipantSubmit)}
                   >
-                    Remove
-                  </Button>
-                )}
-              </Group>
-              <Divider my="lg" />
-            </>
-          ))}
+                    <Text fw={500} mt={20}>
+                      Add Participant
+                    </Text>
 
-          <Group justify="space-between">
-            <Button
-              variant="outline"
-              c="#105476"
-              leftSection={<IconPlus size={16} />}
-              onClick={addParticipant}
-            >
-              Add More
-            </Button>
-            <Group>
-              <Button
-                variant="outline"
-                c="#105476"
-                styles={{
-                  root: {
-                    color: "#105476",
-                    borderColor: "#105476",
-                  },
-                }}
-                onClick={closeParticipant}
-              >
-                Save
-              </Button>
-            </Group>
-          </Group>
-        </Box>
-      </Drawer>
-      <Drawer
-        opened={nearbyCustomer}
-        onClose={closeCustomer}
-        title="Nearby Customers"
-        position="right"
-        size={"1200"}
-      >
-        <Divider mb={"md"} />
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-            <Text size="md" fw={600}>
-              List of Customers{" "}
-            </Text>
-            {/* <TextInput
+                    {participantForm.values.participants.map((_, index) => (
+                      <>
+                        <Grid key={index} p="sm">
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="First Name"
+                              placeholder="Enter First Name"
+                              value={
+                                participantForm.values.participants[index]
+                                  ?.first_name || ""
+                              }
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value
+                                );
+                                participantForm.setFieldValue(
+                                  `participants.${index}.first_name`,
+                                  formattedValue
+                                );
+                              }}
+                              error={
+                                participantForm.errors[
+                                  `participants.${index}.first_name`
+                                ] as string
+                              }
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="Last Name"
+                              placeholder="Enter Last Name"
+                              value={
+                                participantForm.values.participants[index]
+                                  ?.last_name || ""
+                              }
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value
+                                );
+                                participantForm.setFieldValue(
+                                  `participants.${index}.last_name`,
+                                  formattedValue
+                                );
+                              }}
+                              error={
+                                participantForm.errors[
+                                  `participants.${index}.last_name`
+                                ] as string
+                              }
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="Designation"
+                              placeholder="Enter designation"
+                              value={
+                                participantForm.values.participants[index]
+                                  ?.designation || ""
+                              }
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value
+                                );
+                                participantForm.setFieldValue(
+                                  `participants.${index}.designation`,
+                                  formattedValue
+                                );
+                              }}
+                              error={
+                                participantForm.errors[
+                                  `participants.${index}.designation`
+                                ] as string
+                              }
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="Mobile Number"
+                              placeholder="Enter Mobile Number"
+                              {...participantForm.getInputProps(
+                                `participants.${index}.mobile_no`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="Email"
+                              placeholder="Enter Email ID"
+                              {...participantForm.getInputProps(
+                                `participants.${index}.email`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={4}>
+                            <TextInput
+                              label="Department"
+                              placeholder="Enter Department"
+                              {...participantForm.getInputProps(
+                                `participants.${index}.department`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                  marginBottom: "4px",
+                                  fontFamily: "Inter",
+                                  fontStyle: "medium",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                        </Grid>
+                        <Group justify="end" mb="xs" mr="md">
+                          {participantForm.values.participants.length > 1 && (
+                            <Button
+                              variant="light"
+                              color="red"
+                              size="xs"
+                              leftSection={<IconTrash size={14} />}
+                              onClick={() => removeParticipant(index)}
+                              styles={{
+                                root: { fontFamily: "Inter, sans-serif" },
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </Group>
+                        <Divider my="lg" />
+                      </>
+                    ))}
+
+                    <Group justify="space-between">
+                      <Button
+                        variant="outline"
+                        c="#105476"
+                        leftSection={<IconPlus size={16} />}
+                        onClick={addParticipant}
+                        styles={{
+                          root: { fontFamily: "Inter, sans-serif" },
+                        }}
+                      >
+                        Add More
+                      </Button>
+                      <Group>
+                        <Button
+                          variant="outline"
+                          c="#105476"
+                          styles={{
+                            root: {
+                              color: "#105476",
+                              borderColor: "#105476",
+                              fontFamily: "Inter, sans-serif",
+                            },
+                          }}
+                          onClick={closeParticipant}
+                        >
+                          Save
+                        </Button>
+                      </Group>
+                    </Group>
+                  </Box>
+                </Drawer>
+                <Drawer
+                  opened={nearbyCustomer}
+                  onClose={closeCustomer}
+                  title="Nearby Customers"
+                  position="right"
+                  size={"1200"}
+                  styles={{
+                    title: { fontFamily: "Inter, sans-serif", fontWeight: 600 },
+                  }}
+                >
+                  <Divider mb={"md"} />
+                  <Card shadow="sm" padding="lg" radius="md" withBorder>
+                    <Group
+                      justify="space-between"
+                      align="center"
+                      mb="md"
+                      wrap="nowrap"
+                    >
+                      <Text
+                        size="md"
+                        fw={600}
+                        style={{ fontFamily: "Inter, sans-serif" }}
+                      >
+                        List of Customers{" "}
+                      </Text>
+                      {/* <TextInput
               placeholder="Search"
               leftSection={<IconSearch size={16} />}
               style={{ width: 300, height: 32, fontSize: 14 }}
               radius="sm"
               size="xs"
             /> */}
-          </Group>
+                    </Group>
 
-          {isLoadingNearbyCustomers ? (
-            <Box ta="center" py="xl">
-              <Loader size="lg" color="#105476" />
-              <Text mt="md" c="dimmed" size="lg">
-                Fetching nearby customers data...
-              </Text>
-            </Box>
-          ) : (
-            <Box
-              style={{
-                overflowX: "auto",
-                overflowY: "auto",
-                maxHeight: "70vh",
-                minWidth: "100%",
-              }}
-            >
-              <MantineReactTable table={nearbyCustomerTable} />
-            </Box>
-          )}
-        </Card>
-      </Drawer>
-      <Drawer
-        opened={quotationDrawer}
-        onClose={() => {
-          closeQuotationDrawer();
-          setQuotationData([]);
-          setJobData([]);
-          // Commented out - local_outstanding key will be removed from response
-          // setNetBalanceData([]);
-          setCallEntryData([]);
-          setShipmentData([]);
-          setPotentialProfilingData([]);
-          setCustomerCreditDay(null);
-          setCustomerSalesperson(null);
-          setCustomerLastVisited(null);
-          setCustomerTotalCreditAmount(null);
-          setTotalRevenue(null);
-          setTotalProfit(null);
-          setSelectedMonth(new Date().getMonth() + 1);
-          setSelectedYear(new Date().getFullYear());
-        }}
-        title={`Customer Data for ${selectedCustomerName}`}
-        size={"70%"}
-        position="right"
-      >
-        <Divider mb={"md"} />
-
-        {isLoadingData ? (
-          <Box ta="center" py="xl">
-            <Loader size="lg" color="#105476" />
-            <Text mt="md" c="dimmed" size="lg">
-              Loading customer data...
-            </Text>
-          </Box>
-        ) : (
-          <Stack gap="lg">
-            {/* Customer Info Section - Above Quotations */}
-            {(customerCreditDay !== null ||
-              customerSalesperson ||
-              customerLastVisited ||
-              customerTotalCreditAmount !== null ||
-              totalOutstandingAmount !== 0 ||
-              totalRevenue !== null ||
-              totalProfit !== null) && (
-              <Box>
-                <Text
-                  size="lg"
-                  fw={700}
-                  mb="md"
-                  c="#105476"
-                  style={{
-                    paddingBottom: "6px",
-                  }}
-                >
-                  ℹ️ Customer Information
-                </Text>
-                <Grid gutter="md">
-                  {/* Left Card - General Customer Info */}
-                  <Grid.Col span={{ base: 12, md: user?.is_staff ? 6 : 12 }}>
-                    <Card
-                      shadow="sm"
-                      padding="lg"
-                      radius="md"
-                      withBorder
-                      style={{
-                        border: "1px solid #e9ecef",
-                        backgroundColor: "#ffffff",
-                        height: "100%",
-                      }}
-                    >
-                      <Grid gutter="md">
-                        {customerSalesperson && (
-                          <Grid.Col span={{ base: 12, sm: 6 }}>
-                            <Box>
-                              <Text size="xs" fw={600} c="#666" mb={6}>
-                                Salesperson
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {customerSalesperson}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
-                        )}
-                        <Grid.Col span={{ base: 12, sm: 6 }}>
-                          <Box>
-                            <Text size="xs" fw={600} c="#666" mb={6}>
-                              Credit Days
-                            </Text>
-                            <Text size="sm" fw={500} c="#333">
-                              {customerCreditDay !== null
-                                ? `${customerCreditDay} days`
-                                : "-"}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
-                        {customerTotalCreditAmount !== null && (
-                          <Grid.Col span={{ base: 12, sm: 6 }}>
-                            <Box>
-                              <Text size="xs" fw={600} c="#666" mb={6}>
-                                Credit Amount
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                ₹
-                                {customerTotalCreditAmount.toLocaleString(
-                                  "en-IN"
-                                )}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
-                        )}
-                        <Grid.Col span={{ base: 12, sm: 6 }}>
-                          <Box>
-                            <Text size="xs" fw={600} c="#666" mb={6}>
-                              Total Outstanding Amount
-                            </Text>
-                            <Text
-                              size="sm"
-                              fw={500}
-                              style={{
-                                color:
-                                  totalOutstandingAmount > 0
-                                    ? "#28a745"
-                                    : totalOutstandingAmount < 0
-                                      ? "#dc3545"
-                                      : undefined,
-                              }}
-                            >
-                              ₹{totalOutstandingAmount.toLocaleString("en-IN")}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
-                        <Grid.Col span={{ base: 12, sm: 6 }}>
-                          <Box>
-                            <Text size="xs" fw={600} c="#666" mb={6}>
-                              Last Visited
-                            </Text>
-                            <Text size="sm" fw={500} c="#333">
-                              {customerLastVisited
-                                ? dayjs(customerLastVisited).format(
-                                    "DD/MM/YYYY"
-                                  )
-                                : "-"}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
-                      </Grid>
-                    </Card>
-                  </Grid.Col>
-
-                  {/* Right Card - Revenue/Profit with Filter - Only visible to admin users */}
-                  {user?.is_staff && (
-                    <Grid.Col span={{ base: 12, md: 6 }}>
-                      <Card
-                        shadow="sm"
-                        padding="lg"
-                        radius="md"
-                        withBorder
+                    {isLoadingNearbyCustomers ? (
+                      <Box ta="center" py="xl">
+                        <Loader size="lg" color="#105476" />
+                        <Text
+                          mt="md"
+                          c="dimmed"
+                          size="lg"
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          Fetching nearby customers data...
+                        </Text>
+                      </Box>
+                    ) : (
+                      <Box
                         style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          height: "100%",
+                          overflowX: "auto",
+                          overflowY: "auto",
+                          maxHeight: "70vh",
+                          minWidth: "100%",
                         }}
                       >
-                        <Stack gap="md">
-                          {/* Filter Section */}
-                          <Box>
-                            <Group gap="xs" justify="space-between">
-                              <Group>
-                                <Text size="xs" fw={600} c="#666" mb={6}>
-                                  Revenue & Profit
-                                </Text>
-                              </Group>
-                              <Group>
-                                <Select
-                                  size="xs"
-                                  value={String(selectedMonth)}
-                                  onChange={(value) => {
-                                    if (value) {
-                                      const month = parseInt(value, 10);
-                                      setSelectedMonth(month);
-                                      const customerVal =
-                                        callEntryForm.getValues().customer;
-                                      if (customerVal) {
-                                        fetchCustomerData(
-                                          customerVal,
-                                          month,
-                                          selectedYear
-                                        );
-                                      }
-                                    }
-                                  }}
-                                  data={[
-                                    { value: "1", label: "January" },
-                                    { value: "2", label: "February" },
-                                    { value: "3", label: "March" },
-                                    { value: "4", label: "April" },
-                                    { value: "5", label: "May" },
-                                    { value: "6", label: "June" },
-                                    { value: "7", label: "July" },
-                                    { value: "8", label: "August" },
-                                    { value: "9", label: "September" },
-                                    { value: "10", label: "October" },
-                                    { value: "11", label: "November" },
-                                    { value: "12", label: "December" },
-                                  ]}
-                                  styles={{
-                                    input: { fontSize: 12, height: 30 },
-                                    label: {
-                                      fontSize: "12px",
-                                      fontWeight: 500,
-                                      color: "#495057",
-                                    },
-                                  }}
-                                  w={120}
-                                />
-                                <Select
-                                  size="xs"
-                                  value={String(selectedYear)}
-                                  onChange={(value) => {
-                                    if (value) {
-                                      const year = parseInt(value, 10);
-                                      setSelectedYear(year);
-                                      const customerVal =
-                                        callEntryForm.getValues().customer;
-                                      if (customerVal) {
-                                        fetchCustomerData(
-                                          customerVal,
-                                          selectedMonth,
-                                          year
-                                        );
-                                      }
-                                    }
-                                  }}
-                                  data={Array.from({ length: 10 }, (_, i) => {
-                                    const year =
-                                      new Date().getFullYear() - 9 + i;
-                                    return {
-                                      value: String(year),
-                                      label: String(year),
-                                    };
-                                  })}
-                                  styles={{
-                                    input: { fontSize: 12, height: 30 },
-                                    label: {
-                                      fontSize: "12px",
-                                      fontWeight: 500,
-                                      color: "#495057",
-                                    },
-                                  }}
-                                  w={100}
-                                />
-                              </Group>
-                            </Group>
-                          </Box>
+                        <MantineReactTable table={nearbyCustomerTable} />
+                      </Box>
+                    )}
+                  </Card>
+                </Drawer>
+                <Drawer
+                  opened={quotationDrawer}
+                  onClose={() => {
+                    closeQuotationDrawer();
+                    setQuotationData([]);
+                    setJobData([]);
+                    // Commented out - local_outstanding key will be removed from response
+                    // setNetBalanceData([]);
+                    setCallEntryData([]);
+                    setShipmentData([]);
+                    setPotentialProfilingData([]);
+                    setCustomerCreditDay(null);
+                    setCustomerSalesperson(null);
+                    setCustomerLastVisited(null);
+                    setCustomerTotalCreditAmount(null);
+                    setTotalRevenue(null);
+                    setTotalProfit(null);
+                    setSelectedMonth(new Date().getMonth() + 1);
+                    setSelectedYear(new Date().getFullYear());
+                  }}
+                  title={`Customer Data for ${selectedCustomerName}`}
+                  size={"70%"}
+                  position="right"
+                  styles={{
+                    title: { fontFamily: "Inter, sans-serif", fontWeight: 600 },
+                  }}
+                >
+                  <Divider mb={"md"} />
 
-                          {/* Revenue and Profit */}
-                          <Group justify="space-evenly" mt={10}>
-                            {totalRevenue !== null && (
-                              <Box style={{ textAlign: "center" }}>
-                                <Text size="xs" fw={600} c="#666" mb={6}>
-                                  Total Revenue
-                                </Text>
-                                <Text size="sm" fw={500} c="#FF9800">
-                                  ₹{totalRevenue.toLocaleString("en-IN")}
-                                </Text>
-                              </Box>
-                            )}
-                            {totalProfit !== null && (
-                              <Box style={{ textAlign: "center" }}>
-                                <Text size="xs" fw={600} c="#666" mb={6}>
-                                  Total Profit
-                                </Text>
-                                <Text size="sm" fw={500} c="#105476">
-                                  ₹{totalProfit.toLocaleString("en-IN")}
-                                </Text>
-                              </Box>
-                            )}
-                          </Group>
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  )}
-                </Grid>
-              </Box>
-            )}
+                  {isLoadingData ? (
+                    <Box ta="center" py="xl">
+                      <Loader size="lg" color="#105476" />
+                      <Text
+                        mt="md"
+                        c="dimmed"
+                        size="lg"
+                        style={{ fontFamily: "Inter, sans-serif" }}
+                      >
+                        Loading customer data...
+                      </Text>
+                    </Box>
+                  ) : (
+                    <Stack gap="lg">
+                      {/* Customer Info Section - Above Quotations */}
+                      {(customerCreditDay !== null ||
+                        customerSalesperson ||
+                        customerLastVisited ||
+                        customerTotalCreditAmount !== null ||
+                        totalOutstandingAmount !== 0 ||
+                        totalRevenue !== null ||
+                        totalProfit !== null) && (
+                        <Box>
+                          <Text
+                            size="lg"
+                            fw={700}
+                            mb="md"
+                            c="#105476"
+                            style={{
+                              paddingBottom: "6px",
+                              fontFamily: "Inter, sans-serif",
+                            }}
+                          >
+                            ℹ️ Customer Information
+                          </Text>
+                          <Grid gutter="md">
+                            {/* Left Card - General Customer Info */}
+                            <Grid.Col
+                              span={{ base: 12, md: user?.is_staff ? 6 : 12 }}
+                            >
+                              <Card
+                                shadow="sm"
+                                padding="lg"
+                                radius="md"
+                                withBorder
+                                style={{
+                                  border: "1px solid #e9ecef",
+                                  backgroundColor: "#ffffff",
+                                  height: "100%",
+                                }}
+                              >
+                                <Grid gutter="md">
+                                  {customerSalesperson && (
+                                    <Grid.Col span={{ base: 12, sm: 6 }}>
+                                      <Box>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={6}
+                                          style={{
+                                            fontFamily: "Inter, sans-serif",
+                                          }}
+                                        >
+                                          Salesperson
+                                        </Text>
+                                        <Text
+                                          size="sm"
+                                          fw={500}
+                                          c="#333"
+                                          style={{
+                                            fontFamily: "Inter, sans-serif",
+                                          }}
+                                        >
+                                          {customerSalesperson}
+                                        </Text>
+                                      </Box>
+                                    </Grid.Col>
+                                  )}
+                                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                                    <Box>
+                                      <Text size="xs" fw={600} c="#666" mb={6}>
+                                        Credit Days
+                                      </Text>
+                                      <Text size="sm" fw={500} c="#333">
+                                        {customerCreditDay !== null
+                                          ? `${customerCreditDay} days`
+                                          : "-"}
+                                      </Text>
+                                    </Box>
+                                  </Grid.Col>
+                                  {customerTotalCreditAmount !== null && (
+                                    <Grid.Col span={{ base: 12, sm: 6 }}>
+                                      <Box>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={6}
+                                        >
+                                          Credit Amount
+                                        </Text>
+                                        <Text size="sm" fw={500} c="#333">
+                                          ₹
+                                          {customerTotalCreditAmount.toLocaleString(
+                                            "en-IN"
+                                          )}
+                                        </Text>
+                                      </Box>
+                                    </Grid.Col>
+                                  )}
+                                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                                    <Box>
+                                      <Text size="xs" fw={600} c="#666" mb={6}>
+                                        Total Outstanding Amount
+                                      </Text>
+                                      <Text
+                                        size="sm"
+                                        fw={500}
+                                        style={{
+                                          color:
+                                            totalOutstandingAmount > 0
+                                              ? "#28a745"
+                                              : totalOutstandingAmount < 0
+                                                ? "#dc3545"
+                                                : undefined,
+                                        }}
+                                      >
+                                        ₹
+                                        {totalOutstandingAmount.toLocaleString(
+                                          "en-IN"
+                                        )}
+                                      </Text>
+                                    </Box>
+                                  </Grid.Col>
+                                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                                    <Box>
+                                      <Text size="xs" fw={600} c="#666" mb={6}>
+                                        Last Visited
+                                      </Text>
+                                      <Text size="sm" fw={500} c="#333">
+                                        {customerLastVisited
+                                          ? dayjs(customerLastVisited).format(
+                                              "DD/MM/YYYY"
+                                            )
+                                          : "-"}
+                                      </Text>
+                                    </Box>
+                                  </Grid.Col>
+                                </Grid>
+                              </Card>
+                            </Grid.Col>
 
-            {/* Total Outstanding Amount - Below Customer Information - Commented out, now integrated in Customer Information section */}
-            {/* <Box>
+                            {/* Right Card - Revenue/Profit with Filter - Only visible to admin users */}
+                            {user?.is_staff && (
+                              <Grid.Col span={{ base: 12, md: 6 }}>
+                                <Card
+                                  shadow="sm"
+                                  padding="lg"
+                                  radius="md"
+                                  withBorder
+                                  style={{
+                                    border: "1px solid #e9ecef",
+                                    backgroundColor: "#ffffff",
+                                    height: "100%",
+                                  }}
+                                >
+                                  <Stack gap="md">
+                                    {/* Filter Section */}
+                                    <Box>
+                                      <Group gap="xs" justify="space-between">
+                                        <Group>
+                                          <Text
+                                            size="xs"
+                                            fw={600}
+                                            c="#666"
+                                            mb={6}
+                                          >
+                                            Revenue & Profit
+                                          </Text>
+                                        </Group>
+                                        <Group>
+                                          <Select
+                                            size="xs"
+                                            value={String(selectedMonth)}
+                                            onChange={(value) => {
+                                              if (value) {
+                                                const month = parseInt(
+                                                  value,
+                                                  10
+                                                );
+                                                setSelectedMonth(month);
+                                                const customerVal =
+                                                  callEntryForm.getValues()
+                                                    .customer;
+                                                if (customerVal) {
+                                                  fetchCustomerData(
+                                                    customerVal,
+                                                    month,
+                                                    selectedYear
+                                                  );
+                                                }
+                                              }
+                                            }}
+                                            data={[
+                                              { value: "1", label: "January" },
+                                              { value: "2", label: "February" },
+                                              { value: "3", label: "March" },
+                                              { value: "4", label: "April" },
+                                              { value: "5", label: "May" },
+                                              { value: "6", label: "June" },
+                                              { value: "7", label: "July" },
+                                              { value: "8", label: "August" },
+                                              {
+                                                value: "9",
+                                                label: "September",
+                                              },
+                                              { value: "10", label: "October" },
+                                              {
+                                                value: "11",
+                                                label: "November",
+                                              },
+                                              {
+                                                value: "12",
+                                                label: "December",
+                                              },
+                                            ]}
+                                            styles={{
+                                              input: {
+                                                fontSize: 12,
+                                                height: 30,
+                                              },
+                                              label: {
+                                                fontSize: "12px",
+                                                fontWeight: 500,
+                                                color: "#495057",
+                                              },
+                                            }}
+                                            w={120}
+                                          />
+                                          <Select
+                                            size="xs"
+                                            value={String(selectedYear)}
+                                            onChange={(value) => {
+                                              if (value) {
+                                                const year = parseInt(
+                                                  value,
+                                                  10
+                                                );
+                                                setSelectedYear(year);
+                                                const customerVal =
+                                                  callEntryForm.getValues()
+                                                    .customer;
+                                                if (customerVal) {
+                                                  fetchCustomerData(
+                                                    customerVal,
+                                                    selectedMonth,
+                                                    year
+                                                  );
+                                                }
+                                              }
+                                            }}
+                                            data={Array.from(
+                                              { length: 10 },
+                                              (_, i) => {
+                                                const year =
+                                                  new Date().getFullYear() -
+                                                  9 +
+                                                  i;
+                                                return {
+                                                  value: String(year),
+                                                  label: String(year),
+                                                };
+                                              }
+                                            )}
+                                            styles={{
+                                              input: {
+                                                fontSize: 12,
+                                                height: 30,
+                                              },
+                                              label: {
+                                                fontSize: "12px",
+                                                fontWeight: 500,
+                                                color: "#495057",
+                                              },
+                                            }}
+                                            w={100}
+                                          />
+                                        </Group>
+                                      </Group>
+                                    </Box>
+
+                                    {/* Revenue and Profit */}
+                                    <Group justify="space-evenly" mt={10}>
+                                      {totalRevenue !== null && (
+                                        <Box style={{ textAlign: "center" }}>
+                                          <Text
+                                            size="xs"
+                                            fw={600}
+                                            c="#666"
+                                            mb={6}
+                                          >
+                                            Total Revenue
+                                          </Text>
+                                          <Text size="sm" fw={500} c="#FF9800">
+                                            ₹
+                                            {totalRevenue.toLocaleString(
+                                              "en-IN"
+                                            )}
+                                          </Text>
+                                        </Box>
+                                      )}
+                                      {totalProfit !== null && (
+                                        <Box style={{ textAlign: "center" }}>
+                                          <Text
+                                            size="xs"
+                                            fw={600}
+                                            c="#666"
+                                            mb={6}
+                                          >
+                                            Total Profit
+                                          </Text>
+                                          <Text size="sm" fw={500} c="#105476">
+                                            ₹
+                                            {totalProfit.toLocaleString(
+                                              "en-IN"
+                                            )}
+                                          </Text>
+                                        </Box>
+                                      )}
+                                    </Group>
+                                  </Stack>
+                                </Card>
+                              </Grid.Col>
+                            )}
+                          </Grid>
+                        </Box>
+                      )}
+
+                      {/* Total Outstanding Amount - Below Customer Information - Commented out, now integrated in Customer Information section */}
+                      {/* <Box>
               <Card
                 shadow="sm"
                 padding="md"
@@ -2883,238 +3412,310 @@ function CallEntryNew() {
               </Card>
             </Box> */}
 
-            {/* Quotations Section */}
-            <Box>
-              <Text
-                size="lg"
-                fw={700}
-                mb="md"
-                c="#105476"
-                style={{
-                  // borderBottom: "2px solid #105476",
-                  paddingBottom: "6px",
-                }}
-              >
-                📋 Recent Quotations
-              </Text>
-              {quotationData.length > 0 ? (
-                <Grid gutter="md">
-                  {quotationData.map((quotation) => (
-                    <Grid.Col
-                      key={quotation.id}
-                      span={{ base: 12, sm: 6, md: 4 }}
-                    >
-                      <Card
-                        shadow="sm"
-                        padding="md"
-                        radius="md"
-                        withBorder
-                        style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          transition: "all 0.2s ease",
-                          cursor: "pointer",
-                          height: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow =
-                            "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#105476";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.1)";
-                          e.currentTarget.style.borderColor = "#e9ecef";
-                        }}
-                        onClick={() => {
-                          const customerVal =
-                            callEntryForm.getValues().customer;
+                      {/* Quotations Section */}
+                      <Box>
+                        <Text
+                          size="lg"
+                          fw={700}
+                          mb="md"
+                          c="#105476"
+                          style={{
+                            // borderBottom: "2px solid #105476",
+                            paddingBottom: "6px",
+                          }}
+                        >
+                          📋 Recent Quotations
+                        </Text>
+                        {quotationData.length > 0 ? (
+                          <Grid gutter="md">
+                            {quotationData.map((quotation) => (
+                              <Grid.Col
+                                key={quotation.id}
+                                span={{ base: 12, sm: 6, md: 4 }}
+                              >
+                                <Card
+                                  shadow="sm"
+                                  padding="md"
+                                  radius="md"
+                                  withBorder
+                                  style={{
+                                    border: "1px solid #e9ecef",
+                                    backgroundColor: "#ffffff",
+                                    transition: "all 0.2s ease",
+                                    cursor: "pointer",
+                                    height: "100%",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform =
+                                      "translateY(-2px)";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 8px 20px rgba(16, 84, 118, 0.1)";
+                                    e.currentTarget.style.borderColor =
+                                      "#105476";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform =
+                                      "translateY(0)";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 2px 8px rgba(0,0,0,0.1)";
+                                    e.currentTarget.style.borderColor =
+                                      "#e9ecef";
+                                  }}
+                                  onClick={() => {
+                                    const customerVal =
+                                      callEntryForm.getValues().customer;
 
-                          navigate("/quotation-create", {
-                            state: {
-                              enquiry_id: quotation.enquiry_id,
-                              service: quotation.service,
-                              quotationData: quotation,
-                              customerData: {
-                                customer_code: customerVal,
-                                customer_name:
-                                  quotation.customer_name ||
-                                  selectedCustomerName,
-                                total_net_balance: totalOutstandingAmount,
-                              },
-                              returnTo: "call-entry",
-                              returnToState: {
-                                customer: customerVal,
-                                customerName:
-                                  quotation.customer_name ||
-                                  selectedCustomerName,
-                                openDrawer: true,
-                              },
-                            },
-                          });
-                        }}
-                      >
-                        <Stack gap="sm">
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#105476">
-                              {quotation.enquiry_received_date
-                                ? dayjs(quotation.enquiry_received_date).format(
-                                    "DD/MM/YYYY"
-                                  )
-                                : "-"}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              {quotation.service || "-"}
-                            </Text>
-                          </Group>
+                                    navigate("/quotation-create", {
+                                      state: {
+                                        enquiry_id: quotation.enquiry_id,
+                                        service: quotation.service,
+                                        quotationData: quotation,
+                                        customerData: {
+                                          customer_code: customerVal,
+                                          customer_name:
+                                            quotation.customer_name ||
+                                            selectedCustomerName,
+                                          total_net_balance:
+                                            totalOutstandingAmount,
+                                        },
+                                        returnTo: "call-entry",
+                                        returnToState: {
+                                          customer: customerVal,
+                                          customerName:
+                                            quotation.customer_name ||
+                                            selectedCustomerName,
+                                          openDrawer: true,
+                                        },
+                                      },
+                                    });
+                                  }}
+                                >
+                                  <Stack gap="sm">
+                                    <Group
+                                      justify="space-between"
+                                      align="center"
+                                    >
+                                      <Text size="sm" fw={600} c="#105476">
+                                        {quotation.enquiry_received_date
+                                          ? dayjs(
+                                              quotation.enquiry_received_date
+                                            ).format("DD/MM/YYYY")
+                                          : "-"}
+                                      </Text>
+                                      <Text size="xs" c="dimmed">
+                                        {quotation.service || "-"}
+                                      </Text>
+                                    </Group>
 
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Origin
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {quotation.origin_name || "-"}
+                                    <Group gap="sm">
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Origin
+                                        </Text>
+                                        <Text
+                                          size="sm"
+                                          fw={500}
+                                          c="#333"
+                                          truncate
+                                        >
+                                          {quotation.origin_name || "-"}
+                                        </Text>
+                                      </Box>
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Destination
+                                        </Text>
+                                        <Text
+                                          size="sm"
+                                          fw={500}
+                                          c="#333"
+                                          truncate
+                                        >
+                                          {quotation.destination_name || "-"}
+                                        </Text>
+                                      </Box>
+                                    </Group>
+
+                                    {/* Additional Quotation Details */}
+                                    <Group gap="sm">
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Container Type
+                                        </Text>
+                                        <Text
+                                          size="sm"
+                                          fw={500}
+                                          c="#333"
+                                          truncate
+                                        >
+                                          {quotation.fcl_details &&
+                                          quotation.fcl_details.length > 0
+                                            ? quotation.fcl_details
+                                                .map(
+                                                  (detail) =>
+                                                    detail.container_type
+                                                )
+                                                .join(", ")
+                                            : "-"}
+                                        </Text>
+                                      </Box>
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          No. of Containers
+                                        </Text>
+                                        <Text
+                                          size="sm"
+                                          fw={500}
+                                          c="#333"
+                                          truncate
+                                        >
+                                          {quotation.fcl_details &&
+                                          quotation.fcl_details.length > 0
+                                            ? quotation.fcl_details
+                                                .map(
+                                                  (detail) =>
+                                                    detail.no_of_containers
+                                                )
+                                                .join(", ")
+                                            : "-"}
+                                        </Text>
+                                      </Box>
+                                    </Group>
+
+                                    {/* Status at the bottom */}
+                                    <Group
+                                      justify="space-between"
+                                      align="center"
+                                    >
+                                      <Text size="xs" fw={600} c="#666">
+                                        Status:
+                                      </Text>
+                                      <Text size="sm" fw={500} c="#28a745">
+                                        {quotation.status || "-"}
+                                      </Text>
+                                    </Group>
+                                  </Stack>
+                                </Card>
+                              </Grid.Col>
+                            ))}
+                          </Grid>
+                        ) : (
+                          <Card
+                            shadow="sm"
+                            padding="md"
+                            radius="md"
+                            withBorder
+                            style={{ backgroundColor: "#f8f9fa" }}
+                          >
+                            <Box ta="center" py="sm">
+                              <Text c="dimmed" size="sm">
+                                No quotations found for this customer
                               </Text>
                             </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Destination
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {quotation.destination_name || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
+                          </Card>
+                        )}
+                      </Box>
 
-                          {/* Additional Quotation Details */}
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Container Type
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {quotation.fcl_details &&
-                                quotation.fcl_details.length > 0
-                                  ? quotation.fcl_details
-                                      .map((detail) => detail.container_type)
-                                      .join(", ")
-                                  : "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                No. of Containers
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {quotation.fcl_details &&
-                                quotation.fcl_details.length > 0
-                                  ? quotation.fcl_details
-                                      .map((detail) => detail.no_of_containers)
-                                      .join(", ")
-                                  : "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-
-                          {/* Status at the bottom */}
-                          <Group justify="space-between" align="center">
-                            <Text size="xs" fw={600} c="#666">
-                              Status:
-                            </Text>
-                            <Text size="sm" fw={500} c="#28a745">
-                              {quotation.status || "-"}
-                            </Text>
-                          </Group>
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
-              ) : (
-                <Card
-                  shadow="sm"
-                  padding="md"
-                  radius="md"
-                  withBorder
-                  style={{ backgroundColor: "#f8f9fa" }}
-                >
-                  <Box ta="center" py="sm">
-                    <Text c="dimmed" size="sm">
-                      No quotations found for this customer
-                    </Text>
-                  </Box>
-                </Card>
-              )}
-            </Box>
-
-            {/* Shipments Section */}
-            <Box>
-              <Group justify="space-between" align="center" mb="md">
-                <Text
-                  size="lg"
-                  fw={700}
-                  c="#105476"
-                  style={{
-                    paddingBottom: "6px",
-                  }}
-                >
-                  📦 Recent Shipments
-                </Text>
-              </Group>
-              {shipmentData.length > 0 ? (
-                <Grid gutter="md">
-                  {shipmentData.map((shipment, index) => (
-                    <Grid.Col key={index} span={{ base: 12, sm: 6, md: 4 }}>
-                      <Card
-                        shadow="sm"
-                        padding="md"
-                        radius="md"
-                        withBorder
-                        style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          transition: "all 0.2s ease",
-                          cursor: "pointer",
-                          height: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow =
-                            "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#105476";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.1)";
-                          e.currentTarget.style.borderColor = "#e9ecef";
-                        }}
-                      >
-                        <Stack gap="sm">
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#105476">
-                              {shipment.customer_name || "-"}
-                            </Text>
-                            {/* <Text size="xs" c="dimmed">
+                      {/* Shipments Section */}
+                      <Box>
+                        <Group justify="space-between" align="center" mb="md">
+                          <Text
+                            size="lg"
+                            fw={700}
+                            c="#105476"
+                            style={{
+                              paddingBottom: "6px",
+                            }}
+                          >
+                            📦 Recent Shipments
+                          </Text>
+                        </Group>
+                        {shipmentData.length > 0 ? (
+                          <Grid gutter="md">
+                            {shipmentData.map((shipment, index) => (
+                              <Grid.Col
+                                key={index}
+                                span={{ base: 12, sm: 6, md: 4 }}
+                              >
+                                <Card
+                                  shadow="sm"
+                                  padding="md"
+                                  radius="md"
+                                  withBorder
+                                  style={{
+                                    border: "1px solid #e9ecef",
+                                    backgroundColor: "#ffffff",
+                                    transition: "all 0.2s ease",
+                                    cursor: "pointer",
+                                    height: "100%",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform =
+                                      "translateY(-2px)";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 8px 20px rgba(16, 84, 118, 0.1)";
+                                    e.currentTarget.style.borderColor =
+                                      "#105476";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform =
+                                      "translateY(0)";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 2px 8px rgba(0,0,0,0.1)";
+                                    e.currentTarget.style.borderColor =
+                                      "#e9ecef";
+                                  }}
+                                >
+                                  <Stack gap="sm">
+                                    <Group
+                                      justify="space-between"
+                                      align="center"
+                                    >
+                                      <Text size="sm" fw={600} c="#105476">
+                                        {shipment.customer_name || "-"}
+                                      </Text>
+                                      {/* <Text size="xs" c="dimmed">
                               {shipment.carrier_name || "-"}
                             </Text> */}
-                          </Group>
+                                    </Group>
 
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Booking No
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {shipment.booking_no || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
+                                    <Group gap="sm">
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Booking No
+                                        </Text>
+                                        <Text size="sm" fw={500} c="#333">
+                                          {shipment.booking_no || "-"}
+                                        </Text>
+                                      </Box>
+                                    </Group>
 
-                          {/* <Group gap="sm">
+                                    {/* <Group gap="sm">
                             <Box style={{ flex: 1 }}>
                               <Text size="xs" fw={600} c="#666" mb={2}>
                                 Revenue
@@ -3136,89 +3737,96 @@ function CallEntryNew() {
                               </Text>
                             </Box>
                           </Group> */}
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
-              ) : (
-                <Card
-                  shadow="sm"
-                  padding="md"
-                  radius="md"
-                  withBorder
-                  style={{ backgroundColor: "#f8f9fa" }}
-                >
-                  <Box ta="center" py="sm">
-                    <Text c="dimmed" size="sm">
-                      No shipments found for this customer
-                    </Text>
-                  </Box>
-                </Card>
-              )}
-            </Box>
+                                  </Stack>
+                                </Card>
+                              </Grid.Col>
+                            ))}
+                          </Grid>
+                        ) : (
+                          <Card
+                            shadow="sm"
+                            padding="md"
+                            radius="md"
+                            withBorder
+                            style={{ backgroundColor: "#f8f9fa" }}
+                          >
+                            <Box ta="center" py="sm">
+                              <Text c="dimmed" size="sm">
+                                No shipments found for this customer
+                              </Text>
+                            </Box>
+                          </Card>
+                        )}
+                      </Box>
 
-            {/* Call Entries Section */}
-            <Box>
-              <Text
-                size="lg"
-                fw={700}
-                mb="md"
-                c="#105476"
-                style={{
-                  // borderBottom: "2px solid #105476",
-                  paddingBottom: "6px",
-                }}
-              >
-                📞 Recent Call Entries
-              </Text>
-              {callEntryData.length > 0 ? (
-                <Grid gutter="md">
-                  {callEntryData.map((callEntry) => (
-                    <Grid.Col
-                      key={callEntry.id}
-                      span={{ base: 12, sm: 6, md: 4 }}
-                    >
-                      <Card
-                        shadow="sm"
-                        padding="md"
-                        radius="md"
-                        withBorder
-                        style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          transition: "all 0.2s ease",
-                          cursor: "pointer",
-                          height: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow =
-                            "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#105476";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.1)";
-                          e.currentTarget.style.borderColor = "#e9ecef";
-                        }}
-                      >
-                        <Stack gap="sm">
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#105476">
-                              {callEntry.call_date
-                                ? dayjs(callEntry.call_date).format(
-                                    "DD/MM/YYYY"
-                                  )
-                                : "-"}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              {callEntry.call_mode || "-"}
-                            </Text>
-                          </Group>
+                      {/* Call Entries Section */}
+                      <Box>
+                        <Text
+                          size="lg"
+                          fw={700}
+                          mb="md"
+                          c="#105476"
+                          style={{
+                            // borderBottom: "2px solid #105476",
+                            paddingBottom: "6px",
+                          }}
+                        >
+                          📞 Recent Call Entries
+                        </Text>
+                        {callEntryData.length > 0 ? (
+                          <Grid gutter="md">
+                            {callEntryData.map((callEntry) => (
+                              <Grid.Col
+                                key={callEntry.id}
+                                span={{ base: 12, sm: 6, md: 4 }}
+                              >
+                                <Card
+                                  shadow="sm"
+                                  padding="md"
+                                  radius="md"
+                                  withBorder
+                                  style={{
+                                    border: "1px solid #e9ecef",
+                                    backgroundColor: "#ffffff",
+                                    transition: "all 0.2s ease",
+                                    cursor: "pointer",
+                                    height: "100%",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform =
+                                      "translateY(-2px)";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 8px 20px rgba(16, 84, 118, 0.1)";
+                                    e.currentTarget.style.borderColor =
+                                      "#105476";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform =
+                                      "translateY(0)";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 2px 8px rgba(0,0,0,0.1)";
+                                    e.currentTarget.style.borderColor =
+                                      "#e9ecef";
+                                  }}
+                                >
+                                  <Stack gap="sm">
+                                    <Group
+                                      justify="space-between"
+                                      align="center"
+                                    >
+                                      <Text size="sm" fw={600} c="#105476">
+                                        {callEntry.call_date
+                                          ? dayjs(callEntry.call_date).format(
+                                              "DD/MM/YYYY"
+                                            )
+                                          : "-"}
+                                      </Text>
+                                      <Text size="xs" c="dimmed">
+                                        {callEntry.call_mode || "-"}
+                                      </Text>
+                                    </Group>
 
-                          {/* <Box>
+                                    {/* <Box>
                             <Text size="xs" fw={600} c="#666" mb={2}>
                               Call Summary
                             </Text>
@@ -3238,60 +3846,70 @@ function CallEntryNew() {
                             </Text>
                           </Box> */}
 
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Follow-up Date
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {callEntry.followup_date
-                                  ? dayjs(callEntry.followup_date).format(
-                                      "DD/MM/YYYY"
-                                    )
-                                  : "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Action
-                              </Text>
-                              <Text
-                                size="sm"
-                                fw={500}
-                                c="#333"
-                                style={{
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: "vertical",
-                                  overflow: "hidden",
-                                  lineHeight: "1.4",
-                                }}
-                              >
-                                {callEntry.followup_action || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-                          <Box>
-                            <Text size="xs" fw={600} c="#666" mb={2}>
-                              Call Summary
-                            </Text>
-                            <Text
-                              size="sm"
-                              fw={500}
-                              c="#333"
-                              style={{
-                                display: "-webkit-box",
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: "vertical",
-                                overflow: "hidden",
-                                lineHeight: "1.4",
-                              }}
-                            >
-                              {callEntry.call_summary || "-"}
-                            </Text>
-                          </Box>
+                                    <Group gap="sm">
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Follow-up Date
+                                        </Text>
+                                        <Text size="sm" fw={500} c="#333">
+                                          {callEntry.followup_date
+                                            ? dayjs(
+                                                callEntry.followup_date
+                                              ).format("DD/MM/YYYY")
+                                            : "-"}
+                                        </Text>
+                                      </Box>
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Action
+                                        </Text>
+                                        <Text
+                                          size="sm"
+                                          fw={500}
+                                          c="#333"
+                                          style={{
+                                            display: "-webkit-box",
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: "vertical",
+                                            overflow: "hidden",
+                                            lineHeight: "1.4",
+                                          }}
+                                        >
+                                          {callEntry.followup_action || "-"}
+                                        </Text>
+                                      </Box>
+                                    </Group>
+                                    <Box>
+                                      <Text size="xs" fw={600} c="#666" mb={2}>
+                                        Call Summary
+                                      </Text>
+                                      <Text
+                                        size="sm"
+                                        fw={500}
+                                        c="#333"
+                                        style={{
+                                          display: "-webkit-box",
+                                          WebkitLineClamp: 2,
+                                          WebkitBoxOrient: "vertical",
+                                          overflow: "hidden",
+                                          lineHeight: "1.4",
+                                        }}
+                                      >
+                                        {callEntry.call_summary || "-"}
+                                      </Text>
+                                    </Box>
 
-                          {/* <Group justify="space-between" align="center">
+                                    {/* <Group justify="space-between" align="center">
                             <Text size="xs" fw={600} c="#666">
                               Status:
                             </Text>
@@ -3308,636 +3926,1001 @@ function CallEntryNew() {
                               {callEntry.status || "-"}
                             </Text>
                           </Group> */}
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
-              ) : (
-                <Card
-                  shadow="sm"
-                  padding="md"
-                  radius="md"
-                  withBorder
-                  style={{ backgroundColor: "#f8f9fa" }}
-                >
-                  <Box ta="center" py="sm">
-                    <Text c="dimmed" size="sm">
-                      No call entries found for this customer
-                    </Text>
-                  </Box>
-                </Card>
-              )}
-            </Box>
+                                  </Stack>
+                                </Card>
+                              </Grid.Col>
+                            ))}
+                          </Grid>
+                        ) : (
+                          <Card
+                            shadow="sm"
+                            padding="md"
+                            radius="md"
+                            withBorder
+                            style={{ backgroundColor: "#f8f9fa" }}
+                          >
+                            <Box ta="center" py="sm">
+                              <Text c="dimmed" size="sm">
+                                No call entries found for this customer
+                              </Text>
+                            </Box>
+                          </Card>
+                        )}
+                      </Box>
 
-            {/* Potential Profiling Section */}
-            <Box>
-              <Text
-                size="lg"
-                fw={700}
-                mb="md"
-                c="#105476"
-                style={{
-                  // borderBottom: "2px solid #105476",
-                  paddingBottom: "6px",
-                }}
-              >
-                🎯 Potential Profiling
-              </Text>
-              {potentialProfilingData.length > 0 ? (
-                <Grid gutter="md">
-                  {potentialProfilingData.map((profile) => (
-                    <Grid.Col
-                      key={profile.id}
-                      span={{ base: 12, sm: 6, md: 4 }}
-                    >
-                      <Card
-                        shadow="sm"
-                        padding="md"
-                        radius="md"
-                        withBorder
-                        style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          transition: "all 0.2s ease",
-                          cursor: "pointer",
-                          height: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow =
-                            "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#105476";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.1)";
-                          e.currentTarget.style.borderColor = "#e9ecef";
+                      {/* Potential Profiling Section */}
+                      <Box>
+                        <Text
+                          size="lg"
+                          fw={700}
+                          mb="md"
+                          c="#105476"
+                          style={{
+                            // borderBottom: "2px solid #105476",
+                            paddingBottom: "6px",
+                          }}
+                        >
+                          🎯 Potential Profiling
+                        </Text>
+                        {potentialProfilingData.length > 0 ? (
+                          <Grid gutter="md">
+                            {potentialProfilingData.map((profile) => (
+                              <Grid.Col
+                                key={profile.id}
+                                span={{ base: 12, sm: 6, md: 4 }}
+                              >
+                                <Card
+                                  shadow="sm"
+                                  padding="md"
+                                  radius="md"
+                                  withBorder
+                                  style={{
+                                    border: "1px solid #e9ecef",
+                                    backgroundColor: "#ffffff",
+                                    transition: "all 0.2s ease",
+                                    cursor: "pointer",
+                                    height: "100%",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform =
+                                      "translateY(-2px)";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 8px 20px rgba(16, 84, 118, 0.1)";
+                                    e.currentTarget.style.borderColor =
+                                      "#105476";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform =
+                                      "translateY(0)";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 2px 8px rgba(0,0,0,0.1)";
+                                    e.currentTarget.style.borderColor =
+                                      "#e9ecef";
+                                  }}
+                                >
+                                  <Stack gap="sm">
+                                    <Group
+                                      justify="space-between"
+                                      align="center"
+                                    >
+                                      <Text size="sm" fw={600} c="#105476">
+                                        {profile.service || "-"}
+                                      </Text>
+                                    </Group>
+
+                                    <Group gap="sm">
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Origin
+                                        </Text>
+                                        <Text
+                                          size="sm"
+                                          fw={500}
+                                          c="#333"
+                                          truncate
+                                        >
+                                          {profile.origin_port_name || "-"}
+                                        </Text>
+                                      </Box>
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Destination
+                                        </Text>
+                                        <Text
+                                          size="sm"
+                                          fw={500}
+                                          c="#333"
+                                          truncate
+                                        >
+                                          {profile.destination_port_name || "-"}
+                                        </Text>
+                                      </Box>
+                                    </Group>
+
+                                    <Group gap="sm">
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          No. of Shipments
+                                        </Text>
+                                        <Text size="sm" fw={500} c="#333">
+                                          {profile.no_of_shipments || "-"}
+                                        </Text>
+                                      </Box>
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Frequency
+                                        </Text>
+                                        <Text size="sm" fw={500} c="#333">
+                                          {profile.frequency_name || "-"}
+                                        </Text>
+                                      </Box>
+                                    </Group>
+
+                                    <Group gap="sm">
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Volume
+                                        </Text>
+                                        <Text size="sm" fw={500} c="#333">
+                                          {profile.volume || "-"}
+                                        </Text>
+                                      </Box>
+                                      <Box style={{ flex: 1 }}>
+                                        <Text
+                                          size="xs"
+                                          fw={600}
+                                          c="#666"
+                                          mb={2}
+                                        >
+                                          Potential Profit
+                                        </Text>
+                                        <Text size="sm" fw={500} c="#28a745">
+                                          {profile.potential_profit
+                                            ? `₹${profile.potential_profit.toLocaleString("en-IN")}`
+                                            : "-"}
+                                        </Text>
+                                      </Box>
+                                    </Group>
+                                  </Stack>
+                                </Card>
+                              </Grid.Col>
+                            ))}
+                          </Grid>
+                        ) : (
+                          <Card
+                            shadow="sm"
+                            padding="md"
+                            radius="md"
+                            withBorder
+                            style={{ backgroundColor: "#f8f9fa" }}
+                          >
+                            <Box ta="center" py="sm">
+                              <Text c="dimmed" size="sm">
+                                No potential profiling data found for this
+                                customer
+                              </Text>
+                            </Box>
+                          </Card>
+                        )}
+                      </Box>
+                    </Stack>
+                  )}
+                </Drawer>
+                <Grid.Col span={12}>
+                  <Box
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <Menu shadow="md" width={220} position="bottom-end">
+                      <Menu.Target>
+                        <ActionIcon
+                          variant="subtle"
+                          color="#105476"
+                          size="lg"
+                          styles={{
+                            root: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              border: "1px solid #E9ECEF",
+                              borderRadius: "8px",
+                              "&:hover": {
+                                backgroundColor: "#F8F9FA",
+                              },
+                            },
+                          }}
+                        >
+                          <IconDotsVertical size={18} />
+                        </ActionIcon>
+                      </Menu.Target>
+                      <Menu.Dropdown
+                        styles={{
+                          dropdown: {
+                            border: "1px solid #E9ECEF",
+                            borderRadius: "8px",
+                            padding: "8px",
+                            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                          },
                         }}
                       >
-                        <Stack gap="sm">
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#105476">
-                              {profile.service || "-"}
-                            </Text>
-                          </Group>
+                        <Menu.Item
+                          leftSection={
+                            <Box
+                              style={{
+                                backgroundColor: "#E7F5FF",
+                                borderRadius: "6px",
+                                padding: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconUserScan size={16} color="#105476" />
+                            </Box>
+                          }
+                          disabled={
+                            !location.pincode &&
+                            locationPermission !== "granted"
+                          }
+                          styles={{
+                            item: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              borderRadius: "6px",
+                              padding: "10px 12px",
+                              marginBottom: "4px",
+                              "&:hover": {
+                                backgroundColor: "#F8F9FA",
+                              },
+                            },
+                            itemLabel: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                            },
+                          }}
+                          onClick={async () => {
+                            // Check if pincode is available
+                            if (location.pincode) {
+                              openCustomer();
+                              await fetchNearbyCustomers(location.pincode);
+                              return;
+                            }
 
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Origin
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {profile.origin_port_name || "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Destination
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {profile.destination_port_name || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
+                            // If location is denied, retry permission request without showing duplicate toast
+                            if (locationPermission === "denied") {
+                              // Automatically retry location permission request
+                              const locationGranted =
+                                await requestLocationPermission();
 
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                No. of Shipments
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {profile.no_of_shipments || "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Frequency
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {profile.frequency_name || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
+                              if (locationGranted && location.pincode) {
+                                openCustomer();
+                                await fetchNearbyCustomers(location.pincode);
+                              }
+                              return;
+                            }
 
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Volume
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {profile.volume || "-"}
-                              </Text>
+                            // Request location permission
+                            const locationGranted =
+                              await requestLocationPermission();
+
+                            if (locationGranted && location.pincode) {
+                              openCustomer();
+                              await fetchNearbyCustomers(location.pincode);
+                            } else if (locationGranted && !location.pincode) {
+                              ToastNotification({
+                                type: "error",
+                                message:
+                                  "Unable to fetch pincode from your location. Please try again or check your internet connection.",
+                              });
+                            }
+                          }}
+                        >
+                          Nearby Customers
+                        </Menu.Item>
+                        <Menu.Item
+                          leftSection={
+                            <Box
+                              style={{
+                                backgroundColor: "#E7F5FF",
+                                borderRadius: "6px",
+                                padding: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconUserScan size={16} color="#105476" />
                             </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Potential Profit
-                              </Text>
-                              <Text size="sm" fw={500} c="#28a745">
-                                {profile.potential_profit
-                                  ? `₹${profile.potential_profit.toLocaleString("en-IN")}`
-                                  : "-"}
-                              </Text>
+                          }
+                          styles={{
+                            item: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              borderRadius: "6px",
+                              padding: "10px 12px",
+                              marginBottom: "4px",
+                              "&:hover": {
+                                backgroundColor: "#F8F9FA",
+                              },
+                            },
+                            itemLabel: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                            },
+                          }}
+                          onClick={() => {
+                            open();
+                            // Reset pagination when opening modal
+                            setProfilingPageIndex(0);
+                            // Always fetch table data when opening modal
+                            fetchProfiling(0, profilingPageSize);
+                            // Check if there's existing profiling form data
+                            if (
+                              profilingForm.values.profiles.some(
+                                (profile) =>
+                                  profile.service ||
+                                  profile.origin ||
+                                  profile.destination ||
+                                  profile.no_of_shipments ||
+                                  profile.frequency ||
+                                  profile.volume ||
+                                  profile.tier ||
+                                  profile.competitors
+                              )
+                            ) {
+                              // Show existing form data
+                              console.log(
+                                "Showing existing profiling data:",
+                                profilingForm.values.profiles
+                              );
+                            }
+                          }}
+                        >
+                          Profiling
+                        </Menu.Item>
+                        <Menu.Item
+                          leftSection={
+                            <Box
+                              style={{
+                                backgroundColor: "#E7F5FF",
+                                borderRadius: "6px",
+                                padding: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconPlus size={16} color="#105476" />
                             </Box>
-                          </Group>
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
-              ) : (
-                <Card
-                  shadow="sm"
-                  padding="md"
-                  radius="md"
-                  withBorder
-                  style={{ backgroundColor: "#f8f9fa" }}
-                >
-                  <Box ta="center" py="sm">
-                    <Text c="dimmed" size="sm">
-                      No potential profiling data found for this customer
-                    </Text>
+                          }
+                          styles={{
+                            item: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              borderRadius: "6px",
+                              padding: "10px 12px",
+                              marginBottom: "4px",
+                              "&:hover": {
+                                backgroundColor: "#F8F9FA",
+                              },
+                            },
+                            itemLabel: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                            },
+                          }}
+                          onClick={() => {
+                            openParticipant();
+                            // Reset pagination when opening modal
+                            setParticipantsPageIndex(0);
+                            // Always fetch table data when opening modal
+                            fetchParticipants(0, participantsPageSize);
+                            // Check if there's existing participant form data
+                            if (
+                              participantForm.values.participants.some(
+                                (participant) =>
+                                  participant.first_name ||
+                                  participant.last_name ||
+                                  participant.designation ||
+                                  participant.mobile_no ||
+                                  participant.email ||
+                                  participant.department
+                              )
+                            ) {
+                              // Show existing form data
+                              console.log(
+                                "Showing existing participant data:",
+                                participantForm.values.participants
+                              );
+                            }
+                          }}
+                        >
+                          Participants
+                        </Menu.Item>
+                        <Menu.Item
+                          leftSection={
+                            <Box
+                              style={{
+                                backgroundColor: "#E7F5FF",
+                                borderRadius: "6px",
+                                padding: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconUserScan size={16} color="#105476" />
+                            </Box>
+                          }
+                          styles={{
+                            item: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              borderRadius: "6px",
+                              padding: "10px 12px",
+                              marginBottom: "4px",
+                              "&:hover": {
+                                backgroundColor: "#F8F9FA",
+                              },
+                            },
+                            itemLabel: {
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                            },
+                          }}
+                          onClick={() => {
+                            const customerVal =
+                              callEntryForm.getValues().customer;
+                            if (customerVal) {
+                              // Set customer name from stored customer data if available
+                              if (
+                                selectedCustomerData &&
+                                selectedCustomerData.customer_name
+                              ) {
+                                setSelectedCustomerName(
+                                  selectedCustomerData.customer_name
+                                );
+                              } else if (!selectedCustomerName) {
+                                // Fallback to placeholder only if no data available
+                                setSelectedCustomerName(`${customerVal}`);
+                              }
+                              fetchCustomerData(customerVal);
+                              openQuotationDrawer();
+                            } else {
+                              ToastNotification({
+                                type: "warning",
+                                message: "Please select a customer",
+                              });
+                            }
+                          }}
+                        >
+                          Customer Data
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
                   </Box>
-                </Card>
-              )}
+                </Grid.Col>
+                <Grid gutter="md">
+                  <Grid.Col span={4}>
+                    <SearchableSelect
+                      label="Customer Name"
+                      placeholder="Type customer name"
+                      apiEndpoint={URL.customer}
+                      searchFields={["customer_name", "customer_code"]}
+                      displayFormat={(item: any) => ({
+                        value: String(item.customer_code),
+                        label: item.customer_name,
+                      })}
+                      value={callEntryForm.values.customer}
+                      displayValue={
+                        callEntryForm.values.customer &&
+                        callEntryForm.values.customer.trim()
+                          ? selectedCustomerName || null
+                          : null
+                      }
+                      onChange={(value, selectedData) => {
+                        callEntryForm.setFieldValue("customer", value || "");
+                        // Always call handleCustomerChange to handle both selection and clearing
+                        handleCustomerChange(value || "", selectedData || null);
+                      }}
+                      minSearchLength={2}
+                      required
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={4}>
+                    <DateInput
+                      label="Date"
+                      withAsterisk
+                      placeholder="YYYY-MM-DD"
+                      value={
+                        callEntryForm.values.call_date &&
+                        callEntryForm.values.call_date.trim() !== ""
+                          ? dayjs(callEntryForm.values.call_date).toDate()
+                          : new Date()
+                      }
+                      onChange={(date) => {
+                        const formatted = date
+                          ? dayjs(date).format("YYYY-MM-DD")
+                          : "";
+                        callEntryForm.setFieldValue("call_date", formatted);
+                        console.log("formatted=", formatted);
+                      }}
+                      error={callEntryForm.errors.call_date}
+                      valueFormat="YYYY-MM-DD"
+                      leftSection={<IconCalendar size={18} />}
+                      leftSectionPointerEvents="none"
+                      radius="sm"
+                      size="sm"
+                      nextIcon={<IconChevronRight size={16} />}
+                      previousIcon={<IconChevronLeft size={16} />}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                        day: {
+                          width: "2.25rem",
+                          height: "2.25rem",
+                          fontSize: "0.9rem",
+                          fontFamily: "Inter, sans-serif",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={4}>
+                    <Dropdown
+                      label="Call Mode"
+                      placeholder="Select Call Mode"
+                      withAsterisk
+                      searchable
+                      clearable
+                      nothingFoundMessage="No Call Mode found..."
+                      data={callModeOptions}
+                      limit={50} // Limit initial display to 50 items
+                      maxDropdownHeight={400} // Limit dropdown height
+                      {...callEntryForm.getInputProps("call_mode")}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={12}>
+                    <Textarea
+                      label="Description"
+                      withAsterisk
+                      placeholder="Enter Description"
+                      minRows={4}
+                      value={callEntryForm.values.call_summary}
+                      onChange={(e) => {
+                        const formattedValue = toTitleCase(e.target.value);
+                        callEntryForm.setFieldValue(
+                          "call_summary",
+                          formattedValue
+                        );
+                      }}
+                      error={callEntryForm.errors.call_summary}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={4}>
+                    <Dropdown
+                      label="Follow Up Action"
+                      placeholder="Select Follow Up Action"
+                      withAsterisk
+                      searchable
+                      clearable
+                      nothingFoundMessage="No Follow up action found..."
+                      data={followUpAction}
+                      limit={50} // Limit initial display to 50 items
+                      maxDropdownHeight={250} // Limit dropdown height
+                      rightSection={<IconChevronDown />}
+                      {...callEntryForm.getInputProps("followup_action")}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={4}>
+                    <DateInput
+                      label="Follow-Up Date"
+                      withAsterisk
+                      placeholder="YYYY-MM-DD"
+                      value={
+                        callEntryForm.values.followup_date &&
+                        callEntryForm.values.followup_date.trim() !== ""
+                          ? dayjs(callEntryForm.values.followup_date).toDate()
+                          : new Date()
+                      }
+                      onChange={(date) => {
+                        console.log("date=", date);
+                        const formatted = date
+                          ? dayjs(date).format("YYYY-MM-DD")
+                          : "";
+                        console.log("formatted=", formatted);
+                        callEntryForm.setFieldValue("followup_date", formatted);
+                        console.log("followup_date date=", formatted);
+                      }}
+                      error={callEntryForm.errors.followup_date}
+                      valueFormat="YYYY-MM-DD"
+                      leftSection={<IconCalendar size={18} />}
+                      leftSectionPointerEvents="none"
+                      radius="sm"
+                      size="sm"
+                      nextIcon={<IconChevronRight size={16} />}
+                      previousIcon={<IconChevronLeft size={16} />}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                        day: {
+                          width: "2.25rem",
+                          height: "2.25rem",
+                          fontSize: "0.9rem",
+                          fontFamily: "Inter, sans-serif",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={4}>
+                    <NumberInput
+                      label="Expected Profit"
+                      placeholder="Enter expected profit"
+                      hideControls
+                      {...callEntryForm.getInputProps("expected_profit")}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+                  {callEntryId &&
+                    (() => {
+                      // Find the selected follow-up action option
+                      const selectedFollowUpAction = followUpAction.find(
+                        (option) =>
+                          option.value === callEntryForm.values.followup_action
+                      );
+                      const isFollowUpActionClose =
+                        selectedFollowUpAction?.label === "Close";
+                      const isChecked = closeCallEntry || isFollowUpActionClose;
+
+                      return (
+                        <>
+                          <Grid.Col span={12}>
+                            <Checkbox
+                              label="Close Call Entry"
+                              checked={isChecked}
+                              onChange={(event) => {
+                                // Only allow change if follow-up action is not "Close"
+                                if (!isFollowUpActionClose) {
+                                  setCloseCallEntry(
+                                    event.currentTarget.checked
+                                  );
+                                }
+                              }}
+                              description="Check this box to close the call entry"
+                              disabled={isFollowUpActionClose}
+                              color="red"
+                              styles={{
+                                label: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                },
+                                description: {
+                                  fontSize: "12px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          {(isChecked || isFollowUpActionClose) && (
+                            <Grid.Col span={12}>
+                              <Textarea
+                                label="Remark"
+                                placeholder="Enter remark..."
+                                required
+                                {...callEntryForm.getInputProps("remark")}
+                                error={
+                                  (isChecked || isFollowUpActionClose) &&
+                                  !callEntryForm.values.remark.trim()
+                                    ? "Remark is required when closing call entry"
+                                    : callEntryForm.errors.remark
+                                }
+                                minRows={3}
+                                styles={{
+                                  input: {
+                                    fontSize: "13px",
+                                    fontFamily: "Inter",
+                                  },
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }}
+                              />
+                            </Grid.Col>
+                          )}
+                        </>
+                      );
+                    })()}
+                </Grid>
+              </Grid>
             </Box>
-          </Stack>
-        )}
-      </Drawer>
-      <Flex justify={"space-between"}>
-        <Text fw={500} my="md">
-          {callEntryId ? "Edit Call Entry" : "Call Entry Details"}
-        </Text>
-        <Group>
-          <Tooltip
-            label="Enable location access"
-            disabled={!!location.pincode || locationPermission === "granted"}
-            position="top"
-            withArrow
-          >
-            <Button
-              variant="outline"
-              color={"#105476"}
-              leftSection={<IconUserScan size={16} />}
-              size="xs"
-              loading={isGettingLocation}
-              disabled={!location.pincode && locationPermission !== "granted"}
-              onClick={async () => {
-                // Check if pincode is available
-                if (location.pincode) {
-                  openCustomer();
-                  await fetchNearbyCustomers(location.pincode);
-                  return;
-                }
 
-                // If location is denied, retry permission request without showing duplicate toast
-                if (locationPermission === "denied") {
-                  // Automatically retry location permission request
-                  const locationGranted = await requestLocationPermission();
-
-                  if (locationGranted && location.pincode) {
-                    openCustomer();
-                    await fetchNearbyCustomers(location.pincode);
-                  }
-                  return;
-                }
-
-                // Request location permission
-                const locationGranted = await requestLocationPermission();
-
-                if (locationGranted && location.pincode) {
-                  openCustomer();
-                  await fetchNearbyCustomers(location.pincode);
-                } else if (locationGranted && !location.pincode) {
-                  ToastNotification({
-                    type: "error",
-                    message:
-                      "Unable to fetch pincode from your location. Please try again or check your internet connection.",
-                  });
-                }
+            {/* Footer Buttons */}
+            <Box
+              style={{
+                borderTop: "1px solid #e9ecef",
+                padding: "20px 32px",
+                backgroundColor: "#ffffff",
               }}
             >
-              Nearby customers
-            </Button>
-          </Tooltip>
-          <Button
-            variant="outline"
-            color={"#105476"}
-            leftSection={<IconUserScan size={16} />}
-            size="xs"
-            onClick={() => {
-              open();
-              // Reset pagination when opening modal
-              setProfilingPageIndex(0);
-              // Always fetch table data when opening modal
-              fetchProfiling(0, profilingPageSize);
-              // Check if there's existing profiling form data
-              if (
-                profilingForm.values.profiles.some(
-                  (profile) =>
-                    profile.service ||
-                    profile.origin ||
-                    profile.destination ||
-                    profile.no_of_shipments ||
-                    profile.frequency ||
-                    profile.volume ||
-                    profile.tier ||
-                    profile.competitors
-                )
-              ) {
-                // Show existing form data
-                console.log(
-                  "Showing existing profiling data:",
-                  profilingForm.values.profiles
-                );
-              }
-            }}
-          >
-            Profiling
-          </Button>
-          <Button
-            variant="outline"
-            color={"#105476"}
-            leftSection={<IconPlus size={16} />}
-            size="xs"
-            onClick={() => {
-              openParticipant();
-              // Reset pagination when opening modal
-              setParticipantsPageIndex(0);
-              // Always fetch table data when opening modal
-              fetchParticipants(0, participantsPageSize);
-              // Check if there's existing participant form data
-              if (
-                participantForm.values.participants.some(
-                  (participant) =>
-                    participant.first_name ||
-                    participant.last_name ||
-                    participant.designation ||
-                    participant.mobile_no ||
-                    participant.email ||
-                    participant.department
-                )
-              ) {
-                // Show existing form data
-                console.log(
-                  "Showing existing participant data:",
-                  participantForm.values.participants
-                );
-              }
-            }}
-          >
-            Participants
-          </Button>
-          <Button
-            variant="outline"
-            color={"#105476"}
-            leftSection={<IconUserScan size={16} />}
-            size="xs"
-            onClick={() => {
-              const customerVal = callEntryForm.getValues().customer;
-              if (customerVal) {
-                // Set customer name from stored customer data if available
-                if (
-                  selectedCustomerData &&
-                  selectedCustomerData.customer_name
-                ) {
-                  setSelectedCustomerName(selectedCustomerData.customer_name);
-                } else if (!selectedCustomerName) {
-                  // Fallback to placeholder only if no data available
-                  setSelectedCustomerName(`${customerVal}`);
-                }
-                fetchCustomerData(customerVal);
-                openQuotationDrawer();
-              } else {
-                ToastNotification({
-                  type: "warning",
-                  message: "Please select a customer",
-                });
-              }
-            }}
-          >
-            Customer Data
-          </Button>
-        </Group>
-      </Flex>
-      <Group grow mb={"md"}>
-        <SearchableSelect
-          label="Customer Name"
-          placeholder="Type customer name"
-          apiEndpoint={URL.customer}
-          searchFields={["customer_name", "customer_code"]}
-          displayFormat={(item: any) => ({
-            value: String(item.customer_code),
-            label: item.customer_name,
-          })}
-          value={callEntryForm.values.customer}
-          displayValue={
-            callEntryForm.values.customer &&
-            callEntryForm.values.customer.trim()
-              ? selectedCustomerName || null
-              : null
-          }
-          onChange={(value, selectedData) => {
-            callEntryForm.setFieldValue("customer", value || "");
-            // Always call handleCustomerChange to handle both selection and clearing
-            handleCustomerChange(value || "", selectedData || null);
-          }}
-          minSearchLength={2}
-          required
-        />
-        <Box maw={300} mx="auto">
-          <DateInput
-            label="Date"
-            withAsterisk
-            placeholder="YYYY-MM-DD"
-            value={
-              callEntryForm.values.call_date &&
-              callEntryForm.values.call_date.trim() !== ""
-                ? dayjs(callEntryForm.values.call_date).toDate()
-                : new Date()
-            }
-            onChange={(date) => {
-              const formatted = date ? dayjs(date).format("YYYY-MM-DD") : "";
-              callEntryForm.setFieldValue("call_date", formatted);
-              console.log("formatted=", formatted);
-            }}
-            error={callEntryForm.errors.call_date}
-            valueFormat="YYYY-MM-DD"
-            leftSection={<IconCalendar size={18} />}
-            leftSectionPointerEvents="none"
-            radius="sm"
-            size="sm"
-            nextIcon={<IconChevronRight size={16} />}
-            previousIcon={<IconChevronLeft size={16} />}
-            styles={{
-              day: {
-                width: "2.25rem",
-                height: "2.25rem",
-                fontSize: "0.9rem",
-              },
-            }}
-          />
-        </Box>
-        <Dropdown
-          label="Call Mode"
-          placeholder="Select Call Mode"
-          withAsterisk
-          searchable
-          clearable
-          nothingFoundMessage="No Call Mode found..."
-          data={callModeOptions}
-          limit={50} // Limit initial display to 50 items
-          maxDropdownHeight={400} // Limit dropdown height
-          {...callEntryForm.getInputProps("call_mode")}
-        />
-      </Group>
-      <Stack>
-        <Textarea
-          label="Description"
-          withAsterisk
-          placeholder="Enter Description"
-          minRows={4}
-          value={callEntryForm.values.call_summary}
-          onChange={(e) => {
-            const formattedValue = toTitleCase(e.target.value);
-            callEntryForm.setFieldValue("call_summary", formattedValue);
-          }}
-          error={callEntryForm.errors.call_summary}
-        />
-      </Stack>
-      <Grid mt="md">
-        <Grid.Col span={4}>
-          <Dropdown
-            label="Follow Up Action"
-            placeholder="Select Follow Up Action"
-            withAsterisk
-            searchable
-            clearable
-            nothingFoundMessage="No Follow up action found..."
-            data={followUpAction}
-            limit={50} // Limit initial display to 50 items
-            maxDropdownHeight={250} // Limit dropdown height
-            rightSection={<IconChevronDown />}
-            {...callEntryForm.getInputProps("followup_action")}
-          />
-        </Grid.Col>
-        <Grid.Col span={4}>
-          <DateInput
-            label="Follow-Up Date"
-            withAsterisk
-            placeholder="YYYY-MM-DD"
-            value={
-              callEntryForm.values.followup_date &&
-              callEntryForm.values.followup_date.trim() !== ""
-                ? dayjs(callEntryForm.values.followup_date).toDate()
-                : new Date()
-            }
-            onChange={(date) => {
-              console.log("date=", date);
-              const formatted = date ? dayjs(date).format("YYYY-MM-DD") : "";
-              console.log("formatted=", formatted);
-              callEntryForm.setFieldValue("followup_date", formatted);
-              console.log("followup_date date=", formatted);
-            }}
-            error={callEntryForm.errors.followup_date}
-            valueFormat="YYYY-MM-DD"
-            leftSection={<IconCalendar size={18} />}
-            leftSectionPointerEvents="none"
-            radius="sm"
-            size="sm"
-            nextIcon={<IconChevronRight size={16} />}
-            previousIcon={<IconChevronLeft size={16} />}
-            styles={{
-              day: {
-                width: "2.25rem",
-                height: "2.25rem",
-                fontSize: "0.9rem",
-              },
-            }}
-          />
-        </Grid.Col>
-        <Grid.Col span={4}>
-          <NumberInput
-            label="Expected Profit"
-            placeholder="Enter expected profit"
-            hideControls
-            {...callEntryForm.getInputProps("expected_profit")}
-          />
-        </Grid.Col>
-      </Grid>
-      {callEntryId &&
-        (() => {
-          // Find the selected follow-up action option
-          const selectedFollowUpAction = followUpAction.find(
-            (option) => option.value === callEntryForm.values.followup_action
-          );
-          const isFollowUpActionClose =
-            selectedFollowUpAction?.label === "Close";
-          const isChecked = closeCallEntry || isFollowUpActionClose;
+              <Group justify="space-between">
+                <Group gap="sm">
+                  {/* Back to Dashboard button - show when navigating from dashboard */}
+                  {routerLocation.state?.returnTo === "/" &&
+                    routerLocation.state?.returnToState && (
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        leftSection={<IconChevronLeft size={16} />}
+                        styles={{
+                          root: {
+                            borderColor: "#d0d0d0",
+                            color: "#666",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                        onClick={() => {
+                          const returnToState = (routerLocation.state as any)
+                            ?.returnToState;
+                          if (returnToState) {
+                            navigate("/", {
+                              state: {
+                                returnToCallEntryDetailedView: true,
+                                dashboardState: returnToState,
+                              },
+                            });
+                          }
+                        }}
+                      >
+                        Back to Dashboard
+                      </Button>
+                    )}
 
-          return (
-            <Box mt="md">
-              <Checkbox
-                label="Close Call Entry"
-                checked={isChecked}
-                onChange={(event) => {
-                  // Only allow change if follow-up action is not "Close"
-                  if (!isFollowUpActionClose) {
-                    setCloseCallEntry(event.currentTarget.checked);
-                  }
-                }}
-                description="Check this box to close the call entry"
-                disabled={isFollowUpActionClose}
-                color="red"
-              />
-              {(isChecked || isFollowUpActionClose) && (
-                <Box mt="md">
-                  <Textarea
-                    label="Remark"
-                    placeholder="Enter remark..."
-                    required
-                    {...callEntryForm.getInputProps("remark")}
-                    error={
-                      (isChecked || isFollowUpActionClose) &&
-                      !callEntryForm.values.remark.trim()
-                        ? "Remark is required when closing call entry"
-                        : callEntryForm.errors.remark
-                    }
-                    minRows={4}
-                  />
-                </Box>
-              )}
-            </Box>
-          );
-        })()}
-      <Stack justify="space-between" mt="5%">
-        <Divider my="md" />
-
-        <Flex gap="md" justify={"end"}>
-          {/* Back to Dashboard button - show when navigating from dashboard */}
-          {routerLocation.state?.returnTo === "/" &&
-            routerLocation.state?.returnToState && (
-              <Button
-                variant="outline"
-                color="#105476"
-                leftSection={<IconChevronLeft size={16} />}
-                size="sm"
-                onClick={() => {
-                  const returnToState = (routerLocation.state as any)
-                    ?.returnToState;
-                  if (returnToState) {
-                    navigate("/", {
-                      state: {
-                        returnToCallEntryDetailedView: true,
-                        dashboardState: returnToState,
+                  {/* Cancel button */}
+                  <Button
+                    variant="outline"
+                    color="gray"
+                    size="sm"
+                    styles={{
+                      root: {
+                        borderColor: "#d0d0d0",
+                        color: "#666",
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
                       },
-                    });
-                  }
-                }}
-              >
-                Back to Dashboard
-              </Button>
-            )}
-          <Button
-            variant="outline"
-            c="#105476"
-            styles={{
-              root: {
-                color: "#105476",
-                borderColor: "#105476",
-              },
-            }}
-            onClick={() => {
-              // Check if there's a returnTo path in location state, otherwise go back in history
-              const returnTo = (routerLocation.state as { returnTo?: string })
-                ?.returnTo;
-              const returnToState = (routerLocation.state as any)
-                ?.returnToState;
-              const preserveFilters = (routerLocation.state as any)
-                ?.preserveFilters;
+                    }}
+                    onClick={() => {
+                      // Check if there's a returnTo path in location state, otherwise go back in history
+                      const returnTo = (
+                        routerLocation.state as { returnTo?: string }
+                      )?.returnTo;
+                      const returnToState = (routerLocation.state as any)
+                        ?.returnToState;
+                      const preserveFilters = (routerLocation.state as any)
+                        ?.preserveFilters;
 
-              if (returnTo === "dashboard-pipeline") {
-                // Navigate back to dashboard with pipeline report state
-                navigate("/", {
-                  state: {
-                    returnToPipelineReport: true,
-                    pipelineReportState: (routerLocation.state as any)
-                      ?.pipelineReportState,
-                  },
-                });
-              } else if (returnTo === "/" && returnToState) {
-                // Navigate back to dashboard with call entry detailed view state
-                navigate("/", {
-                  state: {
-                    returnToCallEntryDetailedView: true,
-                    dashboardState: returnToState,
-                  },
-                });
-              } else if (returnTo) {
-                // If navigating to a specific route, restore filters if preserved
-                if (preserveFilters && returnTo === "/call-entry") {
-                  navigate(returnTo, {
-                    state: {
-                      restoreFilters: preserveFilters,
-                      refreshData: true,
-                    },
-                  });
-                } else {
-                  navigate(returnTo);
-                }
-              } else {
-                // Restore filter state if preserved when going back to call-entry
-                if (preserveFilters) {
-                  navigate("/call-entry", {
-                    state: {
-                      restoreFilters: preserveFilters,
-                      refreshData: true,
-                    },
-                  });
-                } else {
-                  // Use navigate(-1) to go back, with fallback to call-entry if no history
-                  const historyLength = window.history.length;
-                  if (historyLength > 1) {
-                    navigate(-1);
-                  } else {
-                    // Fallback if there's no history to go back to
-                    navigate("/call-entry");
-                  }
-                }
-              }
-            }}
-          >
-            Cancel
-          </Button>
-          <Tooltip
-            label="Enable location access to create call-entry"
-            disabled={locationPermission === "granted"}
-            py={5}
-            px={15}
-            style={{}}
-            withArrow
-          >
-            <Box style={{ display: "inline-block" }}>
-              <Button
-                type="submit"
-                color="#105476"
-                rightSection={<IconCheck size={16} />}
-                disabled={locationPermission !== "granted"}
-                style={{
-                  cursor:
-                    locationPermission !== "granted"
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-              >
-                Submit
-              </Button>
+                      if (returnTo === "dashboard-pipeline") {
+                        // Navigate back to dashboard with pipeline report state
+                        navigate("/", {
+                          state: {
+                            returnToPipelineReport: true,
+                            pipelineReportState: (routerLocation.state as any)
+                              ?.pipelineReportState,
+                          },
+                        });
+                      } else if (returnTo === "/" && returnToState) {
+                        // Navigate back to dashboard with call entry detailed view state
+                        navigate("/", {
+                          state: {
+                            returnToCallEntryDetailedView: true,
+                            dashboardState: returnToState,
+                          },
+                        });
+                      } else if (returnTo) {
+                        // If navigating to a specific route, restore filters if preserved
+                        if (preserveFilters && returnTo === "/call-entry") {
+                          navigate(returnTo, {
+                            state: {
+                              restoreFilters: preserveFilters,
+                              refreshData: true,
+                            },
+                          });
+                        } else {
+                          navigate(returnTo);
+                        }
+                      } else {
+                        // Restore filter state if preserved when going back to call-entry
+                        if (preserveFilters) {
+                          navigate("/call-entry", {
+                            state: {
+                              restoreFilters: preserveFilters,
+                              refreshData: true,
+                            },
+                          });
+                        } else {
+                          // Use navigate(-1) to go back, with fallback to call-entry if no history
+                          const historyLength = window.history.length;
+                          if (historyLength > 1) {
+                            navigate(-1);
+                          } else {
+                            // Fallback if there's no history to go back to
+                            navigate("/call-entry");
+                          }
+                        }
+                      }
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </Group>
+
+                <Group gap="sm">
+                  <Tooltip
+                    label="Enable location access to create call-entry"
+                    disabled={locationPermission === "granted"}
+                    py={5}
+                    px={15}
+                    withArrow
+                    styles={{
+                      tooltip: { fontFamily: "Inter, sans-serif" },
+                    }}
+                  >
+                    <Box style={{ display: "inline-block" }}>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={locationPermission !== "granted"}
+                        style={{
+                          backgroundColor: "#105476",
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                          cursor:
+                            locationPermission !== "granted"
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                        rightSection={<IconCheck size={16} />}
+                      >
+                        Submit
+                      </Button>
+                    </Box>
+                  </Tooltip>
+                </Group>
+              </Group>
             </Box>
-          </Tooltip>
+          </Box>
         </Flex>
-        {/* </Flex> */}
-      </Stack>
+      </Box>
     </Box>
   );
 }
