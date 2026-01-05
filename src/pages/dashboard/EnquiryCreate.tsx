@@ -5991,17 +5991,12 @@ function EnquiryCreate() {
                                                       fontSize: "13px",
                                                       fontFamily: "Inter",
                                                       height: "36px",
+                                                      backgroundColor: "#f8f9fa",
                                                     },
                                                   }}
                                                   decimalScale={4}
                                                   value={row?.value ?? null}
                                                   readOnly
-                                                  styles={{
-                                                    input: {
-                                                      backgroundColor:
-                                                        "#f8f9fa",
-                                                    },
-                                                  }}
                                                 />
                                               </Grid.Col>
                                               <Grid.Col span={2.5}>
@@ -6012,6 +6007,8 @@ function EnquiryCreate() {
                                                       fontSize: "13px",
                                                       fontFamily: "Inter",
                                                       height: "36px",
+                                                      backgroundColor:
+                                                        "#f8f9fa",
                                                     },
                                                   }}
                                                   decimalScale={4}
@@ -6019,12 +6016,6 @@ function EnquiryCreate() {
                                                     row?.vol_weight ?? null
                                                   }
                                                   readOnly
-                                                  styles={{
-                                                    input: {
-                                                      backgroundColor:
-                                                        "#f8f9fa",
-                                                    },
-                                                  }}
                                                 />
                                               </Grid.Col>
                                               <Grid.Col span={0.8}>
