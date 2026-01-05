@@ -1588,7 +1588,7 @@ function CallEntry() {
               </Grid.Col>
 
               {/* Date Range Filter */}
-              <Grid.Col span={4.3}>
+              <Grid.Col span={4.8}>
                 <DateRangeInput
                   fromDate={fromDate}
                   toDate={toDate}
