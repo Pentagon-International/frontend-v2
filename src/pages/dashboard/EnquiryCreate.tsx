@@ -6319,434 +6319,359 @@ function EnquiryCreate() {
                                         </Text>
                                       </Grid.Col>
 
-                                      {/* AIR Dimension Section */}
-                                      {Array.isArray(
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.diemensions
-                                      ) &&
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ].diemensions.length > 0 && (
-                                          <>
-                                            <Grid.Col span={12}>
-                                              <Grid
-                                                style={{
-                                                  fontWeight: 600,
-                                                  color: "#105476",
-                                                  fontSize: "13px",
-                                                  fontFamily: "Inter",
-                                                  fontStyle: "medium",
-                                                }}
-                                              >
-                                                <Grid.Col span={1.5}>
-                                                  Pieces
-                                                </Grid.Col>
-                                                <Grid.Col span={1.5}>
-                                                  Length
-                                                </Grid.Col>
-                                                <Grid.Col span={1.5}>
-                                                  Width
-                                                </Grid.Col>
-                                                <Grid.Col span={1.5}>
-                                                  Height
-                                                </Grid.Col>
-                                                <Grid.Col span={2}>
-                                                  Value
-                                                </Grid.Col>
-                                                <Grid.Col span={2.5}>
-                                                  Volume Weight
-                                                </Grid.Col>
-                                                <Grid.Col span={0.8}></Grid.Col>
-                                              </Grid>
-                                            </Grid.Col>
-                                            {serviceForm.values.service_details[
-                                              serviceIndex
-                                            ].diemensions.map(
-                                              (row: any, rowIdx: number) => (
-                                                <Grid.Col
-                                                  span={12}
-                                                  key={`air-dim-${serviceIndex}-${rowIdx}`}
+                                {/* AIR Dimension Section */}
+                                {Array.isArray(
+                                  serviceForm.values.service_details[
+                                    serviceIndex
+                                  ]?.diemensions
+                                ) &&
+                                  serviceForm.values.service_details[
+                                    serviceIndex
+                                  ].diemensions.length > 0 && (
+                                    <>
+                                      <Grid.Col span={12}>
+                                        <Grid
+                                          style={{
+                                            fontWeight: 600,
+                                            color: "#105476",
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
+                                          }}
+                                        >
+                                          <Grid.Col span={1.5}>Pieces</Grid.Col>
+                                          <Grid.Col span={1.5}>Length</Grid.Col>
+                                          <Grid.Col span={1.5}>Width</Grid.Col>
+                                          <Grid.Col span={1.5}>Height</Grid.Col>
+                                          <Grid.Col span={2}>Value</Grid.Col>
+                                          <Grid.Col span={2.5}>
+                                            Volume Weight
+                                          </Grid.Col>
+                                          <Grid.Col span={0.8}></Grid.Col>
+                                        </Grid>
+                                      </Grid.Col>
+                                      {serviceForm.values.service_details[
+                                        serviceIndex
+                                      ].diemensions.map(
+                                        (row: any, rowIdx: number) => (
+                                          <Grid.Col
+                                            span={12}
+                                            key={`air-dim-${serviceIndex}-${rowIdx}`}
+                                          >
+                                            <Grid>
+                                              <Grid.Col span={1.5}>
+                                                <NumberInput
+                                                  hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
+                                                  value={row?.pieces ?? null}
+                                                  onChange={(val) => {
+                                                    const list = [
+                                                      ...((serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ].diemensions as any[]) ||
+                                                        []),
+                                                    ];
+                                                    const v = getDimensionValue(
+                                                      "AIR",
+                                                      serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ]?.dimension_unit || ""
+                                                    );
+                                                    const pieces =
+                                                      Number(val) || 0;
+                                                    const length =
+                                                      Number(
+                                                        list[rowIdx]?.length
+                                                      ) || 0;
+                                                    const width =
+                                                      Number(
+                                                        list[rowIdx]?.width
+                                                      ) || 0;
+                                                    const height =
+                                                      Number(
+                                                        list[rowIdx]?.height
+                                                      ) || 0;
+                                                    const vol = v
+                                                      ? (pieces *
+                                                          length *
+                                                          width *
+                                                          height) /
+                                                        v
+                                                      : 0;
+                                                    list[rowIdx] = {
+                                                      ...(list[rowIdx] || {}),
+                                                      pieces: val,
+                                                      value: v || null,
+                                                      vol_weight: isFinite(vol)
+                                                        ? vol
+                                                        : null,
+                                                    };
+                                                    serviceForm.setFieldValue(
+                                                      `service_details.${serviceIndex}.diemensions`,
+                                                      list
+                                                    );
+                                                  }}
+                                                />
+                                              </Grid.Col>
+                                              <Grid.Col span={1.5}>
+                                                <NumberInput
+                                                  hideControls
+                                                  value={row?.length ?? null}
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
+                                                  onChange={(val) => {
+                                                    const list = [
+                                                      ...((serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ].diemensions as any[]) ||
+                                                        []),
+                                                    ];
+                                                    const v = getDimensionValue(
+                                                      "AIR",
+                                                      serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ]?.dimension_unit || ""
+                                                    );
+                                                    const pieces =
+                                                      Number(
+                                                        list[rowIdx]?.pieces
+                                                      ) || 0;
+                                                    const length =
+                                                      Number(val) || 0;
+                                                    const width =
+                                                      Number(
+                                                        list[rowIdx]?.width
+                                                      ) || 0;
+                                                    const height =
+                                                      Number(
+                                                        list[rowIdx]?.height
+                                                      ) || 0;
+                                                    const vol = v
+                                                      ? (pieces *
+                                                          length *
+                                                          width *
+                                                          height) /
+                                                        v
+                                                      : 0;
+                                                    list[rowIdx] = {
+                                                      ...(list[rowIdx] || {}),
+                                                      length: val,
+                                                      value: v || null,
+                                                      vol_weight: isFinite(vol)
+                                                        ? vol
+                                                        : null,
+                                                    };
+                                                    serviceForm.setFieldValue(
+                                                      `service_details.${serviceIndex}.diemensions`,
+                                                      list
+                                                    );
+                                                  }}
+                                                />
+                                              </Grid.Col>
+                                              <Grid.Col span={1.5}>
+                                                <NumberInput
+                                                  hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
+                                                  value={row?.width ?? null}
+                                                  onChange={(val) => {
+                                                    const list = [
+                                                      ...((serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ].diemensions as any[]) ||
+                                                        []),
+                                                    ];
+                                                    const v = getDimensionValue(
+                                                      "AIR",
+                                                      serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ]?.dimension_unit || ""
+                                                    );
+                                                    const pieces =
+                                                      Number(
+                                                        list[rowIdx]?.pieces
+                                                      ) || 0;
+                                                    const length =
+                                                      Number(
+                                                        list[rowIdx]?.length
+                                                      ) || 0;
+                                                    const width =
+                                                      Number(val) || 0;
+                                                    const height =
+                                                      Number(
+                                                        list[rowIdx]?.height
+                                                      ) || 0;
+                                                    const vol = v
+                                                      ? (pieces *
+                                                          length *
+                                                          width *
+                                                          height) /
+                                                        v
+                                                      : 0;
+                                                    list[rowIdx] = {
+                                                      ...(list[rowIdx] || {}),
+                                                      width: val,
+                                                      value: v || null,
+                                                      vol_weight: isFinite(vol)
+                                                        ? vol
+                                                        : null,
+                                                    };
+                                                    serviceForm.setFieldValue(
+                                                      `service_details.${serviceIndex}.diemensions`,
+                                                      list
+                                                    );
+                                                  }}
+                                                />
+                                              </Grid.Col>
+                                              <Grid.Col span={1.5}>
+                                                <NumberInput
+                                                  hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                  }}
+                                                  value={row?.height ?? null}
+                                                  onChange={(val) => {
+                                                    const list = [
+                                                      ...((serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ].diemensions as any[]) ||
+                                                        []),
+                                                    ];
+                                                    const v = getDimensionValue(
+                                                      "AIR",
+                                                      serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ]?.dimension_unit || ""
+                                                    );
+                                                    const pieces =
+                                                      Number(
+                                                        list[rowIdx]?.pieces
+                                                      ) || 0;
+                                                    const length =
+                                                      Number(
+                                                        list[rowIdx]?.length
+                                                      ) || 0;
+                                                    const width =
+                                                      Number(
+                                                        list[rowIdx]?.width
+                                                      ) || 0;
+                                                    const height =
+                                                      Number(val) || 0;
+                                                    const vol = v
+                                                      ? (pieces *
+                                                          length *
+                                                          width *
+                                                          height) /
+                                                        v
+                                                      : 0;
+                                                    list[rowIdx] = {
+                                                      ...(list[rowIdx] || {}),
+                                                      height: val,
+                                                      value: v || null,
+                                                      vol_weight: isFinite(vol)
+                                                        ? vol
+                                                        : null,
+                                                    };
+                                                    serviceForm.setFieldValue(
+                                                      `service_details.${serviceIndex}.diemensions`,
+                                                      list
+                                                    );
+                                                  }}
+                                                />
+                                              </Grid.Col>
+                                              <Grid.Col span={2}>
+                                                <NumberInput
+                                                  hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                      backgroundColor: "#f8f9fa",
+                                                    },
+                                                  }}
+                                                  decimalScale={4}
+                                                  value={row?.value ?? null}
+                                                  readOnly
+                                                />
+                                              </Grid.Col>
+                                              <Grid.Col span={2.5}>
+                                                <NumberInput
+                                                  hideControls
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                      backgroundColor:
+                                                        "#f8f9fa",
+                                                    },
+                                                  }}
+                                                  decimalScale={4}
+                                                  value={
+                                                    row?.vol_weight ?? null
+                                                  }
+                                                  readOnly
+                                                />
+                                              </Grid.Col>
+                                              <Grid.Col span={0.8}>
+                                                <Button
+                                                  variant="light"
+                                                  color="red"
+                                                  onClick={() => {
+                                                    const list = [
+                                                      ...((serviceForm.values
+                                                        .service_details[
+                                                        serviceIndex
+                                                      ].diemensions as any[]) ||
+                                                        []),
+                                                    ];
+                                                    list.splice(rowIdx, 1);
+                                                    serviceForm.setFieldValue(
+                                                      `service_details.${serviceIndex}.diemensions`,
+                                                      list
+                                                    );
+                                                  }}
                                                 >
-                                                  <Grid>
-                                                    <Grid.Col span={1.5}>
-                                                      <NumberInput
-                                                        hideControls
-                                                        styles={{
-                                                          input: {
-                                                            fontSize: "13px",
-                                                            fontFamily: "Inter",
-                                                            height: "36px",
-                                                          },
-                                                        }}
-                                                        value={
-                                                          row?.pieces ?? null
-                                                        }
-                                                        onChange={(val) => {
-                                                          const list = [
-                                                            ...((serviceForm
-                                                              .values
-                                                              .service_details[
-                                                              serviceIndex
-                                                            ]
-                                                              .diemensions as any[]) ||
-                                                              []),
-                                                          ];
-                                                          const v =
-                                                            getDimensionValue(
-                                                              "AIR",
-                                                              serviceForm.values
-                                                                .service_details[
-                                                                serviceIndex
-                                                              ]
-                                                                ?.dimension_unit ||
-                                                                ""
-                                                            );
-                                                          const pieces =
-                                                            Number(val) || 0;
-                                                          const length =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.length
-                                                            ) || 0;
-                                                          const width =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.width
-                                                            ) || 0;
-                                                          const height =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.height
-                                                            ) || 0;
-                                                          const vol = v
-                                                            ? (pieces *
-                                                                length *
-                                                                width *
-                                                                height) /
-                                                              v
-                                                            : 0;
-                                                          list[rowIdx] = {
-                                                            ...(list[rowIdx] ||
-                                                              {}),
-                                                            pieces: val,
-                                                            value: v || null,
-                                                            vol_weight:
-                                                              isFinite(vol)
-                                                                ? vol
-                                                                : null,
-                                                          };
-                                                          serviceForm.setFieldValue(
-                                                            `service_details.${serviceIndex}.diemensions`,
-                                                            list
-                                                          );
-                                                        }}
-                                                      />
-                                                    </Grid.Col>
-                                                    <Grid.Col span={1.5}>
-                                                      <NumberInput
-                                                        hideControls
-                                                        value={
-                                                          row?.length ?? null
-                                                        }
-                                                        styles={{
-                                                          input: {
-                                                            fontSize: "13px",
-                                                            fontFamily: "Inter",
-                                                            height: "36px",
-                                                          },
-                                                        }}
-                                                        onChange={(val) => {
-                                                          const list = [
-                                                            ...((serviceForm
-                                                              .values
-                                                              .service_details[
-                                                              serviceIndex
-                                                            ]
-                                                              .diemensions as any[]) ||
-                                                              []),
-                                                          ];
-                                                          const v =
-                                                            getDimensionValue(
-                                                              "AIR",
-                                                              serviceForm.values
-                                                                .service_details[
-                                                                serviceIndex
-                                                              ]
-                                                                ?.dimension_unit ||
-                                                                ""
-                                                            );
-                                                          const pieces =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.pieces
-                                                            ) || 0;
-                                                          const length =
-                                                            Number(val) || 0;
-                                                          const width =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.width
-                                                            ) || 0;
-                                                          const height =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.height
-                                                            ) || 0;
-                                                          const vol = v
-                                                            ? (pieces *
-                                                                length *
-                                                                width *
-                                                                height) /
-                                                              v
-                                                            : 0;
-                                                          list[rowIdx] = {
-                                                            ...(list[rowIdx] ||
-                                                              {}),
-                                                            length: val,
-                                                            value: v || null,
-                                                            vol_weight:
-                                                              isFinite(vol)
-                                                                ? vol
-                                                                : null,
-                                                          };
-                                                          serviceForm.setFieldValue(
-                                                            `service_details.${serviceIndex}.diemensions`,
-                                                            list
-                                                          );
-                                                        }}
-                                                      />
-                                                    </Grid.Col>
-                                                    <Grid.Col span={1.5}>
-                                                      <NumberInput
-                                                        hideControls
-                                                        styles={{
-                                                          input: {
-                                                            fontSize: "13px",
-                                                            fontFamily: "Inter",
-                                                            height: "36px",
-                                                          },
-                                                        }}
-                                                        value={
-                                                          row?.width ?? null
-                                                        }
-                                                        onChange={(val) => {
-                                                          const list = [
-                                                            ...((serviceForm
-                                                              .values
-                                                              .service_details[
-                                                              serviceIndex
-                                                            ]
-                                                              .diemensions as any[]) ||
-                                                              []),
-                                                          ];
-                                                          const v =
-                                                            getDimensionValue(
-                                                              "AIR",
-                                                              serviceForm.values
-                                                                .service_details[
-                                                                serviceIndex
-                                                              ]
-                                                                ?.dimension_unit ||
-                                                                ""
-                                                            );
-                                                          const pieces =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.pieces
-                                                            ) || 0;
-                                                          const length =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.length
-                                                            ) || 0;
-                                                          const width =
-                                                            Number(val) || 0;
-                                                          const height =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.height
-                                                            ) || 0;
-                                                          const vol = v
-                                                            ? (pieces *
-                                                                length *
-                                                                width *
-                                                                height) /
-                                                              v
-                                                            : 0;
-                                                          list[rowIdx] = {
-                                                            ...(list[rowIdx] ||
-                                                              {}),
-                                                            width: val,
-                                                            value: v || null,
-                                                            vol_weight:
-                                                              isFinite(vol)
-                                                                ? vol
-                                                                : null,
-                                                          };
-                                                          serviceForm.setFieldValue(
-                                                            `service_details.${serviceIndex}.diemensions`,
-                                                            list
-                                                          );
-                                                        }}
-                                                      />
-                                                    </Grid.Col>
-                                                    <Grid.Col span={1.5}>
-                                                      <NumberInput
-                                                        hideControls
-                                                        styles={{
-                                                          input: {
-                                                            fontSize: "13px",
-                                                            fontFamily: "Inter",
-                                                            height: "36px",
-                                                          },
-                                                        }}
-                                                        value={
-                                                          row?.height ?? null
-                                                        }
-                                                        onChange={(val) => {
-                                                          const list = [
-                                                            ...((serviceForm
-                                                              .values
-                                                              .service_details[
-                                                              serviceIndex
-                                                            ]
-                                                              .diemensions as any[]) ||
-                                                              []),
-                                                          ];
-                                                          const v =
-                                                            getDimensionValue(
-                                                              "AIR",
-                                                              serviceForm.values
-                                                                .service_details[
-                                                                serviceIndex
-                                                              ]
-                                                                ?.dimension_unit ||
-                                                                ""
-                                                            );
-                                                          const pieces =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.pieces
-                                                            ) || 0;
-                                                          const length =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.length
-                                                            ) || 0;
-                                                          const width =
-                                                            Number(
-                                                              list[rowIdx]
-                                                                ?.width
-                                                            ) || 0;
-                                                          const height =
-                                                            Number(val) || 0;
-                                                          const vol = v
-                                                            ? (pieces *
-                                                                length *
-                                                                width *
-                                                                height) /
-                                                              v
-                                                            : 0;
-                                                          list[rowIdx] = {
-                                                            ...(list[rowIdx] ||
-                                                              {}),
-                                                            height: val,
-                                                            value: v || null,
-                                                            vol_weight:
-                                                              isFinite(vol)
-                                                                ? vol
-                                                                : null,
-                                                          };
-                                                          serviceForm.setFieldValue(
-                                                            `service_details.${serviceIndex}.diemensions`,
-                                                            list
-                                                          );
-                                                        }}
-                                                      />
-                                                    </Grid.Col>
-                                                    <Grid.Col span={2}>
-                                                      <NumberInput
-                                                        hideControls
-                                                        styles={{
-                                                          input: {
-                                                            fontSize: "13px",
-                                                            fontFamily: "Inter",
-                                                            height: "36px",
-                                                          },
-                                                        }}
-                                                        decimalScale={4}
-                                                        value={
-                                                          row?.value ?? null
-                                                        }
-                                                        readOnly
-                                                        styles={{
-                                                          input: {
-                                                            backgroundColor:
-                                                              "#f8f9fa",
-                                                          },
-                                                        }}
-                                                      />
-                                                    </Grid.Col>
-                                                    <Grid.Col span={2.5}>
-                                                      <NumberInput
-                                                        hideControls
-                                                        styles={{
-                                                          input: {
-                                                            fontSize: "13px",
-                                                            fontFamily: "Inter",
-                                                            height: "36px",
-                                                          },
-                                                        }}
-                                                        decimalScale={4}
-                                                        value={
-                                                          row?.vol_weight ??
-                                                          null
-                                                        }
-                                                        readOnly
-                                                        styles={{
-                                                          input: {
-                                                            backgroundColor:
-                                                              "#f8f9fa",
-                                                          },
-                                                        }}
-                                                      />
-                                                    </Grid.Col>
-                                                    <Grid.Col span={0.8}>
-                                                      <Button
-                                                        variant="light"
-                                                        color="red"
-                                                        onClick={() => {
-                                                          const list = [
-                                                            ...((serviceForm
-                                                              .values
-                                                              .service_details[
-                                                              serviceIndex
-                                                            ]
-                                                              .diemensions as any[]) ||
-                                                              []),
-                                                          ];
-                                                          list.splice(
-                                                            rowIdx,
-                                                            1
-                                                          );
-                                                          serviceForm.setFieldValue(
-                                                            `service_details.${serviceIndex}.diemensions`,
-                                                            list
-                                                          );
-                                                        }}
-                                                      >
-                                                        <IconTrash size={16} />
-                                                      </Button>
-                                                    </Grid.Col>
-                                                  </Grid>
-                                                </Grid.Col>
-                                              )
-                                            )}
-                                          </>
-                                        )}
-                                    </Grid>
+                                                  <IconTrash size={16} />
+                                                </Button>
+                                              </Grid.Col>
+                                            </Grid>
+                                          </Grid.Col>
+                                        )
+                                      )}
+                                    </>
                                   )}
+                              </Grid>
+                            )}
 
                                   {(() => {
                                     // Determine effective service type for rendering

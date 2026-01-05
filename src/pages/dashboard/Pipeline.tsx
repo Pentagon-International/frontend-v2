@@ -22,12 +22,12 @@ import {
 import {
   IconChevronLeft,
   IconChevronRight,
-  IconFilterOff,
   IconPlus,
   IconFilter,
   IconDotsVertical,
   IconEdit,
   IconEye,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getAPICall } from "../../service/getApiCall";
@@ -572,6 +572,14 @@ function Pipeline() {
       shadow: "sm",
       p: "md",
       radius: "md",
+      style: { 
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto", 
+      },
     },
     mantineTableBodyCellProps: ({ column }) => {
       let extraStyles: Record<string, any> = {};
@@ -582,7 +590,8 @@ function Pipeline() {
             right: 0,
             minWidth: "30px",
             zIndex: 2,
-            backgroundColor: "#ffffff",
+            borderLeft: "1px solid #F3F3F3",
+            boxShadow: "1px -2px 4px 0px #00000040",
           };
           break;
         default:
@@ -590,8 +599,12 @@ function Pipeline() {
       }
       return {
         style: {
-          padding: "8px 12px",
-          fontSize: "13px",
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontstyle: "regular",
+          fontFamily: "Inter",
+          color: "#333740",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -604,9 +617,10 @@ function Pipeline() {
           extraStyles = {
             position: "sticky",
             right: 0,
-            minWidth: "30px",
+            minWidth: "80px",
             zIndex: 2,
-            backgroundColor: "#ffffff",
+            backgroundColor: "#FBFBFB",
+            boxShadow: "0px -2px 4px 0px #00000040",
           };
           break;
         default:
@@ -614,290 +628,362 @@ function Pipeline() {
       }
       return {
         style: {
-          padding: "6px 12px",
-          fontSize: "12px",
-          backgroundColor: "#ffffff",
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          fontstyle: "bold",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
           top: 0,
           zIndex: 3,
-          borderBottom: "1px solid #e9ecef",
+          borderBottom: "1px solid #F3F3F3",
           ...extraStyles,
         },
       };
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
   });
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c={"#105476"}>
-            List of Pipeline{" "}
-          </Text>
-
-          <Group gap="sm" wrap="nowrap">
-            {/* <TextInput
-              placeholder="Search"
-              leftSection={<IconSearch size={16} />}
-              style={{ width: 300 }}
-              radius="sm"
-              size="xs"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.currentTarget.value)}
-            /> */}
-
-            <Button
-              variant="outline"
-              leftSection={<IconFilter size={16} />}
-              size="xs"
-              color="#105476"
-              onClick={() => setShowFilters(!showFilters)}
+      <Card
+        shadow="sm"
+        pt="md"
+        pb="sm"
+        px="lg"
+        radius="md"
+        withBorder
+        style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            overflow: "hidden",
+            flex:1,
+        }}
+      >
+        <Box >
+          <Group justify="space-between" align="center" pb="sm">
+            <Text
+              size="md"
+              fw={600}
+              c={"#444955"}
+              style={{ fontFamily: "Inter", fontSize: "16px" }}
             >
-              Filters
-            </Button>
-            <Button
-              color={"#105476"}
-              leftSection={<IconPlus size={16} />}
-              size="xs"
-              onClick={() => navigate("/pipeline/create")}
-            >
-              Create New
-            </Button>
+              List of Pipelines
+            </Text>
+
+            <Group gap="xs" wrap="nowrap">
+              <ActionIcon
+                variant={showFilters ? "filled" : "outline"}
+                size={36}
+                color={showFilters ? "#E0F5FF" : "gray"}
+                onClick={() => setShowFilters(!showFilters)}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                    color: showFilters ? "#105476" : "#737780",
+                    "&:active": {
+                      border: "1px solid #105476",
+                      color: "#FFFFFF",
+                    },
+                  },
+                }}
+              >
+                <IconFilter size={18} />
+              </ActionIcon>
+
+              <Button
+                leftSection={<IconPlus size={16} />}
+                size="sm"
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    color: "#FFFFFF",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontStyle: "semibold",
+                    "&:hover": {
+                      backgroundColor: "#105476",
+                    },
+                  },
+                }}
+                onClick={() => navigate("/pipeline/create")}
+              >
+                Create New
+              </Button>
+            </Group>
           </Group>
-        </Group>
+        </Box>
 
         {/* Filter Section */}
         {showFilters && (
-          <Card
-            shadow="xs"
-            padding="md"
-            radius="md"
-            withBorder
-            mb="md"
-            bg="#f8f9fa"
+          <Box
+            mb="xs"
+            style={{
+              borderRadius: "8px",
+              border: "1px solid #E0E0E0",
+              flexShrink: 0,
+              height: "fit-content",
+            }}
           >
-            <Group justify="space-between" align="center">
-              <Group align="center" gap="xs">
-                <IconFilter size={16} color="#105476" />
-                <Text size="sm" fw={500} c="#105476">
-                  Filters
-                </Text>
-              </Group>
+            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#FAFAFA", padding: "8px 8px", borderRadius: "8px" }}>
+              <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>
+                Filter
+              </Text>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={() => setShowFilters(false)}
+                aria-label="Close filters"
+                size="sm"
+              >
+                <IconX size={18} />
+              </ActionIcon>
             </Group>
 
-            <Grid>
-              <Grid.Col span={12}>
-                <Grid>
-                  {/* Sales Person Filter */}
-                  <Grid.Col span={2.4}>
-                    <Select
-                      key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
-                      label="Sales Person"
-                      placeholder={
-                        salespersonsLoading
-                          ? "Loading salespersons..."
-                          : "Select Sales Person"
-                      }
-                      searchable
-                      clearable
-                      size="xs"
-                      data={salespersonOptions}
-                      nothingFoundMessage={
-                        salespersonsLoading
-                          ? "Loading salespersons..."
-                          : "No salespersons found"
-                      }
-                      disabled={salespersonsLoading}
-                      value={filterForm.values.sales_person}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("sales_person", value || null)
-                      }
-                      onFocus={(event) => {
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+            <Grid gutter="md" px="md">
+              {/* Sales Person Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
+                  label="Sales Person"
+                  placeholder={
+                    salespersonsLoading
+                      ? "Loading salespersons..."
+                      : "Select Service"
+                  }
+                  searchable
+                  clearable
+                  size="xs"
+                  data={salespersonOptions}
+                  nothingFoundMessage={
+                    salespersonsLoading
+                      ? "Loading salespersons..."
+                      : "No salespersons found"
+                  }
+                  disabled={salespersonsLoading}
+                  value={filterForm.values.sales_person}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("sales_person", value || null)
+                  }
+                  onFocus={(event) => {
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* Customer Name Filter */}
-                  <Grid.Col span={2.4}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Customer Name"
-                      placeholder="Type customer name"
-                      apiEndpoint={URL.customer}
-                      searchFields={["customer_name", "customer_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.customer_code),
-                        label: String(item.customer_name),
-                      })}
-                      value={filterForm.values.customer}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("customer", value || "")
-                      }
-                      minSearchLength={2}
-                    />
-                  </Grid.Col>
+              {/* Customer Name Filter */}
+              <Grid.Col span={2.4}>
+                <SearchableSelect
+                  size="xs"
+                  label="Customer Name"
+                  placeholder="Select Service"
+                  apiEndpoint={URL.customer}
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.customer_code),
+                    label: String(item.customer_name),
+                  })}
+                  value={filterForm.values.customer}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("customer", value || "")
+                  }
+                  minSearchLength={2}
+                  className="filter-searchable-select"
+                />
+              </Grid.Col>
 
-                  {/* Service Filter */}
-                  <Grid.Col span={2.4}>
-                    <Select
-                      size="xs"
-                      label="Service"
-                      placeholder="Select Service"
-                      searchable
-                      clearable
-                      data={[
-                        { value: "AIR", label: "AIR" },
-                        { value: "FCL", label: "FCL" },
-                        { value: "LCL", label: "LCL" },
-                      ]}
-                      value={filterForm.values.service}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("service", value || "")
-                      }
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+              {/* Service Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  key={`service-${filterForm.values.service}`}
+                  label="Service"
+                  placeholder="Select Service"
+                  searchable
+                  clearable
+                  size="xs"
+                  data={[
+                    { value: "AIR", label: "AIR" },
+                    { value: "FCL", label: "FCL" },
+                    { value: "LCL", label: "LCL" },
+                  ]}
+                  value={filterForm.values.service}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("service", value || "")
+                  }
+                  onFocus={(event) => {
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* Origin Filter */}
-                  <Grid.Col span={2.4}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Origin"
-                      placeholder="Type origin port"
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_name", "port_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.port_code),
-                        label: String(item.port_name),
-                      })}
-                      value={filterForm.values.origin}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("origin", value || "")
-                      }
-                      minSearchLength={2}
-                    />
-                  </Grid.Col>
+              {/* Origin Filter */}
+              <Grid.Col span={2.4}>
+                <SearchableSelect
+                  size="xs"
+                  label="Origin"
+                  placeholder="Type Origin Code"
+                  apiEndpoint={URL.portMaster}
+                  searchFields={["port_name", "port_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filterForm.values.origin}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("origin", value || "")
+                  }
+                  minSearchLength={3}
+                  className="filter-searchable-select"
+                />
+              </Grid.Col>
 
-                  {/* Destination Filter */}
-                  <Grid.Col span={2.4}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Destination"
-                      placeholder="Type destination port"
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_name", "port_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.port_code),
-                        label: String(item.port_name),
-                      })}
-                      value={filterForm.values.destination}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("destination", value || "")
-                      }
-                      minSearchLength={2}
-                    />
-                  </Grid.Col>
+              {/* Destination Filter */}
+              <Grid.Col span={2.4}>
+                <SearchableSelect
+                  size="xs"
+                  label="Destination"
+                  placeholder="Type destination cod"
+                  apiEndpoint={URL.portMaster}
+                  searchFields={["port_name", "port_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filterForm.values.destination}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("destination", value || "")
+                  }
+                  minSearchLength={3}
+                  className="filter-searchable-select"
+                />
+              </Grid.Col>
 
-                  {/* Frequency Filter */}
-                  <Grid.Col span={2.4}>
-                    <Select
-                      key={`frequency-${filterForm.values.frequency}-${frequencyDataLoading}-${frequencyOptionsData.length}`}
-                      label="Frequency"
-                      placeholder={
-                        frequencyDataLoading
-                          ? "Loading frequencies..."
-                          : "Select Frequency"
-                      }
-                      searchable
-                      clearable
-                      size="xs"
-                      data={frequencyOptionsData}
-                      nothingFoundMessage={
-                        frequencyDataLoading
-                          ? "Loading frequencies..."
-                          : "No frequencies found"
-                      }
-                      disabled={frequencyDataLoading}
-                      {...filterForm.getInputProps("frequency")}
-                      onFocus={(event) => {
-                        // Auto-select all text when input is focused
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                </Grid>
+              {/* Frequency Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  key={`frequency-${filterForm.values.frequency}-${frequencyDataLoading}-${frequencyOptionsData.length}`}
+                  label="Frequency"
+                  placeholder={
+                    frequencyDataLoading
+                      ? "Loading frequencies..."
+                      : "Select Service"
+                  }
+                  searchable
+                  clearable
+                  size="xs"
+                  data={frequencyOptionsData}
+                  nothingFoundMessage={
+                    frequencyDataLoading
+                      ? "Loading frequencies..."
+                      : "No frequencies found"
+                  }
+                  disabled={frequencyDataLoading}
+                  {...filterForm.getInputProps("frequency")}
+                  onFocus={(event) => {
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
               </Grid.Col>
             </Grid>
 
-            <Group justify="end" mt="sm">
+            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
               <Button
-                size="xs"
-                variant="outline"
-                color="#105476"
-                leftSection={<IconFilterOff size={14} />}
+                size="sm"
+                variant="default"
                 onClick={clearAllFilters}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    color: "#444955",
+                  },
+                }}
               >
-                Clear Filters
+                Clear
               </Button>
               <Button
-                size="xs"
-                variant="filled"
-                color="#105476"
-                leftSection={
-                  isLoading ? <Loader size={14} /> : <IconFilter size={14} />
-                }
+                size="sm"
                 onClick={applyFilters}
                 loading={isLoading}
                 disabled={isLoading}
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    "&:hover": {
+                      backgroundColor: "#0d4261",
+                    },
+                  },
+                }}
               >
-                Apply Filters
+                Apply
               </Button>
             </Group>
-          </Card>
+          </Box>
         )}
 
         {isLoading ? (
-          <Center py="xl">
+          <Center py="xl" style={{flex:1}}>
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
               <Text c="dimmed">Loading pipeline data...</Text>
@@ -915,14 +1001,15 @@ function Pipeline() {
               w="100%"
               justify="space-between"
               align="center"
-              px="md"
-              py="xs"
-              style={{ borderTop: "1px solid #e9ecef" }}
+              pt="sm"
+              pl="sm"
+              pr="xl"
+              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
               wrap="nowrap"
-              mt="xs"
+              mt="sm"
             >
               {/* Rows per page and range */}
-              <Group gap="sm" align="center" wrap="nowrap" mt={10}>
+              <Group gap="sm" align="center" wrap="nowrap">
                 <Text size="sm" c="dimmed">
                   Rows per page
                 </Text>
@@ -952,7 +1039,7 @@ function Pipeline() {
               </Group>
 
               {/* Page controls */}
-              <Group gap="xs" align="center" wrap="nowrap" mt={10}>
+              <Group gap="xs" align="center" wrap="nowrap">
                 <ActionIcon
                   variant="default"
                   size="sm"
