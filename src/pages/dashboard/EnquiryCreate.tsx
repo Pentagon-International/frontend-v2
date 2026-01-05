@@ -439,10 +439,16 @@ function EnquiryCreate() {
   const [enq] = useState(location.state || null);
 
   // State for salesperson confirmation modal
-  const [salespersonModalOpened, { open: openSalespersonModal, close: closeSalespersonModal }] = useDisclosure(false);
-  const [salespersonModalData, setSalespersonModalData] = useState<SalespersonData | null>(null);
+  const [
+    salespersonModalOpened,
+    { open: openSalespersonModal, close: closeSalespersonModal },
+  ] = useDisclosure(false);
+  const [salespersonModalData, setSalespersonModalData] =
+    useState<SalespersonData | null>(null);
   const [isCheckingSalesperson, setIsCheckingSalesperson] = useState(false);
-  const [lastCheckedServiceIndex, setLastCheckedServiceIndex] = useState<number | null>(null);
+  const [lastCheckedServiceIndex, setLastCheckedServiceIndex] = useState<
+    number | null
+  >(null);
 
   const { data: termsOfShipment = [] } = useQuery({
     queryKey: ["tosData"],
@@ -554,15 +560,19 @@ function EnquiryCreate() {
     serviceForm.values.service_details.forEach(
       (serviceDetail, serviceIndex) => {
         // Safety check: ensure cargo_details exists and has at least one item
-        if (!serviceDetail.cargo_details || !Array.isArray(serviceDetail.cargo_details) || serviceDetail.cargo_details.length === 0) {
+        if (
+          !serviceDetail.cargo_details ||
+          !Array.isArray(serviceDetail.cargo_details) ||
+          serviceDetail.cargo_details.length === 0
+        ) {
           return; // Skip if no cargo details
         }
-        
+
         const cargo = serviceDetail.cargo_details[0];
         if (!cargo) {
           return; // Skip if cargo is undefined
         }
-        
+
         // Determine effective service type inline for OTHERS services
         let effectiveServiceType = serviceDetail.service;
         if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
@@ -778,7 +788,7 @@ function EnquiryCreate() {
             }
           }
         }
-        
+
         if (effectiveServiceType !== "AIR" && effectiveServiceType !== "LCL")
           return;
 
@@ -1078,10 +1088,7 @@ function EnquiryCreate() {
           }
         }
 
-        if (
-          effectiveServiceType === "AIR" ||
-          effectiveServiceType === "LCL"
-        ) {
+        if (effectiveServiceType === "AIR" || effectiveServiceType === "LCL") {
           if (!cargo?.no_of_packages || cargo.no_of_packages < 1) {
             serviceForm.setFieldError(
               `service_details.${serviceIndex}.cargo_details.0.no_of_packages`,
@@ -1301,7 +1308,10 @@ function EnquiryCreate() {
 
           // Determine effective service type for cargo structure (for OTHERS, determine from selected service)
           let effectiveServiceType = serviceDetail.service;
-          if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
+          if (
+            serviceDetail.service === "OTHERS" &&
+            serviceDetail.service_code
+          ) {
             const selectedOtherService = otherServicesData.find(
               (item) => item.value === serviceDetail.service_code
             );
@@ -1310,7 +1320,10 @@ function EnquiryCreate() {
               const fullGroupage = selectedOtherService.full_groupage || "";
               if (transportMode === "SEA" && fullGroupage === "FULL") {
                 effectiveServiceType = "FCL";
-              } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
+              } else if (
+                transportMode === "SEA" &&
+                fullGroupage === "GROUPAGE"
+              ) {
                 effectiveServiceType = "LCL";
               } else {
                 effectiveServiceType = "AIR";
@@ -1469,7 +1482,12 @@ function EnquiryCreate() {
 
     // Only check if all required fields are available
     if (!customerCode || !service || !trade) {
-      console.log("❌ Missing required fields:", { customerCode, service, trade, serviceIndex });
+      console.log("❌ Missing required fields:", {
+        customerCode,
+        service,
+        trade,
+        serviceIndex,
+      });
       return;
     }
 
@@ -1481,15 +1499,17 @@ function EnquiryCreate() {
 
     try {
       setIsCheckingSalesperson(true);
-      console.log("🔍 Checking salesperson data:", { customerCode, service, trade, serviceIndex });
-      const response = await apiCallProtected.post(
-        URL.accountsSalespersons,
-        {
-          customer_code: customerCode,
-          service: service,
-          service_type: trade,
-        }
-      ) as {
+      console.log("🔍 Checking salesperson data:", {
+        customerCode,
+        service,
+        trade,
+        serviceIndex,
+      });
+      const response = (await apiCallProtected.post(URL.accountsSalespersons, {
+        customer_code: customerCode,
+        service: service,
+        service_type: trade,
+      })) as {
         success?: boolean;
         message?: string;
         data?: SalespersonData[];
@@ -1500,8 +1520,11 @@ function EnquiryCreate() {
         const currentSalesperson = customerForm.values.sales_person;
 
         // Compare sales_person from API with current selection
-        if (apiSalesperson.sales_person && currentSalesperson && 
-            apiSalesperson.sales_person !== currentSalesperson) {
+        if (
+          apiSalesperson.sales_person &&
+          currentSalesperson &&
+          apiSalesperson.sales_person !== currentSalesperson
+        ) {
           // Salesperson doesn't match - show modal
           setSalespersonModalData(apiSalesperson);
           openSalespersonModal();
@@ -1519,26 +1542,81 @@ function EnquiryCreate() {
   const handleUpdateSalespersonData = () => {
     if (salespersonModalData) {
       if (salespersonModalData.sales_person) {
-        customerForm.setFieldValue("sales_person", salespersonModalData.sales_person);
+        customerForm.setFieldValue(
+          "sales_person",
+          salespersonModalData.sales_person
+        );
       }
       if (salespersonModalData.sales_coordinator) {
-        customerForm.setFieldValue("sales_coordinator", salespersonModalData.sales_coordinator);
-      }else{
+        customerForm.setFieldValue(
+          "sales_coordinator",
+          salespersonModalData.sales_coordinator
+        );
+      } else {
         customerForm.setFieldValue("sales_coordinator", "");
       }
       if (salespersonModalData.customer_service) {
-        customerForm.setFieldValue("customer_services", salespersonModalData.customer_service);
-      }else{
+        customerForm.setFieldValue(
+          "customer_services",
+          salespersonModalData.customer_service
+        );
+      } else {
         customerForm.setFieldValue("customer_services", "");
       }
       // Close modal first
       closeSalespersonModal();
       setSalespersonModalData(null);
-      
+
       // Navigate to stepper 1 (Customer Details) - active is 0-indexed, so 0 = step 1
       setTimeout(() => {
         setActive(0);
       }, 200);
+    }
+  };
+
+  // Function to validate a specific step
+  const validateStep = (stepIndex: number): boolean => {
+    if (stepIndex === 0) {
+      const result = customerForm.validate();
+      return !result.hasErrors;
+    }
+    if (stepIndex === 1) {
+      const result = serviceForm.validate();
+      return !result.hasErrors;
+    }
+    // Step 2 (Quotation) validation is handled by QuotationCreate component
+    return true;
+  };
+
+  // Function to handle stepper title click with validation
+  const handleStepClick = (targetStep: number) => {
+    // Allow backward navigation without validation
+    if (targetStep < active) {
+      setActive(targetStep);
+      return;
+    }
+
+    // For forward navigation, validate all steps from current to target
+    if (targetStep > active) {
+      let allStepsValid = true;
+      // Validate each step from current to target (exclusive of target)
+      for (let step = active; step < targetStep; step++) {
+        const isValid = validateStep(step);
+        if (!isValid) {
+          allStepsValid = false;
+          // Stay on the first invalid step to show errors
+          setActive(step);
+          break;
+        }
+      }
+      // Only navigate to target if all intermediate steps are valid
+      if (allStepsValid) {
+        setActive(targetStep);
+      }
+      // If validation fails, errors are already displayed by form.validate()
+    } else {
+      // Same step clicked, just navigate
+      setActive(targetStep);
     }
   };
 
@@ -1685,7 +1763,8 @@ function EnquiryCreate() {
   });
 
   const otherServicesData = useMemo(() => {
-    if (!Array.isArray(rawOtherServicesData) || !rawOtherServicesData.length) return [];
+    if (!Array.isArray(rawOtherServicesData) || !rawOtherServicesData.length)
+      return [];
 
     return rawOtherServicesData.map((item: any) => ({
       value: item.service_code ? String(item.service_code) : "",
@@ -1847,17 +1926,24 @@ function EnquiryCreate() {
               let tradeValue = service.trade || "";
               let serviceCodeValue = service.service_code || "";
               let serviceNameValue = service.service_name || "";
-              
+
               // Check if this is OTHERS type from quotation (service_type == "OTHERS" and trade == null)
-              if ((service.service_type === "OTHERS" || service.service === "OTHERS") && 
-                  (service.trade === null || service.trade === undefined || service.trade === "")) {
+              if (
+                (service.service_type === "OTHERS" ||
+                  service.service === "OTHERS") &&
+                (service.trade === null ||
+                  service.trade === undefined ||
+                  service.trade === "")
+              ) {
                 serviceValue = "OTHERS";
                 tradeValue = "";
                 // Use service_type_code and service_type_name if available, otherwise use service_code and service_name
-                serviceCodeValue = service.service_type_code || service.service_code || "";
-                serviceNameValue = service.service_type_name || service.service_name || "";
+                serviceCodeValue =
+                  service.service_type_code || service.service_code || "";
+                serviceNameValue =
+                  service.service_type_name || service.service_name || "";
               }
-              
+
               const serviceDetail = {
                 id: service.id,
                 // Date.now().toString() +
@@ -1894,37 +1980,56 @@ function EnquiryCreate() {
               let isOthersWithFCL = false;
               let isOthersWithAIR = false;
               let isOthersWithLCL = false;
-              
+
               if (serviceValue === "OTHERS" && serviceCodeValue) {
                 // Try to determine structure from otherServicesData if available
                 const selectedOtherService = (otherServicesData || []).find(
                   (item: any) => item.value === serviceCodeValue
                 );
                 if (selectedOtherService) {
-                  const transportMode = selectedOtherService.transport_mode || "";
+                  const transportMode =
+                    selectedOtherService.transport_mode || "";
                   const fullGroupage = selectedOtherService.full_groupage || "";
                   if (transportMode === "SEA" && fullGroupage === "FULL") {
                     isOthersWithFCL = true;
-                  } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
+                  } else if (
+                    transportMode === "SEA" &&
+                    fullGroupage === "GROUPAGE"
+                  ) {
                     isOthersWithLCL = true;
                   } else {
                     isOthersWithAIR = true;
                   }
                 } else {
                   // Fallback: determine structure from cargo data presence
-                  if (service.fcl_details && Array.isArray(service.fcl_details) && service.fcl_details.length > 0) {
+                  if (
+                    service.fcl_details &&
+                    Array.isArray(service.fcl_details) &&
+                    service.fcl_details.length > 0
+                  ) {
                     isOthersWithFCL = true;
-                  } else if (service.volume_weight !== undefined && service.volume_weight !== null && (service.volume === undefined || service.volume === null)) {
+                  } else if (
+                    service.volume_weight !== undefined &&
+                    service.volume_weight !== null &&
+                    (service.volume === undefined || service.volume === null)
+                  ) {
                     isOthersWithAIR = true;
-                  } else if (service.volume !== undefined && service.volume !== null && (service.volume_weight === undefined || service.volume_weight === null)) {
+                  } else if (
+                    service.volume !== undefined &&
+                    service.volume !== null &&
+                    (service.volume_weight === undefined ||
+                      service.volume_weight === null)
+                  ) {
                     isOthersWithLCL = true;
                   } else {
                     // Default to AIR structure if we have volume_weight
-                    isOthersWithAIR = (service.volume_weight !== undefined && service.volume_weight !== null);
+                    isOthersWithAIR =
+                      service.volume_weight !== undefined &&
+                      service.volume_weight !== null;
                   }
                 }
               }
-              
+
               if (
                 (serviceValue === "FCL" || isOthersWithFCL) &&
                 service.fcl_details &&
@@ -2090,37 +2195,56 @@ function EnquiryCreate() {
               let isOthersWithFCL = false;
               let isOthersWithAIR = false;
               let isOthersWithLCL = false;
-              
+
               if (service.service === "OTHERS" && service.service_code) {
                 // Try to determine structure from otherServicesData if available
                 const selectedOtherService = (otherServicesData || []).find(
                   (item: any) => item.value === service.service_code
                 );
                 if (selectedOtherService) {
-                  const transportMode = selectedOtherService.transport_mode || "";
+                  const transportMode =
+                    selectedOtherService.transport_mode || "";
                   const fullGroupage = selectedOtherService.full_groupage || "";
                   if (transportMode === "SEA" && fullGroupage === "FULL") {
                     isOthersWithFCL = true;
-                  } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
+                  } else if (
+                    transportMode === "SEA" &&
+                    fullGroupage === "GROUPAGE"
+                  ) {
                     isOthersWithLCL = true;
                   } else {
                     isOthersWithAIR = true;
                   }
                 } else {
                   // Fallback: determine structure from cargo data presence
-                  if (service.fcl_details && Array.isArray(service.fcl_details) && service.fcl_details.length > 0) {
+                  if (
+                    service.fcl_details &&
+                    Array.isArray(service.fcl_details) &&
+                    service.fcl_details.length > 0
+                  ) {
                     isOthersWithFCL = true;
-                  } else if (service.volume_weight !== undefined && service.volume_weight !== null && (service.volume === undefined || service.volume === null)) {
+                  } else if (
+                    service.volume_weight !== undefined &&
+                    service.volume_weight !== null &&
+                    (service.volume === undefined || service.volume === null)
+                  ) {
                     isOthersWithAIR = true;
-                  } else if (service.volume !== undefined && service.volume !== null && (service.volume_weight === undefined || service.volume_weight === null)) {
+                  } else if (
+                    service.volume !== undefined &&
+                    service.volume !== null &&
+                    (service.volume_weight === undefined ||
+                      service.volume_weight === null)
+                  ) {
                     isOthersWithLCL = true;
                   } else {
                     // Default to AIR structure if we have volume_weight
-                    isOthersWithAIR = (service.volume_weight !== undefined && service.volume_weight !== null);
+                    isOthersWithAIR =
+                      service.volume_weight !== undefined &&
+                      service.volume_weight !== null;
                   }
                 }
               }
-              
+
               if (
                 (service.service === "FCL" || isOthersWithFCL) &&
                 service.fcl_details &&
@@ -2277,7 +2401,7 @@ function EnquiryCreate() {
           let isOthersWithFCL = false;
           let isOthersWithAIR = false;
           let isOthersWithLCL = false;
-          
+
           if (enq?.service === "OTHERS" && enq.service_code) {
             // Try to determine structure from otherServicesData if available
             const selectedOtherService = (otherServicesData || []).find(
@@ -2288,50 +2412,62 @@ function EnquiryCreate() {
               const fullGroupage = selectedOtherService.full_groupage || "";
               if (transportMode === "SEA" && fullGroupage === "FULL") {
                 isOthersWithFCL = true;
-              } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
+              } else if (
+                transportMode === "SEA" &&
+                fullGroupage === "GROUPAGE"
+              ) {
                 isOthersWithLCL = true;
               } else {
                 isOthersWithAIR = true;
               }
             } else {
               // Fallback: determine structure from cargo data presence
-              if (enq.fcl_details && Array.isArray(enq.fcl_details) && enq.fcl_details.length > 0) {
+              if (
+                enq.fcl_details &&
+                Array.isArray(enq.fcl_details) &&
+                enq.fcl_details.length > 0
+              ) {
                 isOthersWithFCL = true;
-              } else if (enq.volume_weight !== undefined && enq.volume_weight !== null && (enq.volume === undefined || enq.volume === null)) {
+              } else if (
+                enq.volume_weight !== undefined &&
+                enq.volume_weight !== null &&
+                (enq.volume === undefined || enq.volume === null)
+              ) {
                 isOthersWithAIR = true;
-              } else if (enq.volume !== undefined && enq.volume !== null && (enq.volume_weight === undefined || enq.volume_weight === null)) {
+              } else if (
+                enq.volume !== undefined &&
+                enq.volume !== null &&
+                (enq.volume_weight === undefined || enq.volume_weight === null)
+              ) {
                 isOthersWithLCL = true;
               } else {
                 // Default to AIR structure if we have volume_weight
-                isOthersWithAIR = (enq.volume_weight !== undefined && enq.volume_weight !== null);
+                isOthersWithAIR =
+                  enq.volume_weight !== undefined && enq.volume_weight !== null;
               }
             }
           }
-          
+
           if (
             (enq?.service === "FCL" || isOthersWithFCL) &&
             enq.fcl_details &&
             Array.isArray(enq.fcl_details)
           ) {
             // FCL service with multiple containers (or OTHERS with FCL structure)
-            serviceDetail.cargo_details = enq.fcl_details.map(
-              (fcl: any) => ({
-                id: fcl.id || null,
-                no_of_packages: null,
-                gross_weight: fcl.gross_weight
-                  ? Number(fcl.gross_weight)
-                  : null,
-                volume_weight: null,
-                chargable_weight: null,
-                volume: null,
-                chargable_volume: null,
-                container_type_code:
-                  fcl.container_type_code || fcl.container_type || null,
-                no_of_containers: fcl.no_of_containers || null,
-                hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
-                stackable: enq.stackable ? "Yes" : "No",
-              })
-            );
+            serviceDetail.cargo_details = enq.fcl_details.map((fcl: any) => ({
+              id: fcl.id || null,
+              no_of_packages: null,
+              gross_weight: fcl.gross_weight ? Number(fcl.gross_weight) : null,
+              volume_weight: null,
+              chargable_weight: null,
+              volume: null,
+              chargable_volume: null,
+              container_type_code:
+                fcl.container_type_code || fcl.container_type || null,
+              no_of_containers: fcl.no_of_containers || null,
+              hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
+              stackable: enq.stackable ? "Yes" : "No",
+            }));
           } else if (enq?.service === "AIR" || isOthersWithAIR) {
             // AIR service with direct cargo fields (or OTHERS with AIR structure)
             serviceDetail.cargo_details = [
@@ -2495,29 +2631,31 @@ function EnquiryCreate() {
   // useEffect to check salesperson data when customer, service, and trade are all selected
   useEffect(() => {
     const customerCode = customerForm.values.customer_code;
-    
+
     if (!customerCode) {
       return;
     }
 
     // Check all service details
     const timeouts: ReturnType<typeof setTimeout>[] = [];
-    serviceForm.values.service_details.forEach((serviceDetail, serviceIndex) => {
-      const service = serviceDetail?.service;
-      const trade = serviceDetail?.trade;
+    serviceForm.values.service_details.forEach(
+      (serviceDetail, serviceIndex) => {
+        const service = serviceDetail?.service;
+        const trade = serviceDetail?.trade;
 
-      if (service && trade && lastCheckedServiceIndex !== serviceIndex) {
-        // Small delay to ensure form values are updated
-        const timeoutId = setTimeout(() => {
-          checkSalespersonData(serviceIndex);
-        }, 300);
-        timeouts.push(timeoutId);
+        if (service && trade && lastCheckedServiceIndex !== serviceIndex) {
+          // Small delay to ensure form values are updated
+          const timeoutId = setTimeout(() => {
+            checkSalespersonData(serviceIndex);
+          }, 300);
+          timeouts.push(timeoutId);
+        }
       }
-    });
+    );
 
     // Cleanup function
     return () => {
-      timeouts.forEach(timeout => clearTimeout(timeout));
+      timeouts.forEach((timeout) => clearTimeout(timeout));
     };
   }, [
     customerForm.values.customer_code,
@@ -2824,20 +2962,32 @@ function EnquiryCreate() {
   return (
     <>
       <Box
-      // py={"2%"}
-      // w={"80%"}
-      style={{ backgroundColor: "#F8F8F8" ,}}
+        // py={"2%"}
+        // w={"80%"}
+        style={{ backgroundColor: "#F8F8F8" }}
       >
         <Box p="xs" maw={1200} mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
           {/* Header */}
 
-
-          <Flex gap="lg" align="flex-start" style={{ minHeight: "calc(100vh - 100px)" }}>
+          <Flex
+            gap="lg"
+            align="flex-start"
+            style={{ minHeight: "calc(100vh - 100px)" }}
+          >
             {/* Vertical Stepper Sidebar */}
-            <Box style={{ minWidth: 240, height: "calc(100vh - 100px)", alignSelf: "stretch" , backgroundColor: "#FFFFFF", position: "sticky", top: 0 }}>
-              <Stack gap="sm" style={{ height: "100%" ,padding: "10px" }}>
+            <Box
+              style={{
+                minWidth: 240,
+                height: "calc(100vh - 100px)",
+                alignSelf: "stretch",
+                backgroundColor: "#FFFFFF",
+                position: "sticky",
+                top: 0,
+              }}
+            >
+              <Stack gap="sm" style={{ height: "100%", padding: "10px" }}>
                 <Box
-                  onClick={() => setActive(0)}
+                  onClick={() => handleStepClick(0)}
                   style={{
                     cursor: "pointer",
                     padding: "4px 0",
@@ -2845,37 +2995,75 @@ function EnquiryCreate() {
                   }}
                 >
                   <Box>
-                    <Text size="md" fw={600} c="#105476" mb="xs" style={{ fontFamily: "Inter", fontStyle: "medium" , fontSize: "16px", color: "#105476" }}>
-            {enq?.actionType === "edit" || enq?.actionType === "editQuotation"
-              ? "Edit Enquiry"
-              : "Create New Enquiry"}
-          </Text>
+                    <Text
+                      size="md"
+                      fw={600}
+                      c="#105476"
+                      mb="xs"
+                      style={{
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                        fontSize: "16px",
+                        color: "#105476",
+                      }}
+                    >
+                      {enq?.actionType === "edit" ||
+                      enq?.actionType === "editQuotation"
+                        ? "Edit Enquiry"
+                        : "Create New Enquiry"}
+                    </Text>
                   </Box>
                   <Flex align="center" gap="sm">
-                    
                     <Box
                       style={{
                         width: 40,
                         height: 40,
                         borderRadius: "50%",
                         backgroundColor: active > 0 ? "#EAF9F1" : "#E6F2F8",
-                        border: active > 0 ? "none" : active === 0 ? "2px solid #105476" : "2px solid #d1d5db",
+                        border:
+                          active > 0
+                            ? "none"
+                            : active === 0
+                              ? "2px solid #105476"
+                              : "2px solid #d1d5db",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         fontSize: "16px",
                         fontWeight: 600,
-                        color: active > 0 ? "white" : active === 0 ? "#105476" : "#9ca3af",
+                        color:
+                          active > 0
+                            ? "white"
+                            : active === 0
+                              ? "#105476"
+                              : "#9ca3af",
                         transition: "all 0.2s",
                         flexShrink: 0,
                       }}
                     >
-                      {active > 0 ? 
-                      <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
-                      // <IconCheck size={20} /> 
-                      : <IconUser size={20} color="#105476" fill="#E6F2F8" />}
+                      {active > 0 ? (
+                        <IconCircleCheck
+                          size={20}
+                          color="#289D69"
+                          fill="#EAF9F1"
+                        />
+                      ) : (
+                        // <IconCheck size={20} />
+                        <IconUser size={20} color="#105476" fill="#E6F2F8" />
+                      )}
                     </Box>
-                    <Text size="sm" fw={400} c="#105476" style={{ lineHeight: 1.3 , fontFamily: "Inter", fontStyle: "regular" , fontSize: "13px", color: "#105476" }}>
+                    <Text
+                      size="sm"
+                      fw={400}
+                      c="#105476"
+                      style={{
+                        lineHeight: 1.3,
+                        fontFamily: "Inter",
+                        fontStyle: "regular",
+                        fontSize: "13px",
+                        color: "#105476",
+                      }}
+                    >
                       Customer Details
                     </Text>
                   </Flex>
@@ -2904,14 +3092,11 @@ function EnquiryCreate() {
                 </Box>
 
                 <Box
-                  onClick={() => {
-                    if (active >= 1) setActive(1);
-                  }}
+                  onClick={() => handleStepClick(1)}
                   style={{
-                    cursor: active >= 1 ? "pointer" : "not-allowed",
+                    cursor: "pointer",
                     padding: "4px 0",
                     transition: "all 0.2s",
-                    opacity: active >= 1 ? 1 : 0.6,
                   }}
                 >
                   <Flex align="center" gap="sm">
@@ -2921,21 +3106,53 @@ function EnquiryCreate() {
                         height: 40,
                         borderRadius: "50%",
                         backgroundColor: active > 1 ? "#EAF9F1" : "#fff",
-                        border: active > 1 ? "none" : active === 1 ? "2px solid #105476" : "2px solid #d1d5db",
+                        border:
+                          active > 1
+                            ? "none"
+                            : active === 1
+                              ? "2px solid #105476"
+                              : "2px solid #d1d5db",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         fontSize: "16px",
                         fontWeight: 600,
-                        color: active > 1 ? "white" : active === 1 ? "#105476" : "#9ca3af",
+                        color:
+                          active > 1
+                            ? "white"
+                            : active === 1
+                              ? "#105476"
+                              : "#9ca3af",
                         transition: "all 0.2s",
                         flexShrink: 0,
                       }}
                     >
-                      {active > 1 ? <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
-: <IconTruckDelivery size={20} color="#105476" fill="#E6F2F8" />}
+                      {active > 1 ? (
+                        <IconCircleCheck
+                          size={20}
+                          color="#289D69"
+                          fill="#EAF9F1"
+                        />
+                      ) : (
+                        <IconTruckDelivery
+                          size={20}
+                          color="#105476"
+                          fill="#E6F2F8"
+                        />
+                      )}
                     </Box>
-                    <Text size="sm" fw={400} c="#374151" style={{ lineHeight: 1.3 , fontFamily: "Inter", fontStyle: "regular" , fontSize: "13px", color: "#105476" }}>
+                    <Text
+                      size="sm"
+                      fw={400}
+                      c="#374151"
+                      style={{
+                        lineHeight: 1.3,
+                        fontFamily: "Inter",
+                        fontStyle: "regular",
+                        fontSize: "13px",
+                        color: "#105476",
+                      }}
+                    >
                       Service & Cargo Details
                     </Text>
                   </Flex>
@@ -2965,14 +3182,11 @@ function EnquiryCreate() {
                     </Box>
 
                     <Box
-                      onClick={() => {
-                        if (active >= 2) setActive(2);
-                      }}
+                      onClick={() => handleStepClick(2)}
                       style={{
-                        cursor: active >= 2 ? "pointer" : "not-allowed",
+                        cursor: "pointer",
                         padding: "4px 0",
                         transition: "all 0.2s",
-                        opacity: active >= 2 ? 1 : 0.6,
                       }}
                     >
                       <Flex align="center" gap="sm">
@@ -2982,21 +3196,53 @@ function EnquiryCreate() {
                             height: 40,
                             borderRadius: "50%",
                             backgroundColor: active > 2 ? "#EAF9F1" : "#fff",
-                            border: active > 2 ? "none" : active === 2 ? "2px solid #105476" : "2px solid #d1d5db",
+                            border:
+                              active > 2
+                                ? "none"
+                                : active === 2
+                                  ? "2px solid #105476"
+                                  : "2px solid #d1d5db",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             fontSize: "16px",
                             fontWeight: 600,
-                            color: active > 2 ? "white" : active === 2 ? "#105476" : "#9ca3af",
+                            color:
+                              active > 2
+                                ? "white"
+                                : active === 2
+                                  ? "#105476"
+                                  : "#9ca3af",
                             transition: "all 0.2s",
                             flexShrink: 0,
                           }}
                         >
-                          {active > 2 ? <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
-                            : <IconFileText size={20} color="#105476" fill="#E6F2F8" />}
+                          {active > 2 ? (
+                            <IconCircleCheck
+                              size={20}
+                              color="#289D69"
+                              fill="#EAF9F1"
+                            />
+                          ) : (
+                            <IconFileText
+                              size={20}
+                              color="#105476"
+                              fill="#E6F2F8"
+                            />
+                          )}
                         </Box>
-                        <Text size="sm" fw={400} c="#374151" style={{ lineHeight: 1.3 , fontFamily: "Inter", fontStyle: "regular" , fontSize: "13px", color: "#105476" }}>
+                        <Text
+                          size="sm"
+                          fw={400}
+                          c="#374151"
+                          style={{
+                            lineHeight: 1.3,
+                            fontFamily: "Inter",
+                            fontStyle: "regular",
+                            fontSize: "13px",
+                            color: "#105476",
+                          }}
+                        >
                           Quotation
                         </Text>
                       </Flex>
@@ -3007,349 +3253,393 @@ function EnquiryCreate() {
             </Box>
 
             {/* Main Content Area */}
-            <Box style={{ flex: 1, backgroundColor: "#ffffff", borderRadius: "8px", display: "flex", flexDirection: "column", height: "calc(100vh - 100px)", overflow: "hidden" }}>
+            <Box
+              style={{
+                flex: 1,
+                backgroundColor: "#ffffff",
+                borderRadius: "8px",
+                display: "flex",
+                flexDirection: "column",
+                height: "calc(100vh - 100px)",
+                overflow: "hidden",
+              }}
+            >
               {active === 0 && (
                 <>
-                <Box style={{ flex: 1, overflowY: "auto", paddingBottom: "16px", backgroundColor: "#F8F8F8" }}>
-                  <Grid style={{ backgroundColor: "#FFFFFF", padding: "10px" }}>
-                    <Grid.Col span={6}>
-                    <Flex gap="sm" align="flex-end">
-                      <div
-                        style={{
-                          flex: customerForm.values.customer_code ? 0.75 : 1,
-                          transition: "flex 0.3s ease",
-                        }}
-                      >
-                        <SearchableSelect
-                          key={customerForm.key("customer_code")}
-                          label="Customer Name"
-                          required
-                          apiEndpoint={URL.customer}
-                          placeholder="Type customer name"
-                          searchFields={["customer_code", "customer_name"]}
-                          returnOriginalData={true}
-                          displayFormat={(item: any) => ({
-                            value: String(item.customer_code),
-                            label: String(item.customer_name), // Show only customer name
-                          })}
-                          value={customerForm.values.customer_code}
-                          displayValue={customerDisplayName}
-                          onChange={(value, selectedData, originalData) => {
-                            customerForm.setFieldValue(
-                              "customer_code",
-                              value || ""
-                            );
-                            // Update display name and selected name
-                            if (value && selectedData) {
-                              const customerName = selectedData.label;
-                              setCustomerDisplayName(customerName);
-                              setSelectedCustomerName(customerName);
-
-                              // Extract primary address from originalData
-                              if (
-                                originalData &&
-                                typeof originalData === "object"
-                              ) {
-                                const customerData = originalData as any;
-                                if (
-                                  customerData.addresses_data &&
-                                  Array.isArray(customerData.addresses_data)
-                                ) {
-                                  // Find primary address (case-insensitive match)
-                                  const primaryAddress =
-                                    customerData.addresses_data.find(
-                                      (addr: any) =>
-                                        addr?.address_type &&
-                                        addr.address_type.toUpperCase() ===
-                                          "PRIMARY"
-                                    );
-
-                                  // Set customer_address only if:
-                                  // 1. Not initial load AND not in edit mode, OR
-                                  // 2. Not initial load AND in edit mode but customer changed, OR
-                                  // 3. Not initial load AND in edit mode and customer_address is empty
-                                  const shouldSetAddress =
-                                    !isInitialDataLoad &&
-                                    (enq?.actionType !== "edit" ||
-                                      enq?.customer_code_read !== value ||
-                                      !customerForm.values.customer_address);
-
-                                  if (
-                                    primaryAddress?.address &&
-                                    shouldSetAddress
-                                  ) {
-                                    customerForm.setFieldValue(
-                                      "customer_address",
-                                      primaryAddress.address
-                                    );
-                                  }
-                                }
-                              }
-
-                              // Only call handleCustomerSelection if this is not initial data load and not edit mode or if customer changed
-                              if (
-                                !isInitialDataLoad &&
-                                (enq?.actionType !== "edit" ||
-                                  enq?.customer_code_read !== value)
-                              ) {
-                                handleCustomerSelection(value);
-                              }
-
-                              // Check salesperson data if service and trade are already selected
-                              // Check all service details
-                              serviceForm.values.service_details.forEach((_, idx) => {
-                                const serviceDetail = serviceForm.values.service_details[idx];
-                                if (serviceDetail?.service && serviceDetail?.trade) {
-                                  setTimeout(() => {
-                                    checkSalespersonData(idx);
-                                  }, 200);
-                                }
-                              });
-                            } else {
-                              setCustomerDisplayName(null);
-                              setSelectedCustomerName(null);
-                              // Clear customer_address when customer is cleared
-                              customerForm.setFieldValue(
-                                "customer_address",
-                                ""
-                              );
-                              // Reset salespersons to initial state (empty customer_id)
-                              if (
-                                !isInitialDataLoad &&
-                                enq?.actionType !== "edit" &&
-                                !salespersonsApiCalled
-                              ) {
-                                console.log(
-                                  "🔄 Customer cleared - refetching salespersons"
-                                );
-                                refetchSalespersons();
-                                setSalespersonsApiCalled(true);
-                              }
-                            }
-                          }}
-                          error={customerForm.errors.customer_code as string}
-                          minSearchLength={3}
-                        />
-                      </div>
-
-                      {customerForm.values.customer_code && (
-                        <div style={{ flex: 0.25 }}>
-                          <Button
-                            size="xs"
-                            mb={4}
-                            color="#105476"
-                            // variant="outline"
-                            onClick={() => {
-                              const customerCode =
-                                customerForm.values.customer_code;
-                              if (customerCode) {
-                                fetchCustomerData(customerCode);
-                                openCustomerDataDrawer();
-                              }
+                  <Box
+                    style={{
+                      flex: 1,
+                      overflowY: "auto",
+                      paddingBottom: "16px",
+                      backgroundColor: "#F8F8F8",
+                    }}
+                  >
+                    <Grid
+                      style={{ backgroundColor: "#FFFFFF", padding: "10px" }}
+                    >
+                      <Grid.Col span={6}>
+                        <Flex gap="sm" align="flex-end">
+                          <div
+                            style={{
+                              flex: customerForm.values.customer_code
+                                ? 0.75
+                                : 1,
+                              transition: "flex 0.3s ease",
                             }}
                           >
-                            {/* {customerForm.values.customer_code} */}
-                            <IconInfoCircle size={16} />
-                          </Button>
-                        </div>
-                      )}
-                    </Flex>
-                    <Drawer
-                      opened={customerDataDrawer}
-                      onClose={() => {
-                        closeCustomerDataDrawer();
-                        setCustomerQuotationData([]);
-                        setCallEntryData([]);
-                        setShipmentData([]);
-                        setPotentialProfilingData([]);
-                        setCustomerCreditDay(null);
-                        setCustomerSalesperson(null);
-                        setCustomerLastVisited(null);
-                        setCustomerTotalCreditAmount(null);
-                        setTotalRevenue(null);
-                        setTotalProfit(null);
-                        setSelectedMonth(new Date().getMonth() + 1);
-                        setSelectedYear(new Date().getFullYear());
-                      }}
-                      title={`Customer Data for ${selectedCustomerName || customerForm.values.customer_code}`}
-                      size={"70%"}
-                      position="right"
-                    >
-                      <Divider mb={"md"} />
+                            <SearchableSelect
+                              key={customerForm.key("customer_code")}
+                              label="Customer Name"
+                              required
+                              apiEndpoint={URL.customer}
+                              placeholder="Type customer name"
+                              searchFields={["customer_code", "customer_name"]}
+                              returnOriginalData={true}
+                              displayFormat={(item: any) => ({
+                                value: String(item.customer_code),
+                                label: String(item.customer_name), // Show only customer name
+                              })}
+                              value={customerForm.values.customer_code}
+                              displayValue={customerDisplayName}
+                              onChange={(value, selectedData, originalData) => {
+                                customerForm.setFieldValue(
+                                  "customer_code",
+                                  value || ""
+                                );
+                                // Update display name and selected name
+                                if (value && selectedData) {
+                                  const customerName = selectedData.label;
+                                  setCustomerDisplayName(customerName);
+                                  setSelectedCustomerName(customerName);
 
-                      {isLoadingData ? (
-                        <Box ta="center" py="xl">
-                          <Loader size="lg" color="#105476" />
-                          <Text mt="md" c="dimmed" size="lg">
-                            Loading customer data...
-                          </Text>
-                        </Box>
-                      ) : (
-                        <Stack gap="lg">
-                          {/* Customer Info Section */}
-                          {(customerCreditDay !== null ||
-                            customerSalesperson ||
-                            customerLastVisited ||
-                            customerTotalCreditAmount !== null ||
-                            totalOutstandingAmount !== 0 ||
-                            totalRevenue !== null ||
-                            totalProfit !== null) && (
-                            <Box>
-                              <Text
-                                size="lg"
-                                fw={700}
-                                mb="md"
-                                c="#105476"
-                                style={{
-                                  paddingBottom: "6px",
+                                  // Extract primary address from originalData
+                                  if (
+                                    originalData &&
+                                    typeof originalData === "object"
+                                  ) {
+                                    const customerData = originalData as any;
+                                    if (
+                                      customerData.addresses_data &&
+                                      Array.isArray(customerData.addresses_data)
+                                    ) {
+                                      // Find primary address (case-insensitive match)
+                                      const primaryAddress =
+                                        customerData.addresses_data.find(
+                                          (addr: any) =>
+                                            addr?.address_type &&
+                                            addr.address_type.toUpperCase() ===
+                                              "PRIMARY"
+                                        );
+
+                                      // Set customer_address only if:
+                                      // 1. Not initial load AND not in edit mode, OR
+                                      // 2. Not initial load AND in edit mode but customer changed, OR
+                                      // 3. Not initial load AND in edit mode and customer_address is empty
+                                      const shouldSetAddress =
+                                        !isInitialDataLoad &&
+                                        (enq?.actionType !== "edit" ||
+                                          enq?.customer_code_read !== value ||
+                                          !customerForm.values
+                                            .customer_address);
+
+                                      if (
+                                        primaryAddress?.address &&
+                                        shouldSetAddress
+                                      ) {
+                                        customerForm.setFieldValue(
+                                          "customer_address",
+                                          primaryAddress.address
+                                        );
+                                      }
+                                    }
+                                  }
+
+                                  // Only call handleCustomerSelection if this is not initial data load and not edit mode or if customer changed
+                                  if (
+                                    !isInitialDataLoad &&
+                                    (enq?.actionType !== "edit" ||
+                                      enq?.customer_code_read !== value)
+                                  ) {
+                                    handleCustomerSelection(value);
+                                  }
+
+                                  // Check salesperson data if service and trade are already selected
+                                  // Check all service details
+                                  serviceForm.values.service_details.forEach(
+                                    (_, idx) => {
+                                      const serviceDetail =
+                                        serviceForm.values.service_details[idx];
+                                      if (
+                                        serviceDetail?.service &&
+                                        serviceDetail?.trade
+                                      ) {
+                                        setTimeout(() => {
+                                          checkSalespersonData(idx);
+                                        }, 200);
+                                      }
+                                    }
+                                  );
+                                } else {
+                                  setCustomerDisplayName(null);
+                                  setSelectedCustomerName(null);
+                                  // Clear customer_address when customer is cleared
+                                  customerForm.setFieldValue(
+                                    "customer_address",
+                                    ""
+                                  );
+                                  // Reset salespersons to initial state (empty customer_id)
+                                  if (
+                                    !isInitialDataLoad &&
+                                    enq?.actionType !== "edit" &&
+                                    !salespersonsApiCalled
+                                  ) {
+                                    console.log(
+                                      "🔄 Customer cleared - refetching salespersons"
+                                    );
+                                    refetchSalespersons();
+                                    setSalespersonsApiCalled(true);
+                                  }
+                                }
+                              }}
+                              error={
+                                customerForm.errors.customer_code as string
+                              }
+                              minSearchLength={3}
+                            />
+                          </div>
+
+                          {customerForm.values.customer_code && (
+                            <div style={{ flex: 0.25 }}>
+                              <Button
+                                size="xs"
+                                mb={4}
+                                color="#105476"
+                                // variant="outline"
+                                onClick={() => {
+                                  const customerCode =
+                                    customerForm.values.customer_code;
+                                  if (customerCode) {
+                                    fetchCustomerData(customerCode);
+                                    openCustomerDataDrawer();
+                                  }
                                 }}
                               >
-                                ℹ️ Customer Information
+                                {/* {customerForm.values.customer_code} */}
+                                <IconInfoCircle size={16} />
+                              </Button>
+                            </div>
+                          )}
+                        </Flex>
+                        <Drawer
+                          opened={customerDataDrawer}
+                          onClose={() => {
+                            closeCustomerDataDrawer();
+                            setCustomerQuotationData([]);
+                            setCallEntryData([]);
+                            setShipmentData([]);
+                            setPotentialProfilingData([]);
+                            setCustomerCreditDay(null);
+                            setCustomerSalesperson(null);
+                            setCustomerLastVisited(null);
+                            setCustomerTotalCreditAmount(null);
+                            setTotalRevenue(null);
+                            setTotalProfit(null);
+                            setSelectedMonth(new Date().getMonth() + 1);
+                            setSelectedYear(new Date().getFullYear());
+                          }}
+                          title={`Customer Data for ${selectedCustomerName || customerForm.values.customer_code}`}
+                          size={"70%"}
+                          position="right"
+                        >
+                          <Divider mb={"md"} />
+
+                          {isLoadingData ? (
+                            <Box ta="center" py="xl">
+                              <Loader size="lg" color="#105476" />
+                              <Text mt="md" c="dimmed" size="lg">
+                                Loading customer data...
                               </Text>
-                              <Grid gutter="md">
-                                {/* Left Card - General Customer Info */}
-                                <Grid.Col
-                                  span={{
-                                    base: 12,
-                                    md: user?.is_staff ? 6 : 12,
-                                  }}
-                                >
-                                  <Card
-                                    shadow="sm"
-                                    padding="lg"
-                                    radius="md"
-                                    withBorder
+                            </Box>
+                          ) : (
+                            <Stack gap="lg">
+                              {/* Customer Info Section */}
+                              {(customerCreditDay !== null ||
+                                customerSalesperson ||
+                                customerLastVisited ||
+                                customerTotalCreditAmount !== null ||
+                                totalOutstandingAmount !== 0 ||
+                                totalRevenue !== null ||
+                                totalProfit !== null) && (
+                                <Box>
+                                  <Text
+                                    size="lg"
+                                    fw={700}
+                                    mb="md"
+                                    c="#105476"
                                     style={{
-                                      border: "1px solid #e9ecef",
-                                      backgroundColor: "#ffffff",
-                                      height: "100%",
+                                      paddingBottom: "6px",
                                     }}
                                   >
-                                    <Grid gutter="md">
-                                      {customerSalesperson && (
-                                        <Grid.Col span={{ base: 12, sm: 6 }}>
-                                          <Box>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={6}
-                                            >
-                                              Salesperson
-                                            </Text>
-                                            <Text size="sm" fw={500} c="#333">
-                                              {customerSalesperson}
-                                            </Text>
-                                          </Box>
-                                        </Grid.Col>
-                                      )}
-                                      <Grid.Col span={{ base: 12, sm: 6 }}>
-                                        <Box>
-                                          <Text
-                                            size="xs"
-                                            fw={600}
-                                            c="#666"
-                                            mb={6}
-                                          >
-                                            Credit Days
-                                          </Text>
-                                          <Text size="sm" fw={500} c="#333">
-                                            {customerCreditDay !== null
-                                              ? `${customerCreditDay} days`
-                                              : "-"}
-                                          </Text>
-                                        </Box>
-                                      </Grid.Col>
-                                      {customerTotalCreditAmount !== null && (
-                                        <Grid.Col span={{ base: 12, sm: 6 }}>
-                                          <Box>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={6}
-                                            >
-                                              Credit Amount
-                                            </Text>
-                                            <Text size="sm" fw={500} c="#333">
-                                              ₹
-                                              {customerTotalCreditAmount.toLocaleString(
-                                                "en-IN"
-                                              )}
-                                            </Text>
-                                          </Box>
-                                        </Grid.Col>
-                                      )}
-                                      <Grid.Col span={{ base: 12, sm: 6 }}>
-                                        <Box>
-                                          <Text
-                                            size="xs"
-                                            fw={600}
-                                            c="#666"
-                                            mb={6}
-                                          >
-                                            Total Outstanding Amount
-                                          </Text>
-                                          <Text
-                                            size="sm"
-                                            fw={500}
-                                            style={{
-                                              color:
-                                                totalOutstandingAmount > 0
-                                                  ? "#28a745"
-                                                  : totalOutstandingAmount < 0
-                                                    ? "#dc3545"
-                                                    : undefined,
-                                            }}
-                                          >
-                                            ₹
-                                            {totalOutstandingAmount.toLocaleString(
-                                              "en-IN"
-                                            )}
-                                          </Text>
-                                        </Box>
-                                      </Grid.Col>
-                                      <Grid.Col span={{ base: 12, sm: 6 }}>
-                                        <Box>
-                                          <Text
-                                            size="xs"
-                                            fw={600}
-                                            c="#666"
-                                            mb={6}
-                                          >
-                                            Last Visited
-                                          </Text>
-                                          <Text size="sm" fw={500} c="#333">
-                                            {customerLastVisited
-                                              ? dayjs(
-                                                  customerLastVisited
-                                                ).format("DD/MM/YYYY")
-                                              : "-"}
-                                          </Text>
-                                        </Box>
-                                      </Grid.Col>
-                                    </Grid>
-                                  </Card>
-                                </Grid.Col>
-
-                                {/* Right Card - Revenue/Profit with Filter - Only visible to admin users */}
-                                {user?.is_staff && (
-                                  <Grid.Col span={{ base: 12, md: 6 }}>
-                                    <Card
-                                      shadow="sm"
-                                      padding="lg"
-                                      radius="md"
-                                      withBorder
-                                      style={{
-                                        border: "1px solid #e9ecef",
-                                        backgroundColor: "#ffffff",
-                                        height: "100%",
+                                    ℹ️ Customer Information
+                                  </Text>
+                                  <Grid gutter="md">
+                                    {/* Left Card - General Customer Info */}
+                                    <Grid.Col
+                                      span={{
+                                        base: 12,
+                                        md: user?.is_staff ? 6 : 12,
                                       }}
                                     >
-                                      <Stack gap="md">
-                                        {/* Filter Section */}
-                                        <Box>
-                                          {/* <Text
+                                      <Card
+                                        shadow="sm"
+                                        padding="lg"
+                                        radius="md"
+                                        withBorder
+                                        style={{
+                                          border: "1px solid #e9ecef",
+                                          backgroundColor: "#ffffff",
+                                          height: "100%",
+                                        }}
+                                      >
+                                        <Grid gutter="md">
+                                          {customerSalesperson && (
+                                            <Grid.Col
+                                              span={{ base: 12, sm: 6 }}
+                                            >
+                                              <Box>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={6}
+                                                >
+                                                  Salesperson
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#333"
+                                                >
+                                                  {customerSalesperson}
+                                                </Text>
+                                              </Box>
+                                            </Grid.Col>
+                                          )}
+                                          <Grid.Col span={{ base: 12, sm: 6 }}>
+                                            <Box>
+                                              <Text
+                                                size="xs"
+                                                fw={600}
+                                                c="#666"
+                                                mb={6}
+                                              >
+                                                Credit Days
+                                              </Text>
+                                              <Text size="sm" fw={500} c="#333">
+                                                {customerCreditDay !== null
+                                                  ? `${customerCreditDay} days`
+                                                  : "-"}
+                                              </Text>
+                                            </Box>
+                                          </Grid.Col>
+                                          {customerTotalCreditAmount !==
+                                            null && (
+                                            <Grid.Col
+                                              span={{ base: 12, sm: 6 }}
+                                            >
+                                              <Box>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={6}
+                                                >
+                                                  Credit Amount
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#333"
+                                                >
+                                                  ₹
+                                                  {customerTotalCreditAmount.toLocaleString(
+                                                    "en-IN"
+                                                  )}
+                                                </Text>
+                                              </Box>
+                                            </Grid.Col>
+                                          )}
+                                          <Grid.Col span={{ base: 12, sm: 6 }}>
+                                            <Box>
+                                              <Text
+                                                size="xs"
+                                                fw={600}
+                                                c="#666"
+                                                mb={6}
+                                              >
+                                                Total Outstanding Amount
+                                              </Text>
+                                              <Text
+                                                size="sm"
+                                                fw={500}
+                                                style={{
+                                                  color:
+                                                    totalOutstandingAmount > 0
+                                                      ? "#28a745"
+                                                      : totalOutstandingAmount <
+                                                          0
+                                                        ? "#dc3545"
+                                                        : undefined,
+                                                }}
+                                              >
+                                                ₹
+                                                {totalOutstandingAmount.toLocaleString(
+                                                  "en-IN"
+                                                )}
+                                              </Text>
+                                            </Box>
+                                          </Grid.Col>
+                                          <Grid.Col span={{ base: 12, sm: 6 }}>
+                                            <Box>
+                                              <Text
+                                                size="xs"
+                                                fw={600}
+                                                c="#666"
+                                                mb={6}
+                                              >
+                                                Last Visited
+                                              </Text>
+                                              <Text size="sm" fw={500} c="#333">
+                                                {customerLastVisited
+                                                  ? dayjs(
+                                                      customerLastVisited
+                                                    ).format("DD/MM/YYYY")
+                                                  : "-"}
+                                              </Text>
+                                            </Box>
+                                          </Grid.Col>
+                                        </Grid>
+                                      </Card>
+                                    </Grid.Col>
+
+                                    {/* Right Card - Revenue/Profit with Filter - Only visible to admin users */}
+                                    {user?.is_staff && (
+                                      <Grid.Col span={{ base: 12, md: 6 }}>
+                                        <Card
+                                          shadow="sm"
+                                          padding="lg"
+                                          radius="md"
+                                          withBorder
+                                          style={{
+                                            border: "1px solid #e9ecef",
+                                            backgroundColor: "#ffffff",
+                                            height: "100%",
+                                          }}
+                                        >
+                                          <Stack gap="md">
+                                            {/* Filter Section */}
+                                            <Box>
+                                              {/* <Text
                                           size="xs"
                                           fw={600}
                                           c="#666"
@@ -3357,895 +3647,957 @@ function EnquiryCreate() {
                                         >
                                           Filter by Period
                                         </Text> */}
-                                          <Group
-                                            gap="xs"
-                                            justify="space-between"
-                                          >
-                                            <Group>
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={6}
+                                              <Group
+                                                gap="xs"
+                                                justify="space-between"
                                               >
-                                                Revenue & Profit
-                                              </Text>
+                                                <Group>
+                                                  <Text
+                                                    size="xs"
+                                                    fw={600}
+                                                    c="#666"
+                                                    mb={6}
+                                                  >
+                                                    Revenue & Profit
+                                                  </Text>
+                                                </Group>
+                                                <Group>
+                                                  <Select
+                                                    size="xs"
+                                                    value={String(
+                                                      selectedMonth
+                                                    )}
+                                                    onChange={(value) => {
+                                                      if (value) {
+                                                        const month = parseInt(
+                                                          value,
+                                                          10
+                                                        );
+                                                        setSelectedMonth(month);
+                                                        const customerCode =
+                                                          customerForm.values
+                                                            .customer_code;
+                                                        if (customerCode) {
+                                                          fetchCustomerData(
+                                                            customerCode,
+                                                            month,
+                                                            selectedYear
+                                                          );
+                                                        }
+                                                      }
+                                                    }}
+                                                    data={[
+                                                      {
+                                                        value: "1",
+                                                        label: "January",
+                                                      },
+                                                      {
+                                                        value: "2",
+                                                        label: "February",
+                                                      },
+                                                      {
+                                                        value: "3",
+                                                        label: "March",
+                                                      },
+                                                      {
+                                                        value: "4",
+                                                        label: "April",
+                                                      },
+                                                      {
+                                                        value: "5",
+                                                        label: "May",
+                                                      },
+                                                      {
+                                                        value: "6",
+                                                        label: "June",
+                                                      },
+                                                      {
+                                                        value: "7",
+                                                        label: "July",
+                                                      },
+                                                      {
+                                                        value: "8",
+                                                        label: "August",
+                                                      },
+                                                      {
+                                                        value: "9",
+                                                        label: "September",
+                                                      },
+                                                      {
+                                                        value: "10",
+                                                        label: "October",
+                                                      },
+                                                      {
+                                                        value: "11",
+                                                        label: "November",
+                                                      },
+                                                      {
+                                                        value: "12",
+                                                        label: "December",
+                                                      },
+                                                    ]}
+                                                    styles={{
+                                                      input: {
+                                                        fontSize: 12,
+                                                        height: 30,
+                                                      },
+                                                      label: {
+                                                        fontSize: "12px",
+                                                        fontWeight: 500,
+                                                        color: "#495057",
+                                                      },
+                                                    }}
+                                                    w={120}
+                                                  />
+                                                  <Select
+                                                    size="xs"
+                                                    value={String(selectedYear)}
+                                                    onChange={(value) => {
+                                                      if (value) {
+                                                        const year = parseInt(
+                                                          value,
+                                                          10
+                                                        );
+                                                        setSelectedYear(year);
+                                                        const customerCode =
+                                                          customerForm.values
+                                                            .customer_code;
+                                                        if (customerCode) {
+                                                          fetchCustomerData(
+                                                            customerCode,
+                                                            selectedMonth,
+                                                            year
+                                                          );
+                                                        }
+                                                      }
+                                                    }}
+                                                    data={Array.from(
+                                                      { length: 10 },
+                                                      (_, i) => {
+                                                        const year =
+                                                          new Date().getFullYear() -
+                                                          9 +
+                                                          i;
+                                                        return {
+                                                          value: String(year),
+                                                          label: String(year),
+                                                        };
+                                                      }
+                                                    )}
+                                                    styles={{
+                                                      input: {
+                                                        fontSize: 12,
+                                                        height: 30,
+                                                      },
+                                                      label: {
+                                                        fontSize: "12px",
+                                                        fontWeight: 500,
+                                                        color: "#495057",
+                                                      },
+                                                    }}
+                                                    w={100}
+                                                  />
+                                                </Group>
+                                              </Group>
+                                            </Box>
+
+                                            {/* Revenue and Profit */}
+                                            <Group
+                                              justify="space-evenly"
+                                              mt={10}
+                                            >
+                                              {totalRevenue !== null && (
+                                                <Box
+                                                  style={{
+                                                    textAlign: "center",
+                                                  }}
+                                                >
+                                                  <Text
+                                                    size="xs"
+                                                    fw={600}
+                                                    c="#666"
+                                                    mb={6}
+                                                  >
+                                                    Total Revenue
+                                                  </Text>
+                                                  <Text
+                                                    size="sm"
+                                                    fw={500}
+                                                    c="#FF9800"
+                                                  >
+                                                    ₹
+                                                    {totalRevenue.toLocaleString(
+                                                      "en-IN"
+                                                    )}
+                                                  </Text>
+                                                </Box>
+                                              )}
+                                              {totalProfit !== null && (
+                                                <Box
+                                                  style={{
+                                                    textAlign: "center",
+                                                  }}
+                                                >
+                                                  <Text
+                                                    size="xs"
+                                                    fw={600}
+                                                    c="#666"
+                                                    mb={6}
+                                                  >
+                                                    Total Profit
+                                                  </Text>
+                                                  <Text
+                                                    size="sm"
+                                                    fw={500}
+                                                    c="#105476"
+                                                  >
+                                                    ₹
+                                                    {totalProfit.toLocaleString(
+                                                      "en-IN"
+                                                    )}
+                                                  </Text>
+                                                </Box>
+                                              )}
                                             </Group>
-                                            <Group>
-                                              <Select
-                                                size="xs"
-                                                value={String(selectedMonth)}
-                                                onChange={(value) => {
-                                                  if (value) {
-                                                    const month = parseInt(
-                                                      value,
-                                                      10
-                                                    );
-                                                    setSelectedMonth(month);
-                                                    const customerCode =
-                                                      customerForm.values
-                                                        .customer_code;
-                                                    if (customerCode) {
-                                                      fetchCustomerData(
-                                                        customerCode,
-                                                        month,
-                                                        selectedYear
-                                                      );
-                                                    }
-                                                  }
-                                                }}
-                                                data={[
-                                                  {
-                                                    value: "1",
-                                                    label: "January",
-                                                  },
-                                                  {
-                                                    value: "2",
-                                                    label: "February",
-                                                  },
-                                                  {
-                                                    value: "3",
-                                                    label: "March",
-                                                  },
-                                                  {
-                                                    value: "4",
-                                                    label: "April",
-                                                  },
-                                                  { value: "5", label: "May" },
-                                                  { value: "6", label: "June" },
-                                                  { value: "7", label: "July" },
-                                                  {
-                                                    value: "8",
-                                                    label: "August",
-                                                  },
-                                                  {
-                                                    value: "9",
-                                                    label: "September",
-                                                  },
-                                                  {
-                                                    value: "10",
-                                                    label: "October",
-                                                  },
-                                                  {
-                                                    value: "11",
-                                                    label: "November",
-                                                  },
-                                                  {
-                                                    value: "12",
-                                                    label: "December",
-                                                  },
-                                                ]}
-                                                styles={{
-                                                  input: {
-                                                    fontSize: 12,
-                                                    height: 30,
-                                                  },
-                                                  label: {
-                                                    fontSize: "12px",
-                                                    fontWeight: 500,
-                                                    color: "#495057",
-                                                  },
-                                                }}
-                                                w={120}
-                                              />
-                                              <Select
-                                                size="xs"
-                                                value={String(selectedYear)}
-                                                onChange={(value) => {
-                                                  if (value) {
-                                                    const year = parseInt(
-                                                      value,
-                                                      10
-                                                    );
-                                                    setSelectedYear(year);
-                                                    const customerCode =
-                                                      customerForm.values
-                                                        .customer_code;
-                                                    if (customerCode) {
-                                                      fetchCustomerData(
-                                                        customerCode,
-                                                        selectedMonth,
-                                                        year
-                                                      );
-                                                    }
-                                                  }
-                                                }}
-                                                data={Array.from(
-                                                  { length: 10 },
-                                                  (_, i) => {
-                                                    const year =
-                                                      new Date().getFullYear() -
-                                                      9 +
-                                                      i;
-                                                    return {
-                                                      value: String(year),
-                                                      label: String(year),
-                                                    };
-                                                  }
-                                                )}
-                                                styles={{
-                                                  input: {
-                                                    fontSize: 12,
-                                                    height: 30,
-                                                  },
-                                                  label: {
-                                                    fontSize: "12px",
-                                                    fontWeight: 500,
-                                                    color: "#495057",
-                                                  },
-                                                }}
-                                                w={100}
-                                              />
-                                            </Group>
-                                          </Group>
-                                        </Box>
-
-                                        {/* Revenue and Profit */}
-                                        <Group justify="space-evenly" mt={10}>
-                                          {totalRevenue !== null && (
-                                            <Box
-                                              style={{ textAlign: "center" }}
-                                            >
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={6}
-                                              >
-                                                Total Revenue
-                                              </Text>
-                                              <Text
-                                                size="sm"
-                                                fw={500}
-                                                c="#FF9800"
-                                              >
-                                                ₹
-                                                {totalRevenue.toLocaleString(
-                                                  "en-IN"
-                                                )}
-                                              </Text>
-                                            </Box>
-                                          )}
-                                          {totalProfit !== null && (
-                                            <Box
-                                              style={{ textAlign: "center" }}
-                                            >
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={6}
-                                              >
-                                                Total Profit
-                                              </Text>
-                                              <Text
-                                                size="sm"
-                                                fw={500}
-                                                c="#105476"
-                                              >
-                                                ₹
-                                                {totalProfit.toLocaleString(
-                                                  "en-IN"
-                                                )}
-                                              </Text>
-                                            </Box>
-                                          )}
-                                        </Group>
-                                      </Stack>
-                                    </Card>
-                                  </Grid.Col>
-                                )}
-                              </Grid>
-                            </Box>
-                          )}
-
-                          {/* Quotations Section */}
-                          <Box>
-                            <Text
-                              size="lg"
-                              fw={700}
-                              mb="md"
-                              c="#105476"
-                              style={{
-                                paddingBottom: "6px",
-                              }}
-                            >
-                              📋 Recent Quotations
-                            </Text>
-                            {customerQuotationData.length > 0 ? (
-                              <Grid gutter="md">
-                                {customerQuotationData.map(
-                                  (quotation: QuotationData) => (
-                                    <Grid.Col
-                                      key={quotation.id}
-                                      span={{ base: 12, sm: 6, md: 4 }}
-                                    >
-                                      <Card
-                                        shadow="sm"
-                                        padding="md"
-                                        radius="md"
-                                        withBorder
-                                        style={{
-                                          border: "1px solid #e9ecef",
-                                          backgroundColor: "#ffffff",
-                                          transition: "all 0.2s ease",
-                                          height: "100%",
-                                        }}
-                                      >
-                                        <Stack gap="sm">
-                                          <Group
-                                            justify="space-between"
-                                            align="center"
-                                          >
-                                            <Text
-                                              size="sm"
-                                              fw={600}
-                                              c="#105476"
-                                            >
-                                              {quotation.enquiry_received_date
-                                                ? dayjs(
-                                                    quotation.enquiry_received_date
-                                                  ).format("DD/MM/YYYY")
-                                                : "-"}
-                                            </Text>
-                                            <Text size="xs" c="dimmed">
-                                              {quotation.service || "-"}
-                                            </Text>
-                                          </Group>
-                                          <Group gap="sm">
-                                            <Box style={{ flex: 1 }}>
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={2}
-                                              >
-                                                Origin
-                                              </Text>
-                                              <Text
-                                                size="sm"
-                                                fw={500}
-                                                c="#333"
-                                                truncate
-                                              >
-                                                {quotation.origin_name || "-"}
-                                              </Text>
-                                            </Box>
-                                            <Box style={{ flex: 1 }}>
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={2}
-                                              >
-                                                Destination
-                                              </Text>
-                                              <Text
-                                                size="sm"
-                                                fw={500}
-                                                c="#333"
-                                                truncate
-                                              >
-                                                {quotation.destination_name ||
-                                                  "-"}
-                                              </Text>
-                                            </Box>
-                                          </Group>
-                                          <Group
-                                            justify="space-between"
-                                            align="center"
-                                          >
-                                            <Text size="xs" fw={600} c="#666">
-                                              Status:
-                                            </Text>
-                                            <Text
-                                              size="sm"
-                                              fw={500}
-                                              c="#28a745"
-                                            >
-                                              {quotation.status || "-"}
-                                            </Text>
-                                          </Group>
-                                        </Stack>
-                                      </Card>
-                                    </Grid.Col>
-                                  )
-                                )}
-                              </Grid>
-                            ) : (
-                              <Card
-                                shadow="sm"
-                                padding="md"
-                                radius="md"
-                                withBorder
-                                style={{ backgroundColor: "#f8f9fa" }}
-                              >
-                                <Box ta="center" py="sm">
-                                  <Text c="dimmed" size="sm">
-                                    No quotations found for this customer
-                                  </Text>
+                                          </Stack>
+                                        </Card>
+                                      </Grid.Col>
+                                    )}
+                                  </Grid>
                                 </Box>
-                              </Card>
-                            )}
-                          </Box>
+                              )}
 
-                          {/* Shipments Section */}
-                          <Box>
-                            <Text
-                              size="lg"
-                              fw={700}
-                              mb="md"
-                              c="#105476"
-                              style={{
-                                paddingBottom: "6px",
-                              }}
-                            >
-                              📦 Recent Shipments
-                            </Text>
-                            {shipmentData.length > 0 ? (
-                              <Grid gutter="md">
-                                {shipmentData.map((shipment, index) => (
-                                  <Grid.Col
-                                    key={index}
-                                    span={{ base: 12, sm: 6, md: 4 }}
-                                  >
-                                    <Card
-                                      shadow="sm"
-                                      padding="md"
-                                      radius="md"
-                                      withBorder
-                                      style={{
-                                        border: "1px solid #e9ecef",
-                                        backgroundColor: "#ffffff",
-                                        height: "100%",
-                                      }}
-                                    >
-                                      <Stack gap="sm">
-                                        <Group
-                                          justify="space-between"
-                                          align="center"
+                              {/* Quotations Section */}
+                              <Box>
+                                <Text
+                                  size="lg"
+                                  fw={700}
+                                  mb="md"
+                                  c="#105476"
+                                  style={{
+                                    paddingBottom: "6px",
+                                  }}
+                                >
+                                  📋 Recent Quotations
+                                </Text>
+                                {customerQuotationData.length > 0 ? (
+                                  <Grid gutter="md">
+                                    {customerQuotationData.map(
+                                      (quotation: QuotationData) => (
+                                        <Grid.Col
+                                          key={quotation.id}
+                                          span={{ base: 12, sm: 6, md: 4 }}
                                         >
-                                          <Text size="sm" fw={600} c="#105476">
-                                            {shipment.customer_name || "-"}
-                                          </Text>
-                                        </Group>
-                                        <Group gap="sm">
-                                          <Box style={{ flex: 1 }}>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={2}
-                                            >
-                                              Booking No
-                                            </Text>
-                                            <Text size="sm" fw={500} c="#333">
-                                              {shipment.booking_no || "-"}
-                                            </Text>
-                                          </Box>
-                                        </Group>
-                                      </Stack>
-                                    </Card>
-                                  </Grid.Col>
-                                ))}
-                              </Grid>
-                            ) : (
-                              <Card
-                                shadow="sm"
-                                padding="md"
-                                radius="md"
-                                withBorder
-                                style={{ backgroundColor: "#f8f9fa" }}
-                              >
-                                <Box ta="center" py="sm">
-                                  <Text c="dimmed" size="sm">
-                                    No shipments found for this customer
-                                  </Text>
-                                </Box>
-                              </Card>
-                            )}
-                          </Box>
-
-                          {/* Call Entries Section */}
-                          <Box>
-                            <Text
-                              size="lg"
-                              fw={700}
-                              mb="md"
-                              c="#105476"
-                              style={{
-                                paddingBottom: "6px",
-                              }}
-                            >
-                              📞 Recent Call Entries
-                            </Text>
-                            {callEntryData.length > 0 ? (
-                              <Grid gutter="md">
-                                {callEntryData.map((callEntry) => (
-                                  <Grid.Col
-                                    key={callEntry.id}
-                                    span={{ base: 12, sm: 6, md: 4 }}
-                                  >
-                                    <Card
-                                      shadow="sm"
-                                      padding="md"
-                                      radius="md"
-                                      withBorder
-                                      style={{
-                                        border: "1px solid #e9ecef",
-                                        backgroundColor: "#ffffff",
-                                        height: "100%",
-                                      }}
-                                    >
-                                      <Stack gap="sm">
-                                        <Group
-                                          justify="space-between"
-                                          align="center"
-                                        >
-                                          <Text size="sm" fw={600} c="#105476">
-                                            {callEntry.call_date
-                                              ? dayjs(
-                                                  callEntry.call_date
-                                                ).format("DD/MM/YYYY")
-                                              : "-"}
-                                          </Text>
-                                          <Text size="xs" c="dimmed">
-                                            {callEntry.call_mode || "-"}
-                                          </Text>
-                                        </Group>
-                                        <Box>
-                                          <Text
-                                            size="xs"
-                                            fw={600}
-                                            c="#666"
-                                            mb={2}
-                                          >
-                                            Call Summary
-                                          </Text>
-                                          <Text
-                                            size="sm"
-                                            fw={500}
-                                            c="#333"
+                                          <Card
+                                            shadow="sm"
+                                            padding="md"
+                                            radius="md"
+                                            withBorder
                                             style={{
-                                              display: "-webkit-box",
-                                              WebkitLineClamp: 2,
-                                              WebkitBoxOrient: "vertical",
-                                              overflow: "hidden",
-                                              lineHeight: "1.4",
+                                              border: "1px solid #e9ecef",
+                                              backgroundColor: "#ffffff",
+                                              transition: "all 0.2s ease",
+                                              height: "100%",
                                             }}
                                           >
-                                            {callEntry.call_summary || "-"}
-                                          </Text>
-                                        </Box>
-                                      </Stack>
-                                    </Card>
-                                  </Grid.Col>
-                                ))}
-                              </Grid>
-                            ) : (
-                              <Card
-                                shadow="sm"
-                                padding="md"
-                                radius="md"
-                                withBorder
-                                style={{ backgroundColor: "#f8f9fa" }}
-                              >
-                                <Box ta="center" py="sm">
-                                  <Text c="dimmed" size="sm">
-                                    No call entries found for this customer
-                                  </Text>
-                                </Box>
-                              </Card>
-                            )}
-                          </Box>
-
-                          {/* Potential Profiling Section */}
-                          <Box>
-                            <Text
-                              size="lg"
-                              fw={700}
-                              mb="md"
-                              c="#105476"
-                              style={{
-                                paddingBottom: "6px",
-                              }}
-                            >
-                              🎯 Potential Profiling
-                            </Text>
-                            {potentialProfilingData.length > 0 ? (
-                              <Grid gutter="md">
-                                {potentialProfilingData.map((profile) => (
-                                  <Grid.Col
-                                    key={profile.id}
-                                    span={{ base: 12, sm: 6, md: 4 }}
+                                            <Stack gap="sm">
+                                              <Group
+                                                justify="space-between"
+                                                align="center"
+                                              >
+                                                <Text
+                                                  size="sm"
+                                                  fw={600}
+                                                  c="#105476"
+                                                >
+                                                  {quotation.enquiry_received_date
+                                                    ? dayjs(
+                                                        quotation.enquiry_received_date
+                                                      ).format("DD/MM/YYYY")
+                                                    : "-"}
+                                                </Text>
+                                                <Text size="xs" c="dimmed">
+                                                  {quotation.service || "-"}
+                                                </Text>
+                                              </Group>
+                                              <Group gap="sm">
+                                                <Box style={{ flex: 1 }}>
+                                                  <Text
+                                                    size="xs"
+                                                    fw={600}
+                                                    c="#666"
+                                                    mb={2}
+                                                  >
+                                                    Origin
+                                                  </Text>
+                                                  <Text
+                                                    size="sm"
+                                                    fw={500}
+                                                    c="#333"
+                                                    truncate
+                                                  >
+                                                    {quotation.origin_name ||
+                                                      "-"}
+                                                  </Text>
+                                                </Box>
+                                                <Box style={{ flex: 1 }}>
+                                                  <Text
+                                                    size="xs"
+                                                    fw={600}
+                                                    c="#666"
+                                                    mb={2}
+                                                  >
+                                                    Destination
+                                                  </Text>
+                                                  <Text
+                                                    size="sm"
+                                                    fw={500}
+                                                    c="#333"
+                                                    truncate
+                                                  >
+                                                    {quotation.destination_name ||
+                                                      "-"}
+                                                  </Text>
+                                                </Box>
+                                              </Group>
+                                              <Group
+                                                justify="space-between"
+                                                align="center"
+                                              >
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                >
+                                                  Status:
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#28a745"
+                                                >
+                                                  {quotation.status || "-"}
+                                                </Text>
+                                              </Group>
+                                            </Stack>
+                                          </Card>
+                                        </Grid.Col>
+                                      )
+                                    )}
+                                  </Grid>
+                                ) : (
+                                  <Card
+                                    shadow="sm"
+                                    padding="md"
+                                    radius="md"
+                                    withBorder
+                                    style={{ backgroundColor: "#f8f9fa" }}
                                   >
-                                    <Card
-                                      shadow="sm"
-                                      padding="md"
-                                      radius="md"
-                                      withBorder
-                                      style={{
-                                        border: "1px solid #e9ecef",
-                                        backgroundColor: "#ffffff",
-                                        height: "100%",
-                                      }}
-                                    >
-                                      <Stack gap="sm">
-                                        <Group
-                                          justify="space-between"
-                                          align="center"
+                                    <Box ta="center" py="sm">
+                                      <Text c="dimmed" size="sm">
+                                        No quotations found for this customer
+                                      </Text>
+                                    </Box>
+                                  </Card>
+                                )}
+                              </Box>
+
+                              {/* Shipments Section */}
+                              <Box>
+                                <Text
+                                  size="lg"
+                                  fw={700}
+                                  mb="md"
+                                  c="#105476"
+                                  style={{
+                                    paddingBottom: "6px",
+                                  }}
+                                >
+                                  📦 Recent Shipments
+                                </Text>
+                                {shipmentData.length > 0 ? (
+                                  <Grid gutter="md">
+                                    {shipmentData.map((shipment, index) => (
+                                      <Grid.Col
+                                        key={index}
+                                        span={{ base: 12, sm: 6, md: 4 }}
+                                      >
+                                        <Card
+                                          shadow="sm"
+                                          padding="md"
+                                          radius="md"
+                                          withBorder
+                                          style={{
+                                            border: "1px solid #e9ecef",
+                                            backgroundColor: "#ffffff",
+                                            height: "100%",
+                                          }}
                                         >
-                                          <Text size="sm" fw={600} c="#105476">
-                                            {profile.service || "-"}
-                                          </Text>
-                                        </Group>
-                                        <Group gap="sm">
-                                          <Box style={{ flex: 1 }}>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={2}
+                                          <Stack gap="sm">
+                                            <Group
+                                              justify="space-between"
+                                              align="center"
                                             >
-                                              Origin
-                                            </Text>
-                                            <Text
-                                              size="sm"
-                                              fw={500}
-                                              c="#333"
-                                              truncate
-                                            >
-                                              {profile.origin_port_name || "-"}
-                                            </Text>
-                                          </Box>
-                                          <Box style={{ flex: 1 }}>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={2}
-                                            >
-                                              Destination
-                                            </Text>
-                                            <Text
-                                              size="sm"
-                                              fw={500}
-                                              c="#333"
-                                              truncate
-                                            >
-                                              {profile.destination_port_name ||
-                                                "-"}
-                                            </Text>
-                                          </Box>
-                                        </Group>
-                                        <Group gap="sm">
-                                          <Box style={{ flex: 1 }}>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={2}
-                                            >
-                                              No. of Shipments
-                                            </Text>
-                                            <Text size="sm" fw={500} c="#333">
-                                              {profile.no_of_shipments || "-"}
-                                            </Text>
-                                          </Box>
-                                          <Box style={{ flex: 1 }}>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={2}
-                                            >
-                                              Frequency
-                                            </Text>
-                                            <Text size="sm" fw={500} c="#333">
-                                              {profile.frequency_name || "-"}
-                                            </Text>
-                                          </Box>
-                                        </Group>
-                                        <Group gap="sm">
-                                          <Box style={{ flex: 1 }}>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={2}
-                                            >
-                                              Volume
-                                            </Text>
-                                            <Text size="sm" fw={500} c="#333">
-                                              {profile.volume || "-"}
-                                            </Text>
-                                          </Box>
-                                          <Box style={{ flex: 1 }}>
-                                            <Text
-                                              size="xs"
-                                              fw={600}
-                                              c="#666"
-                                              mb={2}
-                                            >
-                                              Potential Profit
-                                            </Text>
-                                            <Text
-                                              size="sm"
-                                              fw={500}
-                                              c="#105476"
-                                            >
-                                              ₹
-                                              {profile.potential_profit?.toLocaleString(
-                                                "en-IN"
-                                              ) || "-"}
-                                            </Text>
-                                          </Box>
-                                        </Group>
-                                      </Stack>
-                                    </Card>
-                                  </Grid.Col>
-                                ))}
-                              </Grid>
-                            ) : (
-                              <Card
-                                shadow="sm"
-                                padding="md"
-                                radius="md"
-                                withBorder
-                                style={{ backgroundColor: "#f8f9fa" }}
-                              >
-                                <Box ta="center" py="sm">
-                                  <Text c="dimmed" size="sm">
-                                    No potential profiling data found for this
-                                    customer
-                                  </Text>
-                                </Box>
-                              </Card>
-                            )}
-                          </Box>
-                        </Stack>
-                      )}
-                    </Drawer>
-                  </Grid.Col>
+                                              <Text
+                                                size="sm"
+                                                fw={600}
+                                                c="#105476"
+                                              >
+                                                {shipment.customer_name || "-"}
+                                              </Text>
+                                            </Group>
+                                            <Group gap="sm">
+                                              <Box style={{ flex: 1 }}>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={2}
+                                                >
+                                                  Booking No
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#333"
+                                                >
+                                                  {shipment.booking_no || "-"}
+                                                </Text>
+                                              </Box>
+                                            </Group>
+                                          </Stack>
+                                        </Card>
+                                      </Grid.Col>
+                                    ))}
+                                  </Grid>
+                                ) : (
+                                  <Card
+                                    shadow="sm"
+                                    padding="md"
+                                    radius="md"
+                                    withBorder
+                                    style={{ backgroundColor: "#f8f9fa" }}
+                                  >
+                                    <Box ta="center" py="sm">
+                                      <Text c="dimmed" size="sm">
+                                        No shipments found for this customer
+                                      </Text>
+                                    </Box>
+                                  </Card>
+                                )}
+                              </Box>
 
-                  <Grid.Col span={6}>
-                    <Box
-                      // maw={300}
-                      mx="auto"
-                    >
-                      <DateInput
-                        label="Enquiry Received Date"
-                        withAsterisk
-                        placeholder="YYYY-MM-DD"
-                        key={customerForm.key("enquiry_received_date")}
-                        value={
-                          customerForm.values.enquiry_received_date
-                            ? dayjs(
-                                customerForm.values.enquiry_received_date
-                              ).toDate()
-                            : new Date()
-                        }
-                        onChange={(date) => {
-                          const formatted = date
-                            ? dayjs(date).format("YYYY-MM-DD")
-                            : "";
-                          customerForm.setFieldValue(
-                            "enquiry_received_date",
-                            formatted
-                          );
-                        }}
-                        error={customerForm.errors.enquiry_received_date}
-                        valueFormat="YYYY-MM-DD"
-                        leftSection={<IconCalendar size={18} />}
-                        leftSectionPointerEvents="none"
-                        radius="sm"
-                        size="sm"
-                        nextIcon={<IconChevronRight size={16} />}
-                        previousIcon={<IconChevronLeft size={16} />}
-                        styles={{
-                          input: {
-                            height: "36px",
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                          label: {
-                            fontSize: "13px",
-                            fontWeight: 500,
-                            color: "#424242",
-                            marginBottom: "4px",
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                          day: {
-                            width: "2.25rem",
-                            height: "2.25rem",
-                            fontSize: "0.9rem",
-                          },
-                          calendarHeaderLevel: {
-                            fontSize: "1rem",
-                            fontWeight: 500,
-                            marginBottom: "0.5rem",
-                            flex: 1,
-                            textAlign: "center",
-                          },
-                          calendarHeaderControl: {
-                            width: "2rem",
-                            height: "2rem",
-                            margin: "0 0.5rem",
-                          },
-                          calendarHeader: {
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "0.5rem",
-                          },
-                        }}
-                      />
-                    </Box>
-                  </Grid.Col>
-                  <Grid.Col span={6}>
-                    <Dropdown
-                      label="Sales Person"
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },  
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                      }}
-                      key={customerForm.key("sales_person")}
-                      withAsterisk
-                      placeholder="Select Salesperson"
-                      searchable
-                      data={salespersonsData}
-                      nothingFoundMessage="No salespersons found"
-                      {...customerForm.getInputProps("sales_person")}
-                      onChange={(value) => {
-                        customerForm.setFieldValue("sales_person", value || "");
+                              {/* Call Entries Section */}
+                              <Box>
+                                <Text
+                                  size="lg"
+                                  fw={700}
+                                  mb="md"
+                                  c="#105476"
+                                  style={{
+                                    paddingBottom: "6px",
+                                  }}
+                                >
+                                  📞 Recent Call Entries
+                                </Text>
+                                {callEntryData.length > 0 ? (
+                                  <Grid gutter="md">
+                                    {callEntryData.map((callEntry) => (
+                                      <Grid.Col
+                                        key={callEntry.id}
+                                        span={{ base: 12, sm: 6, md: 4 }}
+                                      >
+                                        <Card
+                                          shadow="sm"
+                                          padding="md"
+                                          radius="md"
+                                          withBorder
+                                          style={{
+                                            border: "1px solid #e9ecef",
+                                            backgroundColor: "#ffffff",
+                                            height: "100%",
+                                          }}
+                                        >
+                                          <Stack gap="sm">
+                                            <Group
+                                              justify="space-between"
+                                              align="center"
+                                            >
+                                              <Text
+                                                size="sm"
+                                                fw={600}
+                                                c="#105476"
+                                              >
+                                                {callEntry.call_date
+                                                  ? dayjs(
+                                                      callEntry.call_date
+                                                    ).format("DD/MM/YYYY")
+                                                  : "-"}
+                                              </Text>
+                                              <Text size="xs" c="dimmed">
+                                                {callEntry.call_mode || "-"}
+                                              </Text>
+                                            </Group>
+                                            <Box>
+                                              <Text
+                                                size="xs"
+                                                fw={600}
+                                                c="#666"
+                                                mb={2}
+                                              >
+                                                Call Summary
+                                              </Text>
+                                              <Text
+                                                size="sm"
+                                                fw={500}
+                                                c="#333"
+                                                style={{
+                                                  display: "-webkit-box",
+                                                  WebkitLineClamp: 2,
+                                                  WebkitBoxOrient: "vertical",
+                                                  overflow: "hidden",
+                                                  lineHeight: "1.4",
+                                                }}
+                                              >
+                                                {callEntry.call_summary || "-"}
+                                              </Text>
+                                            </Box>
+                                          </Stack>
+                                        </Card>
+                                      </Grid.Col>
+                                    ))}
+                                  </Grid>
+                                ) : (
+                                  <Card
+                                    shadow="sm"
+                                    padding="md"
+                                    radius="md"
+                                    withBorder
+                                    style={{ backgroundColor: "#f8f9fa" }}
+                                  >
+                                    <Box ta="center" py="sm">
+                                      <Text c="dimmed" size="sm">
+                                        No call entries found for this customer
+                                      </Text>
+                                    </Box>
+                                  </Card>
+                                )}
+                              </Box>
 
-                        // Auto-fill sales coordinator and customer service based on selected sales person
-                        if (value) {
-                          const selectedSalesperson = salespersonsData.find(
-                            (person: {
-                              value: string;
-                              sales_coordinator: string;
-                              customer_service: string;
-                            }) => person.value === value
-                          );
-                          if (selectedSalesperson) {
+                              {/* Potential Profiling Section */}
+                              <Box>
+                                <Text
+                                  size="lg"
+                                  fw={700}
+                                  mb="md"
+                                  c="#105476"
+                                  style={{
+                                    paddingBottom: "6px",
+                                  }}
+                                >
+                                  🎯 Potential Profiling
+                                </Text>
+                                {potentialProfilingData.length > 0 ? (
+                                  <Grid gutter="md">
+                                    {potentialProfilingData.map((profile) => (
+                                      <Grid.Col
+                                        key={profile.id}
+                                        span={{ base: 12, sm: 6, md: 4 }}
+                                      >
+                                        <Card
+                                          shadow="sm"
+                                          padding="md"
+                                          radius="md"
+                                          withBorder
+                                          style={{
+                                            border: "1px solid #e9ecef",
+                                            backgroundColor: "#ffffff",
+                                            height: "100%",
+                                          }}
+                                        >
+                                          <Stack gap="sm">
+                                            <Group
+                                              justify="space-between"
+                                              align="center"
+                                            >
+                                              <Text
+                                                size="sm"
+                                                fw={600}
+                                                c="#105476"
+                                              >
+                                                {profile.service || "-"}
+                                              </Text>
+                                            </Group>
+                                            <Group gap="sm">
+                                              <Box style={{ flex: 1 }}>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={2}
+                                                >
+                                                  Origin
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#333"
+                                                  truncate
+                                                >
+                                                  {profile.origin_port_name ||
+                                                    "-"}
+                                                </Text>
+                                              </Box>
+                                              <Box style={{ flex: 1 }}>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={2}
+                                                >
+                                                  Destination
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#333"
+                                                  truncate
+                                                >
+                                                  {profile.destination_port_name ||
+                                                    "-"}
+                                                </Text>
+                                              </Box>
+                                            </Group>
+                                            <Group gap="sm">
+                                              <Box style={{ flex: 1 }}>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={2}
+                                                >
+                                                  No. of Shipments
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#333"
+                                                >
+                                                  {profile.no_of_shipments ||
+                                                    "-"}
+                                                </Text>
+                                              </Box>
+                                              <Box style={{ flex: 1 }}>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={2}
+                                                >
+                                                  Frequency
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#333"
+                                                >
+                                                  {profile.frequency_name ||
+                                                    "-"}
+                                                </Text>
+                                              </Box>
+                                            </Group>
+                                            <Group gap="sm">
+                                              <Box style={{ flex: 1 }}>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={2}
+                                                >
+                                                  Volume
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#333"
+                                                >
+                                                  {profile.volume || "-"}
+                                                </Text>
+                                              </Box>
+                                              <Box style={{ flex: 1 }}>
+                                                <Text
+                                                  size="xs"
+                                                  fw={600}
+                                                  c="#666"
+                                                  mb={2}
+                                                >
+                                                  Potential Profit
+                                                </Text>
+                                                <Text
+                                                  size="sm"
+                                                  fw={500}
+                                                  c="#105476"
+                                                >
+                                                  ₹
+                                                  {profile.potential_profit?.toLocaleString(
+                                                    "en-IN"
+                                                  ) || "-"}
+                                                </Text>
+                                              </Box>
+                                            </Group>
+                                          </Stack>
+                                        </Card>
+                                      </Grid.Col>
+                                    ))}
+                                  </Grid>
+                                ) : (
+                                  <Card
+                                    shadow="sm"
+                                    padding="md"
+                                    radius="md"
+                                    withBorder
+                                    style={{ backgroundColor: "#f8f9fa" }}
+                                  >
+                                    <Box ta="center" py="sm">
+                                      <Text c="dimmed" size="sm">
+                                        No potential profiling data found for
+                                        this customer
+                                      </Text>
+                                    </Box>
+                                  </Card>
+                                )}
+                              </Box>
+                            </Stack>
+                          )}
+                        </Drawer>
+                      </Grid.Col>
+
+                      <Grid.Col span={6}>
+                        <Box
+                          // maw={300}
+                          mx="auto"
+                        >
+                          <DateInput
+                            label="Enquiry Received Date"
+                            withAsterisk
+                            placeholder="YYYY-MM-DD"
+                            key={customerForm.key("enquiry_received_date")}
+                            value={
+                              customerForm.values.enquiry_received_date
+                                ? dayjs(
+                                    customerForm.values.enquiry_received_date
+                                  ).toDate()
+                                : new Date()
+                            }
+                            onChange={(date) => {
+                              const formatted = date
+                                ? dayjs(date).format("YYYY-MM-DD")
+                                : "";
+                              customerForm.setFieldValue(
+                                "enquiry_received_date",
+                                formatted
+                              );
+                            }}
+                            error={customerForm.errors.enquiry_received_date}
+                            valueFormat="YYYY-MM-DD"
+                            leftSection={<IconCalendar size={18} />}
+                            leftSectionPointerEvents="none"
+                            radius="sm"
+                            size="sm"
+                            nextIcon={<IconChevronRight size={16} />}
+                            previousIcon={<IconChevronLeft size={16} />}
+                            styles={{
+                              input: {
+                                height: "36px",
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                fontStyle: "medium",
+                              },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                                fontStyle: "medium",
+                              },
+                              day: {
+                                width: "2.25rem",
+                                height: "2.25rem",
+                                fontSize: "0.9rem",
+                              },
+                              calendarHeaderLevel: {
+                                fontSize: "1rem",
+                                fontWeight: 500,
+                                marginBottom: "0.5rem",
+                                flex: 1,
+                                textAlign: "center",
+                              },
+                              calendarHeaderControl: {
+                                width: "2rem",
+                                height: "2rem",
+                                margin: "0 0.5rem",
+                              },
+                              calendarHeader: {
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "0.5rem",
+                              },
+                            }}
+                          />
+                        </Box>
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <Dropdown
+                          label="Sales Person"
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          key={customerForm.key("sales_person")}
+                          withAsterisk
+                          placeholder="Select Salesperson"
+                          searchable
+                          data={salespersonsData}
+                          nothingFoundMessage="No salespersons found"
+                          {...customerForm.getInputProps("sales_person")}
+                          onChange={(value) => {
+                            customerForm.setFieldValue(
+                              "sales_person",
+                              value || ""
+                            );
+
+                            // Auto-fill sales coordinator and customer service based on selected sales person
+                            if (value) {
+                              const selectedSalesperson = salespersonsData.find(
+                                (person: {
+                                  value: string;
+                                  sales_coordinator: string;
+                                  customer_service: string;
+                                }) => person.value === value
+                              );
+                              if (selectedSalesperson) {
+                                customerForm.setFieldValue(
+                                  "sales_coordinator",
+                                  selectedSalesperson.sales_coordinator || ""
+                                );
+                                customerForm.setFieldValue(
+                                  "customer_services",
+                                  selectedSalesperson.customer_service || ""
+                                );
+                              }
+                            } else {
+                              // Clear fields if no salesperson selected
+                              customerForm.setFieldValue(
+                                "sales_coordinator",
+                                ""
+                              );
+                              customerForm.setFieldValue(
+                                "customer_services",
+                                ""
+                              );
+                            }
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Sales Co-ordinator"
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          key={customerForm.key("sales_coordinator")}
+                          value={customerForm.values.sales_coordinator}
+                          onChange={(e) => {
+                            const formattedValue = toTitleCase(e.target.value);
                             customerForm.setFieldValue(
                               "sales_coordinator",
-                              selectedSalesperson.sales_coordinator || ""
+                              formattedValue
                             );
+                          }}
+                          error={customerForm.errors.sales_coordinator}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Customer Service"
+                          key={customerForm.key("customer_services")}
+                          value={customerForm.values.customer_services}
+                          onChange={(e) => {
+                            const formattedValue = toTitleCase(e.target.value);
                             customerForm.setFieldValue(
                               "customer_services",
-                              selectedSalesperson.customer_service || ""
+                              formattedValue
                             );
-                          }
-                        } else {
-                          // Clear fields if no salesperson selected
-                          customerForm.setFieldValue("sales_coordinator", "");
-                          customerForm.setFieldValue("customer_services", "");
-                        }
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={6}>
-                    <TextInput
-                      label="Sales Co-ordinator"
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                      }}
-                      key={customerForm.key("sales_coordinator")}
-                      value={customerForm.values.sales_coordinator}
-                      onChange={(e) => {
-                        const formattedValue = toTitleCase(e.target.value);
-                        customerForm.setFieldValue(
-                          "sales_coordinator",
-                          formattedValue
-                        );
-                      }}
-                      error={customerForm.errors.sales_coordinator}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={6}>
-                    <TextInput
-                      label="Customer Service"
-                      key={customerForm.key("customer_services")}
-                      value={customerForm.values.customer_services}
-                      onChange={(e) => {
-                        const formattedValue = toTitleCase(e.target.value);
-                        customerForm.setFieldValue(
-                          "customer_services",
-                          formattedValue
-                        );
-                      }}
-                      error={customerForm.errors.customer_services}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={6}>
-                    <TextInput
-                      label="Reference No"
-                      key={customerForm.key("reference_no")}
-                      placeholder="Enter reference number"
-                      maxLength={100}
-                      {...customerForm.getInputProps("reference_no")}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                      }}
-
-                    />
-                  </Grid.Col>
-                  {/* Customer Address field is hidden in the new design */}
-                  {/* <Grid.Col span={6}>
+                          }}
+                          error={customerForm.errors.customer_services}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Reference No"
+                          key={customerForm.key("reference_no")}
+                          placeholder="Enter reference number"
+                          maxLength={100}
+                          {...customerForm.getInputProps("reference_no")}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                      {/* Customer Address field is hidden in the new design */}
+                      {/* <Grid.Col span={6}>
                     <TextInput
                       label="Customer Address"
                       key={customerForm.key("customer_address")}
@@ -4261,2806 +4613,3293 @@ function EnquiryCreate() {
                       error={customerForm.errors.customer_address}
                     />
                   </Grid.Col> */}
-                </Grid>
+                    </Grid>
+                  </Box>
 
-              </Box>
-                
-                {/* Buttons for Step 0 */}
-                <Box style={{ borderTop: "1px solid #e9ecef", padding: "20px 32px", backgroundColor: "#ffffff" }}>
-                  <Group justify="space-between">
-                    <Group gap="sm">
-                      <Button
-                        variant="outline"
-                        color="gray"
-                        size="sm"
-                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
-                        onClick={() => {
-                          // Restore filter state if preserved
-                          const preserveFilters = (location.state as any)
-                            ?.preserveFilters;
-                          // Check if we came from enquiry or quotation
-                          const fromEnquiry = (location.state as any)?.fromEnquiry;
-                          const actionType = (location.state as any)?.actionType;
+                  {/* Buttons for Step 0 */}
+                  <Box
+                    style={{
+                      borderTop: "1px solid #e9ecef",
+                      padding: "20px 32px",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    <Group justify="space-between">
+                      <Group gap="sm">
+                        <Button
+                          variant="outline"
+                          color="gray"
+                          size="sm"
+                          styles={{
+                            root: {
+                              borderColor: "#d0d0d0",
+                              color: "#666",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          onClick={() => {
+                            // Restore filter state if preserved
+                            const preserveFilters = (location.state as any)
+                              ?.preserveFilters;
+                            // Check if we came from enquiry or quotation
+                            const fromEnquiry = (location.state as any)
+                              ?.fromEnquiry;
+                            const actionType = (location.state as any)
+                              ?.actionType;
 
-                          // Navigate to the correct list based on source
-                          // If came from call entry (actionType === "createEnquiry"), go back to call entry list
-                          if (actionType === "createEnquiry") {
-                            // Came from call entry list, go back to call entry list
-                            if (preserveFilters) {
-                              navigate("/call-entry", {
-                                state: {
-                                  restoreFilters: preserveFilters,
-                                  refreshData: true,
-                                },
-                              });
-                            } else {
-                              navigate("/call-entry", {
-                                state: { refreshData: true },
-                              });
-                            }
-                          } else if (fromEnquiry || actionType === "edit") {
-                            // Came from enquiry list or editing enquiry, go back to enquiry list
-                            if (preserveFilters) {
-                              navigate("/enquiry", {
-                                state: {
-                                  restoreFilters: preserveFilters,
-                                  refreshData: true,
-                                },
-                              });
-                            } else {
-                              navigate("/enquiry", {
-                                state: { refreshData: true },
-                              });
-                            }
-                          } else {
-                            // Default: navigate to quotation list (from quotation or new)
-                            if (preserveFilters) {
-                              navigate("/quotation", {
-                                state: {
-                                  restoreFilters: preserveFilters,
-                                  refreshData: true,
-                                },
-                              });
-                            } else {
-                              navigate("/quotation", {
-                                state: { refreshData: true },
-                              });
-                            }
-                          }
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="outline"
-                        color="gray"
-                        size="sm"
-                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
-                        onClick={() => {
-                          customerForm.reset();
-                          setCustomerDisplayName(null);
-                          setSelectedCustomerName(null);
-                        }}
-                      >
-                        Clear all
-                      </Button>
-                    </Group>
-                    <Group gap="sm">
-                      <Button
-                        variant="outline"
-                        color="gray"
-                        size="sm"
-                        disabled
-                        styles={{ root: { borderColor: "#e0e0e0", color: "#999", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
-                      >
-                        Back
-                      </Button>
-                      <Button
-                        onClick={() => handleNext()}
-                        size="sm"
-                        style={{ backgroundColor: "#105476", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" }}
-                      >
-                        Next
-                      </Button>
-                    </Group>
-                  </Group>
-                </Box>
-
-              </>
-            )}
-
-            {active === 1 && (
-              <>
-                <Box style={{ flex: 1, overflowY: "auto", padding: "32px", paddingBottom: "16px", backgroundColor: "#F8F8F8" }}>
-                  {/* Service Details Section */}
-
-                  {/* Dynamic Service Details */}
-                  <Stack gap="lg" style={{ backgroundColor: "#F8F8F8" }}>
-                  {serviceForm.values.service_details.map(
-                    (serviceDetail, serviceIndex) => (
-                      <Box
-                        key={(serviceDetail as any).id || serviceIndex}
-                        style={{
-                          border: "1px solid #e9ecef",
-                          borderRadius: "8px",
-                          padding: "24px",
-                          backgroundColor: "#FFFFFF",
-                        }}
-                      >
-                        <Flex justify="space-between" align="center" mb="lg">
-                          <Text size="md" fw={600} c="#333" style={{ fontFamily: "Inter", fontStyle: "medium" , fontSize: "16px", color: "#22252B" }}>
-                            {`Service ${serviceIndex + 1}`}
-                          </Text>
-                          {serviceForm.values.service_details.length > 1 && (
-                            <Button
-                              variant="subtle"
-                              color="red"
-                              size="xs"
-                              p={0}
-                              styles={{ root: { minWidth: "auto", height: "auto" } }}
-                              onClick={() => {
-                                serviceForm.removeListItem(
-                                  "service_details",
-                                  serviceIndex
-                                );
-                              }}
-                            >
-                              <IconTrash size={20} color="#dc3545" />
-                            </Button>
-                          )}
-                        </Flex>
-
-                        <Grid>
-                          <Grid.Col span={6}>
-                            <Dropdown
-                              label="Service"
-                              styles={{
-                                input: {
-                                  fontSize: "13px",
-                                  fontFamily: "Inter",
-                                  height: "36px",
-                                },
-                                label: {
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                  marginBottom: "4px",
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                },
-                              }}
-
-                              searchable
-                              withAsterisk
-                              placeholder="Select Service"
-                              key={serviceForm.key(
-                                `service_details.${serviceIndex}.service`
-                              )}
-                              data={["AIR", "FCL", "LCL", "OTHERS"]}
-                              value={
-                                serviceForm.values.service_details[serviceIndex]
-                                  ?.service
-                              }
-                              onChange={(value) => {
-                                const previousService =
-                                  serviceForm.values.service_details[
-                                    serviceIndex
-                                  ]?.service;
-
-                                // Set the new service value
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.service`,
-                                  value || ""
-                                );
-
-                                // Clear service_code and service_name when service changes
-                                if (value !== "OTHERS") {
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.service_code`,
-                                    ""
-                                  );
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.service_name`,
-                                    ""
-                                  );
-                                } else {
-                                  // Clear trade when OTHERS is selected
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.trade`,
-                                    ""
-                                  );
-                                }
-
-                                // Reset last checked index when service changes
-                                setLastCheckedServiceIndex(null);
-
-                                // Check salesperson data if customer, service, and trade are all selected (only for non-OTHERS)
-                                if (value && value !== "OTHERS") {
-                                  setTimeout(() => {
-                                    const currentService = serviceForm.values.service_details[serviceIndex]?.service;
-                                    const currentTrade = serviceForm.values.service_details[serviceIndex]?.trade;
-                                    if (currentService && customerForm.values.customer_code && currentTrade) {
-                                      checkSalespersonData(serviceIndex);
-                                    }
-                                  }, 200);
-                                }
-
-                                // Clear cargo details when service changes
-                                if (previousService !== value && value) {
-                                  // Reset cargo_details to default empty state
-                                  const defaultCargoDetail = {
-                                    no_of_packages: null,
-                                    gross_weight: null,
-                                    volume_weight: null,
-                                    chargable_weight: null,
-                                    volume: null,
-                                    chargable_volume: null,
-                                    container_type_code: null,
-                                    no_of_containers: null,
-                                    hazardous_cargo: "No",
-                                    stackable: "Yes",
-                                  };
-
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.cargo_details`,
-                                    [defaultCargoDetail]
-                                  );
-
-                                  // Reset dimensions (AIR/LCL)
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.dimension_unit`,
-                                    "Centimeter"
-                                  );
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.diemensions`,
-                                    []
-                                  );
-
-                                  // Clear any validation errors for cargo details
-                                  serviceForm.clearFieldError(
-                                    `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
-                                  );
-                                  serviceForm.clearFieldError(
-                                    `service_details.${serviceIndex}.cargo_details.0.gross_weight`
-                                  );
-                                  serviceForm.clearFieldError(
-                                    `service_details.${serviceIndex}.cargo_details.0.volume_weight`
-                                  );
-                                  serviceForm.clearFieldError(
-                                    `service_details.${serviceIndex}.cargo_details.0.volume`
-                                  );
-                                  serviceForm.clearFieldError(
-                                    `service_details.${serviceIndex}.cargo_details.0.container_type_code`
-                                  );
-                                  serviceForm.clearFieldError(
-                                    `service_details.${serviceIndex}.cargo_details.0.no_of_containers`
-                                  );
-                                }
-                              }}
-                              error={
-                                serviceForm.errors[
-                                  `service_details.${serviceIndex}.service`
-                                ] as string
-                              }
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={6}>
-                            {serviceForm.values.service_details[serviceIndex]?.service === "OTHERS" ? (
-                              <Dropdown
-                                label="Service Name"
-                                styles={{
-                                  input: {
-                                    fontSize: "13px",
-                                    fontFamily: "Inter",
-                                    height: "36px",
+                            // Navigate to the correct list based on source
+                            // If came from call entry (actionType === "createEnquiry"), go back to call entry list
+                            if (actionType === "createEnquiry") {
+                              // Came from call entry list, go back to call entry list
+                              if (preserveFilters) {
+                                navigate("/call-entry", {
+                                  state: {
+                                    restoreFilters: preserveFilters,
+                                    refreshData: true,
                                   },
-                                  label: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                }}
-
-                                placeholder="Select Service Name"
-                                searchable
-                                withAsterisk
-                                key={serviceForm.key(
-                                  `service_details.${serviceIndex}.service_code`
-                                )}
-                                data={otherServicesData}
-                                value={serviceForm.values.service_details[serviceIndex]?.service_code || ""}
-                                onChange={(value) => {
-                                  const selectedService = otherServicesData.find(
-                                    (item) => item.value === value
-                                  );
-                                  
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.service_code`,
-                                    value || ""
-                                  );
-                                  
-                                  if (selectedService) {
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.service_name`,
-                                      selectedService.label || ""
-                                    );
-
-                                    // Determine cargo structure based on transport_mode and full_groupage
-                                    const transportMode = selectedService.transport_mode || "";
-                                    const fullGroupage = selectedService.full_groupage || "";
-                                    
-                                    let cargoStructure = "AIR"; // Default to AIR
-                                    if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                      cargoStructure = "FCL";
-                                    } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                      cargoStructure = "LCL";
-                                    }
-
-                                    // Reset cargo_details based on determined structure
-                                    if (cargoStructure === "FCL") {
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.cargo_details`,
-                                        [{
-                                          id: null,
-                                          no_of_packages: null,
-                                          gross_weight: null,
-                                          volume_weight: null,
-                                          chargable_weight: null,
-                                          volume: null,
-                                          chargable_volume: null,
-                                          container_type_code: null,
-                                          no_of_containers: null,
-                                          hazardous_cargo: "No",
-                                          stackable: "Yes",
-                                        }]
-                                      );
-                                      // Clear dimensions for FCL
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.dimension_unit`,
-                                        "Centimeter"
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.diemensions`,
-                                        []
-                                      );
-                                    } else if (cargoStructure === "LCL") {
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.cargo_details`,
-                                        [{
-                                          id: null,
-                                          no_of_packages: null,
-                                          gross_weight: null,
-                                          volume_weight: null,
-                                          chargable_weight: null,
-                                          volume: null,
-                                          chargable_volume: null,
-                                          container_type_code: null,
-                                          no_of_containers: null,
-                                          hazardous_cargo: "No",
-                                          stackable: "Yes",
-                                        }]
-                                      );
-                                      // Reset dimensions for LCL
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.dimension_unit`,
-                                        "Centimeter"
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.diemensions`,
-                                        []
-                                      );
-                                    } else {
-                                      // AIR structure
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.cargo_details`,
-                                        [{
-                                          id: null,
-                                          no_of_packages: null,
-                                          gross_weight: null,
-                                          volume_weight: null,
-                                          chargable_weight: null,
-                                          volume: null,
-                                          chargable_volume: null,
-                                          container_type_code: null,
-                                          no_of_containers: null,
-                                          hazardous_cargo: "No",
-                                          stackable: "Yes",
-                                        }]
-                                      );
-                                      // Reset dimensions for AIR
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.dimension_unit`,
-                                        "Centimeter"
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.diemensions`,
-                                        []
-                                      );
-                                    }
-                                  }
-                                }}
-                                error={
-                                  serviceForm.errors[
-                                    `service_details.${serviceIndex}.service_code`
-                                  ] as string
-                                }
-                              />
-                            ) : (
-                              <Dropdown
-                                label="Trade"
-                                styles={{
-                                  input: {
-                                    fontSize: "13px",
-                                    fontFamily: "Inter",
-                                    height: "36px",
-                                  },
-                                  label: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                  root: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                }}
-                                placeholder="Select Trade"
-                                searchable
-                                withAsterisk
-                                key={serviceForm.key(
-                                  `service_details.${serviceIndex}.trade`
-                                )}
-                                data={["Export", "Import"]}
-                                value={serviceForm.values.service_details[serviceIndex]?.trade}
-                                onChange={(value) => {
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.trade`,
-                                    value || ""
-                                  );
-
-                                  // Reset last checked index when trade changes
-                                  setLastCheckedServiceIndex(null);
-
-                                  // Check salesperson data if customer, service, and trade are all selected
-                                  // Use setTimeout to ensure form value is updated
-                                  setTimeout(() => {
-                                    const currentService = serviceForm.values.service_details[serviceIndex]?.service;
-                                    const currentTrade = serviceForm.values.service_details[serviceIndex]?.trade;
-                                    if (currentService && customerForm.values.customer_code && currentTrade) {
-                                      checkSalespersonData(serviceIndex);
-                                    }
-                                  }, 200);
-                                }}
-                                error={
-                                  serviceForm.errors[
-                                    `service_details.${serviceIndex}.trade`
-                                  ] as string
-                                }
-                              />
-                            )}
-                          </Grid.Col>
-                          <Grid.Col span={6}>
-                            <SearchableSelect
-
-                              label="Origin"
-                              required
-                              apiEndpoint={URL.portMaster}
-                              placeholder="Type origin code or name"
-                              searchFields={["port_code", "port_name"]}
-                              displayFormat={(item: any) => ({
-                                value: String(item.port_code),
-                                label: `${item.port_name} (${item.port_code})`,
-                              })}
-                              value={
-                                serviceForm.values.service_details[serviceIndex]
-                                  ?.origin_code
-                              }
-                              displayValue={
-                                serviceForm.values.service_details[serviceIndex]
-                                  ?.origin_name
-                                  ? `${serviceForm.values.service_details[serviceIndex]?.origin_name} (${serviceForm.values.service_details[serviceIndex]?.origin_code})`
-                                  : serviceForm.values.service_details[
-                                      serviceIndex
-                                    ]?.origin_code
-                              }
-                              onChange={(value, selectedData) => {
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.origin_code`,
-                                  value || ""
-                                );
-                                if (selectedData) {
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.origin_name`,
-                                    selectedData.label.split(" (")[0] || ""
-                                  );
-                                } else {
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.origin_name`,
-                                    ""
-                                  );
-                                }
-                              }}
-                              error={
-                                serviceForm.errors[
-                                  `service_details.${serviceIndex}.origin_code`
-                                ] as string
-                              }
-                              minSearchLength={3}
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={6}>
-                            <Radio.Group
-                              label="Pickup"
-                              styles={{
-                                label: {
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                  marginBottom: "4px",
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                },
-                              }}
-                              key={serviceForm.key(
-                                `service_details.${serviceIndex}.pickup`
-                              )}
-                              {...serviceForm.getInputProps(
-                                `service_details.${serviceIndex}.pickup`
-                              )}
-                            >
-                              <Group mt={10}>
-                                <Radio value="true" label="Yes" styles={{
-                                  label: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                }} />
-                                <Radio value="false" label="No" styles={{
-                                  label: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                }} />
-                              </Group>
-                            </Radio.Group>
-                          </Grid.Col>
-
-                          <Grid.Col span={6}>
-                            <SearchableSelect
-                              label="Destination"
-                              required
-                              apiEndpoint={URL.portMaster}
-                              placeholder="Type destination code or name"
-                              searchFields={["port_code", "port_name"]}
-                              displayFormat={(item: any) => ({
-                                value: String(item.port_code),
-                                label: `${item.port_name} (${item.port_code})`,
-                              })}
-                              value={
-                                serviceForm.values.service_details[serviceIndex]
-                                  ?.destination_code
-                              }
-                              displayValue={
-                                serviceForm.values.service_details[serviceIndex]
-                                  ?.destination_name
-                                  ? `${serviceForm.values.service_details[serviceIndex]?.destination_name} (${serviceForm.values.service_details[serviceIndex]?.destination_code})`
-                                  : serviceForm.values.service_details[
-                                      serviceIndex
-                                    ]?.destination_code
-                              }
-                              onChange={(value, selectedData) => {
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.destination_code`,
-                                  value || ""
-                                );
-
-                                if (selectedData) {
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.destination_name`,
-                                    selectedData.label.split(" (")[0] || ""
-                                  );
-                                } else {
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.destination_name`,
-                                    ""
-                                  );
-                                }
-                              }}
-                              error={
-                                serviceForm.errors[
-                                  `service_details.${serviceIndex}.destination_code`
-                                ] as string
-                              }
-                              minSearchLength={3}
-                            />
-                          </Grid.Col>
-
-                          <Grid.Col span={6}>
-                            <Dropdown
-                              placeholder="Select Shipment Terms"
-                              styles={{
-                                input: {
-                                  fontSize: "13px",
-                                  fontFamily: "Inter",
-                                  height: "36px",
-                                },
-                                label: {
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                  marginBottom: "4px",
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                },
-                              }}
-                              searchable
-                              withAsterisk
-                              key={serviceForm.key(
-                                `service_details.${serviceIndex}.shipment_terms_code`
-                              )}
-                              label="Shipment Terms"
-                              data={shipmentOptions}
-                              {...serviceForm.getInputProps(
-                                `service_details.${serviceIndex}.shipment_terms_code`
-                              )}
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={6}>
-                            <Dropdown
-                              key={serviceForm.key(
-                                `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
-                              )}
-                              styles={{
-                                input: {
-                                  fontSize: "13px",
-                                  fontFamily: "Inter",
-                                  height: "36px",
-                                },
-                                label: {
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                  marginBottom: "4px",
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                },
-                              }}
-                              searchable
-                              label="Hazardous Cargo"
-                              withAsterisk
-                              placeholder="Select Hazardous"
-                              data={["Yes", "No"]}
-                              {...serviceForm.getInputProps(
-                                `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
-                              )}
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={6}>
-                            <Radio.Group
-                              label="Delivery"
-                              styles={{
-                                label: {
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                  marginBottom: "4px",
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                },
-                              }}
-                              key={serviceForm.key(
-                                `service_details.${serviceIndex}.delivery`
-                              )}
-                              value={
-                                serviceForm.values.service_details[serviceIndex]
-                                  ?.delivery
-                              }
-                              onChange={(value) => {
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.delivery`,
-                                  value
-                                );
-
-                                // Clear delivery_location if "false" is selected
-                                if (value === "false") {
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.delivery_location`,
-                                    ""
-                                  );
-                                }
-                              }}
-                            >
-                              <Group mt={10}>
-                                <Radio value="true" label="Yes" styles={{
-                                  label: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                }} />
-                                <Radio value="false" label="No" styles={{
-                                  label: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                }} />
-                              </Group>
-                            </Radio.Group>
-                          </Grid.Col>
-                          {serviceForm.values.service_details[serviceIndex]
-                            ?.pickup === "true" && (
-                            <Grid.Col span={6}>
-                              <TextInput
-                                label="Pickup Location"
-                                styles={{
-                                  input: {
-                                    fontSize: "13px",
-                                    fontFamily: "Inter",
-                                    height: "36px",
-                                  },
-                                  label: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                }}
-
-                                key={serviceForm.key(
-                                  `service_details.${serviceIndex}.pickup_location`
-                                )}
-                                value={
-                                  serviceForm.values.service_details[
-                                    serviceIndex
-                                  ]?.pickup_location || ""
-                                }
-                                onChange={(e) => {
-                                  const formattedValue = toTitleCase(
-                                    e.target.value
-                                  );
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.pickup_location`,
-                                    formattedValue
-                                  );
-                                }}
-                                error={
-                                  serviceForm.errors[
-                                    `service_details.${serviceIndex}.pickup_location`
-                                  ] as string
-                                }
-                              />
-                            </Grid.Col>
-                          )}
-                          {serviceForm.values.service_details[serviceIndex]
-                            ?.delivery === "true" && (
-                            <Grid.Col span={6}>
-                              <TextInput
-                                key={serviceForm.key(
-                                  `service_details.${serviceIndex}.delivery_location`
-                                )}
-                                label="Delivery Location"
-                                styles={{
-                                  input: {
-                                    fontSize: "13px",
-                                    fontFamily: "Inter",
-                                    height: "36px",
-                                  },
-                                  label: {
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                    marginBottom: "4px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  },
-                                }}
-
-                                value={
-                                  serviceForm.values.service_details[
-                                    serviceIndex
-                                  ]?.delivery_location || ""
-                                }
-                                onChange={(e) => {
-                                  const formattedValue = toTitleCase(
-                                    e.target.value
-                                  );
-                                  serviceForm.setFieldValue(
-                                    `service_details.${serviceIndex}.delivery_location`,
-                                    formattedValue
-                                  );
-                                }}
-                                error={
-                                  serviceForm.errors[
-                                    `service_details.${serviceIndex}.delivery_location`
-                                  ] as string
-                                }
-                              />
-                            </Grid.Col>
-                          )}
-                          <Grid.Col span={6}>
-                            <TextInput
-                              label="Service Remark"
-                              styles={{
-                                input: {
-                                  fontSize: "13px",
-                                  fontFamily: "Inter",
-                                  height: "36px",
-                                },
-                                label: {
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                  marginBottom: "4px",
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                },
-                              }}
-                              key={serviceForm.key(
-                                `service_details.${serviceIndex}.service_remark`
-                              )}
-                              value={
-                                serviceForm.values.service_details[serviceIndex]
-                                  ?.service_remark || ""
-                              }
-                              onChange={(e) => {
-                                const formattedValue = toTitleCase(
-                                  e.target.value
-                                );
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.service_remark`,
-                                  formattedValue
-                                );
-                              }}
-                              error={
-                                serviceForm.errors[
-                                  `service_details.${serviceIndex}.service_remark`
-                                ] as string
-                              }
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={3}>
-                            <TextInput
-                              label="Commodity"
-                              styles={{
-                                input: {
-                                  fontSize: "13px",
-                                  fontFamily: "Inter",
-                                  height: "36px",
-                                },
-                                label: {
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                  marginBottom: "4px",
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                },
-                              }}
-                              key={serviceForm.key(
-                                `service_details.${serviceIndex}.commodity`
-                              )}
-                              value={
-                                serviceForm.values.service_details[serviceIndex]
-                                  ?.commodity || ""
-                              }
-                              onChange={(e) => {
-                                const formattedValue = toTitleCase(
-                                  e.target.value
-                                );
-                                serviceForm.setFieldValue(
-                                  `service_details.${serviceIndex}.commodity`,
-                                  formattedValue
-                                );
-                              }}
-                              error={
-                                serviceForm.errors[
-                                  `service_details.${serviceIndex}.commodity`
-                                ] as string
-                              }
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={3}>
-                            <Dropdown
-                              styles={{
-                                input: {
-                                  fontSize: "13px",
-                                  fontFamily: "Inter",
-                                  height: "36px",
-                                },
-                                label: {
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                  marginBottom: "4px",
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                },
-                              }}
-                              key={serviceForm.key(
-                                `service_details.${serviceIndex}.cargo_details.0.stackable`
-                              )}
-                              searchable
-                              label="Stackable Cargo"
-                              withAsterisk
-                              placeholder="Select Stackable"
-                              data={["Yes", "No"]}
-                              {...serviceForm.getInputProps(
-                                `service_details.${serviceIndex}.cargo_details.0.stackable`
-                              )}
-                            />
-                          </Grid.Col>
-                        </Grid>
-
-                        {/* Cargo Details for this specific service */}
-                        {serviceDetail.service && (() => {
-                          // Determine effective service type for rendering (for OTHERS, determine from selected service)
-                          let effectiveServiceType = serviceDetail.service;
-                          if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                            const selectedOtherService = otherServicesData.find(
-                              (item) => item.value === serviceDetail.service_code
-                            );
-                            if (selectedOtherService) {
-                              const transportMode = selectedOtherService.transport_mode || "";
-                              const fullGroupage = selectedOtherService.full_groupage || "";
-                              if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                effectiveServiceType = "FCL";
-                              } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                effectiveServiceType = "LCL";
+                                });
                               } else {
-                                effectiveServiceType = "AIR";
+                                navigate("/call-entry", {
+                                  state: { refreshData: true },
+                                });
+                              }
+                            } else if (fromEnquiry || actionType === "edit") {
+                              // Came from enquiry list or editing enquiry, go back to enquiry list
+                              if (preserveFilters) {
+                                navigate("/enquiry", {
+                                  state: {
+                                    restoreFilters: preserveFilters,
+                                    refreshData: true,
+                                  },
+                                });
+                              } else {
+                                navigate("/enquiry", {
+                                  state: { refreshData: true },
+                                });
+                              }
+                            } else {
+                              // Default: navigate to quotation list (from quotation or new)
+                              if (preserveFilters) {
+                                navigate("/quotation", {
+                                  state: {
+                                    restoreFilters: preserveFilters,
+                                    refreshData: true,
+                                  },
+                                });
+                              } else {
+                                navigate("/quotation", {
+                                  state: { refreshData: true },
+                                });
                               }
                             }
-                          }
-                          return effectiveServiceType;
-                        })() && (
-                          <>
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="outline"
+                          color="gray"
+                          size="sm"
+                          styles={{
+                            root: {
+                              borderColor: "#d0d0d0",
+                              color: "#666",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          onClick={() => {
+                            customerForm.reset();
+                            setCustomerDisplayName(null);
+                            setSelectedCustomerName(null);
+                          }}
+                        >
+                          Clear all
+                        </Button>
+                      </Group>
+                      <Group gap="sm">
+                        <Button
+                          variant="outline"
+                          color="gray"
+                          size="sm"
+                          disabled
+                          styles={{
+                            root: {
+                              borderColor: "#e0e0e0",
+                              color: "#999",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                        >
+                          Back
+                        </Button>
+                        <Button
+                          onClick={() => handleNext()}
+                          size="sm"
+                          style={{
+                            backgroundColor: "#105476",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          }}
+                        >
+                          Next
+                        </Button>
+                      </Group>
+                    </Group>
+                  </Box>
+                </>
+              )}
+
+              {active === 1 && (
+                <>
+                  <Box
+                    style={{
+                      flex: 1,
+                      overflowY: "auto",
+                      padding: "32px",
+                      paddingBottom: "16px",
+                      backgroundColor: "#F8F8F8",
+                    }}
+                  >
+                    {/* Service Details Section */}
+
+                    {/* Dynamic Service Details */}
+                    <Stack gap="lg" style={{ backgroundColor: "#F8F8F8" }}>
+                      {serviceForm.values.service_details.map(
+                        (serviceDetail, serviceIndex) => (
+                          <Box
+                            key={(serviceDetail as any).id || serviceIndex}
+                            style={{
+                              border: "1px solid #e9ecef",
+                              borderRadius: "8px",
+                              padding: "24px",
+                              backgroundColor: "#FFFFFF",
+                            }}
+                          >
                             <Flex
-                              align="center"
                               justify="space-between"
-                              mt="lg"
-                              mb="md"
+                              align="center"
+                              mb="lg"
                             >
                               <Text
                                 size="md"
-                                fw={500}
-                                c="#105476"
+                                fw={600}
+                                c="#333"
                                 style={{
-                                  paddingBottom: "4px",
                                   fontFamily: "Inter",
-                                  fontStyle: "semibold",
+                                  fontStyle: "medium",
                                   fontSize: "16px",
-                                  color: "#105476",
+                                  color: "#22252B",
                                 }}
                               >
-                                Cargo Details
+                                {`Service ${serviceIndex + 1}`}
                               </Text>
-                              {(() => {
-                                // Determine effective service type for rendering
-                                let effectiveServiceType = serviceDetail.service;
-                                if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                                  const selectedOtherService = otherServicesData.find(
-                                    (item) => item.value === serviceDetail.service_code
-                                  );
-                                  if (selectedOtherService) {
-                                    const transportMode = selectedOtherService.transport_mode || "";
-                                    const fullGroupage = selectedOtherService.full_groupage || "";
-                                    if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                      effectiveServiceType = "FCL";
-                                    } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                      effectiveServiceType = "LCL";
-                                    } else {
-                                      effectiveServiceType = "AIR";
-                                    }
-                                  }
-                                }
-                                return effectiveServiceType;
-                              })() === "AIR" || (() => {
-                                // Determine effective service type for rendering
-                                let effectiveServiceType = serviceDetail.service;
-                                if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                                  const selectedOtherService = otherServicesData.find(
-                                    (item) => item.value === serviceDetail.service_code
-                                  );
-                                  if (selectedOtherService) {
-                                    const transportMode = selectedOtherService.transport_mode || "";
-                                    const fullGroupage = selectedOtherService.full_groupage || "";
-                                    if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                      effectiveServiceType = "FCL";
-                                    } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                      effectiveServiceType = "LCL";
-                                    } else {
-                                      effectiveServiceType = "AIR";
-                                    }
-                                  }
-                                }
-                                return effectiveServiceType;
-                              })() === "LCL" ? (
-                                <Group gap="sm">
-                                  {Array.isArray(
+                              {serviceForm.values.service_details.length >
+                                1 && (
+                                <Button
+                                  variant="subtle"
+                                  color="red"
+                                  size="xs"
+                                  p={0}
+                                  styles={{
+                                    root: { minWidth: "auto", height: "auto" },
+                                  }}
+                                  onClick={() => {
+                                    serviceForm.removeListItem(
+                                      "service_details",
+                                      serviceIndex
+                                    );
+                                  }}
+                                >
+                                  <IconTrash size={20} color="#dc3545" />
+                                </Button>
+                              )}
+                            </Flex>
+
+                            <Grid>
+                              <Grid.Col span={6}>
+                                <Dropdown
+                                  label="Service"
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                      height: "36px",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  searchable
+                                  withAsterisk
+                                  placeholder="Select Service"
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.service`
+                                  )}
+                                  data={["AIR", "FCL", "LCL", "OTHERS"]}
+                                  value={
                                     serviceForm.values.service_details[
                                       serviceIndex
-                                    ]?.diemensions
-                                  ) &&
-                                    serviceForm.values.service_details[
-                                      serviceIndex
-                                    ].diemensions.length > 0 && (
-                                      <Dropdown
-                                        placeholder="Dimension Unit"
-                                        data={
-                                          DIMENSION_UNIT_OPTIONS.find(
-                                            (option) => {
-                                              // Determine effective service type for dimension unit
-                                              let effectiveServiceType = serviceDetail.service;
-                                              if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                                                const selectedOtherService = otherServicesData.find(
-                                                  (item) => item.value === serviceDetail.service_code
-                                                );
-                                                if (selectedOtherService) {
-                                                  const transportMode = selectedOtherService.transport_mode || "";
-                                                  const fullGroupage = selectedOtherService.full_groupage || "";
-                                                  if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                                    effectiveServiceType = "FCL";
-                                                  } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                                    effectiveServiceType = "LCL";
-                                                  } else {
-                                                    effectiveServiceType = "AIR";
-                                                  }
-                                                }
-                                              }
-                                              return option.service === effectiveServiceType;
-                                            }
-                                          )?.unit_value.map((unit) => ({
-                                            value: unit.Label,
-                                            label: unit.Label,
-                                          })) || []
-                                        }
-                                        value={
+                                    ]?.service
+                                  }
+                                  onChange={(value) => {
+                                    const previousService =
+                                      serviceForm.values.service_details[
+                                        serviceIndex
+                                      ]?.service;
+
+                                    // Set the new service value
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.service`,
+                                      value || ""
+                                    );
+
+                                    // Clear service_code and service_name when service changes
+                                    if (value !== "OTHERS") {
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.service_code`,
+                                        ""
+                                      );
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.service_name`,
+                                        ""
+                                      );
+                                    } else {
+                                      // Clear trade when OTHERS is selected
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.trade`,
+                                        ""
+                                      );
+                                    }
+
+                                    // Reset last checked index when service changes
+                                    setLastCheckedServiceIndex(null);
+
+                                    // Check salesperson data if customer, service, and trade are all selected (only for non-OTHERS)
+                                    if (value && value !== "OTHERS") {
+                                      setTimeout(() => {
+                                        const currentService =
                                           serviceForm.values.service_details[
                                             serviceIndex
-                                          ]?.dimension_unit || ""
+                                          ]?.service;
+                                        const currentTrade =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.trade;
+                                        if (
+                                          currentService &&
+                                          customerForm.values.customer_code &&
+                                          currentTrade
+                                        ) {
+                                          checkSalespersonData(serviceIndex);
                                         }
-                                        onChange={(value) => {
+                                      }, 200);
+                                    }
+
+                                    // Clear cargo details when service changes
+                                    if (previousService !== value && value) {
+                                      // Reset cargo_details to default empty state
+                                      const defaultCargoDetail = {
+                                        no_of_packages: null,
+                                        gross_weight: null,
+                                        volume_weight: null,
+                                        chargable_weight: null,
+                                        volume: null,
+                                        chargable_volume: null,
+                                        container_type_code: null,
+                                        no_of_containers: null,
+                                        hazardous_cargo: "No",
+                                        stackable: "Yes",
+                                      };
+
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.cargo_details`,
+                                        [defaultCargoDetail]
+                                      );
+
+                                      // Reset dimensions (AIR/LCL)
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.dimension_unit`,
+                                        "Centimeter"
+                                      );
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.diemensions`,
+                                        []
+                                      );
+
+                                      // Clear any validation errors for cargo details
+                                      serviceForm.clearFieldError(
+                                        `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
+                                      );
+                                      serviceForm.clearFieldError(
+                                        `service_details.${serviceIndex}.cargo_details.0.gross_weight`
+                                      );
+                                      serviceForm.clearFieldError(
+                                        `service_details.${serviceIndex}.cargo_details.0.volume_weight`
+                                      );
+                                      serviceForm.clearFieldError(
+                                        `service_details.${serviceIndex}.cargo_details.0.volume`
+                                      );
+                                      serviceForm.clearFieldError(
+                                        `service_details.${serviceIndex}.cargo_details.0.container_type_code`
+                                      );
+                                      serviceForm.clearFieldError(
+                                        `service_details.${serviceIndex}.cargo_details.0.no_of_containers`
+                                      );
+                                    }
+                                  }}
+                                  error={
+                                    serviceForm.errors[
+                                      `service_details.${serviceIndex}.service`
+                                    ] as string
+                                  }
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={6}>
+                                {serviceForm.values.service_details[
+                                  serviceIndex
+                                ]?.service === "OTHERS" ? (
+                                  <Dropdown
+                                    label="Service Name"
+                                    styles={{
+                                      input: {
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
+                                      },
+                                    }}
+                                    placeholder="Select Service Name"
+                                    searchable
+                                    withAsterisk
+                                    key={serviceForm.key(
+                                      `service_details.${serviceIndex}.service_code`
+                                    )}
+                                    data={otherServicesData}
+                                    value={
+                                      serviceForm.values.service_details[
+                                        serviceIndex
+                                      ]?.service_code || ""
+                                    }
+                                    onChange={(value) => {
+                                      const selectedService =
+                                        otherServicesData.find(
+                                          (item) => item.value === value
+                                        );
+
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.service_code`,
+                                        value || ""
+                                      );
+
+                                      if (selectedService) {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.service_name`,
+                                          selectedService.label || ""
+                                        );
+
+                                        // Determine cargo structure based on transport_mode and full_groupage
+                                        const transportMode =
+                                          selectedService.transport_mode || "";
+                                        const fullGroupage =
+                                          selectedService.full_groupage || "";
+
+                                        let cargoStructure = "AIR"; // Default to AIR
+                                        if (
+                                          transportMode === "SEA" &&
+                                          fullGroupage === "FULL"
+                                        ) {
+                                          cargoStructure = "FCL";
+                                        } else if (
+                                          transportMode === "SEA" &&
+                                          fullGroupage === "GROUPAGE"
+                                        ) {
+                                          cargoStructure = "LCL";
+                                        }
+
+                                        // Reset cargo_details based on determined structure
+                                        if (cargoStructure === "FCL") {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.cargo_details`,
+                                            [
+                                              {
+                                                id: null,
+                                                no_of_packages: null,
+                                                gross_weight: null,
+                                                volume_weight: null,
+                                                chargable_weight: null,
+                                                volume: null,
+                                                chargable_volume: null,
+                                                container_type_code: null,
+                                                no_of_containers: null,
+                                                hazardous_cargo: "No",
+                                                stackable: "Yes",
+                                              },
+                                            ]
+                                          );
+                                          // Clear dimensions for FCL
                                           serviceForm.setFieldValue(
                                             `service_details.${serviceIndex}.dimension_unit`,
-                                            value || ""
+                                            "Centimeter"
                                           );
-                                          const rows =
-                                            serviceForm.values.service_details[
-                                              serviceIndex
-                                            ]?.diemensions || [];
-                                          // Determine effective service type for dimension calculation
-                                          let effectiveServiceType = serviceDetail.service;
-                                          if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                                            const selectedOtherService = otherServicesData.find(
-                                              (item) => item.value === serviceDetail.service_code
-                                            );
-                                            if (selectedOtherService) {
-                                              const transportMode = selectedOtherService.transport_mode || "";
-                                              const fullGroupage = selectedOtherService.full_groupage || "";
-                                              if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                                effectiveServiceType = "FCL";
-                                              } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                                effectiveServiceType = "LCL";
-                                              } else {
-                                                effectiveServiceType = "AIR";
-                                              }
-                                            }
-                                          }
-                                          const mapped = rows.map((r: any) => {
-                                            const v = getDimensionValue(
-                                              effectiveServiceType,
-                                              value || ""
-                                            );
-                                            const pieces =
-                                              Number(r?.pieces) || 0;
-                                            const length =
-                                              Number(r?.length) || 0;
-                                            const width = Number(r?.width) || 0;
-                                            const height =
-                                              Number(r?.height) || 0;
-                                            const vol = v
-                                              ? (pieces *
-                                                  length *
-                                                  width *
-                                                  height) /
-                                                v
-                                              : 0;
-                                            return {
-                                              ...r,
-                                              value: v,
-                                              vol_weight: isFinite(vol)
-                                                ? vol
-                                                : 0,
-                                            };
-                                          });
                                           serviceForm.setFieldValue(
                                             `service_details.${serviceIndex}.diemensions`,
-                                            mapped
+                                            []
                                           );
-                                        }}
-                                      />
-                                    )}
-                                  <Button
-                                    variant="light"
-                                    color="#105476"
-                                    leftSection={<IconPlus size={16} />}
+                                        } else if (cargoStructure === "LCL") {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.cargo_details`,
+                                            [
+                                              {
+                                                id: null,
+                                                no_of_packages: null,
+                                                gross_weight: null,
+                                                volume_weight: null,
+                                                chargable_weight: null,
+                                                volume: null,
+                                                chargable_volume: null,
+                                                container_type_code: null,
+                                                no_of_containers: null,
+                                                hazardous_cargo: "No",
+                                                stackable: "Yes",
+                                              },
+                                            ]
+                                          );
+                                          // Reset dimensions for LCL
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.dimension_unit`,
+                                            "Centimeter"
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.diemensions`,
+                                            []
+                                          );
+                                        } else {
+                                          // AIR structure
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.cargo_details`,
+                                            [
+                                              {
+                                                id: null,
+                                                no_of_packages: null,
+                                                gross_weight: null,
+                                                volume_weight: null,
+                                                chargable_weight: null,
+                                                volume: null,
+                                                chargable_volume: null,
+                                                container_type_code: null,
+                                                no_of_containers: null,
+                                                hazardous_cargo: "No",
+                                                stackable: "Yes",
+                                              },
+                                            ]
+                                          );
+                                          // Reset dimensions for AIR
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.dimension_unit`,
+                                            "Centimeter"
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.diemensions`,
+                                            []
+                                          );
+                                        }
+                                      }
+                                    }}
+                                    error={
+                                      serviceForm.errors[
+                                        `service_details.${serviceIndex}.service_code`
+                                      ] as string
+                                    }
+                                  />
+                                ) : (
+                                  <Dropdown
+                                    label="Trade"
                                     styles={{
+                                      input: {
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
+                                      },
                                       root: {
                                         fontSize: "13px",
                                         fontWeight: 500,
-                                        color: "#105476",
+                                        color: "#424242",
+                                        marginBottom: "4px",
                                         fontFamily: "Inter",
-                                        fontStyle: "semibold",
+                                        fontStyle: "medium",
                                       },
                                     }}
-                                    onClick={() => {
-                                      const unit =
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.dimension_unit || "Centimeter";
+                                    placeholder="Select Trade"
+                                    searchable
+                                    withAsterisk
+                                    key={serviceForm.key(
+                                      `service_details.${serviceIndex}.trade`
+                                    )}
+                                    data={["Export", "Import"]}
+                                    value={
+                                      serviceForm.values.service_details[
+                                        serviceIndex
+                                      ]?.trade
+                                    }
+                                    onChange={(value) => {
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.trade`,
+                                        value || ""
+                                      );
 
-                                      // Set dimension_unit to Centimeter if not already set
+                                      // Reset last checked index when trade changes
+                                      setLastCheckedServiceIndex(null);
+
+                                      // Check salesperson data if customer, service, and trade are all selected
+                                      // Use setTimeout to ensure form value is updated
+                                      setTimeout(() => {
+                                        const currentService =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.service;
+                                        const currentTrade =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.trade;
+                                        if (
+                                          currentService &&
+                                          customerForm.values.customer_code &&
+                                          currentTrade
+                                        ) {
+                                          checkSalespersonData(serviceIndex);
+                                        }
+                                      }, 200);
+                                    }}
+                                    error={
+                                      serviceForm.errors[
+                                        `service_details.${serviceIndex}.trade`
+                                      ] as string
+                                    }
+                                  />
+                                )}
+                              </Grid.Col>
+                              <Grid.Col span={6}>
+                                <SearchableSelect
+                                  label="Origin"
+                                  required
+                                  apiEndpoint={URL.portMaster}
+                                  placeholder="Type origin code or name"
+                                  searchFields={["port_code", "port_name"]}
+                                  displayFormat={(item: any) => ({
+                                    value: String(item.port_code),
+                                    label: `${item.port_name} (${item.port_code})`,
+                                  })}
+                                  value={
+                                    serviceForm.values.service_details[
+                                      serviceIndex
+                                    ]?.origin_code
+                                  }
+                                  displayValue={
+                                    serviceForm.values.service_details[
+                                      serviceIndex
+                                    ]?.origin_name
+                                      ? `${serviceForm.values.service_details[serviceIndex]?.origin_name} (${serviceForm.values.service_details[serviceIndex]?.origin_code})`
+                                      : serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.origin_code
+                                  }
+                                  onChange={(value, selectedData) => {
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.origin_code`,
+                                      value || ""
+                                    );
+                                    if (selectedData) {
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.origin_name`,
+                                        selectedData.label.split(" (")[0] || ""
+                                      );
+                                    } else {
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.origin_name`,
+                                        ""
+                                      );
+                                    }
+                                  }}
+                                  error={
+                                    serviceForm.errors[
+                                      `service_details.${serviceIndex}.origin_code`
+                                    ] as string
+                                  }
+                                  minSearchLength={3}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={6}>
+                                <Radio.Group
+                                  label="Pickup"
+                                  styles={{
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.pickup`
+                                  )}
+                                  {...serviceForm.getInputProps(
+                                    `service_details.${serviceIndex}.pickup`
+                                  )}
+                                >
+                                  <Group mt={10}>
+                                    <Radio
+                                      value="true"
+                                      label="Yes"
+                                      styles={{
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                    />
+                                    <Radio
+                                      value="false"
+                                      label="No"
+                                      styles={{
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                    />
+                                  </Group>
+                                </Radio.Group>
+                              </Grid.Col>
+
+                              <Grid.Col span={6}>
+                                <SearchableSelect
+                                  label="Destination"
+                                  required
+                                  apiEndpoint={URL.portMaster}
+                                  placeholder="Type destination code or name"
+                                  searchFields={["port_code", "port_name"]}
+                                  displayFormat={(item: any) => ({
+                                    value: String(item.port_code),
+                                    label: `${item.port_name} (${item.port_code})`,
+                                  })}
+                                  value={
+                                    serviceForm.values.service_details[
+                                      serviceIndex
+                                    ]?.destination_code
+                                  }
+                                  displayValue={
+                                    serviceForm.values.service_details[
+                                      serviceIndex
+                                    ]?.destination_name
+                                      ? `${serviceForm.values.service_details[serviceIndex]?.destination_name} (${serviceForm.values.service_details[serviceIndex]?.destination_code})`
+                                      : serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.destination_code
+                                  }
+                                  onChange={(value, selectedData) => {
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.destination_code`,
+                                      value || ""
+                                    );
+
+                                    if (selectedData) {
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.destination_name`,
+                                        selectedData.label.split(" (")[0] || ""
+                                      );
+                                    } else {
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.destination_name`,
+                                        ""
+                                      );
+                                    }
+                                  }}
+                                  error={
+                                    serviceForm.errors[
+                                      `service_details.${serviceIndex}.destination_code`
+                                    ] as string
+                                  }
+                                  minSearchLength={3}
+                                />
+                              </Grid.Col>
+
+                              <Grid.Col span={6}>
+                                <Dropdown
+                                  placeholder="Select Shipment Terms"
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                      height: "36px",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  searchable
+                                  withAsterisk
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.shipment_terms_code`
+                                  )}
+                                  label="Shipment Terms"
+                                  data={shipmentOptions}
+                                  {...serviceForm.getInputProps(
+                                    `service_details.${serviceIndex}.shipment_terms_code`
+                                  )}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={6}>
+                                <Dropdown
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
+                                  )}
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                      height: "36px",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  searchable
+                                  label="Hazardous Cargo"
+                                  withAsterisk
+                                  placeholder="Select Hazardous"
+                                  data={["Yes", "No"]}
+                                  {...serviceForm.getInputProps(
+                                    `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
+                                  )}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={6}>
+                                <Radio.Group
+                                  label="Delivery"
+                                  styles={{
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.delivery`
+                                  )}
+                                  value={
+                                    serviceForm.values.service_details[
+                                      serviceIndex
+                                    ]?.delivery
+                                  }
+                                  onChange={(value) => {
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.delivery`,
+                                      value
+                                    );
+
+                                    // Clear delivery_location if "false" is selected
+                                    if (value === "false") {
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.delivery_location`,
+                                        ""
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <Group mt={10}>
+                                    <Radio
+                                      value="true"
+                                      label="Yes"
+                                      styles={{
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                    />
+                                    <Radio
+                                      value="false"
+                                      label="No"
+                                      styles={{
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                    />
+                                  </Group>
+                                </Radio.Group>
+                              </Grid.Col>
+                              {serviceForm.values.service_details[serviceIndex]
+                                ?.pickup === "true" && (
+                                <Grid.Col span={6}>
+                                  <TextInput
+                                    label="Pickup Location"
+                                    styles={{
+                                      input: {
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
+                                      },
+                                    }}
+                                    key={serviceForm.key(
+                                      `service_details.${serviceIndex}.pickup_location`
+                                    )}
+                                    value={
+                                      serviceForm.values.service_details[
+                                        serviceIndex
+                                      ]?.pickup_location || ""
+                                    }
+                                    onChange={(e) => {
+                                      const formattedValue = toTitleCase(
+                                        e.target.value
+                                      );
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.pickup_location`,
+                                        formattedValue
+                                      );
+                                    }}
+                                    error={
+                                      serviceForm.errors[
+                                        `service_details.${serviceIndex}.pickup_location`
+                                      ] as string
+                                    }
+                                  />
+                                </Grid.Col>
+                              )}
+                              {serviceForm.values.service_details[serviceIndex]
+                                ?.delivery === "true" && (
+                                <Grid.Col span={6}>
+                                  <TextInput
+                                    key={serviceForm.key(
+                                      `service_details.${serviceIndex}.delivery_location`
+                                    )}
+                                    label="Delivery Location"
+                                    styles={{
+                                      input: {
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
+                                      },
+                                    }}
+                                    value={
+                                      serviceForm.values.service_details[
+                                        serviceIndex
+                                      ]?.delivery_location || ""
+                                    }
+                                    onChange={(e) => {
+                                      const formattedValue = toTitleCase(
+                                        e.target.value
+                                      );
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.delivery_location`,
+                                        formattedValue
+                                      );
+                                    }}
+                                    error={
+                                      serviceForm.errors[
+                                        `service_details.${serviceIndex}.delivery_location`
+                                      ] as string
+                                    }
+                                  />
+                                </Grid.Col>
+                              )}
+                              <Grid.Col span={6}>
+                                <TextInput
+                                  label="Service Remark"
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                      height: "36px",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.service_remark`
+                                  )}
+                                  value={
+                                    serviceForm.values.service_details[
+                                      serviceIndex
+                                    ]?.service_remark || ""
+                                  }
+                                  onChange={(e) => {
+                                    const formattedValue = toTitleCase(
+                                      e.target.value
+                                    );
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.service_remark`,
+                                      formattedValue
+                                    );
+                                  }}
+                                  error={
+                                    serviceForm.errors[
+                                      `service_details.${serviceIndex}.service_remark`
+                                    ] as string
+                                  }
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={3}>
+                                <TextInput
+                                  label="Commodity"
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                      height: "36px",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.commodity`
+                                  )}
+                                  value={
+                                    serviceForm.values.service_details[
+                                      serviceIndex
+                                    ]?.commodity || ""
+                                  }
+                                  onChange={(e) => {
+                                    const formattedValue = toTitleCase(
+                                      e.target.value
+                                    );
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.commodity`,
+                                      formattedValue
+                                    );
+                                  }}
+                                  error={
+                                    serviceForm.errors[
+                                      `service_details.${serviceIndex}.commodity`
+                                    ] as string
+                                  }
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={3}>
+                                <Dropdown
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                      height: "36px",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.cargo_details.0.stackable`
+                                  )}
+                                  searchable
+                                  label="Stackable Cargo"
+                                  withAsterisk
+                                  placeholder="Select Stackable"
+                                  data={["Yes", "No"]}
+                                  {...serviceForm.getInputProps(
+                                    `service_details.${serviceIndex}.cargo_details.0.stackable`
+                                  )}
+                                />
+                              </Grid.Col>
+                            </Grid>
+
+                            {/* Cargo Details for this specific service */}
+                            {serviceDetail.service &&
+                              (() => {
+                                // Determine effective service type for rendering (for OTHERS, determine from selected service)
+                                let effectiveServiceType =
+                                  serviceDetail.service;
+                                if (
+                                  serviceDetail.service === "OTHERS" &&
+                                  serviceDetail.service_code
+                                ) {
+                                  const selectedOtherService =
+                                    otherServicesData.find(
+                                      (item) =>
+                                        item.value ===
+                                        serviceDetail.service_code
+                                    );
+                                  if (selectedOtherService) {
+                                    const transportMode =
+                                      selectedOtherService.transport_mode || "";
+                                    const fullGroupage =
+                                      selectedOtherService.full_groupage || "";
+                                    if (
+                                      transportMode === "SEA" &&
+                                      fullGroupage === "FULL"
+                                    ) {
+                                      effectiveServiceType = "FCL";
+                                    } else if (
+                                      transportMode === "SEA" &&
+                                      fullGroupage === "GROUPAGE"
+                                    ) {
+                                      effectiveServiceType = "LCL";
+                                    } else {
+                                      effectiveServiceType = "AIR";
+                                    }
+                                  }
+                                }
+                                return effectiveServiceType;
+                              })() && (
+                                <>
+                                  <Flex
+                                    align="center"
+                                    justify="space-between"
+                                    mt="lg"
+                                    mb="md"
+                                  >
+                                    <Text
+                                      size="md"
+                                      fw={500}
+                                      c="#105476"
+                                      style={{
+                                        paddingBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "semibold",
+                                        fontSize: "16px",
+                                        color: "#105476",
+                                      }}
+                                    >
+                                      Cargo Details
+                                    </Text>
+                                    {(() => {
+                                      // Determine effective service type for rendering
+                                      let effectiveServiceType =
+                                        serviceDetail.service;
                                       if (
-                                        !serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.dimension_unit
+                                        serviceDetail.service === "OTHERS" &&
+                                        serviceDetail.service_code
                                       ) {
-                                        serviceForm.setFieldValue(
-                                          `service_details.${serviceIndex}.dimension_unit`,
-                                          "Centimeter"
-                                        );
-                                      }
-
-                                      // Determine effective service type for dimension calculation
-                                      let effectiveServiceType = serviceDetail.service;
-                                      if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                                        const selectedOtherService = otherServicesData.find(
-                                          (item) => item.value === serviceDetail.service_code
-                                        );
+                                        const selectedOtherService =
+                                          otherServicesData.find(
+                                            (item) =>
+                                              item.value ===
+                                              serviceDetail.service_code
+                                          );
                                         if (selectedOtherService) {
-                                          const transportMode = selectedOtherService.transport_mode || "";
-                                          const fullGroupage = selectedOtherService.full_groupage || "";
-                                          if (transportMode === "SEA" && fullGroupage === "FULL") {
+                                          const transportMode =
+                                            selectedOtherService.transport_mode ||
+                                            "";
+                                          const fullGroupage =
+                                            selectedOtherService.full_groupage ||
+                                            "";
+                                          if (
+                                            transportMode === "SEA" &&
+                                            fullGroupage === "FULL"
+                                          ) {
                                             effectiveServiceType = "FCL";
-                                          } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
+                                          } else if (
+                                            transportMode === "SEA" &&
+                                            fullGroupage === "GROUPAGE"
+                                          ) {
                                             effectiveServiceType = "LCL";
                                           } else {
                                             effectiveServiceType = "AIR";
                                           }
                                         }
                                       }
-
-                                      const value = getDimensionValue(
-                                        effectiveServiceType,
-                                        unit
-                                      );
-                                      const newRow = {
-                                        pieces: null,
-                                        length: null,
-                                        width: null,
-                                        height: null,
-                                        value: value || null,
-                                        vol_weight: null,
-                                      };
-                                      const list =
-                                        (serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.diemensions as any[]) || [];
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.diemensions`,
-                                        [...list, newRow]
-                                      );
-                                    }}
-                                  >
-                                    Add Dimension
-                                  </Button>
-                                </Group>
-                              ) : null}
-                            </Flex>
-
-                            {/* Cargo Details Form */}
-                            {(() => {
-                              // Determine effective service type for rendering
-                              let effectiveServiceType = serviceDetail.service;
-                              if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                                const selectedOtherService = otherServicesData.find(
-                                  (item) => item.value === serviceDetail.service_code
-                                );
-                                if (selectedOtherService) {
-                                  const transportMode = selectedOtherService.transport_mode || "";
-                                  const fullGroupage = selectedOtherService.full_groupage || "";
-                                  if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                    effectiveServiceType = "FCL";
-                                  } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                    effectiveServiceType = "LCL";
-                                  } else {
-                                    effectiveServiceType = "AIR";
-                                  }
-                                }
-                              }
-                              return effectiveServiceType === "AIR";
-                            })() && (
-                              <Grid>
-                                <Grid.Col span={3}>
-                                  <NumberInput
-                                    hideControls
-                                    rightSectionPointerEvents="none"
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
-                                    )}
-                                    label="No of Packages"
-                                    withAsterisk
-                                    min={1}
-                                    disabled={hasValidDimensions(
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.diemensions || []
-                                    )}
-                                    styles={
-                                      hasValidDimensions(
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.diemensions || []
-                                      )
-                                        ? {
-                                            input: {
-                                              fontSize: "13px",
-                                              fontFamily: "Inter",
-                                              height: "36px",
-                                              backgroundColor: "#f8f9fa",
-                                              cursor: "not-allowed",
-                                            },
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
+                                      return effectiveServiceType;
+                                    })() === "AIR" ||
+                                    (() => {
+                                      // Determine effective service type for rendering
+                                      let effectiveServiceType =
+                                        serviceDetail.service;
+                                      if (
+                                        serviceDetail.service === "OTHERS" &&
+                                        serviceDetail.service_code
+                                      ) {
+                                        const selectedOtherService =
+                                          otherServicesData.find(
+                                            (item) =>
+                                              item.value ===
+                                              serviceDetail.service_code
+                                          );
+                                        if (selectedOtherService) {
+                                          const transportMode =
+                                            selectedOtherService.transport_mode ||
+                                            "";
+                                          const fullGroupage =
+                                            selectedOtherService.full_groupage ||
+                                            "";
+                                          if (
+                                            transportMode === "SEA" &&
+                                            fullGroupage === "FULL"
+                                          ) {
+                                            effectiveServiceType = "FCL";
+                                          } else if (
+                                            transportMode === "SEA" &&
+                                            fullGroupage === "GROUPAGE"
+                                          ) {
+                                            effectiveServiceType = "LCL";
+                                          } else {
+                                            effectiveServiceType = "AIR";
                                           }
-                                        : {
-                                            input: {
-                                              fontSize: "13px",
-                                              fontFamily: "Inter",
-                                              height: "36px",
-                                            },
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }
-                                    }
-                                    {...serviceForm.getInputProps(
-                                      `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
-                                    )}
-                                  />
-                                </Grid.Col>
-                                {/* Dimension Unit + Add Button (AIR) */}
-                                <Grid.Col span={3}>
-                                  <NumberInput
-                                    hideControls
-                                    styles={{
-                                      input: {
-                                        cursor: "not-allowed",
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        height: "36px",
-                                      },
-                                      label: {
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                        marginBottom: "4px",
-                                        fontFamily: "Inter",
-                                        fontStyle: "medium",
-                                      },
-                                    }}     key={serviceForm.key(
-                                      `service_details.${serviceIndex}.cargo_details.0.gross_weight`
-                                    )}
-                                    label="Gross Weight (kg)"
-                                    min={1}
-                                    withAsterisk
-                                    {...serviceForm.getInputProps(
-                                      `service_details.${serviceIndex}.cargo_details.0.gross_weight`
-                                    )}
-                                  />
-                                </Grid.Col>
-                                <Grid.Col span={3}>
-                                  <NumberInput
-                                    hideControls
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.cargo_details.0.volume_weight`
-                                    )}
-                                    label="Volume Weight (kg)"
-                                    min={1}
-                                    withAsterisk
-                                    disabled={hasValidDimensions(
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.diemensions || []
-                                    )}
-                                    styles={
-                                      hasValidDimensions(
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.diemensions || []
-                                      )
-                                        ? {
-                                            input: {
-                                              backgroundColor: "#f8f9fa",
-                                              cursor: "not-allowed",
-                                              fontSize: "13px",
-                                              fontFamily: "Inter",
-                                              height: "36px",
-                                            },
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }
-                                        : {
-                                            input: {
-                                              fontSize: "13px",
-                                              fontFamily: "Inter",
-                                              height: "36px",
-                                            },
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }
-                                    }
-                                    {...serviceForm.getInputProps(
-                                      `service_details.${serviceIndex}.cargo_details.0.volume_weight`
-                                    )}
-                                  />
-                                </Grid.Col>
-                                <Grid.Col span={3}>
-                                  <NumberInput
-                                    hideControls
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.cargo_details.0.chargable_weight`
-                                    )}
-                                    label="Chargeable Weight (kg)"
-                                    withAsterisk
-                                    min={0}
-                                    readOnly
-                                    styles={{
-                                      input: {
-                                        cursor: "not-allowed",
-                                        color: "#495057",
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        height: "36px",
-                                      },
-                                      label: {
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                        marginBottom: "4px",
-                                        fontFamily: "Inter",
-                                        fontStyle: "medium",
-                                      },
-                                    }}
-                                    {...serviceForm.getInputProps(
-                                      `service_details.${serviceIndex}.cargo_details.0.chargable_weight`
-                                    )}
-                                  />
-                                  <Text size="xs" c="dimmed" mt="xs" style={{
-                                    fontSize: "13px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  }}>
-                                    Max of Gross Weight and Volume Weight
-                                  </Text>
-                                </Grid.Col>
-
-                                {/* AIR Dimension Section */}
-                                {Array.isArray(
-                                  serviceForm.values.service_details[
-                                    serviceIndex
-                                  ]?.diemensions
-                                ) &&
-                                  serviceForm.values.service_details[
-                                    serviceIndex
-                                  ].diemensions.length > 0 && (
-                                    <>
-                                      <Grid.Col span={12}>
-                                        <Grid
-                                          style={{
-                                            fontWeight: 600,
-                                            color: "#105476",
-                                            fontSize: "13px",
-                                            fontFamily: "Inter",
-                                            fontStyle: "medium",
-                                          }}
-                                        >
-                                          <Grid.Col span={1.5}>Pieces</Grid.Col>
-                                          <Grid.Col span={1.5}>Length</Grid.Col>
-                                          <Grid.Col span={1.5}>Width</Grid.Col>
-                                          <Grid.Col span={1.5}>Height</Grid.Col>
-                                          <Grid.Col span={2}>Value</Grid.Col>
-                                          <Grid.Col span={2.5}>
-                                            Volume Weight
-                                          </Grid.Col>
-                                          <Grid.Col span={0.8}></Grid.Col>
-                                        </Grid>
-                                      </Grid.Col>
-                                      {serviceForm.values.service_details[
-                                        serviceIndex
-                                      ].diemensions.map(
-                                        (row: any, rowIdx: number) => (
-                                          <Grid.Col
-                                            span={12}
-                                            key={`air-dim-${serviceIndex}-${rowIdx}`}
-                                          >
-                                            <Grid>
-                                              <Grid.Col span={1.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                  }}
-                                                  value={row?.pieces ?? null}
-                                                  onChange={(val) => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    const v = getDimensionValue(
-                                                      "AIR",
-                                                      serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ]?.dimension_unit || ""
-                                                    );
-                                                    const pieces =
-                                                      Number(val) || 0;
-                                                    const length =
-                                                      Number(
-                                                        list[rowIdx]?.length
-                                                      ) || 0;
-                                                    const width =
-                                                      Number(
-                                                        list[rowIdx]?.width
-                                                      ) || 0;
-                                                    const height =
-                                                      Number(
-                                                        list[rowIdx]?.height
-                                                      ) || 0;
-                                                    const vol = v
-                                                      ? (pieces *
-                                                          length *
-                                                          width *
-                                                          height) /
-                                                        v
-                                                      : 0;
-                                                    list[rowIdx] = {
-                                                      ...(list[rowIdx] || {}),
-                                                      pieces: val,
-                                                      value: v || null,
-                                                      vol_weight: isFinite(vol)
-                                                        ? vol
-                                                        : null,
-                                                    };
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={1.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  value={row?.length ?? null}
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                  }}
-                                                  onChange={(val) => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    const v = getDimensionValue(
-                                                      "AIR",
-                                                      serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ]?.dimension_unit || ""
-                                                    );
-                                                    const pieces =
-                                                      Number(
-                                                        list[rowIdx]?.pieces
-                                                      ) || 0;
-                                                    const length =
-                                                      Number(val) || 0;
-                                                    const width =
-                                                      Number(
-                                                        list[rowIdx]?.width
-                                                      ) || 0;
-                                                    const height =
-                                                      Number(
-                                                        list[rowIdx]?.height
-                                                      ) || 0;
-                                                    const vol = v
-                                                      ? (pieces *
-                                                          length *
-                                                          width *
-                                                          height) /
-                                                        v
-                                                      : 0;
-                                                    list[rowIdx] = {
-                                                      ...(list[rowIdx] || {}),
-                                                      length: val,
-                                                      value: v || null,
-                                                      vol_weight: isFinite(vol)
-                                                        ? vol
-                                                        : null,
-                                                    };
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={1.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                  }}
-                                                  value={row?.width ?? null}
-                                                  onChange={(val) => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    const v = getDimensionValue(
-                                                      "AIR",
-                                                      serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ]?.dimension_unit || ""
-                                                    );
-                                                    const pieces =
-                                                      Number(
-                                                        list[rowIdx]?.pieces
-                                                      ) || 0;
-                                                    const length =
-                                                      Number(
-                                                        list[rowIdx]?.length
-                                                      ) || 0;
-                                                    const width =
-                                                      Number(val) || 0;
-                                                    const height =
-                                                      Number(
-                                                        list[rowIdx]?.height
-                                                      ) || 0;
-                                                    const vol = v
-                                                      ? (pieces *
-                                                          length *
-                                                          width *
-                                                          height) /
-                                                        v
-                                                      : 0;
-                                                    list[rowIdx] = {
-                                                      ...(list[rowIdx] || {}),
-                                                      width: val,
-                                                      value: v || null,
-                                                      vol_weight: isFinite(vol)
-                                                        ? vol
-                                                        : null,
-                                                    };
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={1.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                  }}
-                                                  value={row?.height ?? null}
-                                                  onChange={(val) => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    const v = getDimensionValue(
-                                                      "AIR",
-                                                      serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ]?.dimension_unit || ""
-                                                    );
-                                                    const pieces =
-                                                      Number(
-                                                        list[rowIdx]?.pieces
-                                                      ) || 0;
-                                                    const length =
-                                                      Number(
-                                                        list[rowIdx]?.length
-                                                      ) || 0;
-                                                    const width =
-                                                      Number(
-                                                        list[rowIdx]?.width
-                                                      ) || 0;
-                                                    const height =
-                                                      Number(val) || 0;
-                                                    const vol = v
-                                                      ? (pieces *
-                                                          length *
-                                                          width *
-                                                          height) /
-                                                        v
-                                                      : 0;
-                                                    list[rowIdx] = {
-                                                      ...(list[rowIdx] || {}),
-                                                      height: val,
-                                                      value: v || null,
-                                                      vol_weight: isFinite(vol)
-                                                        ? vol
-                                                        : null,
-                                                    };
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={2}>
-                                                <NumberInput
-                                                  hideControls
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                  }}
-                                                  decimalScale={4}
-                                                  value={row?.value ?? null}
-                                                  readOnly
-                                                  styles={{
-                                                    input: {
-                                                      backgroundColor:
-                                                        "#f8f9fa",
-                                                    },
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={2.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                  }}
-                                                  decimalScale={4}
-                                                  value={
-                                                    row?.vol_weight ?? null
-                                                  }
-                                                  readOnly
-                                                  styles={{
-                                                    input: {
-                                                      backgroundColor:
-                                                        "#f8f9fa",
-                                                    },
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={0.8}>
-                                                <Button
-                                                  variant="light"
-                                                  color="red"
-                                                  onClick={() => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    list.splice(rowIdx, 1);
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                >
-                                                  <IconTrash size={16} />
-                                                </Button>
-                                              </Grid.Col>
-                                            </Grid>
-                                          </Grid.Col>
-                                        )
-                                      )}
-                                    </>
-                                  )}
-                              </Grid>
-                            )}
-
-                            {(() => {
-                              // Determine effective service type for rendering
-                              let effectiveServiceType = serviceDetail.service;
-                              if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                                const selectedOtherService = otherServicesData.find(
-                                  (item) => item.value === serviceDetail.service_code
-                                );
-                                if (selectedOtherService) {
-                                  const transportMode = selectedOtherService.transport_mode || "";
-                                  const fullGroupage = selectedOtherService.full_groupage || "";
-                                  if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                    effectiveServiceType = "FCL";
-                                  } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                    effectiveServiceType = "LCL";
-                                  } else {
-                                    effectiveServiceType = "AIR";
-                                  }
-                                }
-                              }
-                              return effectiveServiceType;
-                            })() === "LCL" && (
-                              <Grid>
-                                <Grid.Col span={3}>
-                                  <NumberInput
-                                    hideControls
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
-                                    )}
-                                    label="No of Packages"
-                                    min={1}
-                                    withAsterisk
-                                    disabled={hasValidDimensions(
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.diemensions || []
-                                    )}
-                                    styles={
-                                      hasValidDimensions(
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.diemensions || []
-                                      )
-                                        ? {
-                                            input: {
-                                              backgroundColor: "#f8f9fa",
-                                              cursor: "not-allowed",
-                                              fontSize: "13px",
-                                              fontFamily: "Inter",
-                                              height: "36px",
-                                            },
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }
-                                        : {
-                                            input: {
-                                              fontSize: "13px",
-                                              fontFamily: "Inter",
-                                              height: "36px",
-                                            },
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }
-                                    }
-                                    {...serviceForm.getInputProps(
-                                      `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
-                                    )}
-                                  />
-                                </Grid.Col>
-                                <Grid.Col span={3}>
-                                  <NumberInput
-                                    hideControls
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.cargo_details.0.gross_weight`
-                                    )}
-                                    styles={{
-                                      input: {
-                                        cursor: "not-allowed",
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        height: "36px",
-                                      },
-                                      label: {
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                        marginBottom: "4px",
-                                        fontFamily: "Inter",
-                                        fontStyle: "medium",
-                                      },
-                                    }}
-                                    label="Gross Weight (kg)"
-                                    min={1}
-                                    withAsterisk
-                                    {...serviceForm.getInputProps(
-                                      `service_details.${serviceIndex}.cargo_details.0.gross_weight`
-                                    )}
-                                  />
-                                </Grid.Col>
-                                <Grid.Col span={3}>
-                                  <NumberInput
-                                    hideControls
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.cargo_details.0.volume`
-                                    )}
-                                    label="Volume (cbm)"
-                                    min={1}
-                                    withAsterisk
-                                    disabled={hasValidDimensions(
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.diemensions || []
-                                    )}
-                                    styles={
-                                      hasValidDimensions(
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.diemensions || []
-                                      )
-                                        ? {
-                                            input: {
-                                              backgroundColor: "#f8f9fa",
-                                              cursor: "not-allowed",
-                                              fontSize: "13px",
-                                              fontFamily: "Inter",
-                                              height: "36px",
-                                            },
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }
-                                        : {
-                                            input: {
-                                              fontSize: "13px",
-                                              fontFamily: "Inter",
-                                              height: "36px",
-                                            },
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }
-                                    }
-                                    {...serviceForm.getInputProps(
-                                      `service_details.${serviceIndex}.cargo_details.0.volume`
-                                    )}
-                                  />
-                                </Grid.Col>
-                                <Grid.Col span={3}>
-                                  <NumberInput
-                                    hideControls
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.cargo_details.0.chargable_volume`
-                                    )}
-                                    label="Chargeable Volume (cbm)"
-                                    min={0}
-                                    readOnly
-                                    styles={{
-                                      input: {
-                                        cursor: "not-allowed",
-                                        color: "#495057",
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        height: "36px",
-                                      },
-                                      label: {
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                        marginBottom: "4px",
-                                        fontFamily: "Inter",
-                                        fontStyle: "medium",
-                                      },
-                                    }}
-                                    {...serviceForm.getInputProps(
-                                      `service_details.${serviceIndex}.cargo_details.0.chargable_volume`
-                                    )}
-                                  />
-                                  <Text size="xs" c="dimmed" mt="xs" style={{
-                                    fontSize: "13px",
-                                    fontFamily: "Inter",
-                                    fontStyle: "medium",
-                                  }}>
-                                    Max of (Gross Weight ÷ 1000) and Volume
-                                  </Text>
-                                </Grid.Col>
-                                {/* LCL Dimension Section */}
-                                {Array.isArray(
-                                  serviceForm.values.service_details[
-                                    serviceIndex
-                                  ]?.diemensions
-                                ) &&
-                                  serviceForm.values.service_details[
-                                    serviceIndex
-                                  ].diemensions.length > 0 && (
-                                    <>
-                                      <Grid.Col span={12}>
-                                        <Grid
-                                          style={{
-                                            fontWeight: 600,
-                                            color: "#105476",
-                                            fontSize: "13px",
-                                            fontFamily: "Inter",
-                                            fontStyle: "medium",
-                                          }}
-                                        >
-                                          <Grid.Col span={1.5}>Pieces</Grid.Col>
-                                          <Grid.Col span={1.5}>Length</Grid.Col>
-                                          <Grid.Col span={1.5}>Width</Grid.Col>
-                                          <Grid.Col span={1.5}>Height</Grid.Col>
-                                          <Grid.Col span={2}>Value</Grid.Col>
-                                          <Grid.Col span={2.5}>
-                                            Volume Weight
-                                          </Grid.Col>
-                                          <Grid.Col span={0.8}></Grid.Col>
-                                        </Grid>
-                                      </Grid.Col>
-                                      {serviceForm.values.service_details[
-                                        serviceIndex
-                                      ].diemensions.map(
-                                        (row: any, rowIdx: number) => (
-                                          <Grid.Col
-                                            span={12}
-                                            key={`lcl-dim-${serviceIndex}-${rowIdx}`}
-                                          >
-                                            <Grid>
-                                              <Grid.Col span={1.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                    label: {
-                                                      fontSize: "13px",
-                                                      fontWeight: 500,
-                                                      color: "#424242",
-                                                      marginBottom: "4px",
-                                                      fontFamily: "Inter",
-                                                      fontStyle: "medium",
-                                                    },
-                                                  }}
-                                                  value={row?.pieces ?? null}
-                                                  onChange={(val) => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    const v = getDimensionValue(
-                                                      "LCL",
-                                                      serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ]?.dimension_unit || ""
-                                                    );
-                                                    const pieces =
-                                                      Number(val) || 0;
-                                                    const length =
-                                                      Number(
-                                                        list[rowIdx]?.length
-                                                      ) || 0;
-                                                    const width =
-                                                      Number(
-                                                        list[rowIdx]?.width
-                                                      ) || 0;
-                                                    const height =
-                                                      Number(
-                                                        list[rowIdx]?.height
-                                                      ) || 0;
-                                                    const vol = v
-                                                      ? (pieces *
-                                                          length *
-                                                          width *
-                                                          height) /
-                                                        v
-                                                      : 0;
-                                                    list[rowIdx] = {
-                                                      ...(list[rowIdx] || {}),
-                                                      pieces: val,
-                                                      value: v || null,
-                                                      vol_weight: isFinite(vol)
-                                                        ? vol
-                                                        : null,
-                                                    };
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={1.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  value={row?.length ?? null} 
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                    label: {
-                                                      fontSize: "13px",
-                                                      fontWeight: 500,
-                                                      color: "#424242",
-                                                      marginBottom: "4px",
-                                                      fontFamily: "Inter",
-                                                      fontStyle: "medium",
-                                                    },
-                                                  }}
-                                                  onChange={(val) => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    const v = getDimensionValue(
-                                                      "LCL",
-                                                      serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ]?.dimension_unit || ""
-                                                    );
-                                                    const pieces =
-                                                      Number(
-                                                        list[rowIdx]?.pieces
-                                                      ) || 0;
-                                                    const length =
-                                                      Number(val) || 0;
-                                                    const width =
-                                                      Number(
-                                                        list[rowIdx]?.width
-                                                      ) || 0;
-                                                    const height =
-                                                      Number(
-                                                        list[rowIdx]?.height
-                                                      ) || 0;
-                                                    const vol = v
-                                                      ? (pieces *
-                                                          length *
-                                                          width *
-                                                          height) /
-                                                        v
-                                                      : 0;
-                                                    list[rowIdx] = {
-                                                      ...(list[rowIdx] || {}),
-                                                      length: val,
-                                                      value: v || null,
-                                                      vol_weight: isFinite(vol)
-                                                        ? vol
-                                                        : null,
-                                                    };
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={1.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  value={row?.width ?? null}
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                    label: {
-                                                      fontSize: "13px",
-                                                      fontWeight: 500,
-                                                      color: "#424242",
-                                                      marginBottom: "4px",
-                                                      fontFamily: "Inter",
-                                                      fontStyle: "medium",
-                                                    },
-                                                  }}
-                                                  onChange={(val) => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    const v = getDimensionValue(
-                                                      "LCL",
-                                                      serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ]?.dimension_unit || ""
-                                                    );
-                                                    const pieces =
-                                                      Number(
-                                                        list[rowIdx]?.pieces
-                                                      ) || 0;
-                                                    const length =
-                                                      Number(
-                                                        list[rowIdx]?.length
-                                                      ) || 0;
-                                                    const width =
-                                                      Number(val) || 0;
-                                                    const height =
-                                                      Number(
-                                                        list[rowIdx]?.height
-                                                      ) || 0;
-                                                    const vol = v
-                                                      ? (pieces *
-                                                          length *
-                                                          width *
-                                                          height) /
-                                                        v
-                                                      : 0;
-                                                    list[rowIdx] = {
-                                                      ...(list[rowIdx] || {}),
-                                                      width: val,
-                                                      value: v || null,
-                                                      vol_weight: isFinite(vol)
-                                                        ? vol
-                                                        : null,
-                                                    };
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={1.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  value={row?.height ?? null}
-                                                  styles={{
-                                                    input: {
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                    label: {
-                                                      fontSize: "13px",
-                                                      fontWeight: 500,
-                                                      color: "#424242",
-                                                      marginBottom: "4px",
-                                                      fontFamily: "Inter",
-                                                      fontStyle: "medium",
-                                                    },
-                                                  }}
-                                                  onChange={(val) => {
-                                                    const list = [
-                                                      ...((serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions as any[]) ||
-                                                        []),
-                                                    ];
-                                                    const v = getDimensionValue(
-                                                      "LCL",
-                                                      serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ]?.dimension_unit || ""
-                                                    );
-                                                    const pieces =
-                                                      Number(
-                                                        list[rowIdx]?.pieces
-                                                      ) || 0;
-                                                    const length =
-                                                      Number(
-                                                        list[rowIdx]?.length
-                                                      ) || 0;
-                                                    const width =
-                                                      Number(
-                                                        list[rowIdx]?.width
-                                                      ) || 0;
-                                                    const height =
-                                                      Number(val) || 0;
-                                                    const vol = v
-                                                      ? (pieces *
-                                                          length *
-                                                          width *
-                                                          height) /
-                                                        v
-                                                      : 0;
-                                                    list[rowIdx] = {
-                                                      ...(list[rowIdx] || {}),
-                                                      height: val,
-                                                      value: v || null,
-                                                      vol_weight: isFinite(vol)
-                                                        ? vol
-                                                        : null,
-                                                    };
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={2}>
-                                                <NumberInput
-                                                  hideControls
-                                                  decimalScale={4}
-                                                  value={row?.value ?? null}
-                                                  readOnly
-                                                  styles={{
-                                                    input: {
-                                                      backgroundColor:
-                                                        "#f8f9fa",
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                    label: {
-                                                      fontSize: "13px",
-                                                      fontWeight: 500,
-                                                      color: "#424242",
-                                                      marginBottom: "4px",
-                                                      fontFamily: "Inter",
-                                                      fontStyle: "medium",
-                                                    },
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={2.5}>
-                                                <NumberInput
-                                                  hideControls
-                                                  decimalScale={4}
-                                                  value={
-                                                    row?.vol_weight ?? null
-                                                  }
-                                                  readOnly
-                                                  styles={{
-                                                    input: {
-                                                      backgroundColor:
-                                                        "#f8f9fa",
-                                                      fontSize: "13px",
-                                                      fontFamily: "Inter",
-                                                      height: "36px",
-                                                    },
-                                                    label: {
-                                                      fontSize: "13px",
-                                                      fontWeight: 500,
-                                                      color: "#424242",
-                                                      marginBottom: "4px",
-                                                      fontFamily: "Inter",
-                                                      fontStyle: "medium",
-                                                    },
-                                                  }}
-                                                />
-                                              </Grid.Col>
-                                              <Grid.Col span={0.8}>
-                                                <Button
-                                                  variant="light"
-                                                  color="red"
-                                                  onClick={() => {
-                                                    const list = [
-                                                      ...(serviceForm.values
-                                                        .service_details[
-                                                        serviceIndex
-                                                      ].diemensions || []),
-                                                    ];
-                                                    list.splice(rowIdx, 1);
-                                                    serviceForm.setFieldValue(
-                                                      `service_details.${serviceIndex}.diemensions`,
-                                                      list
-                                                    );
-                                                  }}
-                                                >
-                                                  <IconTrash size={16} />
-                                                </Button>
-                                              </Grid.Col>
-                                            </Grid>
-                                          </Grid.Col>
-                                        )
-                                      )}
-                                    </>
-                                  )}
-                              </Grid>
-                            )}
-
-                            {(() => {
-                              // Determine effective service type for rendering
-                              let effectiveServiceType = serviceDetail.service;
-                              if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-                                const selectedOtherService = otherServicesData.find(
-                                  (item) => item.value === serviceDetail.service_code
-                                );
-                                if (selectedOtherService) {
-                                  const transportMode = selectedOtherService.transport_mode || "";
-                                  const fullGroupage = selectedOtherService.full_groupage || "";
-                                  if (transportMode === "SEA" && fullGroupage === "FULL") {
-                                    effectiveServiceType = "FCL";
-                                  } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-                                    effectiveServiceType = "LCL";
-                                  } else {
-                                    effectiveServiceType = "AIR";
-                                  }
-                                }
-                              }
-                              return effectiveServiceType;
-                            })() === "FCL" && (
-                              <Stack gap="md">
-                                {/* Show cargo details for this specific service - use current form values */}
-                                {serviceForm.values.service_details[
-                                  serviceIndex
-                                ].cargo_details.map(
-                                  (cargoDetail, cargoIndex) => (
-                                    <Box
-                                      key={`${(serviceDetail as any).id || serviceIndex}-cargo-${cargoDetail.id || cargoIndex}`}
-                                    >
-                                      <Grid>
-                                        <Grid.Col span={3}>
-                                          <Dropdown
-                                            key={serviceForm.key(
-                                              `service_details.${serviceIndex}.cargo_details.${cargoIndex}.container_type_code`
-                                            )}
-                                            searchable
-                                            styles={{
-                                              input: {
-                                                fontSize: "13px",
-                                                fontFamily: "Inter",
-                                                height: "36px",
-                                              },
-                                              label: {
-                                                fontSize: "13px",
-                                                fontWeight: 500,
-                                                color: "#424242",
-                                                marginBottom: "4px",
-                                                fontFamily: "Inter",
-                                                fontStyle: "medium",
-                                              },
-                                            }}
-                                            label="Container Type"
-                                            placeholder="Select Container Type"
-                                            withAsterisk
-                                            data={containerTypeData}
-                                            nothingFoundMessage="No container types found"
-                                            {...serviceForm.getInputProps(
-                                              `service_details.${serviceIndex}.cargo_details.${cargoIndex}.container_type_code`
-                                            )}
-                                          />
-                                        </Grid.Col>
-                                        <Grid.Col span={3}>
-                                          <NumberInput
-                                            hideControls
-                                            key={serviceForm.key(
-                                              `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
-                                            )}
-                                            label="No of Containers"
-                                            styles={{
-                                              input: {
-                                                fontSize: "13px",
-                                                fontFamily: "Inter",
-                                                height: "36px",
-                                              },
-                                              label: {
-                                                fontSize: "13px",
-                                                fontWeight: 500,
-                                                color: "#424242",
-                                                marginBottom: "4px",
-                                                fontFamily: "Inter",
-                                                fontStyle: "medium",
-                                              },
-                                            }}
-                                            placeholder="Enter number of containers"
-                                            min={1}
-                                            withAsterisk
-                                            {...serviceForm.getInputProps(
-                                              `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
-                                            )}
-                                          />
-                                        </Grid.Col>
-                                        <Grid.Col span={3}>
-                                          <NumberInput
-                                            hideControls
-                                            key={serviceForm.key(
-                                              `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
-                                            )}
-                                            styles={{
-                                              input: {
-                                                cursor: "not-allowed",
-                                                fontSize: "13px",
-                                                fontFamily: "Inter",
-                                                height: "36px",
-                                              },
-                                              label: {
-                                                fontSize: "13px",
-                                                fontWeight: 500,
-                                                color: "#424242",
-                                                marginBottom: "4px",
-                                                fontFamily: "Inter",
-                                                fontStyle: "medium",
-                                              },
-                                            }}
-                                            label="Gross Weight (kg)"
-                                            withAsterisk
-                                            placeholder="Enter gross weight"
-                                            min={0}
-                                            {...serviceForm.getInputProps(
-                                              `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
-                                            )}
-                                          />
-                                        </Grid.Col>
-                                        {/* Add button only on the last cargo detail */}
-                                        {cargoIndex ===
+                                        }
+                                      }
+                                      return effectiveServiceType;
+                                    })() === "LCL" ? (
+                                      <Group gap="sm">
+                                        {Array.isArray(
                                           serviceForm.values.service_details[
                                             serviceIndex
-                                          ].cargo_details.length -
-                                            1 && (
-                                          <Grid.Col span={0.75}>
-                                            <Button
-                                              variant="light"
-                                              color="#105476"
-                                              mt={25}
-                                              onClick={() =>
-                                                serviceForm.insertListItem(
-                                                  `service_details.${serviceIndex}.cargo_details`,
-                                                  {
-                                                    id: null,
-                                                    no_of_packages: null,
-                                                    gross_weight: null,
-                                                    volume_weight: null,
-                                                    chargable_weight: null,
-                                                    volume: null,
-                                                    chargable_volume: null,
-                                                    container_type_code: null,
-                                                    no_of_containers: null,
-                                                    hazardous_cargo: "No",
-                                                    stackable: "Yes",
-                                                  }
-                                                )
-                                              }
-                                            >
-                                              <IconPlus size={16} />
-                                            </Button>
-                                          </Grid.Col>
-                                        )}
-                                        {/* Remove button */}
-                                        <Grid.Col span={0.75}>
-                                          {serviceForm.values.service_details[
+                                          ]?.diemensions
+                                        ) &&
+                                          serviceForm.values.service_details[
                                             serviceIndex
-                                          ].cargo_details.length > 1 ? (
-                                            <Button
-                                              variant="light"
-                                              color="red"
-                                              mt={25}
-                                              onClick={() => {
-                                                // Use cargoIndex directly - it's the correct index at render time
-                                                serviceForm.removeListItem(
-                                                  `service_details.${serviceIndex}.cargo_details`,
-                                                  cargoIndex
+                                          ].diemensions.length > 0 && (
+                                            <Dropdown
+                                              placeholder="Dimension Unit"
+                                              data={
+                                                DIMENSION_UNIT_OPTIONS.find(
+                                                  (option) => {
+                                                    // Determine effective service type for dimension unit
+                                                    let effectiveServiceType =
+                                                      serviceDetail.service;
+                                                    if (
+                                                      serviceDetail.service ===
+                                                        "OTHERS" &&
+                                                      serviceDetail.service_code
+                                                    ) {
+                                                      const selectedOtherService =
+                                                        otherServicesData.find(
+                                                          (item) =>
+                                                            item.value ===
+                                                            serviceDetail.service_code
+                                                        );
+                                                      if (
+                                                        selectedOtherService
+                                                      ) {
+                                                        const transportMode =
+                                                          selectedOtherService.transport_mode ||
+                                                          "";
+                                                        const fullGroupage =
+                                                          selectedOtherService.full_groupage ||
+                                                          "";
+                                                        if (
+                                                          transportMode ===
+                                                            "SEA" &&
+                                                          fullGroupage ===
+                                                            "FULL"
+                                                        ) {
+                                                          effectiveServiceType =
+                                                            "FCL";
+                                                        } else if (
+                                                          transportMode ===
+                                                            "SEA" &&
+                                                          fullGroupage ===
+                                                            "GROUPAGE"
+                                                        ) {
+                                                          effectiveServiceType =
+                                                            "LCL";
+                                                        } else {
+                                                          effectiveServiceType =
+                                                            "AIR";
+                                                        }
+                                                      }
+                                                    }
+                                                    return (
+                                                      option.service ===
+                                                      effectiveServiceType
+                                                    );
+                                                  }
+                                                )?.unit_value.map((unit) => ({
+                                                  value: unit.Label,
+                                                  label: unit.Label,
+                                                })) || []
+                                              }
+                                              value={
+                                                serviceForm.values
+                                                  .service_details[serviceIndex]
+                                                  ?.dimension_unit || ""
+                                              }
+                                              onChange={(value) => {
+                                                serviceForm.setFieldValue(
+                                                  `service_details.${serviceIndex}.dimension_unit`,
+                                                  value || ""
+                                                );
+                                                const rows =
+                                                  serviceForm.values
+                                                    .service_details[
+                                                    serviceIndex
+                                                  ]?.diemensions || [];
+                                                // Determine effective service type for dimension calculation
+                                                let effectiveServiceType =
+                                                  serviceDetail.service;
+                                                if (
+                                                  serviceDetail.service ===
+                                                    "OTHERS" &&
+                                                  serviceDetail.service_code
+                                                ) {
+                                                  const selectedOtherService =
+                                                    otherServicesData.find(
+                                                      (item) =>
+                                                        item.value ===
+                                                        serviceDetail.service_code
+                                                    );
+                                                  if (selectedOtherService) {
+                                                    const transportMode =
+                                                      selectedOtherService.transport_mode ||
+                                                      "";
+                                                    const fullGroupage =
+                                                      selectedOtherService.full_groupage ||
+                                                      "";
+                                                    if (
+                                                      transportMode === "SEA" &&
+                                                      fullGroupage === "FULL"
+                                                    ) {
+                                                      effectiveServiceType =
+                                                        "FCL";
+                                                    } else if (
+                                                      transportMode === "SEA" &&
+                                                      fullGroupage ===
+                                                        "GROUPAGE"
+                                                    ) {
+                                                      effectiveServiceType =
+                                                        "LCL";
+                                                    } else {
+                                                      effectiveServiceType =
+                                                        "AIR";
+                                                    }
+                                                  }
+                                                }
+                                                const mapped = rows.map(
+                                                  (r: any) => {
+                                                    const v = getDimensionValue(
+                                                      effectiveServiceType,
+                                                      value || ""
+                                                    );
+                                                    const pieces =
+                                                      Number(r?.pieces) || 0;
+                                                    const length =
+                                                      Number(r?.length) || 0;
+                                                    const width =
+                                                      Number(r?.width) || 0;
+                                                    const height =
+                                                      Number(r?.height) || 0;
+                                                    const vol = v
+                                                      ? (pieces *
+                                                          length *
+                                                          width *
+                                                          height) /
+                                                        v
+                                                      : 0;
+                                                    return {
+                                                      ...r,
+                                                      value: v,
+                                                      vol_weight: isFinite(vol)
+                                                        ? vol
+                                                        : 0,
+                                                    };
+                                                  }
+                                                );
+                                                serviceForm.setFieldValue(
+                                                  `service_details.${serviceIndex}.diemensions`,
+                                                  mapped
                                                 );
                                               }}
-                                            >
-                                              <IconTrash size={16} />
-                                            </Button>
-                                          ) : (
-                                            ""
+                                            />
                                           )}
-                                        </Grid.Col>
-                                      </Grid>
-                                    </Box>
-                                  )
-                                )}
-                              </Stack>
-                            )}
-                          </>
-                        )}
+                                        <Button
+                                          variant="light"
+                                          color="#105476"
+                                          leftSection={<IconPlus size={16} />}
+                                          styles={{
+                                            root: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#105476",
+                                              fontFamily: "Inter",
+                                              fontStyle: "semibold",
+                                            },
+                                          }}
+                                          onClick={() => {
+                                            const unit =
+                                              serviceForm.values
+                                                .service_details[serviceIndex]
+                                                ?.dimension_unit ||
+                                              "Centimeter";
 
-                      </Box>
-                    )
-                  )}
-                </Stack>
-                <Flex justify="end" align="center" mb="md" mt="md">
-                  <Button
-                    variant="subtle"
-                    color="#105476"
-                    size="sm"
-                    leftSection={<IconPlus size={16} />}
-                    styles={{ 
-                      root: { 
-                        color: "#105476",
-                        fontWeight: 500,
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        fontStyle: "medium",
-                      },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        fontFamily: "Inter",
-                        fontStyle: "medium",
-                      },
-                    }}
-                    onClick={() =>
-                      serviceForm.insertListItem("service_details", {
-                        id: "",
-                        service: "",
-                        trade: "",
-                        service_code: "",
-                        service_name: "",
-                        origin_code: "",
-                        origin_name: "",
-                        destination_code: "",
-                        destination_name: "",
-                        pickup: "false",
-                        delivery: "false",
-                        pickup_location: "",
-                        delivery_location: "",
-                        shipment_terms_code: "",
-                        dimension_unit: "Centimeter",
-                        diemensions: [],
-                        cargo_details: [
-                          {
-                            id: null,
-                            no_of_packages: null,
-                            gross_weight: null,
-                            volume_weight: null,
-                            chargable_weight: null,
-                            volume: null,
-                            chargable_volume: null,
-                            container_type_code: null,
-                            no_of_containers: null,
-                            hazardous_cargo: "No",
-                            stackable: "Yes",
+                                            // Set dimension_unit to Centimeter if not already set
+                                            if (
+                                              !serviceForm.values
+                                                .service_details[serviceIndex]
+                                                ?.dimension_unit
+                                            ) {
+                                              serviceForm.setFieldValue(
+                                                `service_details.${serviceIndex}.dimension_unit`,
+                                                "Centimeter"
+                                              );
+                                            }
+
+                                            // Determine effective service type for dimension calculation
+                                            let effectiveServiceType =
+                                              serviceDetail.service;
+                                            if (
+                                              serviceDetail.service ===
+                                                "OTHERS" &&
+                                              serviceDetail.service_code
+                                            ) {
+                                              const selectedOtherService =
+                                                otherServicesData.find(
+                                                  (item) =>
+                                                    item.value ===
+                                                    serviceDetail.service_code
+                                                );
+                                              if (selectedOtherService) {
+                                                const transportMode =
+                                                  selectedOtherService.transport_mode ||
+                                                  "";
+                                                const fullGroupage =
+                                                  selectedOtherService.full_groupage ||
+                                                  "";
+                                                if (
+                                                  transportMode === "SEA" &&
+                                                  fullGroupage === "FULL"
+                                                ) {
+                                                  effectiveServiceType = "FCL";
+                                                } else if (
+                                                  transportMode === "SEA" &&
+                                                  fullGroupage === "GROUPAGE"
+                                                ) {
+                                                  effectiveServiceType = "LCL";
+                                                } else {
+                                                  effectiveServiceType = "AIR";
+                                                }
+                                              }
+                                            }
+
+                                            const value = getDimensionValue(
+                                              effectiveServiceType,
+                                              unit
+                                            );
+                                            const newRow = {
+                                              pieces: null,
+                                              length: null,
+                                              width: null,
+                                              height: null,
+                                              value: value || null,
+                                              vol_weight: null,
+                                            };
+                                            const list =
+                                              (serviceForm.values
+                                                .service_details[serviceIndex]
+                                                ?.diemensions as any[]) || [];
+                                            serviceForm.setFieldValue(
+                                              `service_details.${serviceIndex}.diemensions`,
+                                              [...list, newRow]
+                                            );
+                                          }}
+                                        >
+                                          Add Dimension
+                                        </Button>
+                                      </Group>
+                                    ) : null}
+                                  </Flex>
+
+                                  {/* Cargo Details Form */}
+                                  {(() => {
+                                    // Determine effective service type for rendering
+                                    let effectiveServiceType =
+                                      serviceDetail.service;
+                                    if (
+                                      serviceDetail.service === "OTHERS" &&
+                                      serviceDetail.service_code
+                                    ) {
+                                      const selectedOtherService =
+                                        otherServicesData.find(
+                                          (item) =>
+                                            item.value ===
+                                            serviceDetail.service_code
+                                        );
+                                      if (selectedOtherService) {
+                                        const transportMode =
+                                          selectedOtherService.transport_mode ||
+                                          "";
+                                        const fullGroupage =
+                                          selectedOtherService.full_groupage ||
+                                          "";
+                                        if (
+                                          transportMode === "SEA" &&
+                                          fullGroupage === "FULL"
+                                        ) {
+                                          effectiveServiceType = "FCL";
+                                        } else if (
+                                          transportMode === "SEA" &&
+                                          fullGroupage === "GROUPAGE"
+                                        ) {
+                                          effectiveServiceType = "LCL";
+                                        } else {
+                                          effectiveServiceType = "AIR";
+                                        }
+                                      }
+                                    }
+                                    return effectiveServiceType === "AIR";
+                                  })() && (
+                                    <Grid>
+                                      <Grid.Col span={3}>
+                                        <NumberInput
+                                          hideControls
+                                          rightSectionPointerEvents="none"
+                                          key={serviceForm.key(
+                                            `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
+                                          )}
+                                          label="No of Packages"
+                                          withAsterisk
+                                          min={1}
+                                          disabled={hasValidDimensions(
+                                            serviceForm.values.service_details[
+                                              serviceIndex
+                                            ]?.diemensions || []
+                                          )}
+                                          styles={
+                                            hasValidDimensions(
+                                              serviceForm.values
+                                                .service_details[serviceIndex]
+                                                ?.diemensions || []
+                                            )
+                                              ? {
+                                                  input: {
+                                                    fontSize: "13px",
+                                                    fontFamily: "Inter",
+                                                    height: "36px",
+                                                    backgroundColor: "#f8f9fa",
+                                                    cursor: "not-allowed",
+                                                  },
+                                                  label: {
+                                                    fontSize: "13px",
+                                                    fontWeight: 500,
+                                                    color: "#424242",
+                                                    marginBottom: "4px",
+                                                    fontFamily: "Inter",
+                                                    fontStyle: "medium",
+                                                  },
+                                                }
+                                              : {
+                                                  input: {
+                                                    fontSize: "13px",
+                                                    fontFamily: "Inter",
+                                                    height: "36px",
+                                                  },
+                                                  label: {
+                                                    fontSize: "13px",
+                                                    fontWeight: 500,
+                                                    color: "#424242",
+                                                    marginBottom: "4px",
+                                                    fontFamily: "Inter",
+                                                    fontStyle: "medium",
+                                                  },
+                                                }
+                                          }
+                                          {...serviceForm.getInputProps(
+                                            `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
+                                          )}
+                                        />
+                                      </Grid.Col>
+                                      {/* Dimension Unit + Add Button (AIR) */}
+                                      <Grid.Col span={3}>
+                                        <NumberInput
+                                          hideControls
+                                          styles={{
+                                            input: {
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                          key={serviceForm.key(
+                                            `service_details.${serviceIndex}.cargo_details.0.gross_weight`
+                                          )}
+                                          label="Gross Weight (kg)"
+                                          min={1}
+                                          withAsterisk
+                                          {...serviceForm.getInputProps(
+                                            `service_details.${serviceIndex}.cargo_details.0.gross_weight`
+                                          )}
+                                        />
+                                      </Grid.Col>
+                                      <Grid.Col span={3}>
+                                        <NumberInput
+                                          hideControls
+                                          key={serviceForm.key(
+                                            `service_details.${serviceIndex}.cargo_details.0.volume_weight`
+                                          )}
+                                          label="Volume Weight (kg)"
+                                          min={1}
+                                          withAsterisk
+                                          disabled={hasValidDimensions(
+                                            serviceForm.values.service_details[
+                                              serviceIndex
+                                            ]?.diemensions || []
+                                          )}
+                                          styles={
+                                            hasValidDimensions(
+                                              serviceForm.values
+                                                .service_details[serviceIndex]
+                                                ?.diemensions || []
+                                            )
+                                              ? {
+                                                  input: {
+                                                    backgroundColor: "#f8f9fa",
+                                                    cursor: "not-allowed",
+                                                    fontSize: "13px",
+                                                    fontFamily: "Inter",
+                                                    height: "36px",
+                                                  },
+                                                  label: {
+                                                    fontSize: "13px",
+                                                    fontWeight: 500,
+                                                    color: "#424242",
+                                                    marginBottom: "4px",
+                                                    fontFamily: "Inter",
+                                                    fontStyle: "medium",
+                                                  },
+                                                }
+                                              : {
+                                                  input: {
+                                                    fontSize: "13px",
+                                                    fontFamily: "Inter",
+                                                    height: "36px",
+                                                  },
+                                                  label: {
+                                                    fontSize: "13px",
+                                                    fontWeight: 500,
+                                                    color: "#424242",
+                                                    marginBottom: "4px",
+                                                    fontFamily: "Inter",
+                                                    fontStyle: "medium",
+                                                  },
+                                                }
+                                          }
+                                          {...serviceForm.getInputProps(
+                                            `service_details.${serviceIndex}.cargo_details.0.volume_weight`
+                                          )}
+                                        />
+                                      </Grid.Col>
+                                      <Grid.Col span={3}>
+                                        <NumberInput
+                                          hideControls
+                                          key={serviceForm.key(
+                                            `service_details.${serviceIndex}.cargo_details.0.chargable_weight`
+                                          )}
+                                          label="Chargeable Weight (kg)"
+                                          withAsterisk
+                                          min={0}
+                                          readOnly
+                                          styles={{
+                                            input: {
+                                              cursor: "not-allowed",
+                                              color: "#495057",
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                          {...serviceForm.getInputProps(
+                                            `service_details.${serviceIndex}.cargo_details.0.chargable_weight`
+                                          )}
+                                        />
+                                        <Text
+                                          size="xs"
+                                          c="dimmed"
+                                          mt="xs"
+                                          style={{
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
+                                          }}
+                                        >
+                                          Max of Gross Weight and Volume Weight
+                                        </Text>
+                                      </Grid.Col>
+
+                                      {/* AIR Dimension Section */}
+                                      {Array.isArray(
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.diemensions
+                                      ) &&
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ].diemensions.length > 0 && (
+                                          <>
+                                            <Grid.Col span={12}>
+                                              <Grid
+                                                style={{
+                                                  fontWeight: 600,
+                                                  color: "#105476",
+                                                  fontSize: "13px",
+                                                  fontFamily: "Inter",
+                                                  fontStyle: "medium",
+                                                }}
+                                              >
+                                                <Grid.Col span={1.5}>
+                                                  Pieces
+                                                </Grid.Col>
+                                                <Grid.Col span={1.5}>
+                                                  Length
+                                                </Grid.Col>
+                                                <Grid.Col span={1.5}>
+                                                  Width
+                                                </Grid.Col>
+                                                <Grid.Col span={1.5}>
+                                                  Height
+                                                </Grid.Col>
+                                                <Grid.Col span={2}>
+                                                  Value
+                                                </Grid.Col>
+                                                <Grid.Col span={2.5}>
+                                                  Volume Weight
+                                                </Grid.Col>
+                                                <Grid.Col span={0.8}></Grid.Col>
+                                              </Grid>
+                                            </Grid.Col>
+                                            {serviceForm.values.service_details[
+                                              serviceIndex
+                                            ].diemensions.map(
+                                              (row: any, rowIdx: number) => (
+                                                <Grid.Col
+                                                  span={12}
+                                                  key={`air-dim-${serviceIndex}-${rowIdx}`}
+                                                >
+                                                  <Grid>
+                                                    <Grid.Col span={1.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                        }}
+                                                        value={
+                                                          row?.pieces ?? null
+                                                        }
+                                                        onChange={(val) => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          const v =
+                                                            getDimensionValue(
+                                                              "AIR",
+                                                              serviceForm.values
+                                                                .service_details[
+                                                                serviceIndex
+                                                              ]
+                                                                ?.dimension_unit ||
+                                                                ""
+                                                            );
+                                                          const pieces =
+                                                            Number(val) || 0;
+                                                          const length =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.length
+                                                            ) || 0;
+                                                          const width =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.width
+                                                            ) || 0;
+                                                          const height =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.height
+                                                            ) || 0;
+                                                          const vol = v
+                                                            ? (pieces *
+                                                                length *
+                                                                width *
+                                                                height) /
+                                                              v
+                                                            : 0;
+                                                          list[rowIdx] = {
+                                                            ...(list[rowIdx] ||
+                                                              {}),
+                                                            pieces: val,
+                                                            value: v || null,
+                                                            vol_weight:
+                                                              isFinite(vol)
+                                                                ? vol
+                                                                : null,
+                                                          };
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={1.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        value={
+                                                          row?.length ?? null
+                                                        }
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                        }}
+                                                        onChange={(val) => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          const v =
+                                                            getDimensionValue(
+                                                              "AIR",
+                                                              serviceForm.values
+                                                                .service_details[
+                                                                serviceIndex
+                                                              ]
+                                                                ?.dimension_unit ||
+                                                                ""
+                                                            );
+                                                          const pieces =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.pieces
+                                                            ) || 0;
+                                                          const length =
+                                                            Number(val) || 0;
+                                                          const width =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.width
+                                                            ) || 0;
+                                                          const height =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.height
+                                                            ) || 0;
+                                                          const vol = v
+                                                            ? (pieces *
+                                                                length *
+                                                                width *
+                                                                height) /
+                                                              v
+                                                            : 0;
+                                                          list[rowIdx] = {
+                                                            ...(list[rowIdx] ||
+                                                              {}),
+                                                            length: val,
+                                                            value: v || null,
+                                                            vol_weight:
+                                                              isFinite(vol)
+                                                                ? vol
+                                                                : null,
+                                                          };
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={1.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                        }}
+                                                        value={
+                                                          row?.width ?? null
+                                                        }
+                                                        onChange={(val) => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          const v =
+                                                            getDimensionValue(
+                                                              "AIR",
+                                                              serviceForm.values
+                                                                .service_details[
+                                                                serviceIndex
+                                                              ]
+                                                                ?.dimension_unit ||
+                                                                ""
+                                                            );
+                                                          const pieces =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.pieces
+                                                            ) || 0;
+                                                          const length =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.length
+                                                            ) || 0;
+                                                          const width =
+                                                            Number(val) || 0;
+                                                          const height =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.height
+                                                            ) || 0;
+                                                          const vol = v
+                                                            ? (pieces *
+                                                                length *
+                                                                width *
+                                                                height) /
+                                                              v
+                                                            : 0;
+                                                          list[rowIdx] = {
+                                                            ...(list[rowIdx] ||
+                                                              {}),
+                                                            width: val,
+                                                            value: v || null,
+                                                            vol_weight:
+                                                              isFinite(vol)
+                                                                ? vol
+                                                                : null,
+                                                          };
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={1.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                        }}
+                                                        value={
+                                                          row?.height ?? null
+                                                        }
+                                                        onChange={(val) => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          const v =
+                                                            getDimensionValue(
+                                                              "AIR",
+                                                              serviceForm.values
+                                                                .service_details[
+                                                                serviceIndex
+                                                              ]
+                                                                ?.dimension_unit ||
+                                                                ""
+                                                            );
+                                                          const pieces =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.pieces
+                                                            ) || 0;
+                                                          const length =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.length
+                                                            ) || 0;
+                                                          const width =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.width
+                                                            ) || 0;
+                                                          const height =
+                                                            Number(val) || 0;
+                                                          const vol = v
+                                                            ? (pieces *
+                                                                length *
+                                                                width *
+                                                                height) /
+                                                              v
+                                                            : 0;
+                                                          list[rowIdx] = {
+                                                            ...(list[rowIdx] ||
+                                                              {}),
+                                                            height: val,
+                                                            value: v || null,
+                                                            vol_weight:
+                                                              isFinite(vol)
+                                                                ? vol
+                                                                : null,
+                                                          };
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={2}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                        }}
+                                                        decimalScale={4}
+                                                        value={
+                                                          row?.value ?? null
+                                                        }
+                                                        readOnly
+                                                        styles={{
+                                                          input: {
+                                                            backgroundColor:
+                                                              "#f8f9fa",
+                                                          },
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={2.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                        }}
+                                                        decimalScale={4}
+                                                        value={
+                                                          row?.vol_weight ??
+                                                          null
+                                                        }
+                                                        readOnly
+                                                        styles={{
+                                                          input: {
+                                                            backgroundColor:
+                                                              "#f8f9fa",
+                                                          },
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={0.8}>
+                                                      <Button
+                                                        variant="light"
+                                                        color="red"
+                                                        onClick={() => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          list.splice(
+                                                            rowIdx,
+                                                            1
+                                                          );
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      >
+                                                        <IconTrash size={16} />
+                                                      </Button>
+                                                    </Grid.Col>
+                                                  </Grid>
+                                                </Grid.Col>
+                                              )
+                                            )}
+                                          </>
+                                        )}
+                                    </Grid>
+                                  )}
+
+                                  {(() => {
+                                    // Determine effective service type for rendering
+                                    let effectiveServiceType =
+                                      serviceDetail.service;
+                                    if (
+                                      serviceDetail.service === "OTHERS" &&
+                                      serviceDetail.service_code
+                                    ) {
+                                      const selectedOtherService =
+                                        otherServicesData.find(
+                                          (item) =>
+                                            item.value ===
+                                            serviceDetail.service_code
+                                        );
+                                      if (selectedOtherService) {
+                                        const transportMode =
+                                          selectedOtherService.transport_mode ||
+                                          "";
+                                        const fullGroupage =
+                                          selectedOtherService.full_groupage ||
+                                          "";
+                                        if (
+                                          transportMode === "SEA" &&
+                                          fullGroupage === "FULL"
+                                        ) {
+                                          effectiveServiceType = "FCL";
+                                        } else if (
+                                          transportMode === "SEA" &&
+                                          fullGroupage === "GROUPAGE"
+                                        ) {
+                                          effectiveServiceType = "LCL";
+                                        } else {
+                                          effectiveServiceType = "AIR";
+                                        }
+                                      }
+                                    }
+                                    return effectiveServiceType;
+                                  })() === "LCL" && (
+                                    <Grid>
+                                      <Grid.Col span={3}>
+                                        <NumberInput
+                                          hideControls
+                                          key={serviceForm.key(
+                                            `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
+                                          )}
+                                          label="No of Packages"
+                                          min={1}
+                                          withAsterisk
+                                          disabled={hasValidDimensions(
+                                            serviceForm.values.service_details[
+                                              serviceIndex
+                                            ]?.diemensions || []
+                                          )}
+                                          styles={
+                                            hasValidDimensions(
+                                              serviceForm.values
+                                                .service_details[serviceIndex]
+                                                ?.diemensions || []
+                                            )
+                                              ? {
+                                                  input: {
+                                                    backgroundColor: "#f8f9fa",
+                                                    cursor: "not-allowed",
+                                                    fontSize: "13px",
+                                                    fontFamily: "Inter",
+                                                    height: "36px",
+                                                  },
+                                                  label: {
+                                                    fontSize: "13px",
+                                                    fontWeight: 500,
+                                                    color: "#424242",
+                                                    marginBottom: "4px",
+                                                    fontFamily: "Inter",
+                                                    fontStyle: "medium",
+                                                  },
+                                                }
+                                              : {
+                                                  input: {
+                                                    fontSize: "13px",
+                                                    fontFamily: "Inter",
+                                                    height: "36px",
+                                                  },
+                                                  label: {
+                                                    fontSize: "13px",
+                                                    fontWeight: 500,
+                                                    color: "#424242",
+                                                    marginBottom: "4px",
+                                                    fontFamily: "Inter",
+                                                    fontStyle: "medium",
+                                                  },
+                                                }
+                                          }
+                                          {...serviceForm.getInputProps(
+                                            `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
+                                          )}
+                                        />
+                                      </Grid.Col>
+                                      <Grid.Col span={3}>
+                                        <NumberInput
+                                          hideControls
+                                          key={serviceForm.key(
+                                            `service_details.${serviceIndex}.cargo_details.0.gross_weight`
+                                          )}
+                                          styles={{
+                                            input: {
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                          label="Gross Weight (kg)"
+                                          min={1}
+                                          withAsterisk
+                                          {...serviceForm.getInputProps(
+                                            `service_details.${serviceIndex}.cargo_details.0.gross_weight`
+                                          )}
+                                        />
+                                      </Grid.Col>
+                                      <Grid.Col span={3}>
+                                        <NumberInput
+                                          hideControls
+                                          key={serviceForm.key(
+                                            `service_details.${serviceIndex}.cargo_details.0.volume`
+                                          )}
+                                          label="Volume (cbm)"
+                                          min={1}
+                                          withAsterisk
+                                          disabled={hasValidDimensions(
+                                            serviceForm.values.service_details[
+                                              serviceIndex
+                                            ]?.diemensions || []
+                                          )}
+                                          styles={
+                                            hasValidDimensions(
+                                              serviceForm.values
+                                                .service_details[serviceIndex]
+                                                ?.diemensions || []
+                                            )
+                                              ? {
+                                                  input: {
+                                                    backgroundColor: "#f8f9fa",
+                                                    cursor: "not-allowed",
+                                                    fontSize: "13px",
+                                                    fontFamily: "Inter",
+                                                    height: "36px",
+                                                  },
+                                                  label: {
+                                                    fontSize: "13px",
+                                                    fontWeight: 500,
+                                                    color: "#424242",
+                                                    marginBottom: "4px",
+                                                    fontFamily: "Inter",
+                                                    fontStyle: "medium",
+                                                  },
+                                                }
+                                              : {
+                                                  input: {
+                                                    fontSize: "13px",
+                                                    fontFamily: "Inter",
+                                                    height: "36px",
+                                                  },
+                                                  label: {
+                                                    fontSize: "13px",
+                                                    fontWeight: 500,
+                                                    color: "#424242",
+                                                    marginBottom: "4px",
+                                                    fontFamily: "Inter",
+                                                    fontStyle: "medium",
+                                                  },
+                                                }
+                                          }
+                                          {...serviceForm.getInputProps(
+                                            `service_details.${serviceIndex}.cargo_details.0.volume`
+                                          )}
+                                        />
+                                      </Grid.Col>
+                                      <Grid.Col span={3}>
+                                        <NumberInput
+                                          hideControls
+                                          key={serviceForm.key(
+                                            `service_details.${serviceIndex}.cargo_details.0.chargable_volume`
+                                          )}
+                                          label="Chargeable Volume (cbm)"
+                                          min={0}
+                                          readOnly
+                                          styles={{
+                                            input: {
+                                              cursor: "not-allowed",
+                                              color: "#495057",
+                                              fontSize: "13px",
+                                              fontFamily: "Inter",
+                                              height: "36px",
+                                            },
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                          {...serviceForm.getInputProps(
+                                            `service_details.${serviceIndex}.cargo_details.0.chargable_volume`
+                                          )}
+                                        />
+                                        <Text
+                                          size="xs"
+                                          c="dimmed"
+                                          mt="xs"
+                                          style={{
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
+                                          }}
+                                        >
+                                          Max of (Gross Weight ÷ 1000) and
+                                          Volume
+                                        </Text>
+                                      </Grid.Col>
+                                      {/* LCL Dimension Section */}
+                                      {Array.isArray(
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.diemensions
+                                      ) &&
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ].diemensions.length > 0 && (
+                                          <>
+                                            <Grid.Col span={12}>
+                                              <Grid
+                                                style={{
+                                                  fontWeight: 600,
+                                                  color: "#105476",
+                                                  fontSize: "13px",
+                                                  fontFamily: "Inter",
+                                                  fontStyle: "medium",
+                                                }}
+                                              >
+                                                <Grid.Col span={1.5}>
+                                                  Pieces
+                                                </Grid.Col>
+                                                <Grid.Col span={1.5}>
+                                                  Length
+                                                </Grid.Col>
+                                                <Grid.Col span={1.5}>
+                                                  Width
+                                                </Grid.Col>
+                                                <Grid.Col span={1.5}>
+                                                  Height
+                                                </Grid.Col>
+                                                <Grid.Col span={2}>
+                                                  Value
+                                                </Grid.Col>
+                                                <Grid.Col span={2.5}>
+                                                  Volume Weight
+                                                </Grid.Col>
+                                                <Grid.Col span={0.8}></Grid.Col>
+                                              </Grid>
+                                            </Grid.Col>
+                                            {serviceForm.values.service_details[
+                                              serviceIndex
+                                            ].diemensions.map(
+                                              (row: any, rowIdx: number) => (
+                                                <Grid.Col
+                                                  span={12}
+                                                  key={`lcl-dim-${serviceIndex}-${rowIdx}`}
+                                                >
+                                                  <Grid>
+                                                    <Grid.Col span={1.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                          label: {
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            color: "#424242",
+                                                            marginBottom: "4px",
+                                                            fontFamily: "Inter",
+                                                            fontStyle: "medium",
+                                                          },
+                                                        }}
+                                                        value={
+                                                          row?.pieces ?? null
+                                                        }
+                                                        onChange={(val) => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          const v =
+                                                            getDimensionValue(
+                                                              "LCL",
+                                                              serviceForm.values
+                                                                .service_details[
+                                                                serviceIndex
+                                                              ]
+                                                                ?.dimension_unit ||
+                                                                ""
+                                                            );
+                                                          const pieces =
+                                                            Number(val) || 0;
+                                                          const length =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.length
+                                                            ) || 0;
+                                                          const width =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.width
+                                                            ) || 0;
+                                                          const height =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.height
+                                                            ) || 0;
+                                                          const vol = v
+                                                            ? (pieces *
+                                                                length *
+                                                                width *
+                                                                height) /
+                                                              v
+                                                            : 0;
+                                                          list[rowIdx] = {
+                                                            ...(list[rowIdx] ||
+                                                              {}),
+                                                            pieces: val,
+                                                            value: v || null,
+                                                            vol_weight:
+                                                              isFinite(vol)
+                                                                ? vol
+                                                                : null,
+                                                          };
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={1.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        value={
+                                                          row?.length ?? null
+                                                        }
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                          label: {
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            color: "#424242",
+                                                            marginBottom: "4px",
+                                                            fontFamily: "Inter",
+                                                            fontStyle: "medium",
+                                                          },
+                                                        }}
+                                                        onChange={(val) => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          const v =
+                                                            getDimensionValue(
+                                                              "LCL",
+                                                              serviceForm.values
+                                                                .service_details[
+                                                                serviceIndex
+                                                              ]
+                                                                ?.dimension_unit ||
+                                                                ""
+                                                            );
+                                                          const pieces =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.pieces
+                                                            ) || 0;
+                                                          const length =
+                                                            Number(val) || 0;
+                                                          const width =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.width
+                                                            ) || 0;
+                                                          const height =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.height
+                                                            ) || 0;
+                                                          const vol = v
+                                                            ? (pieces *
+                                                                length *
+                                                                width *
+                                                                height) /
+                                                              v
+                                                            : 0;
+                                                          list[rowIdx] = {
+                                                            ...(list[rowIdx] ||
+                                                              {}),
+                                                            length: val,
+                                                            value: v || null,
+                                                            vol_weight:
+                                                              isFinite(vol)
+                                                                ? vol
+                                                                : null,
+                                                          };
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={1.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        value={
+                                                          row?.width ?? null
+                                                        }
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                          label: {
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            color: "#424242",
+                                                            marginBottom: "4px",
+                                                            fontFamily: "Inter",
+                                                            fontStyle: "medium",
+                                                          },
+                                                        }}
+                                                        onChange={(val) => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          const v =
+                                                            getDimensionValue(
+                                                              "LCL",
+                                                              serviceForm.values
+                                                                .service_details[
+                                                                serviceIndex
+                                                              ]
+                                                                ?.dimension_unit ||
+                                                                ""
+                                                            );
+                                                          const pieces =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.pieces
+                                                            ) || 0;
+                                                          const length =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.length
+                                                            ) || 0;
+                                                          const width =
+                                                            Number(val) || 0;
+                                                          const height =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.height
+                                                            ) || 0;
+                                                          const vol = v
+                                                            ? (pieces *
+                                                                length *
+                                                                width *
+                                                                height) /
+                                                              v
+                                                            : 0;
+                                                          list[rowIdx] = {
+                                                            ...(list[rowIdx] ||
+                                                              {}),
+                                                            width: val,
+                                                            value: v || null,
+                                                            vol_weight:
+                                                              isFinite(vol)
+                                                                ? vol
+                                                                : null,
+                                                          };
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={1.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        value={
+                                                          row?.height ?? null
+                                                        }
+                                                        styles={{
+                                                          input: {
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                          label: {
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            color: "#424242",
+                                                            marginBottom: "4px",
+                                                            fontFamily: "Inter",
+                                                            fontStyle: "medium",
+                                                          },
+                                                        }}
+                                                        onChange={(val) => {
+                                                          const list = [
+                                                            ...((serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ]
+                                                              .diemensions as any[]) ||
+                                                              []),
+                                                          ];
+                                                          const v =
+                                                            getDimensionValue(
+                                                              "LCL",
+                                                              serviceForm.values
+                                                                .service_details[
+                                                                serviceIndex
+                                                              ]
+                                                                ?.dimension_unit ||
+                                                                ""
+                                                            );
+                                                          const pieces =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.pieces
+                                                            ) || 0;
+                                                          const length =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.length
+                                                            ) || 0;
+                                                          const width =
+                                                            Number(
+                                                              list[rowIdx]
+                                                                ?.width
+                                                            ) || 0;
+                                                          const height =
+                                                            Number(val) || 0;
+                                                          const vol = v
+                                                            ? (pieces *
+                                                                length *
+                                                                width *
+                                                                height) /
+                                                              v
+                                                            : 0;
+                                                          list[rowIdx] = {
+                                                            ...(list[rowIdx] ||
+                                                              {}),
+                                                            height: val,
+                                                            value: v || null,
+                                                            vol_weight:
+                                                              isFinite(vol)
+                                                                ? vol
+                                                                : null,
+                                                          };
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={2}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        decimalScale={4}
+                                                        value={
+                                                          row?.value ?? null
+                                                        }
+                                                        readOnly
+                                                        styles={{
+                                                          input: {
+                                                            backgroundColor:
+                                                              "#f8f9fa",
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                          label: {
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            color: "#424242",
+                                                            marginBottom: "4px",
+                                                            fontFamily: "Inter",
+                                                            fontStyle: "medium",
+                                                          },
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={2.5}>
+                                                      <NumberInput
+                                                        hideControls
+                                                        decimalScale={4}
+                                                        value={
+                                                          row?.vol_weight ??
+                                                          null
+                                                        }
+                                                        readOnly
+                                                        styles={{
+                                                          input: {
+                                                            backgroundColor:
+                                                              "#f8f9fa",
+                                                            fontSize: "13px",
+                                                            fontFamily: "Inter",
+                                                            height: "36px",
+                                                          },
+                                                          label: {
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            color: "#424242",
+                                                            marginBottom: "4px",
+                                                            fontFamily: "Inter",
+                                                            fontStyle: "medium",
+                                                          },
+                                                        }}
+                                                      />
+                                                    </Grid.Col>
+                                                    <Grid.Col span={0.8}>
+                                                      <Button
+                                                        variant="light"
+                                                        color="red"
+                                                        onClick={() => {
+                                                          const list = [
+                                                            ...(serviceForm
+                                                              .values
+                                                              .service_details[
+                                                              serviceIndex
+                                                            ].diemensions ||
+                                                              []),
+                                                          ];
+                                                          list.splice(
+                                                            rowIdx,
+                                                            1
+                                                          );
+                                                          serviceForm.setFieldValue(
+                                                            `service_details.${serviceIndex}.diemensions`,
+                                                            list
+                                                          );
+                                                        }}
+                                                      >
+                                                        <IconTrash size={16} />
+                                                      </Button>
+                                                    </Grid.Col>
+                                                  </Grid>
+                                                </Grid.Col>
+                                              )
+                                            )}
+                                          </>
+                                        )}
+                                    </Grid>
+                                  )}
+
+                                  {(() => {
+                                    // Determine effective service type for rendering
+                                    let effectiveServiceType =
+                                      serviceDetail.service;
+                                    if (
+                                      serviceDetail.service === "OTHERS" &&
+                                      serviceDetail.service_code
+                                    ) {
+                                      const selectedOtherService =
+                                        otherServicesData.find(
+                                          (item) =>
+                                            item.value ===
+                                            serviceDetail.service_code
+                                        );
+                                      if (selectedOtherService) {
+                                        const transportMode =
+                                          selectedOtherService.transport_mode ||
+                                          "";
+                                        const fullGroupage =
+                                          selectedOtherService.full_groupage ||
+                                          "";
+                                        if (
+                                          transportMode === "SEA" &&
+                                          fullGroupage === "FULL"
+                                        ) {
+                                          effectiveServiceType = "FCL";
+                                        } else if (
+                                          transportMode === "SEA" &&
+                                          fullGroupage === "GROUPAGE"
+                                        ) {
+                                          effectiveServiceType = "LCL";
+                                        } else {
+                                          effectiveServiceType = "AIR";
+                                        }
+                                      }
+                                    }
+                                    return effectiveServiceType;
+                                  })() === "FCL" && (
+                                    <Stack gap="md">
+                                      {/* Show cargo details for this specific service - use current form values */}
+                                      {serviceForm.values.service_details[
+                                        serviceIndex
+                                      ].cargo_details.map(
+                                        (cargoDetail, cargoIndex) => (
+                                          <Box
+                                            key={`${(serviceDetail as any).id || serviceIndex}-cargo-${cargoDetail.id || cargoIndex}`}
+                                          >
+                                            <Grid>
+                                              <Grid.Col span={3}>
+                                                <Dropdown
+                                                  key={serviceForm.key(
+                                                    `service_details.${serviceIndex}.cargo_details.${cargoIndex}.container_type_code`
+                                                  )}
+                                                  searchable
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
+                                                    },
+                                                  }}
+                                                  label="Container Type"
+                                                  placeholder="Select Container Type"
+                                                  withAsterisk
+                                                  data={containerTypeData}
+                                                  nothingFoundMessage="No container types found"
+                                                  {...serviceForm.getInputProps(
+                                                    `service_details.${serviceIndex}.cargo_details.${cargoIndex}.container_type_code`
+                                                  )}
+                                                />
+                                              </Grid.Col>
+                                              <Grid.Col span={3}>
+                                                <NumberInput
+                                                  hideControls
+                                                  key={serviceForm.key(
+                                                    `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
+                                                  )}
+                                                  label="No of Containers"
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
+                                                    },
+                                                  }}
+                                                  placeholder="Enter number of containers"
+                                                  min={1}
+                                                  withAsterisk
+                                                  {...serviceForm.getInputProps(
+                                                    `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
+                                                  )}
+                                                />
+                                              </Grid.Col>
+                                              <Grid.Col span={3}>
+                                                <NumberInput
+                                                  hideControls
+                                                  key={serviceForm.key(
+                                                    `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
+                                                  )}
+                                                  styles={{
+                                                    input: {
+                                                      fontSize: "13px",
+                                                      fontFamily: "Inter",
+                                                      height: "36px",
+                                                    },
+                                                    label: {
+                                                      fontSize: "13px",
+                                                      fontWeight: 500,
+                                                      color: "#424242",
+                                                      marginBottom: "4px",
+                                                      fontFamily: "Inter",
+                                                      fontStyle: "medium",
+                                                    },
+                                                  }}
+                                                  label="Gross Weight (kg)"
+                                                  withAsterisk
+                                                  placeholder="Enter gross weight"
+                                                  min={0}
+                                                  {...serviceForm.getInputProps(
+                                                    `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
+                                                  )}
+                                                />
+                                              </Grid.Col>
+                                              {/* Add button only on the last cargo detail */}
+                                              {cargoIndex ===
+                                                serviceForm.values
+                                                  .service_details[serviceIndex]
+                                                  .cargo_details.length -
+                                                  1 && (
+                                                <Grid.Col span={0.75}>
+                                                  <Button
+                                                    variant="light"
+                                                    color="#105476"
+                                                    mt={25}
+                                                    onClick={() =>
+                                                      serviceForm.insertListItem(
+                                                        `service_details.${serviceIndex}.cargo_details`,
+                                                        {
+                                                          id: null,
+                                                          no_of_packages: null,
+                                                          gross_weight: null,
+                                                          volume_weight: null,
+                                                          chargable_weight:
+                                                            null,
+                                                          volume: null,
+                                                          chargable_volume:
+                                                            null,
+                                                          container_type_code:
+                                                            null,
+                                                          no_of_containers:
+                                                            null,
+                                                          hazardous_cargo: "No",
+                                                          stackable: "Yes",
+                                                        }
+                                                      )
+                                                    }
+                                                  >
+                                                    <IconPlus size={16} />
+                                                  </Button>
+                                                </Grid.Col>
+                                              )}
+                                              {/* Remove button */}
+                                              <Grid.Col span={0.75}>
+                                                {serviceForm.values
+                                                  .service_details[serviceIndex]
+                                                  .cargo_details.length > 1 ? (
+                                                  <Button
+                                                    variant="light"
+                                                    color="red"
+                                                    mt={25}
+                                                    onClick={() => {
+                                                      // Use cargoIndex directly - it's the correct index at render time
+                                                      serviceForm.removeListItem(
+                                                        `service_details.${serviceIndex}.cargo_details`,
+                                                        cargoIndex
+                                                      );
+                                                    }}
+                                                  >
+                                                    <IconTrash size={16} />
+                                                  </Button>
+                                                ) : (
+                                                  ""
+                                                )}
+                                              </Grid.Col>
+                                            </Grid>
+                                          </Box>
+                                        )
+                                      )}
+                                    </Stack>
+                                  )}
+                                </>
+                              )}
+                          </Box>
+                        )
+                      )}
+                    </Stack>
+                    <Flex justify="end" align="center" mb="md" mt="md">
+                      <Button
+                        variant="subtle"
+                        color="#105476"
+                        size="sm"
+                        leftSection={<IconPlus size={16} />}
+                        styles={{
+                          root: {
+                            color: "#105476",
+                            fontWeight: 500,
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
                           },
-                        ],
-                      })
-                    }
-                  >
-                    Add Service
-                  </Button>
-                </Flex>
-                </Box>
-
-                {/* Buttons for Step 1 */}
-                <Box style={{ borderTop: "1px solid #e9ecef", padding: "20px 32px", backgroundColor: "#ffffff" }}>
-                  <Group justify="space-between">
-                    <Group gap="sm">
-                      <Button
-                        variant="outline"
-                        color="gray"
-                        size="sm"
-                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
-                        onClick={() => {
-                          // Restore filter state if preserved
-                          const preserveFilters = (location.state as any)
-                            ?.preserveFilters;
-                          // Check if we came from enquiry or quotation
-                          const fromEnquiry = (location.state as any)?.fromEnquiry;
-                          const actionType = (location.state as any)?.actionType;
-
-                          // Navigate to the correct list based on source
-                          // If came from call entry (actionType === "createEnquiry"), go back to call entry list
-                          if (actionType === "createEnquiry") {
-                            // Came from call entry list, go back to call entry list
-                            if (preserveFilters) {
-                              navigate("/call-entry", {
-                                state: {
-                                  restoreFilters: preserveFilters,
-                                  refreshData: true,
-                                },
-                              });
-                            } else {
-                              navigate("/call-entry", {
-                                state: { refreshData: true },
-                              });
-                            }
-                          } else if (fromEnquiry || actionType === "edit") {
-                            // Came from enquiry list or editing enquiry, go back to enquiry list
-                            if (preserveFilters) {
-                              navigate("/enquiry", {
-                                state: {
-                                  restoreFilters: preserveFilters,
-                                  refreshData: true,
-                                },
-                              });
-                            } else {
-                              navigate("/enquiry", {
-                                state: { refreshData: true },
-                              });
-                            }
-                          } else {
-                            // Default: navigate to quotation list (from quotation or new)
-                            if (preserveFilters) {
-                              navigate("/quotation", {
-                                state: {
-                                  restoreFilters: preserveFilters,
-                                  refreshData: true,
-                                },
-                              });
-                            } else {
-                              navigate("/quotation", {
-                                state: { refreshData: true },
-                              });
-                            }
-                          }
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
                         }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="outline"
-                        color="gray"
-                        size="sm"
-                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
-                        onClick={() => {
-                          serviceForm.reset();
-                        }}
-                      >
-                        Clear all
-                      </Button>
-                    </Group>
-
-                    <Group gap="sm">
-                      <Button
-                        variant="outline"
-                        color="gray"
-                        size="sm"
-                        styles={{ root: { borderColor: "#d0d0d0", color: "#666", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" } }}
-                        onClick={() => setActive((current) => current - 1)}
-                      >
-                        Back
-                      </Button>
-
-                      <Button
-                        rightSection={
-                          isSubmitting ? (
-                            <Loader size={16} color="white" />
-                          ) : null
+                        onClick={() =>
+                          serviceForm.insertListItem("service_details", {
+                            id: "",
+                            service: "",
+                            trade: "",
+                            service_code: "",
+                            service_name: "",
+                            origin_code: "",
+                            origin_name: "",
+                            destination_code: "",
+                            destination_name: "",
+                            pickup: "false",
+                            delivery: "false",
+                            pickup_location: "",
+                            delivery_location: "",
+                            shipment_terms_code: "",
+                            dimension_unit: "Centimeter",
+                            diemensions: [],
+                            cargo_details: [
+                              {
+                                id: null,
+                                no_of_packages: null,
+                                gross_weight: null,
+                                volume_weight: null,
+                                chargable_weight: null,
+                                volume: null,
+                                chargable_volume: null,
+                                container_type_code: null,
+                                no_of_containers: null,
+                                hazardous_cargo: "No",
+                                stackable: "Yes",
+                              },
+                            ],
+                          })
                         }
-                        onClick={() => handleNext()}
-                        size="sm"
-                        style={{ backgroundColor: "#105476", fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" }}
-                        disabled={isSubmitting}
                       >
-                        {isSubmitting ? "Submitting..." : "Submit"}
+                        Add Service
                       </Button>
+                    </Flex>
+                  </Box>
+
+                  {/* Buttons for Step 1 */}
+                  <Box
+                    style={{
+                      borderTop: "1px solid #e9ecef",
+                      padding: "20px 32px",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    <Group justify="space-between">
+                      <Group gap="sm">
+                        <Button
+                          variant="outline"
+                          color="gray"
+                          size="sm"
+                          styles={{
+                            root: {
+                              borderColor: "#d0d0d0",
+                              color: "#666",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          onClick={() => {
+                            // Restore filter state if preserved
+                            const preserveFilters = (location.state as any)
+                              ?.preserveFilters;
+                            // Check if we came from enquiry or quotation
+                            const fromEnquiry = (location.state as any)
+                              ?.fromEnquiry;
+                            const actionType = (location.state as any)
+                              ?.actionType;
+
+                            // Navigate to the correct list based on source
+                            // If came from call entry (actionType === "createEnquiry"), go back to call entry list
+                            if (actionType === "createEnquiry") {
+                              // Came from call entry list, go back to call entry list
+                              if (preserveFilters) {
+                                navigate("/call-entry", {
+                                  state: {
+                                    restoreFilters: preserveFilters,
+                                    refreshData: true,
+                                  },
+                                });
+                              } else {
+                                navigate("/call-entry", {
+                                  state: { refreshData: true },
+                                });
+                              }
+                            } else if (fromEnquiry || actionType === "edit") {
+                              // Came from enquiry list or editing enquiry, go back to enquiry list
+                              if (preserveFilters) {
+                                navigate("/enquiry", {
+                                  state: {
+                                    restoreFilters: preserveFilters,
+                                    refreshData: true,
+                                  },
+                                });
+                              } else {
+                                navigate("/enquiry", {
+                                  state: { refreshData: true },
+                                });
+                              }
+                            } else {
+                              // Default: navigate to quotation list (from quotation or new)
+                              if (preserveFilters) {
+                                navigate("/quotation", {
+                                  state: {
+                                    restoreFilters: preserveFilters,
+                                    refreshData: true,
+                                  },
+                                });
+                              } else {
+                                navigate("/quotation", {
+                                  state: { refreshData: true },
+                                });
+                              }
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="outline"
+                          color="gray"
+                          size="sm"
+                          styles={{
+                            root: {
+                              borderColor: "#d0d0d0",
+                              color: "#666",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          onClick={() => {
+                            serviceForm.reset();
+                          }}
+                        >
+                          Clear all
+                        </Button>
+                      </Group>
+
+                      <Group gap="sm">
+                        <Button
+                          variant="outline"
+                          color="gray"
+                          size="sm"
+                          styles={{
+                            root: {
+                              borderColor: "#d0d0d0",
+                              color: "#666",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          onClick={() => setActive((current) => current - 1)}
+                        >
+                          Back
+                        </Button>
+
+                        <Button
+                          rightSection={
+                            isSubmitting ? (
+                              <Loader size={16} color="white" />
+                            ) : null
+                          }
+                          onClick={() => handleNext()}
+                          size="sm"
+                          style={{
+                            backgroundColor: "#105476",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          }}
+                          disabled={isSubmitting}
+                        >
+                          {isSubmitting ? "Submitting..." : "Submit"}
+                        </Button>
+                      </Group>
                     </Group>
-                  </Group>
-                </Box>
-              </>
-            )}
+                  </Box>
+                </>
+              )}
 
-            {showQuotation && active === 2 && (
-              <Box style={{ flex: 1, overflowY: "auto", backgroundColor: "#F8F8F8" }}>
-                <QuotationCreate
-                  enquiryData={{
-                    ...enq,
-                    // Override with current form values
-                    customer_code: customerForm.values.customer_code,
-                    customer_name: customerDisplayName || "",
-                    enquiry_received_date:
-                      customerForm.values.enquiry_received_date,
-                    sales_person: customerForm.values.sales_person,
-                    sales_coordinator: customerForm.values.sales_coordinator,
-                    customer_services: customerForm.values.customer_services,
-                    // Pass current service form values
-                    services: serviceForm.values.service_details.map(
-                      (service: any) => ({
-                        ...service,
-                        origin_code_read: service.origin_code,
-                        destination_code_read: service.destination_code,
-                        shipment_terms_code_read: service.shipment_terms_code,
-                      })
-                    ),
-                    // Pass quotation data if available (for edit quotation flow)
-                    quotation: enq?.quotation,
+              {showQuotation && active === 2 && (
+                <Box
+                  style={{
+                    flex: 1,
+                    overflowY: "auto",
+                    backgroundColor: "#F8F8F8",
                   }}
-                  goToStep={setActive}
-                />
-              </Box>
-            )}
+                >
+                  <QuotationCreate
+                    enquiryData={{
+                      ...enq,
+                      // Override with current form values
+                      customer_code: customerForm.values.customer_code,
+                      customer_name: customerDisplayName || "",
+                      enquiry_received_date:
+                        customerForm.values.enquiry_received_date,
+                      sales_person: customerForm.values.sales_person,
+                      sales_coordinator: customerForm.values.sales_coordinator,
+                      customer_services: customerForm.values.customer_services,
+                      // Pass current service form values
+                      services: serviceForm.values.service_details.map(
+                        (service: any) => ({
+                          ...service,
+                          origin_code_read: service.origin_code,
+                          destination_code_read: service.destination_code,
+                          shipment_terms_code_read: service.shipment_terms_code,
+                        })
+                      ),
+                      // Pass quotation data if available (for edit quotation flow)
+                      quotation: enq?.quotation,
+                    }}
+                    goToStep={setActive}
+                  />
+                </Box>
+              )}
             </Box>
-
           </Flex>
         </Box>
 
@@ -7407,34 +8246,65 @@ function EnquiryCreate() {
         centered
         size="lg"
         styles={{
-          title:{
+          title: {
             fontWeight: 700,
             fontSize: 20,
             color: "#105476",
           },
         }}
-
       >
         <Stack gap="md">
-          <Text size="sm" fw={400} c="gray" style={{ fontSize: "13px", fontFamily: "Inter", fontStyle: "medium" }}>
-            The selected service and trade combination has a different salesperson assigned. 
-            Would you like to update the form with the following information?
+          <Text
+            size="sm"
+            fw={400}
+            c="gray"
+            style={{
+              fontSize: "13px",
+              fontFamily: "Inter",
+              fontStyle: "medium",
+            }}
+          >
+            The selected service and trade combination has a different
+            salesperson assigned. Would you like to update the form with the
+            following information?
           </Text>
-          
+
           {salespersonModalData && (
             <Box>
               <Grid>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#105476" mb={4}>Sales Person</Text>
-                  <Text size="sm" fw={500} mb="md">{salespersonModalData.sales_person || "-"}</Text>
+                  <Text size="md" fw={600} c="#105476" mb={4}>
+                    Sales Person
+                  </Text>
+                  <Text size="sm" fw={500} mb="md">
+                    {salespersonModalData.sales_person || "-"}
+                  </Text>
                 </Grid.Col>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#105476" mb={4}>Sales Coordinator</Text>
-                  <Text size="sm" fw={500} px={salespersonModalData.sales_coordinator ? 0 : 2} mb="md">{salespersonModalData.sales_coordinator || "-"}</Text>
+                  <Text size="md" fw={600} c="#105476" mb={4}>
+                    Sales Coordinator
+                  </Text>
+                  <Text
+                    size="sm"
+                    fw={500}
+                    px={salespersonModalData.sales_coordinator ? 0 : 2}
+                    mb="md"
+                  >
+                    {salespersonModalData.sales_coordinator || "-"}
+                  </Text>
                 </Grid.Col>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#105476" mb={4}>Customer Service</Text>
-                  <Text size="sm" fw={500} px={salespersonModalData.customer_service ? 0 : 2} mb="md">{salespersonModalData.customer_service || "-"}</Text>
+                  <Text size="md" fw={600} c="#105476" mb={4}>
+                    Customer Service
+                  </Text>
+                  <Text
+                    size="sm"
+                    fw={500}
+                    px={salespersonModalData.customer_service ? 0 : 2}
+                    mb="md"
+                  >
+                    {salespersonModalData.customer_service || "-"}
+                  </Text>
                 </Grid.Col>
               </Grid>
             </Box>
@@ -7447,14 +8317,14 @@ function EnquiryCreate() {
               styles={{
                 root: {
                   fontSize: "13px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },  
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                },
+                label: {
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                },
               }}
             >
               Cancel
