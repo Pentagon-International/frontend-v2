@@ -61,7 +61,7 @@ import useAuthStore from "../../store/authStore";
 const QUOTATION_APPROVAL_PATH = "/quotation-approval";
 const QUOTATION_MASTER_PATH = "/quotation";
 
-const quotationFormSchema = () =>
+const quotationFormSchema = (isRemarkRequired: boolean) =>
   Yup.object().shape({
     quote_currency_country_code: Yup.string().required("Currency is required"),
     valid_upto: Yup.string().required("Valid upto date is required"),
@@ -69,8 +69,8 @@ const quotationFormSchema = () =>
     quote_type: Yup.string().required("Quote type is required"),
     carrier_code: Yup.string(),
     icd: Yup.string(),
-    remark: Yup.string().when("status", {
-      is: (status: string | undefined) => status?.toLowerCase() === "lost",
+    remark: Yup.string().when([], {
+      is: () => isRemarkRequired,
       then: (schema) => schema.required("Remark is required"),
       otherwise: (schema) => schema.notRequired(),
     }),
@@ -383,6 +383,9 @@ function QuotationCreate({
   const quotationData = location.state;
   const actualEnquiryData =
     enquiryData || quotationData || fetchedQuotationData;
+  const isRemarkRequired =
+    actualEnquiryData?.actionType === "edit" ||
+    actualEnquiryData?.actionType === "editQuotation";
 
   console.log("Whole enquiry data---", actualEnquiryData);
 
@@ -597,14 +600,8 @@ function QuotationCreate({
       status: "QUOTE CREATED",
       remark: "",
     },
-    validate: yupResolver(quotationFormSchema()),
+    validate: yupResolver(quotationFormSchema(isRemarkRequired)),
   });
-
-  // Compute isRemarkRequired based on status field value
-  const isRemarkRequired = useMemo(
-    () => quotationForm.values.status?.toLowerCase() === "lost",
-    [quotationForm.values.status]
-  );
 
   const dynamicForm = useForm<{ charges: ChargeType[] }>({
     initialValues: {
@@ -4892,6 +4889,17 @@ function QuotationCreate({
                           if (goToStep) {
                             goToStep(1);
                           } else if (
+                            location.state?.returnTo === "dashboard-pipeline"
+                          ) {
+                            // Navigate back to dashboard with pipeline report state
+                            navigate("/", {
+                              state: {
+                                returnToPipelineReport: true,
+                                pipelineReportState:
+                                  location.state.pipelineReportState,
+                              },
+                            });
+                          } else if (
                             isStandaloneEdit &&
                             (actualEnquiryData?.enquiry_id ||
                               quotationData?.enquiry_id ||
@@ -5053,17 +5061,6 @@ function QuotationCreate({
                                 state: { refreshData: true },
                               });
                             }
-                          } else if (
-                            location.state?.returnTo === "dashboard-pipeline"
-                          ) {
-                            // Navigate back to dashboard with pipeline report state
-                            navigate("/", {
-                              state: {
-                                returnToPipelineReport: true,
-                                pipelineReportState:
-                                  location.state.pipelineReportState,
-                              },
-                            });
                           } else if (
                             location.state?.returnTo === "call-entry"
                           ) {
@@ -6075,6 +6072,16 @@ function QuotationCreate({
                     if (goToStep) {
                       goToStep(1);
                     } else if (
+                      location.state?.returnTo === "dashboard-pipeline"
+                    ) {
+                      navigate("/", {
+                        state: {
+                          returnToPipelineReport: true,
+                          pipelineReportState:
+                            location.state.pipelineReportState,
+                        },
+                      });
+                    } else if (
                       isStandaloneEdit &&
                       (actualEnquiryData?.enquiry_id ||
                         quotationData?.enquiry_id ||
@@ -6211,16 +6218,6 @@ function QuotationCreate({
                       } else {
                         navigate("/enquiry", { state: { refreshData: true } });
                       }
-                    } else if (
-                      location.state?.returnTo === "dashboard-pipeline"
-                    ) {
-                      navigate("/", {
-                        state: {
-                          returnToPipelineReport: true,
-                          pipelineReportState:
-                            location.state.pipelineReportState,
-                        },
-                      });
                     } else if (location.state?.returnTo === "call-entry") {
                       navigate("/call-entry-create", {
                         state: location.state.returnToState,
