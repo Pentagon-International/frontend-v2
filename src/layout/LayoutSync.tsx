@@ -33,6 +33,10 @@ export const LayoutSync = () => {
     } else if (path === "/quotation" || path.startsWith("/quotation/")) {
       setActiveNav("Sales");
       setActiveSubNav("Quotation");
+    } else if (path === "/quotation-create" || path.startsWith("/quotation-create/")) {
+      // Set active tab for quotation when navigated via create/edit quote flow
+      setActiveNav("Sales");
+      setActiveSubNav("Quotation");
     } else if (path.startsWith("/potential-customers")) {
       setActiveNav("Sales");
       setActiveSubNav("Potential Customers");
