@@ -763,7 +763,8 @@ function QuotationCreate({
   // Helper function to navigate to enquiry-create with specific step
   const navigateToEnquiryStep = useCallback(
     (targetStep: number) => {
-      if (!isStandaloneEdit) return;
+      // Allow navigation if standalone edit OR embedded edit mode without goToStep
+      if (!isStandaloneEdit && !(isEmbeddedEditMode && !goToStep)) return;
 
       const serviceDataSnapshot = snapshotServiceQuotationData();
       const preserveFilters = location.state?.preserveFilters;
@@ -888,6 +889,8 @@ function QuotationCreate({
     },
     [
       isStandaloneEdit,
+      isEmbeddedEditMode,
+      goToStep,
       snapshotServiceQuotationData,
       location.state,
       actualEnquiryData,
@@ -3893,17 +3896,36 @@ function QuotationCreate({
         }}
       >
         {/* Only render left pane when standalone (no goToStep prop) */}
-        {/* Always show layout with fixed footer for edit mode or createQuote flow */}
-        {isEditMode ||
-        (goToStep && enquiryData?.actionType === "createQuote") ? (
+        {/* Always show layout with fixed footer for edit mode or when embedded in EnquiryCreate (goToStep exists) */}
+        {(() => {
+          const shouldShowLayout = isEditMode || goToStep;
+          console.log("QuotationCreate Layout Debug:", {
+            isEditMode,
+            goToStep: !!goToStep,
+            actionType: enquiryData?.actionType,
+            shouldShowLayout,
+            isStandaloneEdit,
+            isEmbeddedEditMode,
+          });
+          return shouldShowLayout;
+        })() ? (
           <Flex
             gap="lg"
             align="flex-start"
             style={{ minHeight: "calc(100vh - 100px)" }}
           >
-            {/* Left Pane - Stepper Titles - Show for edit mode without goToStep or createQuote flow */}
-            {((isEditMode && !goToStep) ||
-              (goToStep && enquiryData?.actionType === "createQuote")) && (
+            {/* Left Pane - Stepper Titles - Show for edit mode without goToStep or when goToStep exists (embedded in EnquiryCreate) */}
+            {(() => {
+              const shouldShowLeftPane = (isEditMode && !goToStep) || goToStep;
+              console.log("QuotationCreate Left Pane Debug:", {
+                isEditMode,
+                goToStep: !!goToStep,
+                shouldShowLeftPane,
+                condition1: isEditMode && !goToStep,
+                condition2: !!goToStep,
+              });
+              return shouldShowLeftPane;
+            })() && (
               <Box
                 style={{
                   minWidth: 240,
@@ -3934,14 +3956,33 @@ function QuotationCreate({
 
                   {/* Step 1: Customer Details - Completed */}
                   <Box
-                    onClick={() => navigateToEnquiryStep(0)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      console.log("Step 1 clicked - navigating to step 0");
+                      if (goToStep && typeof goToStep === "function") {
+                        // Navigate to customer details step (step 0) in enquiry-create flow
+                        goToStep(0);
+                      } else if (isEmbeddedEditMode) {
+                        // If embedded but goToStep not available, navigate to enquiry-create
+                        navigateToEnquiryStep(0);
+                      } else if (isStandaloneEdit) {
+                        // For standalone edit, navigate to enquiry-create step 0
+                        navigateToEnquiryStep(0);
+                      }
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     style={{
                       cursor: "pointer",
                       padding: "4px 0",
                       transition: "all 0.2s",
                     }}
                   >
-                    <Flex align="center" gap="sm">
+                    <Flex
+                      align="center"
+                      gap="sm"
+                      style={{ pointerEvents: "none" }}
+                    >
                       <Box
                         style={{
                           width: 40,
@@ -4004,14 +4045,47 @@ function QuotationCreate({
 
                   {/* Step 2: Service & Cargo Details - Completed */}
                   <Box
-                    onClick={() => navigateToEnquiryStep(1)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      console.log(
+                        "Step 2 clicked - navigating to step 1, goToStep:",
+                        goToStep,
+                        "isEmbeddedEditMode:",
+                        isEmbeddedEditMode,
+                        "isStandaloneEdit:",
+                        isStandaloneEdit
+                      );
+                      if (goToStep && typeof goToStep === "function") {
+                        // Navigate to service details step (step 1) in enquiry-create flow
+                        console.log("Calling goToStep(1)");
+                        goToStep(1);
+                      } else if (isEmbeddedEditMode) {
+                        // If embedded but goToStep not available, navigate to enquiry-create
+                        console.log(
+                          "Embedded mode but goToStep missing, navigating to enquiry-create step 1"
+                        );
+                        navigateToEnquiryStep(1);
+                      } else if (isStandaloneEdit) {
+                        // For standalone edit, navigate to enquiry-create step 1
+                        console.log("Calling navigateToEnquiryStep(1)");
+                        navigateToEnquiryStep(1);
+                      } else {
+                        console.log("No navigation method available");
+                      }
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     style={{
                       cursor: "pointer",
                       padding: "4px 0",
                       transition: "all 0.2s",
                     }}
                   >
-                    <Flex align="center" gap="sm">
+                    <Flex
+                      align="center"
+                      gap="sm"
+                      style={{ pointerEvents: "none" }}
+                    >
                       <Box
                         style={{
                           width: 40,
@@ -4074,13 +4148,33 @@ function QuotationCreate({
 
                   {/* Step 3: Quotation - Active */}
                   <Box
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      console.log("Step 3 clicked - navigating to step 2");
+                      if (goToStep && typeof goToStep === "function") {
+                        // Navigate to quotation step (step 2) in enquiry-create flow
+                        goToStep(2);
+                      } else if (isEmbeddedEditMode) {
+                        // If embedded but goToStep not available, navigate to enquiry-create
+                        navigateToEnquiryStep(2);
+                      } else if (isStandaloneEdit) {
+                        // For standalone edit, navigate to enquiry-create step 2
+                        navigateToEnquiryStep(2);
+                      }
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     style={{
                       cursor: "pointer",
                       padding: "4px 0",
                       transition: "all 0.2s",
                     }}
                   >
-                    <Flex align="center" gap="sm">
+                    <Flex
+                      align="center"
+                      gap="sm"
+                      style={{ pointerEvents: "none" }}
+                    >
                       <Box
                         style={{
                           width: 40,

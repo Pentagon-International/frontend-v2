@@ -1847,7 +1847,9 @@ function EnquiryCreate() {
         // Check if this is edit quotation action (navigating back from quotation edit)
         else if (enq.actionType === "editQuotation") {
           setShowQuotation(true); // Show quotation step
-          setActive(0); // Start at step 1 (Customer Details) - user can click Next to go to step 2, then Next to step 3
+          // Use targetStep if provided (from navigation), otherwise default to step 0
+          const targetStep = (enq as any)?.targetStep;
+          setActive(targetStep !== undefined ? targetStep : 0);
         }
         // Check if this is an edit action (Edit Enquiry)
         else if (enq.actionType === "edit") {
@@ -2977,291 +2979,302 @@ function EnquiryCreate() {
             align="flex-start"
             style={{ minHeight: "calc(100vh - 100px)" }}
           >
-            {/* Vertical Stepper Sidebar */}
-            <Box
-              style={{
-                minWidth: 240,
-                height: "calc(100vh - 100px)",
-                alignSelf: "stretch",
-                backgroundColor: "#FFFFFF",
-                position: "sticky",
-                top: 0,
-              }}
-            >
-              <Stack gap="sm" style={{ height: "100%", padding: "10px" }}>
-                <Box
-                  onClick={() => handleStepClick(0)}
-                  style={{
-                    cursor: "pointer",
-                    padding: "4px 0",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  <Box>
-                    <Text
-                      size="md"
-                      fw={600}
-                      c="#105476"
-                      mb="xs"
-                      style={{
-                        fontFamily: "Inter",
-                        fontStyle: "medium",
-                        fontSize: "16px",
-                        color: "#105476",
-                      }}
-                    >
-                      {(() => {
-                        // Determine title based on actionType and whether quotation step is shown
-                        if (enq?.actionType === "editQuotation") {
-                          return "Edit Quotation";
-                        } else if (enq?.actionType === "createQuote") {
-                          return "Create Quotation";
-                        } else if (enq?.actionType === "edit") {
-                          return "Edit Enquiry";
-                        } else {
-                          return "Create New Enquiry";
-                        }
-                      })()}
-                    </Text>
-                  </Box>
-                  <Flex align="center" gap="sm">
-                    <Box
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: "50%",
-                        backgroundColor: active > 0 ? "#EAF9F1" : "#E6F2F8",
-                        border:
-                          active > 0
-                            ? "none"
-                            : active === 0
-                              ? "2px solid #105476"
-                              : "2px solid #d1d5db",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "16px",
-                        fontWeight: 600,
-                        color:
-                          active > 0
-                            ? "white"
-                            : active === 0
-                              ? "#105476"
-                              : "#9ca3af",
-                        transition: "all 0.2s",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {active > 0 ? (
-                        <IconCircleCheck
-                          size={20}
-                          color="#289D69"
-                          fill="#EAF9F1"
-                        />
-                      ) : (
-                        // <IconCheck size={20} />
-                        <IconUser size={20} color="#105476" fill="#E6F2F8" />
-                      )}
-                    </Box>
-                    <Text
-                      size="sm"
-                      fw={400}
-                      c="#105476"
-                      style={{
-                        lineHeight: 1.3,
-                        fontFamily: "Inter",
-                        fontStyle: "regular",
-                        fontSize: "13px",
-                        color: "#105476",
-                      }}
-                    >
-                      Customer Details
-                    </Text>
-                  </Flex>
-                </Box>
-
-                {/* Vertical dotted line connector */}
-                <Box
-                  style={{
-                    height: "24px",
-                    width: "40px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginLeft: "0",
-                    position: "relative",
-                  }}
-                >
+            {/* Vertical Stepper Sidebar - Hide when QuotationCreate has its own stepper */}
+            {!(showQuotation && active === 2) && (
+              <Box
+                style={{
+                  minWidth: 240,
+                  height: "calc(100vh - 100px)",
+                  alignSelf: "stretch",
+                  backgroundColor: "#FFFFFF",
+                  position: "sticky",
+                  top: 0,
+                }}
+              >
+                <Stack gap="sm" style={{ height: "100%", padding: "10px" }}>
                   <Box
+                    onClick={() => handleStepClick(0)}
                     style={{
-                      width: "2px",
-                      height: "100%",
-                      borderLeft: "2px dotted #d1d5db",
-                      // marginLeft: "19px", // Center it with the icon (40px / 2 = 20px, minus 1px for border)
+                      cursor: "pointer",
+                      padding: "4px 0",
+                      transition: "all 0.2s",
                     }}
-                  />
-                </Box>
-
-                <Box
-                  onClick={() => handleStepClick(1)}
-                  style={{
-                    cursor: "pointer",
-                    padding: "4px 0",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  <Flex align="center" gap="sm">
-                    <Box
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: "50%",
-                        backgroundColor: active > 1 ? "#EAF9F1" : "#fff",
-                        border:
-                          active > 1
-                            ? "none"
-                            : active === 1
-                              ? "2px solid #105476"
-                              : "2px solid #d1d5db",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "16px",
-                        fontWeight: 600,
-                        color:
-                          active > 1
-                            ? "white"
-                            : active === 1
-                              ? "#105476"
-                              : "#9ca3af",
-                        transition: "all 0.2s",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {active > 1 ? (
-                        <IconCircleCheck
-                          size={20}
-                          color="#289D69"
-                          fill="#EAF9F1"
-                        />
-                      ) : (
-                        <IconTruckDelivery
-                          size={20}
-                          color="#105476"
-                          fill="#E6F2F8"
-                        />
-                      )}
+                  >
+                    <Box>
+                      <Text
+                        size="md"
+                        fw={600}
+                        c="#105476"
+                        mb="xs"
+                        style={{
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                          fontSize: "16px",
+                          color: "#105476",
+                        }}
+                      >
+                        {(() => {
+                          // Determine title based on actionType and whether quotation step is shown
+                          if (enq?.actionType === "editQuotation") {
+                            return "Edit Quotation";
+                          } else if (enq?.actionType === "createQuote") {
+                            return "Create Quotation";
+                          } else if (enq?.actionType === "edit") {
+                            return "Edit Enquiry";
+                          } else if (
+                            enq?.id ||
+                            enq?.enquiry_id ||
+                            customerForm.values.customer_code ||
+                            (serviceForm.values.service_details &&
+                              serviceForm.values.service_details.length > 0)
+                          ) {
+                            // If form has values (id, enquiry_id, customer_code, or service details), it's an edit scenario
+                            return "Edit Enquiry";
+                          } else {
+                            return "Create New Enquiry";
+                          }
+                        })()}
+                      </Text>
                     </Box>
-                    <Text
-                      size="sm"
-                      fw={400}
-                      c="#374151"
-                      style={{
-                        lineHeight: 1.3,
-                        fontFamily: "Inter",
-                        fontStyle: "regular",
-                        fontSize: "13px",
-                        color: "#105476",
-                      }}
-                    >
-                      Service & Cargo Details
-                    </Text>
-                  </Flex>
-                </Box>
-
-                {showQuotation && (
-                  <>
-                    {/* Vertical dotted line connector */}
-                    <Box
-                      style={{
-                        height: "24px",
-                        width: "40px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginLeft: "0",
-                        position: "relative",
-                      }}
-                    >
+                    <Flex align="center" gap="sm">
                       <Box
                         style={{
-                          width: "2px",
-                          height: "100%",
-                          borderLeft: "2px dotted #d1d5db",
+                          width: 40,
+                          height: 40,
+                          borderRadius: "50%",
+                          backgroundColor: active > 0 ? "#EAF9F1" : "#E6F2F8",
+                          border:
+                            active > 0
+                              ? "none"
+                              : active === 0
+                                ? "2px solid #105476"
+                                : "2px solid #d1d5db",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "16px",
+                          fontWeight: 600,
+                          color:
+                            active > 0
+                              ? "white"
+                              : active === 0
+                                ? "#105476"
+                                : "#9ca3af",
+                          transition: "all 0.2s",
+                          flexShrink: 0,
                         }}
-                      />
-                    </Box>
+                      >
+                        {active > 0 ? (
+                          <IconCircleCheck
+                            size={20}
+                            color="#289D69"
+                            fill="#EAF9F1"
+                          />
+                        ) : (
+                          // <IconCheck size={20} />
+                          <IconUser size={20} color="#105476" fill="#E6F2F8" />
+                        )}
+                      </Box>
+                      <Text
+                        size="sm"
+                        fw={400}
+                        c="#105476"
+                        style={{
+                          lineHeight: 1.3,
+                          fontFamily: "Inter",
+                          fontStyle: "regular",
+                          fontSize: "13px",
+                          color: "#105476",
+                        }}
+                      >
+                        Customer Details
+                      </Text>
+                    </Flex>
+                  </Box>
 
+                  {/* Vertical dotted line connector */}
+                  <Box
+                    style={{
+                      height: "24px",
+                      width: "40px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginLeft: "0",
+                      position: "relative",
+                    }}
+                  >
                     <Box
-                      onClick={() => handleStepClick(2)}
                       style={{
-                        cursor: "pointer",
-                        padding: "4px 0",
-                        transition: "all 0.2s",
+                        width: "2px",
+                        height: "100%",
+                        borderLeft: "2px dotted #d1d5db",
+                        // marginLeft: "19px", // Center it with the icon (40px / 2 = 20px, minus 1px for border)
                       }}
-                    >
-                      <Flex align="center" gap="sm">
+                    />
+                  </Box>
+
+                  <Box
+                    onClick={() => handleStepClick(1)}
+                    style={{
+                      cursor: "pointer",
+                      padding: "4px 0",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <Flex align="center" gap="sm">
+                      <Box
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: "50%",
+                          backgroundColor: active > 1 ? "#EAF9F1" : "#fff",
+                          border:
+                            active > 1
+                              ? "none"
+                              : active === 1
+                                ? "2px solid #105476"
+                                : "2px solid #d1d5db",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "16px",
+                          fontWeight: 600,
+                          color:
+                            active > 1
+                              ? "white"
+                              : active === 1
+                                ? "#105476"
+                                : "#9ca3af",
+                          transition: "all 0.2s",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {active > 1 ? (
+                          <IconCircleCheck
+                            size={20}
+                            color="#289D69"
+                            fill="#EAF9F1"
+                          />
+                        ) : (
+                          <IconTruckDelivery
+                            size={20}
+                            color="#105476"
+                            fill="#E6F2F8"
+                          />
+                        )}
+                      </Box>
+                      <Text
+                        size="sm"
+                        fw={400}
+                        c="#374151"
+                        style={{
+                          lineHeight: 1.3,
+                          fontFamily: "Inter",
+                          fontStyle: "regular",
+                          fontSize: "13px",
+                          color: "#105476",
+                        }}
+                      >
+                        Service & Cargo Details
+                      </Text>
+                    </Flex>
+                  </Box>
+
+                  {showQuotation && (
+                    <>
+                      {/* Vertical dotted line connector */}
+                      <Box
+                        style={{
+                          height: "24px",
+                          width: "40px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginLeft: "0",
+                          position: "relative",
+                        }}
+                      >
                         <Box
                           style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: "50%",
-                            backgroundColor: active > 2 ? "#EAF9F1" : "#fff",
-                            border:
-                              active > 2
-                                ? "none"
-                                : active === 2
-                                  ? "2px solid #105476"
-                                  : "2px solid #d1d5db",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: "16px",
-                            fontWeight: 600,
-                            color:
-                              active > 2
-                                ? "white"
-                                : active === 2
-                                  ? "#105476"
-                                  : "#9ca3af",
-                            transition: "all 0.2s",
-                            flexShrink: 0,
+                            width: "2px",
+                            height: "100%",
+                            borderLeft: "2px dotted #d1d5db",
                           }}
-                        >
-                          {active > 2 ? (
-                            <IconCircleCheck
-                              size={20}
-                              color="#289D69"
-                              fill="#EAF9F1"
-                            />
-                          ) : (
-                            <IconFileText
-                              size={20}
-                              color="#105476"
-                              fill="#E6F2F8"
-                            />
-                          )}
-                        </Box>
-                        <Text
-                          size="sm"
-                          fw={400}
-                          c="#374151"
-                          style={{
-                            lineHeight: 1.3,
-                            fontFamily: "Inter",
-                            fontStyle: "regular",
-                            fontSize: "13px",
-                            color: "#105476",
-                          }}
-                        >
-                          Quotation
-                        </Text>
-                      </Flex>
-                    </Box>
-                  </>
-                )}
-              </Stack>
-            </Box>
+                        />
+                      </Box>
+
+                      <Box
+                        onClick={() => handleStepClick(2)}
+                        style={{
+                          cursor: "pointer",
+                          padding: "4px 0",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        <Flex align="center" gap="sm">
+                          <Box
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: "50%",
+                              backgroundColor: active > 2 ? "#EAF9F1" : "#fff",
+                              border:
+                                active > 2
+                                  ? "none"
+                                  : active === 2
+                                    ? "2px solid #105476"
+                                    : "2px solid #d1d5db",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "16px",
+                              fontWeight: 600,
+                              color:
+                                active > 2
+                                  ? "white"
+                                  : active === 2
+                                    ? "#105476"
+                                    : "#9ca3af",
+                              transition: "all 0.2s",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {active > 2 ? (
+                              <IconCircleCheck
+                                size={20}
+                                color="#289D69"
+                                fill="#EAF9F1"
+                              />
+                            ) : (
+                              <IconFileText
+                                size={20}
+                                color="#105476"
+                                fill="#E6F2F8"
+                              />
+                            )}
+                          </Box>
+                          <Text
+                            size="sm"
+                            fw={400}
+                            c="#374151"
+                            style={{
+                              lineHeight: 1.3,
+                              fontFamily: "Inter",
+                              fontStyle: "regular",
+                              fontSize: "13px",
+                              color: "#105476",
+                            }}
+                          >
+                            Quotation
+                          </Text>
+                        </Flex>
+                      </Box>
+                    </>
+                  )}
+                </Stack>
+              </Box>
+            )}
 
             {/* Main Content Area */}
             <Box
