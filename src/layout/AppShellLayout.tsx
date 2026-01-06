@@ -43,7 +43,7 @@ const AppShellLayout = ({ children }) => {
       >
         <Box
           style={{
-            zIndex: 10,
+            zIndex: 10000,
             position: "sticky",
             top: 0,
             backgroundColor: "white",
