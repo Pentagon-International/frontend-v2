@@ -1086,7 +1086,16 @@ function EnquiryMaster() {
     },
     mantinePaperProps: {
       shadow: "sm",
+      p: "md",
       radius: "md",
+      style: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
+      },
     },
     // Keep cell/head styles minimal to avoid interfering with built-in sticky behavior
     mantineTableBodyCellProps: {
