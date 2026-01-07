@@ -3160,7 +3160,7 @@ function EnquiryMaster() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2c}>
+                  <Grid.Col span={2}>
                     <TextInput
                       label="Reference No"
                       placeholder="Placeholder"
