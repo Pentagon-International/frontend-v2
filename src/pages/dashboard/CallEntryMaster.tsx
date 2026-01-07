@@ -1265,9 +1265,25 @@ function CallEntry() {
       columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
+    mantineTableProps: {
+      striped: false,
+      highlightOnHover: true,
+      withTableBorder: false,
+      withColumnBorders: false,
+      style: { width: "100%" },
+    },
     mantinePaperProps: {
       shadow: "sm",
+      p: "md",
       radius: "md",
+      style: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
+      },
     },
     mantineTableBodyCellProps: ({ column }) => {
       let extraStyles = {};
@@ -1324,20 +1340,32 @@ function CallEntry() {
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
   });
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Card
+        shadow="sm"
+        pt="md"
+        pb="sm"
+        px="lg"
+        radius="md"
+        withBorder
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          overflow: "hidden",
+          flex: 1,
+        }}
+      >
         <Box mb="md">
           <Group justify="space-between" align="center" mb="md">
             <Text
@@ -1486,10 +1514,12 @@ function CallEntry() {
         {/* Filter Section */}
         {showFilters && (
           <Box
-            mb="md"
+            mb="xs"
             style={{
               borderRadius: "8px",
               border: "1px solid #E0E0E0",
+              flexShrink: 0,
+              height: "fit-content",
             }}
           >
             <Group

@@ -24,6 +24,7 @@ import useAuthStore from "../../store/authStore";
 
 type QuotationData = {
   quotation_id: string;
+  enquiry_id: string;
   customer_name: string;
   salesperson: string;
   origin: string;
@@ -231,6 +232,9 @@ function QuotationApprovalPublic() {
               </Text>
               <Text size="sm" c="dimmed">
                 Quotation ID: {quotations[0]?.quotation_id}
+              </Text>
+              <Text size="sm" c="dimmed">
+                Enquiry ID: {quotations[0]?.enquiry_id}
               </Text>
               <Text size="sm" c="dimmed">
                 Customer: {quotations[0]?.customer_name}

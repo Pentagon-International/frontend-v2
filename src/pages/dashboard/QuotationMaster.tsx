@@ -1897,6 +1897,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       shadow: "sm",
       p: "md",
       radius: "md",
+      style: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
+      },
     },
     mantineTableBodyCellProps: ({ column }) => {
       let extraStyles = {};
@@ -1953,13 +1961,11 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
     // pagination will be controlled by a custom bar below the table
@@ -1982,7 +1988,21 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Card
+        shadow="sm"
+        pt="md"
+        pb="sm"
+        px="lg"
+        radius="md"
+        withBorder
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          overflow: "hidden",
+          flex: 1,
+        }}
+      >
         <Box mb="md">
           <Group justify="space-between" align="center" mb="md">
             <Text
@@ -2057,10 +2077,12 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         {/* Filter Section */}
         {showFilters && (
           <Box
-            mb="md"
+            mb="xs"
             style={{
               borderRadius: "8px",
               border: "1px solid #E0E0E0",
+              flexShrink: 0,
+              height: "fit-content",
             }}
           >
             <Group
@@ -2295,7 +2317,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               </Grid.Col>
 
               {/* Date Range Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={4.8}>
                 <DateRangeInput
                   fromDate={fromDate}
                   toDate={toDate}
@@ -2508,7 +2530,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           </Center>
         ) : (
           <>
-            <Box style={{ position: "relative" }}>
+            <Box
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                position: "relative",
+              }}
+            >
               <MantineReactTable table={table} />
               {/* Loader overlay for approval mode when approving */}
               {isApprovalMode && isApprovingQuotation && (
