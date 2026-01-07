@@ -3021,14 +3021,8 @@ function EnquiryCreate() {
                             return "Create Quotation";
                           } else if (enq?.actionType === "edit") {
                             return "Edit Enquiry";
-                          } else if (
-                            enq?.id ||
-                            enq?.enquiry_id ||
-                            customerForm.values.customer_code ||
-                            (serviceForm.values.service_details &&
-                              serviceForm.values.service_details.length > 0)
-                          ) {
-                            // If form has values (id, enquiry_id, customer_code, or service details), it's an edit scenario
+                          } else if (enq?.id || enq?.enquiry_id) {
+                            // Only check for actual enquiry ID, not form values (which could be from create mode)
                             return "Edit Enquiry";
                           } else {
                             return "Create New Enquiry";

@@ -157,16 +157,62 @@ const responseInterceptor = () =>
         const status = error.response.status;
         const data = error.response.data as any;
 
-        console.log("API Error:", data);
+        console.log("🔍 Response Interceptor Debug - Full Error Response:", {
+          status,
+          data,
+          dataType: typeof data,
+          isObject: typeof data === "object",
+          isArray: Array.isArray(data),
+          hasSuccess: data?.success !== undefined,
+          successValue: data?.success,
+          successType: typeof data?.success,
+          hasMessage: data?.message !== undefined,
+          messageValue: data?.message,
+          messageType: typeof data?.message,
+          hasErrorMessage: data?.error_message !== undefined,
+          errorMessageValue: data?.error_message,
+        });
 
+        // Check if response has a message field (backend format: { success: false, message: "..." })
+        // Priority: message > error_message > default message
+        const hasBackendMessage = 
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data) &&
+          data.message &&
+          typeof data.message === "string" &&
+          data.message.trim() !== "";
+
+        console.log("🔍 Backend Message Check:", {
+          hasBackendMessage,
+          messageExists: !!data?.message,
+          messageValue: data?.message,
+          messageType: typeof data?.message,
+        });
+
+        // Use standard error messages based on status code
         switch (status) {
-          case 400:
+          case 400: {
+            // For 400 errors, prioritize backend message if available
+            let errorMessage = "Bad Request! Please check your input.";
+            
+            if (hasBackendMessage) {
+              errorMessage = data.message;
+              console.log("✅ Using backend message for 400:", errorMessage);
+            } else if (data?.error_message) {
+              errorMessage = data.error_message;
+              console.log("✅ Using error_message for 400:", errorMessage);
+            } else {
+              console.log("⚠️ Using default 400 message");
+            }
+            
+            console.log("🔍 400 Error - Final message:", errorMessage);
             return Promise.reject({
-              message:
-                data?.error_message || "Bad Request! Please check your input.",
+              message: errorMessage,
             });
+          }
 
-          case 403:
+          case 403: {
             // Forbidden - different from 401, user doesn't have permission
             const { accessToken, resetAuth } = useAuthStore?.getState();
 
@@ -182,6 +228,7 @@ const responseInterceptor = () =>
               message:
                 "Access forbidden! You do not have permission to access this resource.",
             });
+          }
 
           case 404:
             return Promise.reject({
