@@ -570,7 +570,6 @@ function Pipeline() {
     },
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
       radius: "md",
       style: { 
         flex: 1,

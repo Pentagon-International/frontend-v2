@@ -1,7 +1,6 @@
 import {
   Box,
   Button,
-  Divider,
   Flex,
   Grid,
   Group,
@@ -640,7 +639,7 @@ function PipelineCreate() {
   return (
     <Box
       component="form"
-      style={{ padding: "0 1%", position: "relative" }}
+      style={{ backgroundColor: "#F8F8F8", position: "relative", borderRadius: "8px", overflow: "hidden" }}
       onSubmit={
         viewMode
           ? (e) => e.preventDefault()
@@ -660,71 +659,138 @@ function PipelineCreate() {
         </Center>
       )}
 
-      <Flex justify={"space-between"} align="center">
-        <Text fw={500} my="md">
-          {viewMode
-            ? "Pipeline Entry Details (View Only)"
-            : "Pipeline Entry Details"}
-        </Text>
-      </Flex>
-
-      {/* Customer Selection */}
-      <Group mb={"md"}>
-        <Box maw={400}>
-          <SearchableSelect
-            label="Customer Name"
-            placeholder="Type customer name"
-            apiEndpoint={editMode ? undefined : URL.customer}
-            searchFields={editMode ? [] : ["customer_name", "customer_code"]}
-            displayFormat={(item: Record<string, unknown>) => ({
-              value: String(item.customer_code),
-              label: String(item.customer_name),
-            })}
-            value={pipelineForm.values.customer}
-            displayValue={
-              customerOption && typeof customerOption.label === "string"
-                ? customerOption.label
-                : undefined
-            }
-            onChange={(value, selectedData) => {
-              const fixedVal = value ? String(value) : "";
-              pipelineForm.setFieldValue("customer", fixedVal);
-              setSelectedCustomerCode(fixedVal);
-              if (selectedData && typeof selectedData.label === "string") {
-                setCustomerOption({
-                  value: fixedVal,
-                  label: String(selectedData.label),
-                });
-              } else {
-                setCustomerOption(null);
-              }
-              if (!editMode && value) {
-                fetchCustomerProfiling(fixedVal);
-              } else if (!editMode && !value) {
-                setCustomerProfilingData([]);
-                profilingForm.setValues({ profiles: [] });
-              }
+      <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+        <Flex
+          gap="md"
+          align="flex-start"
+          style={{ height: "calc(100vh - 112px)", width: "100%" }}
+        >
+          {/* Vertical Stepper Sidebar */}
+          <Box
+            style={{
+              minWidth: 240,
+              width: "100%",
+              maxWidth: 250,
+              height: "100%",
+              alignSelf: "stretch",
+              borderRadius: "8px",
+              backgroundColor: "#FFFFFF",
+              position: "sticky",
+              top: 0,
             }}
-            minSearchLength={2}
-            required
-            disabled={editMode || viewMode}
-          />
-        </Box>
-      </Group>
+          >
+            <Box
+              style={{
+                padding: "20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                size="md"
+                fw={600}
+                c="#105476"
+                style={{
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                  fontSize: "16px",
+                  color: "#105476",
+                  textAlign: "center",
+                }}
+              >
+                {viewMode
+                  ? "Pipeline Entry Details (View Only)"
+                  : editMode
+                    ? "Edit Pipeline Entry"
+                    : "Create Pipeline Entry"}
+              </Text>
+            </Box>
+          </Box>
 
-      {/* Loading State */}
-      {isLoadingProfiling && (
-        <Center py="xl">
-          <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text c="dimmed">Loading data...</Text>
-          </Stack>
-        </Center>
-      )}
+          {/* Main Content Area */}
+          <Box
+            style={{
+              flex: 1,
+              width: "100%",
+              borderRadius: "8px",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              overflow: "hidden",
+              gap: "8px",
+            }}
+          >
+            <Box
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                borderRadius: "8px",
+                backgroundColor: "#FFFFFF",
+              }}
+            >
+              <Grid style={{  padding: "24px"}}>
 
-      {/* Profile Data Grid */}
-      {selectedCustomerCode && !isLoadingProfiling && (
-        <Box mb="md">
+                {/* Customer Selection */}
+                <Grid.Col span={12}>
+                  <Box maw={400}>
+                    <SearchableSelect
+                      label="Customer Name"
+                      placeholder="Type customer name"
+                      apiEndpoint={editMode ? undefined : URL.customer}
+                      searchFields={editMode ? [] : ["customer_name", "customer_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.customer_code),
+                        label: String(item.customer_name),
+                      })}
+                      value={pipelineForm.values.customer}
+                      displayValue={
+                        customerOption && typeof customerOption.label === "string"
+                          ? customerOption.label
+                          : undefined
+                      }
+                      onChange={(value, selectedData) => {
+                        const fixedVal = value ? String(value) : "";
+                        pipelineForm.setFieldValue("customer", fixedVal);
+                        setSelectedCustomerCode(fixedVal);
+                        if (selectedData && typeof selectedData.label === "string") {
+                          setCustomerOption({
+                            value: fixedVal,
+                            label: String(selectedData.label),
+                          });
+                        } else {
+                          setCustomerOption(null);
+                        }
+                        if (!editMode && value) {
+                          fetchCustomerProfiling(fixedVal);
+                        } else if (!editMode && !value) {
+                          setCustomerProfilingData([]);
+                          profilingForm.setValues({ profiles: [] });
+                        }
+                      }}
+                      minSearchLength={2}
+                      required
+                      disabled={editMode || viewMode}
+                    />
+                  </Box>
+                </Grid.Col>
+
+                {/* Loading State */}
+                {isLoadingProfiling && (
+                  <Grid.Col span={12}>
+                    <Center py="xl">
+                      <Stack align="center" gap="md">
+                        <Loader size="lg" color="#105476" />
+                        <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>Loading data...</Text>
+                      </Stack>
+                    </Center>
+                  </Grid.Col>
+                )}
+
+                {/* Profile Data Grid */}
+                {selectedCustomerCode && !isLoadingProfiling && (
+                  <Grid.Col span={12}>
+                    <Box mb="md">
           {/* Table Headers - First Row */}
           <Grid
             style={{
@@ -734,6 +800,7 @@ function PipelineCreate() {
               borderBottom: "1px solid #dee2e6",
               fontWeight: 600,
               fontSize: "12px",
+              fontFamily: "Inter",
             }}
           >
             {/* Profile Section Headers */}
@@ -750,7 +817,7 @@ function PipelineCreate() {
                 borderRight: "none",
               }}
             >
-              <Text fw={600} c="#105476" size="sm" ta="center">
+              <Text fw={600} c="#105476" size="sm" ta="center" style={{ fontFamily: "Inter" }}>
                 Profile
               </Text>
             </Grid.Col>
@@ -765,7 +832,7 @@ function PipelineCreate() {
                 borderLeft: "none",
               }}
             >
-              <Text fw={600} c="#105476" size="sm" ta="center">
+              <Text fw={600} c="#105476" size="sm" ta="center" style={{ fontFamily: "Inter" }}>
                 Pipeline
               </Text>
             </Grid.Col>
@@ -779,6 +846,7 @@ function PipelineCreate() {
               borderBottom: "1px solid #dee2e6",
               fontWeight: 600,
               fontSize: "12px",
+              fontFamily: "Inter",
             }}
           >
             <Grid.Col span={1} style={{ borderBottom: "none" }}>
@@ -816,6 +884,9 @@ function PipelineCreate() {
                     readOnly
                     styles={{
                       input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
                         backgroundColor: "#f8f9fa",
                         cursor: "not-allowed",
                       },
@@ -950,6 +1021,13 @@ function PipelineCreate() {
                         `profiles.${index}.frequency_id`
                       ] as string
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={1}>
@@ -983,11 +1061,20 @@ function PipelineCreate() {
                       viewMode
                         ? {
                             input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
                               backgroundColor: "#f8f9fa",
                               cursor: "not-allowed",
                             },
                           }
-                        : undefined
+                        : {
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }
                     }
                   />
                 </Grid.Col>
@@ -1013,11 +1100,20 @@ function PipelineCreate() {
                       viewMode
                         ? {
                             input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
                               backgroundColor: "#f8f9fa",
                               cursor: "not-allowed",
                             },
                           }
-                        : undefined
+                        : {
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }
                     }
                   />
                 </Grid.Col>
@@ -1047,11 +1143,20 @@ function PipelineCreate() {
                       viewMode
                         ? {
                             input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
                               backgroundColor: "#f8f9fa",
                               cursor: "not-allowed",
                             },
                           }
-                        : undefined
+                        : {
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }
                     }
                   />
                 </Grid.Col>
@@ -1088,11 +1193,20 @@ function PipelineCreate() {
                       viewMode
                         ? {
                             input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
                               backgroundColor: "#f8f9fa",
                               cursor: "not-allowed",
                             },
                           }
-                        : undefined
+                        : {
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }
                     }
                   />
                 </Grid.Col>
@@ -1122,11 +1236,20 @@ function PipelineCreate() {
                       viewMode
                         ? {
                             input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
                               backgroundColor: "#f8f9fa",
                               cursor: "not-allowed",
                             },
                           }
-                        : undefined
+                        : {
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }
                     }
                   />
                 </Grid.Col>
@@ -1155,11 +1278,20 @@ function PipelineCreate() {
                       viewMode
                         ? {
                             input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
                               backgroundColor: "#f8f9fa",
                               cursor: "not-allowed",
                             },
                           }
-                        : undefined
+                        : {
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }
                     }
                   />
                 </Grid.Col>
@@ -1191,6 +1323,13 @@ function PipelineCreate() {
                         `newProfiles.${index}.service`
                       ] as string
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
@@ -1318,6 +1457,13 @@ function PipelineCreate() {
                         `newProfiles.${index}.frequency_id`
                       ] as string
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={1}>
@@ -1345,6 +1491,13 @@ function PipelineCreate() {
                         `newProfiles.${index}.no_of_shipments`
                       ] as string
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={1}>
@@ -1365,6 +1518,13 @@ function PipelineCreate() {
                         e.currentTarget.value
                       )
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={1}>
@@ -1385,6 +1545,13 @@ function PipelineCreate() {
                         `newProfiles.${index}.profit`
                       ] as string
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 {/* Gap column to separate sections */}
@@ -1414,6 +1581,13 @@ function PipelineCreate() {
                         e.currentTarget.value
                       )
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={1}>
@@ -1435,6 +1609,13 @@ function PipelineCreate() {
                         `newProfiles.${index}.pipeline_volume`
                       ] as string
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={1}>
@@ -1456,6 +1637,13 @@ function PipelineCreate() {
                         `newProfiles.${index}.pipeline_profit`
                       ] as string
                     }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={0.4}>
@@ -1463,6 +1651,9 @@ function PipelineCreate() {
                     variant="light"
                     color="red"
                     onClick={() => handleRemoveNewProfile(index)}
+                    styles={{
+                      root: { fontFamily: "Inter, sans-serif" },
+                    }}
                   >
                     <IconTrash size={18} />
                   </Button>
@@ -1471,67 +1662,102 @@ function PipelineCreate() {
             </Box>
           ))}
 
-          {/* Add More Button - Hidden in view mode */}
-          {!viewMode && (
-            <Flex justify="flex-end" mt="md">
-              <Button
-                variant="outline"
-                color="#105476"
-                leftSection={<IconPlus size={16} />}
-                onClick={handleAddNewProfile}
-              >
-                {profilingForm.values.profiles.length > 0
-                  ? "Add More"
-                  : "Add New"}
-              </Button>
-            </Flex>
-          )}
-        </Box>
-      )}
+                      {/* Add More Button - Hidden in view mode */}
+                      {!viewMode && (
+                        <Flex justify="flex-end" mt="lg" mr="sm">
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            c="#105476"
+                            leftSection={<IconPlus size={16} />}
+                            onClick={handleAddNewProfile}
+                            styles={{
+                              root: {
+                                color: "#105476",
+                                borderColor: "#105476",
+                                fontFamily: "Inter, sans-serif",
+                              },
+                            }}
+                          >
+                            {profilingForm.values.profiles.length > 0
+                              ? "Add More"
+                              : "Add New"}
+                          </Button>
+                        </Flex>
+                      )}
+                    </Box>
+                  </Grid.Col>
+                )}
+              </Grid>
+            </Box>
 
-      {/* Submit Buttons - Only show when customer is selected */}
-      {selectedCustomerCode && (
-        <Stack justify="space-between" mt="5%">
-          <Divider my="md" />
-          <Flex gap="md" justify={"end"}>
-            <Button
-              variant="outline"
-              c="#105476"
-              styles={{
-                root: {
-                  color: "#105476",
-                  borderColor: "#105476",
-                },
-              }}
-              onClick={() => {
-                const returnTo = (routerLocation.state as { returnTo?: string })
-                  ?.returnTo;
-                if (returnTo) {
-                  navigate(returnTo);
-                } else {
-                  const historyLength = window.history.length;
-                  if (historyLength > 1) {
-                    navigate(-1);
-                  } else {
-                    navigate("/pipeline");
-                  }
-                }
+            {/* Footer Buttons - Only show when customer is selected */}
+            <Box
+              style={{
+                // borderTop: "1px solid #e9ecef",
+                padding: "20px 32px",
+                backgroundColor: "#ffffff",
+                borderRadius: "8px",
               }}
             >
-              {viewMode ? "Back" : "Cancel"}
-            </Button>
-            {!viewMode && (
-              <Button
-                type="submit"
-                color="#105476"
-                rightSection={<IconCheck size={16} />}
-              >
-                Submit
-              </Button>
-            )}
-          </Flex>
-        </Stack>
-      )}
+              <Group justify="space-between">
+                <Group gap="sm">
+                  <Button
+                    variant="outline"
+                    color="gray"
+                    size="sm"
+                    styles={{
+                      root: {
+                        borderColor: "#d0d0d0",
+                        color: "#666",
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    onClick={() => {
+                      const returnTo = (routerLocation.state as { returnTo?: string })
+                        ?.returnTo;
+                      if (returnTo) {
+                        navigate(returnTo);
+                      } else {
+                        const historyLength = window.history.length;
+                        if (historyLength > 1) {
+                          navigate(-1);
+                        } else {
+                          navigate("/pipeline");
+                        }
+                      }
+                    }}
+                  >
+                    {viewMode ? "Back" : "Cancel"}
+                  </Button>
+                </Group>
+
+                <Group gap="sm">
+                  {!viewMode && (
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={selectedCustomerCode === ""}
+                      style={{
+                        backgroundColor: selectedCustomerCode === "" ? "#105476BB" : "#105476",
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      }}
+                      rightSection={<IconCheck size={16} />}
+                    >
+                      Submit
+                    </Button>
+                  )}
+                </Group>
+              </Group>
+            </Box>
+            
+          </Box>
+        </Flex>
+      </Box>
     </Box>
   );
 }
