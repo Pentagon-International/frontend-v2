@@ -272,7 +272,10 @@ const AddressCard = memo(
               label="Location"
               placeholder="Enter location"
               disabled={!!isViewMode}
-              value={addressForm.values.addresses_data[index]?.customer_location || ""}
+              value={
+                addressForm.values.addresses_data[index]?.customer_location ||
+                ""
+              }
               onChange={(e) => {
                 const formattedValue = toTitleCase(e.target.value);
                 addressForm.setFieldValue(
@@ -280,7 +283,9 @@ const AddressCard = memo(
                   formattedValue
                 );
               }}
-              error={addressForm.errors.addresses_data?.[index]?.customer_location}
+              error={
+                addressForm.errors.addresses_data?.[index]?.customer_location
+              }
             />
           </Grid.Col>
 
@@ -363,7 +368,8 @@ const AddressCard = memo(
                 placeholder="Enter city name"
                 disabled={isViewMode}
                 value={
-                  citySearchValues[index] !== undefined && citySearchValues[index] !== ""
+                  citySearchValues[index] !== undefined &&
+                  citySearchValues[index] !== ""
                     ? citySearchValues[index]
                     : addressForm.values.addresses_data[index]?.city || ""
                 }
@@ -387,7 +393,7 @@ const AddressCard = memo(
               />
             ) : (
               <Select
-                key={`city-select-${index}-${addressForm.values.addresses_data[index]?.city || ''}`}
+                key={`city-select-${index}-${addressForm.values.addresses_data[index]?.city || ""}`}
                 label="City"
                 placeholder="Select or search city"
                 searchable
@@ -395,7 +401,9 @@ const AddressCard = memo(
                 disabled={isViewMode}
                 value={
                   addressForm.values.addresses_data[index]?.city
-                    ? getCityValue(addressForm.values.addresses_data[index].city)
+                    ? getCityValue(
+                        addressForm.values.addresses_data[index].city
+                      )
                     : ""
                 }
                 onChange={(value) => {
@@ -502,9 +510,7 @@ function CustomerCreate() {
   const [selectedStates, setSelectedStates] = useState<Record<number, string>>(
     {}
   );
-  const [customCities, setCustomCities] = useState<Record<number, boolean>>(
-    {}
-  );
+  const [customCities, setCustomCities] = useState<Record<number, boolean>>({});
   const [citySearchValues, setCitySearchValues] = useState<
     Record<number, string>
   >({});
@@ -522,25 +528,24 @@ function CustomerCreate() {
 
   // Customer ID from route parameters
   const customerId = params.id;
-  
+
   // Salespersons data query - initially with empty customer_id
-  const { data: rawSalespersonsData = []} =
-    useQuery({
-      queryKey: ["salespersons", ""],
-      queryFn: () => {
-        console.log(
-          "🚀 React Query calling fetchSalespersons with empty customer_code"
-        );
-        return fetchSalespersons("");
-      },
-      staleTime: 10 * 60 * 1000, // 10 minutes - longer cache
-      gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache longer
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      enabled: true, // Only fetch when component mounts
-      retry: 1, // Only retry once on failure
-    });
+  const { data: rawSalespersonsData = [] } = useQuery({
+    queryKey: ["salespersons", ""],
+    queryFn: () => {
+      console.log(
+        "🚀 React Query calling fetchSalespersons with empty customer_code"
+      );
+      return fetchSalespersons("");
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes - longer cache
+    gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache longer
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    enabled: true, // Only fetch when component mounts
+    retry: 1, // Only retry once on failure
+  });
 
   const salespersonsData = useMemo(() => {
     const response = rawSalespersonsData as SalespersonsResponse;
@@ -769,10 +774,13 @@ function CustomerCreate() {
     if (location.state?.customerFormData && !isFormInitialized) {
       const restoredCustomerData = location.state.customerFormData;
       const restoredAddressData = location.state.addressFormData;
-      
+
       // Use addressFormData if available, otherwise use addresses_data from customerFormData
-      let addressDataToRestore = restoredAddressData?.addresses_data || restoredCustomerData?.addresses_data || [];
-      
+      let addressDataToRestore =
+        restoredAddressData?.addresses_data ||
+        restoredCustomerData?.addresses_data ||
+        [];
+
       // Normalize city values if cities are already loaded (for immediate display)
       if (cities.length > 0 && addressDataToRestore.length > 0) {
         addressDataToRestore = addressDataToRestore.map((addr: AddressData) => {
@@ -788,7 +796,7 @@ function CustomerCreate() {
           return addr;
         });
       }
-      
+
       // Restore customer form
       if (restoredCustomerData) {
         customerForm.setValues({
@@ -800,14 +808,14 @@ function CustomerCreate() {
           addresses_data: addressDataToRestore,
         });
       }
-      
+
       // Restore address form
       if (addressDataToRestore.length > 0) {
         addressForm.setValues({
           addresses_data: addressDataToRestore,
         });
       }
-      
+
       // Set active step to 2 (Address step) since user was on that step
       setActive(1);
       setIsFormInitialized(true);
@@ -818,16 +826,16 @@ function CustomerCreate() {
   // Restore cascading dropdown states for addresses after countries, states, and cities are loaded (both create and edit mode)
   useEffect(() => {
     if (
-      location.state?.customerFormData && 
-      isFormInitialized && 
+      location.state?.customerFormData &&
+      isFormInitialized &&
       !addressStateRestored &&
-      countries.length > 0 && 
-      states.length > 0 && 
+      countries.length > 0 &&
+      states.length > 0 &&
       cities.length > 0
     ) {
       // Read from form values (which are already normalized) instead of location.state
       const addressDataToRestore = addressForm.values.addresses_data || [];
-      
+
       if (addressDataToRestore.length > 0) {
         const newSelectedCountries: Record<number, string> = {};
         const newSelectedStates: Record<number, string> = {};
@@ -838,13 +846,15 @@ function CustomerCreate() {
           // Restore country selection
           if (addr.country) {
             const country = countries.find(
-              (c) => c.country_name === addr.country || c.country_code === addr.country
+              (c) =>
+                c.country_name === addr.country ||
+                c.country_code === addr.country
             );
             if (country) {
               newSelectedCountries[idx] = country.country_code;
             }
           }
-          
+
           // Restore state selection
           if (addr.state) {
             let state = states.find((s) => s.state_code === addr.state);
@@ -854,14 +864,14 @@ function CustomerCreate() {
             if (!state && !isNaN(Number(addr.state))) {
               state = states.find((s) => s.id === Number(addr.state));
             }
-            
+
             if (state) {
               newSelectedStates[idx] = state.state_name;
             } else {
               newSelectedStates[idx] = addr.state;
             }
           }
-          
+
           // Restore city selection - check if city exists in dropdown
           if (addr.city) {
             // Normalize city value - try to find city and use city_name if found
@@ -869,16 +879,22 @@ function CustomerCreate() {
             const city = cities.find(
               (c) => c.city_name === addr.city || c.city_code === addr.city
             );
-            
+
             if (city) {
               // City exists in dropdown - use city_name for consistency
               cityValue = city.city_name;
               newCustomCities[idx] = false; // Use dropdown
               newCitySearchValues[idx] = ""; // Clear search value
-              
+
               // Update form value to city_name to ensure dropdown displays correctly
-              addressForm.setFieldValue(`addresses_data.${idx}.city`, cityValue);
-              customerForm.setFieldValue(`addresses_data.${idx}.city`, cityValue);
+              addressForm.setFieldValue(
+                `addresses_data.${idx}.city`,
+                cityValue
+              );
+              customerForm.setFieldValue(
+                `addresses_data.${idx}.city`,
+                cityValue
+              );
             } else {
               // City doesn't exist - it's a custom city
               newCustomCities[idx] = true; // Use textbox
@@ -899,8 +915,15 @@ function CustomerCreate() {
         setAddressStateRestored(true);
       }
     }
-  }, [location.state, isFormInitialized, addressStateRestored, countries, states, cities, addressForm]);
-
+  }, [
+    location.state,
+    isFormInitialized,
+    addressStateRestored,
+    countries,
+    states,
+    cities,
+    addressForm,
+  ]);
 
   // Function to fetch customer data for edit/view mode
   const fetchCustomerData = useCallback(
@@ -930,7 +953,7 @@ function CustomerCreate() {
               // Preserve original city value from API
               const originalCityValue = addr.city || "";
               let cityName = originalCityValue;
-              
+
               // Try to convert city_code to city_name if it exists in dropdown
               if (cityName) {
                 const city = cities.find(
@@ -943,7 +966,8 @@ function CustomerCreate() {
                 // If city not found, keep original value (could be city_code or custom city name)
               }
               return {
-                customer_location: addr.customer_location || addr.location || "",
+                customer_location:
+                  addr.customer_location || addr.location || "",
                 address_type: addr.address_type || "Primary",
                 address: addr.address || "",
                 city: cityName, // Store the city value (name if found, original if not)
@@ -1109,7 +1133,7 @@ function CustomerCreate() {
           // Preserve original city value from API
           const originalCityValue = addr.city || "";
           let cityName = originalCityValue;
-          
+
           // Try to convert city_code to city_name if it exists in dropdown
           if (cityName) {
             const city = cities.find(
@@ -1393,7 +1417,7 @@ function CustomerCreate() {
 
       // Set selected country (this will trigger state options to update)
       setSelectedCountries((prev) => ({ ...prev, [index]: countryCode }));
-      
+
       // Clear state value and display value
       setSelectedStates((prev) => {
         const newStates = { ...prev };
@@ -1407,7 +1431,7 @@ function CustomerCreate() {
         newCities[index] = false; // Explicitly set to false to reset to dropdown mode
         return newCities;
       });
-      
+
       // Clear city search values
       setCitySearchValues((prev) => {
         const newSearchValues = { ...prev };
@@ -1513,14 +1537,20 @@ function CustomerCreate() {
             c.city_name.toLowerCase().startsWith(searchValue.toLowerCase()) ||
             c.city_code.toLowerCase().startsWith(searchValue.toLowerCase())
         );
-        
+
         // If no exact or partial match found, switch to custom input
         if (!exactMatch && !partialMatch) {
           setCustomCities((prev) => ({ ...prev, [index]: true }));
           // Also update the form with the custom value
           const formattedValue = toTitleCase(searchValue);
-          customerForm.setFieldValue(`addresses_data.${index}.city`, formattedValue);
-          addressForm.setFieldValue(`addresses_data.${index}.city`, formattedValue);
+          customerForm.setFieldValue(
+            `addresses_data.${index}.city`,
+            formattedValue
+          );
+          addressForm.setFieldValue(
+            `addresses_data.${index}.city`,
+            formattedValue
+          );
         } else if (exactMatch || partialMatch) {
           // If there's a match, ensure we're in dropdown mode
           setCustomCities((prev) => ({ ...prev, [index]: false }));
@@ -1570,10 +1600,33 @@ function CustomerCreate() {
         navigate("/master/customer", { state: { refreshData: true } });
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.log("🔍 CustomerCreate - createCustomer Error Caught:", {
+        err,
+        errType: typeof err,
+        isError: err instanceof Error,
+        hasMessage: err && typeof err === "object" && "message" in err,
+        message:
+          err && typeof err === "object" && "message" in err
+            ? (err as any).message
+            : undefined,
+      });
+
+      // Extract error message from various error formats
+      let errorMessage = "Unknown error";
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (err && typeof err === "object" && "message" in err) {
+        errorMessage = String((err as any).message);
+      }
+
+      console.log(
+        "🔍 CustomerCreate - Final error message to display:",
+        errorMessage
+      );
+
       ToastNotification({
         type: "error",
-        message: `Error while creating customer: ${errorMessage}`,
+        message: errorMessage,
       });
     } finally {
       setIsSubmitting(false);
@@ -1618,10 +1671,33 @@ function CustomerCreate() {
         navigate("/master/customer", { state: { refreshData: true } });
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.log("🔍 CustomerCreate - updateCustomer Error Caught:", {
+        err,
+        errType: typeof err,
+        isError: err instanceof Error,
+        hasMessage: err && typeof err === "object" && "message" in err,
+        message:
+          err && typeof err === "object" && "message" in err
+            ? (err as any).message
+            : undefined,
+      });
+
+      // Extract error message from various error formats
+      let errorMessage = "Unknown error";
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (err && typeof err === "object" && "message" in err) {
+        errorMessage = String((err as any).message);
+      }
+
+      console.log(
+        "🔍 CustomerCreate - Final error message to display:",
+        errorMessage
+      );
+
       ToastNotification({
         type: "error",
-        message: `Error while updating customer: ${errorMessage}`,
+        message: errorMessage,
       });
     } finally {
       setIsSubmitting(false);
@@ -1640,8 +1716,8 @@ function CustomerCreate() {
 
     if (!customerResult.hasErrors && !addressResult.hasErrors) {
       // Combine data from both forms
-      if(customerForm.values.assigned_to === "Agent"){
-        customerForm.values.assigned_to = ""
+      if (customerForm.values.assigned_to === "Agent") {
+        customerForm.values.assigned_to = "";
       }
       const finalData = {
         ...customerForm.values,
@@ -1737,7 +1813,10 @@ function CustomerCreate() {
                     value={customerForm.values.customer_name}
                     onChange={(e) => {
                       const formattedValue = toTitleCase(e.target.value);
-                      customerForm.setFieldValue("customer_name", formattedValue);
+                      customerForm.setFieldValue(
+                        "customer_name",
+                        formattedValue
+                      );
                     }}
                     error={customerForm.errors.customer_name}
                   />
@@ -1830,7 +1909,7 @@ function CustomerCreate() {
               <Stack>
                 {addressForm.values.addresses_data.map((_, index) => (
                   <AddressCard
-                    key={`address-${index}-${addressForm.values.addresses_data[index]?.city || ''}-${addressStateRestored}`}
+                    key={`address-${index}-${addressForm.values.addresses_data[index]?.city || ""}-${addressStateRestored}`}
                     index={index}
                     isViewMode={isViewMode}
                     addressForm={addressForm}
@@ -1893,15 +1972,21 @@ function CustomerCreate() {
                         const customerResult = customerForm.validate();
                         const addressResult = addressForm.validate();
 
-                        if (!customerResult.hasErrors && !addressResult.hasErrors) {
+                        if (
+                          !customerResult.hasErrors &&
+                          !addressResult.hasErrors
+                        ) {
                           // Navigate to customer relationship mapping with customer form data
-                          navigate("/master/customer-relationship-mapping/create", {
-                            state: {
-                              fromCustomerMaster: true,
-                              customerFormData: customerForm.values,
-                              addressFormData: addressForm.values,
-                            },
-                          });
+                          navigate(
+                            "/master/customer-relationship-mapping/create",
+                            {
+                              state: {
+                                fromCustomerMaster: true,
+                                customerFormData: customerForm.values,
+                                addressFormData: addressForm.values,
+                              },
+                            }
+                          );
                         } else {
                           // Force re-render to show validation errors inline
                           if (customerResult.hasErrors) {
@@ -1913,7 +1998,7 @@ function CustomerCreate() {
                         }
                       }}
                       disabled={isSubmitting}
-                      style={{border: "1px solid #105476"}}
+                      style={{ border: "1px solid #105476" }}
                       color="white"
                     >
                       Add Customer Relationships
@@ -1927,16 +2012,22 @@ function CustomerCreate() {
                         const customerResult = customerForm.validate();
                         const addressResult = addressForm.validate();
 
-                        if (!customerResult.hasErrors && !addressResult.hasErrors) {
+                        if (
+                          !customerResult.hasErrors &&
+                          !addressResult.hasErrors
+                        ) {
                           // Navigate to customer relationship mapping edit with customer_id
-                          navigate("/master/customer-relationship-mapping/edit", {
-                            state: {
-                              customer_id: Number(customerId),
-                              fromCustomerMaster: true,
-                              customerFormData: customerForm.values,
-                              addressFormData: addressForm.values,
-                            },
-                          });
+                          navigate(
+                            "/master/customer-relationship-mapping/edit",
+                            {
+                              state: {
+                                customer_id: Number(customerId),
+                                fromCustomerMaster: true,
+                                customerFormData: customerForm.values,
+                                addressFormData: addressForm.values,
+                              },
+                            }
+                          );
                         } else {
                           // Force re-render to show validation errors inline
                           if (customerResult.hasErrors) {
@@ -1948,7 +2039,7 @@ function CustomerCreate() {
                         }
                       }}
                       disabled={isSubmitting}
-                      style={{border: "1px solid #105476"}}
+                      style={{ border: "1px solid #105476" }}
                       color="white"
                     >
                       Edit Customer Relationships

@@ -1367,7 +1367,7 @@ function CallEntry() {
         }}
       >
         <Box mb="md">
-          <Group justify="space-between" align="center" mb="md">
+          <Group justify="space-between" align="center" >
             <Text
               size="md"
               fw={600}
@@ -1525,7 +1525,7 @@ function CallEntry() {
             <Group
               justify="space-between"
               align="center"
-              mb="lg"
+              mb="sm"
               style={{
                 backgroundColor: "#FAFAFA",
                 padding: "8px 8px",
@@ -1825,7 +1825,7 @@ function CallEntry() {
               </Grid.Col>
             </Grid>
 
-            <Group justify="end" mt="md" p="md" pb="md">
+            <Group justify="end" mt="xs" p="md" pb="md">
               <Button
                 size="xs"
                 variant="outline"

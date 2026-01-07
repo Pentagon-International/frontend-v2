@@ -1086,7 +1086,16 @@ function EnquiryMaster() {
     },
     mantinePaperProps: {
       shadow: "sm",
+      p: "md",
       radius: "md",
+      style: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
+      },
     },
     // Keep cell/head styles minimal to avoid interfering with built-in sticky behavior
     mantineTableBodyCellProps: {
@@ -2920,7 +2929,7 @@ function EnquiryMaster() {
               <>
                 <Grid gutter="md" px="md">
                   {/* Row 1 */}
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2}>
                     <SearchableSelect
                       size="xs"
                       label="Customer Name"
@@ -2942,7 +2951,7 @@ function EnquiryMaster() {
                     />
                   </Grid.Col>
 
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2}>
                     <SearchableSelect
                       size="xs"
                       label="Origin"
@@ -2963,7 +2972,7 @@ function EnquiryMaster() {
                       className="filter-searchable-select"
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2}>
                     <SearchableSelect
                       size="xs"
                       label="Destination"
@@ -2984,7 +2993,7 @@ function EnquiryMaster() {
                       className="filter-searchable-select"
                     />
                   </Grid.Col>
-                  <Grid.Col span={{ base: 6, md: 4.7 }}>
+                  <Grid.Col span={4}>
                     <DateRangeInput
                       fromDate={fromDate}
                       toDate={toDate}
@@ -3000,7 +3009,7 @@ function EnquiryMaster() {
                   </Grid.Col>
 
                   {/* Row 2 */}
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2}>
                     <Select
                       key={`sales-person-${filters.sales_person}`}
                       label="Sales Person"
@@ -3036,7 +3045,7 @@ function EnquiryMaster() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2}>
                     <Select
                       key={`service-${filters.service}`}
                       label="Service"
@@ -3067,7 +3076,7 @@ function EnquiryMaster() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2}>
                     <Select
                       key={`trade-${filters.trade}`}
                       label="Trade"
@@ -3096,7 +3105,7 @@ function EnquiryMaster() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2}>
                     <Select
                       key={`status-${filters.status}`}
                       label="Status"
@@ -3127,7 +3136,7 @@ function EnquiryMaster() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2}>
                     <TextInput
                       label="Enquiry ID"
                       placeholder="Placeholder"
@@ -3151,7 +3160,7 @@ function EnquiryMaster() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.4}>
+                  <Grid.Col span={2c}>
                     <TextInput
                       label="Reference No"
                       placeholder="Placeholder"
