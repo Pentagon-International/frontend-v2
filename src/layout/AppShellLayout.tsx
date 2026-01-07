@@ -6,11 +6,10 @@ import { useLayoutStore } from "../store/useLayoutStore";
 
 const AppShellLayout = ({ children }) => {
   const { isSidebarCollapsed, setIsSidebarCollapsed } = useLayoutStore();
-  const navbarWidth = isSidebarCollapsed ? 80 : 237;
+  const navbarWidth = isSidebarCollapsed ? 65 : 265;
 
   return (
     <AppShell
-      padding="md"
       navbar={{
         width: navbarWidth,
         breakpoint: "xs",
@@ -20,7 +19,8 @@ const AppShellLayout = ({ children }) => {
       <AppShell.Navbar
         p={isSidebarCollapsed ? "" : "sm"}
         style={{
-          background: "#F8F9FF",
+          zIndex:10,
+          background: "#FFF",
           width: navbarWidth,
           minWidth: navbarWidth,
         }}
@@ -43,7 +43,7 @@ const AppShellLayout = ({ children }) => {
       >
         <Box
           style={{
-            zIndex: 10000,
+            zIndex: 10,
             position: "sticky",
             top: 0,
             backgroundColor: "white",
@@ -51,9 +51,11 @@ const AppShellLayout = ({ children }) => {
           }}
         >
           <MainSectionHeader />
-          <Divider my="md" />
+          <Divider mt="md" />
         </Box>
         <Box
+          px="md"
+          my="md"
           style={{
             flexGrow: 1,
             minHeight: 0,

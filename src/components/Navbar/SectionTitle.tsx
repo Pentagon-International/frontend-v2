@@ -5,9 +5,11 @@ export const SectionTitle = ({ title }: { title: string }) => {
   return (
     <Text
       size="xs"
-      fw={600}
+      px={6}
+      py={4}
+      fw={400}
       style={{
-        color: theme.colors.gray[7],
+        color: "#A1A4AA",
         textTransform: "uppercase",
         fontSize: "12px",
       }}

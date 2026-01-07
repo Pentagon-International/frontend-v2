@@ -323,6 +323,9 @@ export default function SearchableSelect({
     <>
       <Select
         label={label}
+        comboboxProps={{
+          zIndex: 5,
+        }}
         styles={{
           input: { fontSize: "13px", height: "36px", },
           label: {

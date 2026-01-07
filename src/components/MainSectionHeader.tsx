@@ -54,14 +54,14 @@ function MainSectionHeader() {
       <Flex
         justify="space-between"
         align="center"
-        px="sm"
         bg="white"
         mih={30}
+        style={{padding:"0 24px"}}
         //   style={{ borderBottom: "1px solid #f0f0f0" }}
       >
         <Box
           style={{
-            borderLeft: "4px solid #14597A", // Unique accent bar
+            borderLeft: "3px solid #14597A", // Unique accent bar
             paddingLeft: 12,
           }}
         >
@@ -92,14 +92,22 @@ function MainSectionHeader() {
           {/* User info */}
           <UnstyledButton onClick={handleProfileClick} px={0}>
             <Group gap="sm" align="center" wrap="nowrap">
+              <Box style={{ lineHeight: 1 }}>
+                <Text size="sm" ta="right" c="#212629ff" fw={500}>
+                  {fullName}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {email}
+                </Text>
+              </Box>
               <Flex
-              justify="center"
-              align="center"
-              fw={400}
+                justify="center"
+                align="center"
+                fw={400}
                 style={{
                   fontFamily: "Outfit",
-                  width: "32px",
-                  height: "32px",
+                  width: "36px",
+                  height: "36px",
                   color: "white",
                   padding: "4px",
                   borderRadius: "50%",
@@ -107,14 +115,6 @@ function MainSectionHeader() {
                 }}
               >{fullName.slice(0,1)}</Flex>
 
-              <Box style={{ lineHeight: 1 }}>
-                <Text size="sm" c="#212629ff" fw={500}>
-                  {fullName}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  {email}
-                </Text>
-              </Box>
             </Group>
           </UnstyledButton>
         </Group>

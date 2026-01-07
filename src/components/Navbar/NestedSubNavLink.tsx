@@ -11,9 +11,10 @@ type Props = {
   collapsibles?: {
     setIsCustomerServiceOpen?: (v: boolean) => void;
   };
+  icon?: React.ComponentType<any>;
 };
 
-export const NestedSubNavLink = ({ parent, subParent, label, path, collapsibles }: Props) => {
+export const NestedSubNavLink = ({ parent, subParent, label, path, collapsibles, icon: Icon }: Props) => {
   const {
     activeSubNav,
     activeTariffSubNav,
@@ -25,8 +26,9 @@ export const NestedSubNavLink = ({ parent, subParent, label, path, collapsibles 
     setOpenCollapsible,
   } = useLayoutStore();
 const navigate = useNavigate();
+const isActive = activeSubNav === "Tariff" && activeTariffSubNav === label
   const style = getTariffSubLinkStyles(
-    activeSubNav === "Tariff" && activeTariffSubNav === label,
+    isActive,
     label
   );
   const { pathname } = useLocation();
@@ -54,6 +56,22 @@ const navigate = useNavigate();
     <NavLink
       label={label}
       styles={style}
+      leftSection={
+        <div
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 4,
+            backgroundColor: "transparent",
+            color: isActive ? "#105476" : "#444955",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon size={16} />
+        </div>
+      }
       onClick={(e) => {
         e.preventDefault();
         handleClick();

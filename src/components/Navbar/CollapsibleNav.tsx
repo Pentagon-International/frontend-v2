@@ -8,7 +8,7 @@ import {
   IconChevronUp,
 } from "@tabler/icons-react";
 import { useLayoutStore } from "../../store/useLayoutStore";
-import { getLinkStyles } from "./navbarStyles";
+import { getLinkStyles, sectionIconBackground, sectionIconColors } from "./navbarStyles";
 
 type Props = {
   label: string;
@@ -60,6 +60,7 @@ export const CollapsibleNav = ({
   const navRef = useRef<HTMLDivElement | null>(null);
   const flyoutRef = useRef<HTMLDivElement | null>(null);
   const [flyoutPos, setFlyoutPos] = useState({ top: 0, left: 0 });
+  const prevActiveNavRef = useRef<string>(activeNav);
 
   // compute "opened" based on mode:
 
@@ -71,21 +72,50 @@ export const CollapsibleNav = ({
     isSidebarCollapsed
   );
 
-  // keep local state in sync for expanded mode
+  // keep local state in sync for expanded mode - only auto-close when navigating away
   useEffect(() => {
     if (!isSidebarCollapsed) {
-      setOpenedLocal(isActive);
+      // Only auto-close when activeNav CHANGES (not just when it doesn't match)
+      // This allows manual toggles to work without interference
+      const activeNavChanged = prevActiveNavRef.current !== activeNav;
+      
+      if (activeNavChanged) {
+        const shouldBeOpen = activeNav === label || 
+          (label === "Air" || label === "Ocean" ? activeNav === "Transportation" : false) ||
+          hasActiveChild;
+        // Only close if we're navigating away (activeNav changed and doesn't match)
+        if (!shouldBeOpen && activeNav !== "" && openedLocal) {
+          setOpenedLocal(false);
+        }
+      }
+      // Always update ref to track current activeNav for next comparison
+      prevActiveNavRef.current = activeNav;
     }
-  }, [isActive, isSidebarCollapsed]);
+  }, [activeNav, isSidebarCollapsed, label, hasActiveChild, openedLocal, setOpenedLocal]);
 
-  // sync store when collapsed
+  // sync store when collapsed - only auto-close when navigating away
   useEffect(() => {
     if (isSidebarCollapsed) {
+      // Only auto-close when activeNav CHANGES (not just when it doesn't match)
+      const activeNavChanged = prevActiveNavRef.current !== activeNav;
+      
+      if (activeNavChanged) {
+        const shouldBeOpen = activeNav === label || 
+          (label === "Air" || label === "Ocean" ? activeNav === "Transportation" : false) ||
+          hasActiveChild;
+        // Only close if we're navigating away (activeNav changed and doesn't match)
+        if (!shouldBeOpen && activeNav !== "" && openCollapsibles[label]) {
+          setOpenCollapsible(label, false);
+        }
+      }
+      // Always update ref to track current activeNav for next comparison
+      prevActiveNavRef.current = activeNav;
+      // Sync manual toggles from opened state (this allows manual toggles to work)
       if (!!openCollapsibles[label] !== opened) {
         setOpenCollapsible(label, opened);
       }
     }
-  }, [opened, isSidebarCollapsed, label, openCollapsibles, setOpenCollapsible]);
+  }, [opened, isSidebarCollapsed, label, openCollapsibles, setOpenCollapsible, activeNav, hasActiveChild]);
 
   // compute flyout position
   useEffect(() => {
@@ -112,7 +142,24 @@ export const CollapsibleNav = ({
 
   const handleClick = () => {
     if (isSidebarCollapsed) {
-      setOpenCollapsible(label, !openCollapsibles[label]);
+      const isOpening = !openCollapsibles[label];
+      setOpenCollapsible(label, isOpening);
+      // Close other collapsibles when opening this one (mutual exclusion)
+      if (isOpening) {
+        if (label === "Air") {
+          // Opening Air, close Ocean and Sales
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Sales", false);
+        } else if (label === "Ocean") {
+          // Opening Ocean, close Air and Sales
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Sales", false);
+        } else if (label === "Sales") {
+          // Opening Sales, close Air and Ocean
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+        }
+      }
       if (
         label === "Tariff" &&
         (activeSubNav !== "" || activeTariffSubNav !== "")
@@ -130,11 +177,29 @@ export const CollapsibleNav = ({
     }
   };
 
+  const iconColor = sectionIconColors[label] || "white";
+  const iconBackground = sectionIconBackground[label] || "#105476";
+
   const navLinkWrapped = (
     <Box ref={navRef}>
       <NavLink
         label={isSidebarCollapsed && label !== "Tariff" ? undefined : label}
-        leftSection={<Icon size={18} color={style.icon.color} />}
+        leftSection={
+          <div
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 4,
+              backgroundColor: label !=="Tariff" ? (isActive ? "#105476" : iconBackground) : "transparent",
+              color: label !== "Tariff" ? (isActive ?"#fff" : iconColor) : (isActive ? "#105476" : "#444955"),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Icon size={16} />
+          </div>
+        }
         rightSection={
           isSidebarCollapsed ? (
             label !== "Tariff" ? undefined : opened ? (
@@ -176,10 +241,11 @@ export const CollapsibleNav = ({
         <Collapse in={opened}>
           <Box
             style={{
-              border: label === "Tariff" ? "" : "1px solid #BADDEE",
-              borderTop: "none",
-              borderBottomLeftRadius: 6,
-              borderBottomRightRadius: 6,
+              // border: label === "Tariff" ? "1px solid #BADDEE" : "",
+              // borderTop: "none",
+              // borderBottomLeftRadius: 6,
+              // borderBottomRightRadius: 6,
+              paddingLeft: "16px",
               overflow: "hidden",
             }}
           >

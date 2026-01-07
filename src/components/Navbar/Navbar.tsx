@@ -11,26 +11,29 @@ import {
   IconFileSettings,
   IconHelpCircle,
   IconKeyboard,
-  IconLetterPSmall,
-  IconLifebuoy,
   IconMessageQuestion,
   IconPercentage,
   IconPlaneInflight,
   IconRosetteDiscount,
   IconSettingsSpark,
   IconShip,
-  IconTruck,
   IconChevronsLeft,
   IconChevronsRight,
   IconFileAnalytics,
   IconUserPlus,
-  IconTimelineEventExclamation,
-  IconHeadphones,
-  IconArrowUpRight,
-  IconArrowDownLeft,
-  IconArrowsExchange,
-  IconCheck,
   IconUsers,
+  IconPackage,
+  IconMapPin,
+  IconMapPinFilled,
+  IconChartPie2,
+  IconPlane,
+  IconPlaneDeparture,
+  IconPlaneArrival,
+  IconFerry,
+  IconFerryFilled,
+  IconFileDescription,
+  IconCircleCheck,
+  IconGitBranch,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -79,8 +82,9 @@ const Navbar = ({
       <>
         {/* Logo and Title */}
         <Box
-          p="sm"
-          pt={!opened ? "md" : "sm"}
+          px="sm"
+          pt={!opened ? 12 : 4}
+          pb={!opened ? 12 : 8}
           style={{
             width: "100%",
             display: "flex",
@@ -90,15 +94,15 @@ const Navbar = ({
         >
           <Center>
             <Flex
-              justify="center"
+              justify="space-between"
               align="center"
               style={{
                 position: "relative",
                 backgroundColor: "transparent",
                 width: "100%",
-                height: "50px",
+                height: "45px",
                 cursor: "pointer",
-                gap: !opened ? "5px" : "",
+                gap: !opened ? "2px" : "",
               }}
               onClick={handleLogoClick}
             >
@@ -109,7 +113,7 @@ const Navbar = ({
                     alt="Pulse Logo"
                     width="auto"
                     fit="contain"
-                    height={50}
+                    height={45}
                   />
 
                   <IconChevronsLeft
@@ -128,7 +132,7 @@ const Navbar = ({
                     alt="Pulse Logo"
                     width="auto"
                     fit="contain"
-                    height={30}
+                    height={28}
                   />
 
                   <IconChevronsRight
@@ -148,7 +152,6 @@ const Navbar = ({
         {/* Scroll Area */}
         <ScrollArea
           type="never"
-          p="sm"
           style={{
             flex: 1,
             overflow: "auto",
@@ -163,20 +166,22 @@ const Navbar = ({
             }}
           >
             {/* Core Section */}
-            <Stack mt={!opened ? 4 : 16} gap={4}>
+            <Stack mt={!opened ? 0 : 8} gap={4}>
               {opened ? (
                 <SectionTitle title="Core" />
               ) : (
-                <Divider my="xs" color="#D5D5D5" size="sm" />
+                <Divider mb="xs" color="#D5D5D5" size="sm" />
               )}
               <SimpleNavLink
                 label="Dashboard"
-                icon={IconLifebuoy}
+                icon={IconChartPie2}
                 path="/"
                 collapsibles={{
                   setIsSalesOpen,
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
+                  setIsAirOpen,
+                  setIsSeaExportOpen,
                 }}
               />
               <Box>
@@ -191,38 +196,40 @@ const Navbar = ({
                     label="Lead"
                     icon={IconUsers}
                     path="/lead"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Call Entry"
                     icon={IconKeyboard}
                     path="/call-entry"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Enquiry"
                     icon={IconMessageQuestion}
                     path="/enquiry"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Quotation"
-                    icon={IconLetterPSmall}
+                    icon={IconFileDescription}
                     path="/quotation"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
                   />
                   {showQuotationApproval && (
                     <SubNavLink
                       parent="Sales"
                       label="Quotation Approval"
-                      icon={IconCheck}
+                      icon={IconCircleCheck}
                       path="/quotation-approval"
                       collapsibles={{
                         setIsTariffOpen,
                         setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
                       }}
                     />
                   )}
@@ -231,14 +238,14 @@ const Navbar = ({
                     label="Potential Customers"
                     icon={IconUserPlus}
                     path="/potential-customers"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Pipeline"
-                    icon={IconTimelineEventExclamation}
+                    icon={IconGitBranch}
                     path="/pipeline"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
                   />
 
                   {/* Tariff collapsible submenu */}
@@ -254,18 +261,21 @@ const Navbar = ({
                       subParent="Tariff"
                       label="Freight"
                       path="/tariff/freight"
+                      icon={IconPackage}
                     />
                     <NestedSubNavLink
                       parent="Sales"
                       subParent="Tariff"
                       label="Origin"
                       path="/tariff/origin"
+                       icon={IconMapPin}
                     />
                     <NestedSubNavLink
                       parent="Sales"
                       subParent="Tariff"
                       label="Destination"
                       path="/tariff/destination"
+                      icon={IconMapPinFilled}
                     />
                   </CollapsibleNav>
                 </CollapsibleNav>
@@ -345,66 +355,71 @@ const Navbar = ({
                   label="Air"
                   openedLocal={isAirOpen}
                   setOpenedLocal={setIsAirOpen}
-                  icon={IconPlaneInflight}
+                  icon={IconPlane}
                 >
                   <SubNavLink
                     parent="Transportation"
                     label="Air Export Generation"
-                    icon={IconPlaneInflight}
+                    icon={IconPlaneDeparture}
                     path="/air/export-generation"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="Air Export Job"
-                    icon={IconPlaneInflight}
+                    icon={IconPlaneDeparture}
                     path="/air/export-job"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="Air Import Job"
-                    icon={IconPlaneInflight}
+                    icon={IconPlaneArrival}
                     path="/air/import-job"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="Air Export Booking"
-                    icon={IconPlaneInflight}
+                    icon={IconPlaneDeparture}
                     path="/air/export-booking"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="Air Import Booking"
-                    icon={IconPlaneInflight}
+                    icon={IconPlaneArrival}
                     path="/air/import-booking"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
@@ -417,6 +432,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsSeaExportOpen,
                     }}
                   />
                 </CollapsibleNav>
@@ -431,72 +447,78 @@ const Navbar = ({
                   <SubNavLink
                     parent="Transportation"
                     label="FCL Export Generation"
-                    icon={IconShip}
+                    icon={IconFerry}
                     path="/SeaExport/fcl-export-generation"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
+                      setIsAirOpen,
                       setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="LCL Export Generation"
-                    icon={IconShip}
+                    icon={IconFerry}
                     path="/SeaExport/lcl-export-generation"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
+                      setIsAirOpen,
                       setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="Ocean Export Job"
-                    icon={IconShip}
+                    icon={IconFerry}
                     path="/SeaExport/export-job"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
+                      setIsAirOpen,
                       setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="Ocean Import Job"
-                    icon={IconShip}
+                    icon={IconFerryFilled}
                     path="/SeaExport/import-job"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
+                      setIsAirOpen,
                       setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="Ocean Export Booking"
-                    icon={IconShip}
+                    icon={IconFerry}
                     path="/SeaExport/export-booking"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
+                      setIsAirOpen,
                       setIsSeaExportOpen,
                     }}
                   />
                   <SubNavLink
                     parent="Transportation"
                     label="Ocean Import Booking"
-                    icon={IconShip}
+                    icon={IconFerryFilled}
                     path="/SeaExport/import-booking"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
+                      setIsAirOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -509,6 +531,7 @@ const Navbar = ({
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
+                      setIsAirOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -532,6 +555,8 @@ const Navbar = ({
                   setIsSalesOpen,
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
+                  setIsAirOpen,
+                  setIsSeaExportOpen,
                 }}
               />
               <SimpleNavLink
@@ -543,6 +568,8 @@ const Navbar = ({
                   setIsSalesOpen,
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
+                  setIsAirOpen,
+                  setIsSeaExportOpen,
                 }}
               />
               <SimpleNavLink
@@ -554,6 +581,8 @@ const Navbar = ({
                   setIsSalesOpen,
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
+                  setIsAirOpen,
+                  setIsSeaExportOpen,
                 }}
               />
             </Stack>
@@ -573,6 +602,8 @@ const Navbar = ({
                   setIsSalesOpen,
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
+                  setIsAirOpen,
+                  setIsSeaExportOpen,
                 }}
               />
               <SimpleNavLink
@@ -583,6 +614,8 @@ const Navbar = ({
                   setIsSalesOpen,
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
+                  setIsAirOpen,
+                  setIsSeaExportOpen,
                 }}
               />
             </Stack>

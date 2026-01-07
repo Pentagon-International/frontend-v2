@@ -1,7 +1,7 @@
 import { NavLink, Tooltip } from "@mantine/core";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useLayoutStore } from "../../store/useLayoutStore";
-import { getLinkStyles } from "./navbarStyles.ts";
+import { getLinkStyles, sectionIconColors, sectionIconBackground } from "./navbarStyles.ts";
 
 type Props = {
   label: string;
@@ -11,6 +11,8 @@ type Props = {
     setIsSalesOpen?: (v: boolean) => void;
     setIsCustomerServiceOpen?: (v: boolean) => void;
     setIsTariffOpen?: (v: boolean) => void;
+    setIsAirOpen?: (v: boolean) => void;
+    setIsSeaExportOpen?: (v: boolean) => void;
   };
 };
 
@@ -28,6 +30,7 @@ export const SimpleNavLink = ({
     setActiveSubNav,
     setActiveTariffSubNav,
     isSidebarCollapsed,
+    setOpenCollapsible,
   } = useLayoutStore();
 
   const navigate = useNavigate();
@@ -68,12 +71,38 @@ export const SimpleNavLink = ({
     collapsibles?.setIsSalesOpen?.(false);
     collapsibles?.setIsCustomerServiceOpen?.(false);
     collapsibles?.setIsTariffOpen?.(false);
+    collapsibles?.setIsAirOpen?.(false);
+    collapsibles?.setIsSeaExportOpen?.(false);
+    // Also close in layout store for collapsed mode
+    setOpenCollapsible("Sales", false);
+    setOpenCollapsible("Air", false);
+    setOpenCollapsible("Ocean", false);
+    setOpenCollapsible("Customer Service", false);
+    setOpenCollapsible("Tariff", false);
   };
+  const isActive = activeNav === label;
+  const iconColor = sectionIconColors[label] || "white";
+  const iconBackground = sectionIconBackground[label] || "#105476";
 
   const navContent = (
     <NavLink
       label={isSidebarCollapsed ? undefined : label}
-      leftSection={<Icon size={20} color={style.icon.color} />}
+      leftSection={
+        <div
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 4,
+            backgroundColor: isActive ? "#105476" : iconBackground,
+            color: isActive ? "#fff" : iconColor,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon size={16} />
+        </div>
+      }
       styles={style}
       onClick={handleClick}
     />

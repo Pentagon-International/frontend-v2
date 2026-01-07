@@ -1,37 +1,50 @@
-// 🎨 Common icon color mapping
 export const sectionIconColors: Record<string, string> = {
-  Dashboard: "#005430",
-  Sales: "#005430",
-  "Customer Service": "#005430",
-  Road: "red",
-  Air: "red",
-  "Ocean": "red",
+  Dashboard: "#10B563",
+  Sales: "#10B563",
+  "Customer Service": "#6010B5",
+  
+  Road: "#10A4B5",
+  Air: "#10A4B5",
+  "Ocean": "#10A4B5",
 
-  Accounts: "#105476",
-  Masters: "#105476",
-  Settings: "#105476",
+  Accounts: "#1034B5",
+  Masters: "#1034B5",
+  Settings: "#1034B5",
 
-  Reports: "#005430",
-  Help: "#005430",
+  Reports: "#B5105D",
+  Help: "#B5105D",
+
+  Collapse: "#105476",
+};
+
+export const sectionIconBackground: Record<string, string> = {
+  Dashboard: "#EDFCF5",
+  Sales: "#EDFCF5",
+  "Customer Service": "#F5EDFC",
+
+  Road: "#EDFBFC",
+  Air: "#EDFBFC",
+  "Ocean": "#EDFBFC",
+
+  Accounts: "#EDF1FC",
+  Masters: "#EDF1FC",
+  Settings: "#EDF1FC",
+
+  Reports: "#FCEDF4",
+  Help: "#FCEDF4",
 
   Collapse: "#105476",
 };
 
 // 🎨 Base style fragments
 const baseRoot = {
-  padding: "8px 12px",
+  padding: "4px 6px",
   fontWeight: 500,
-  color: "#105476",
   margin: 0,
+  fontSize:"16px",
+  minHeight:"36px"
 };
 
-const baseIcon = {
-  color: "#105476",
-};
-
-const baseLabel = {
-  color: "#105476",
-};
 
 // 🔹 Main navigation link
 export const getLinkStyles = (
@@ -41,42 +54,23 @@ export const getLinkStyles = (
   activeNav?: String,
   isSidebarCollapsed?: Boolean,
 ) => {
-  const iconColor = sectionIconColors[key] || "#105476";
 
   return {
     root: {
       ...baseRoot,
-      padding : isSidebarCollapsed && key!=="Tariff" ? "12px" : "8px 12px",
-      borderRadius: key === "Tariff" ? 0 : 6,
-      borderBottomLeftRadius: isSidebarCollapsed && key!=="Tariff" ? 6 : (collapseOpen ? 0 : 6),
-      borderBottomRightRadius: isSidebarCollapsed && key!=="Tariff" ? 6 : (collapseOpen ? 0 : 6),
-      transition: "background-color 0.2s ease",
-      width: !isSidebarCollapsed && key!=="Tariff" ? "fit" : "100%",
-      backgroundColor:
-        key === "Tariff"
-          ? isActive || collapseOpen
-            ? "#baddee"
-            : "#fff"
-          : isActive
-            ? "#105476"
-            : "transparent",
-      color: key === "Tariff" ? "#105476" : isActive ? "white" : "#105476",
+      borderRadius: key!=="Tariff" ? 8 : 0,
+      borderTopRightRadius: 8,
+      borderBottomRightRadius: 8,
+      transition: "background-color 0.3s ease",
+      width: "100%",
+      backgroundColor: isActive? "#F5FCFF" : "transparent",
+      borderLeft: key==="Tariff" ? (isActive ? "1px solid #105476" : "1px solid #E8E8E8") : "",
+      color: isActive ? "#105476" : "#444955",
       fontWeight: isActive ? 600 : 500,
       marginBottom: 0,
       "&:hover": {
-        backgroundColor:
-          key === "Tariff"
-            ? isActive
-              ? "#baddee"
-              : "#e3f2fd"
-            : isActive
-              ? "#105476"
-              : "#e3f2fd",
+        backgroundColor:"#F5FCFF"
       },
-    },
-    icon: {
-      ...baseIcon,
-      color: key === "Tariff" ? iconColor : isActive ? "white" : iconColor,
     },
     section: {
       marginInlineEnd: isSidebarCollapsed && key!=="Tariff" ? 0 : "8px", 
@@ -86,44 +80,37 @@ export const getLinkStyles = (
 
 // 🔹 Generic sub-link
 export const getSubLinkStyles = (isActive: boolean, key: string) => {
-  const iconColor = sectionIconColors[key] || "#105476";
 
   return {
     root: {
       ...baseRoot,
-      backgroundColor: isActive ? "#BADDEE" : "#fff",
+      backgroundColor: isActive? "#F5FCFF" : "transparent",
+      color: isActive ? "#105476" : "#444955",
+      borderLeft: isActive ? "1px solid #105476" : "1px solid #E8E8E8",
+      borderTopRightRadius: 8,
+      borderBottomRightRadius: 8, 
       fontWeight: isActive ? 600 : 500,
       "&:hover": {
-        backgroundColor: isActive ? "#BADDEE" : "#F0F8FF",
+        backgroundColor:"#F5FCFF"
       },
     },
-    icon: {
-      ...baseIcon,
-      color: isActive ? "white" : iconColor,
-    },
-    label: { ...baseLabel },
   };
 };
 
 // 🔹 Tariff sub-link (extra indent + special colors)
 export const getTariffSubLinkStyles = (isActive: boolean, key: string) => {
-  const iconColor = sectionIconColors[key] || "#105476";
 
   return {
     root: {
       ...baseRoot,
-      backgroundColor: isActive ? "#6FB8D2" : "#fff",
-      paddingLeft: "24px",
+      backgroundColor: isActive? "#F5FCFF" : "transparent",
+      color: isActive ? "#105476" : "#444955",
+      borderLeft: isActive ? "1px solid #105476" : "1px solid #E8E8E8",
       fontWeight: isActive ? 600 : 500,
       "&:hover": {
-        backgroundColor: isActive ? "#6FB8D2" : "#F0F8FF",
+        backgroundColor:"#F5FCFF"
       },
     },
-    icon: {
-      ...baseIcon,
-      color: isActive ? "white" : iconColor,
-    },
-    label: { ...baseLabel },
   };
 };
 
@@ -132,22 +119,16 @@ export const getCustomerServiceSubLinkStyles = (
   isActive: boolean,
   key: string
 ) => {
-  const iconColor = sectionIconColors[key] || "#105476";
 
   return {
     root: {
       ...baseRoot,
-      backgroundColor: isActive ? "#BADDEE" : "#fff",
-      paddingLeft: "24px",
+      backgroundColor: isActive? "#F5FCFF" : "transparent",
+      color: isActive ? "#105476" : "#444955",
       fontWeight: isActive ? 600 : 500,
       "&:hover": {
-        backgroundColor: isActive ? "#BADDEE" : "#F0F8FF",
+         backgroundColor:"#F5FCFF"
       },
     },
-    icon: {
-      ...baseIcon,
-      color: isActive ? "white" : iconColor,
-    },
-    label: { ...baseLabel },
   };
 };
