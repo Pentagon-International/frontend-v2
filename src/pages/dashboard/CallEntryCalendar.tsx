@@ -67,6 +67,10 @@ function CallEntryCalendar() {
   // Generate year options (current year and next year)
   const yearOptions = [
     {
+      value: String(new Date().getFullYear() - 1),
+      label: String(new Date().getFullYear() - 1),
+    },
+    {
       value: String(new Date().getFullYear()),
       label: String(new Date().getFullYear()),
     },

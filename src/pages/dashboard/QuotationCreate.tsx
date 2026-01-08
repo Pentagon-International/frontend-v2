@@ -4302,12 +4302,12 @@ function QuotationCreate({
                         data={quoteCurrency}
                         styles={{
                           input: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontFamily: "Inter",
                             height: "36px",
                           },
                           label: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontWeight: 500,
                             color: "#424242",
                             marginBottom: "4px",
@@ -4349,12 +4349,12 @@ function QuotationCreate({
                           styles={{
                             input: {
                               height: "36px",
-                              fontSize: "13px",
+                              fontSize: "14px",
                               fontFamily: "Inter",
                               fontStyle: "medium",
                             },
                             label: {
-                              fontSize: "13px",
+                              fontSize: "14px",
                               fontWeight: 500,
                               color: "#424242",
                               marginBottom: "4px",
@@ -4402,7 +4402,7 @@ function QuotationCreate({
                         }}
                         styles={{
                           label: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontFamily: "Inter",
                             fontStyle: "medium",
                             color: "#424242",
@@ -4424,12 +4424,12 @@ function QuotationCreate({
                         data={["Standard", "Lumpsum", "All Inclusive"]}
                         styles={{
                           input: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontFamily: "Inter",
                             height: "36px",
                           },
                           label: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontWeight: 500,
                             color: "#424242",
                             marginBottom: "4px",
@@ -4450,12 +4450,12 @@ function QuotationCreate({
                           data={carrierData}
                           styles={{
                             input: {
-                              fontSize: "13px",
+                              fontSize: "14px",
                               fontFamily: "Inter",
                               height: "36px",
                             },
                             label: {
-                              fontSize: "13px",
+                              fontSize: "14px",
                               fontWeight: 500,
                               color: "#424242",
                               marginBottom: "4px",
@@ -4477,12 +4477,12 @@ function QuotationCreate({
                           data={icdData}
                           styles={{
                             input: {
-                              fontSize: "13px",
+                              fontSize: "14px",
                               fontFamily: "Inter",
                               height: "36px",
                             },
                             label: {
-                              fontSize: "13px",
+                              fontSize: "14px",
                               fontWeight: 500,
                               color: "#424242",
                               marginBottom: "4px",
@@ -4506,12 +4506,12 @@ function QuotationCreate({
                         ]}
                         styles={{
                           input: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontFamily: "Inter",
                             height: "36px",
                           },
                           label: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontWeight: 500,
                             color: "#424242",
                             marginBottom: "4px",
@@ -4541,12 +4541,12 @@ function QuotationCreate({
                             }}
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
                               label: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontWeight: 500,
                                 color: "#424242",
                                 marginBottom: "4px",
@@ -4606,7 +4606,7 @@ function QuotationCreate({
                               styles={{
                                 item: {
                                   fontFamily: "Inter",
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontWeight: 500,
                                   borderRadius: "6px",
                                   padding: "10px 12px",
@@ -4617,7 +4617,7 @@ function QuotationCreate({
                                 },
                                 itemLabel: {
                                   fontFamily: "Inter",
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontWeight: 500,
                                   color: "#424242",
                                 },
@@ -4645,7 +4645,7 @@ function QuotationCreate({
                               styles={{
                                 item: {
                                   fontFamily: "Inter",
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontWeight: 500,
                                   borderRadius: "6px",
                                   padding: "10px 12px",
@@ -4656,7 +4656,7 @@ function QuotationCreate({
                                 },
                                 itemLabel: {
                                   fontFamily: "Inter",
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontWeight: 500,
                                   color: "#424242",
                                 },
@@ -4692,7 +4692,7 @@ function QuotationCreate({
                               styles={{
                                 item: {
                                   fontFamily: "Inter",
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontWeight: 500,
                                   borderRadius: "6px",
                                   padding: "10px 12px",
@@ -4703,7 +4703,7 @@ function QuotationCreate({
                                 },
                                 itemLabel: {
                                   fontFamily: "Inter",
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontWeight: 500,
                                   color: "#424242",
                                 },
@@ -4733,7 +4733,7 @@ function QuotationCreate({
                                   styles={{
                                     item: {
                                       fontFamily: "Inter",
-                                      fontSize: "13px",
+                                      fontSize: "14px",
                                       fontWeight: 500,
                                       borderRadius: "6px",
                                       padding: "10px 12px",
@@ -4773,7 +4773,7 @@ function QuotationCreate({
                                   styles={{
                                     item: {
                                       fontFamily: "Inter",
-                                      fontSize: "13px",
+                                      fontSize: "14px",
                                       fontWeight: 500,
                                       borderRadius: "6px",
                                       padding: "10px 12px",
@@ -4817,7 +4817,7 @@ function QuotationCreate({
                         }}
                         gutter="sm"
                       >
-                        <Grid.Col span={1.5}>
+                        <Grid.Col span={2}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -4841,7 +4841,7 @@ function QuotationCreate({
                             Currency
                           </Text>
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.75}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -4865,7 +4865,7 @@ function QuotationCreate({
                             Unit
                           </Text>
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.75}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -4953,7 +4953,7 @@ function QuotationCreate({
                         // mt={"md"}
                       >
                         <Grid gutter="sm">
-                          <Grid.Col span={1.5}>
+                          <Grid.Col span={2}>
                             {/* <Select
                   label="Charge Name"
                   key={
@@ -4971,7 +4971,7 @@ function QuotationCreate({
                               // data={quoteCurrency}
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                 },
@@ -4992,7 +4992,7 @@ function QuotationCreate({
                               data={currency}
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                 },
@@ -5017,7 +5017,7 @@ function QuotationCreate({
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={1}>
+                          <Grid.Col span={0.75}>
                             <TextInput
                               key={
                                 // dynamicForm.values.charges[index]?.roe ||
@@ -5027,7 +5027,7 @@ function QuotationCreate({
                               // decimalScale={2}
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                 },
@@ -5048,7 +5048,7 @@ function QuotationCreate({
                               }
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                 },
@@ -5082,14 +5082,14 @@ function QuotationCreate({
                               disabled={isLoadingUnitData}
                             />
                           </Grid.Col>
-                          <Grid.Col span={1}>
+                          <Grid.Col span={0.75}>
                             <TextInput
                               key={`unit-${index}-no_of_units`}
                               //placeholder={"100"}
                               min={1}
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                 },
@@ -5112,7 +5112,7 @@ function QuotationCreate({
                               min={0}
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                 },
@@ -5135,7 +5135,7 @@ function QuotationCreate({
                               //placeholder={"100"}
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                 },
@@ -5158,7 +5158,7 @@ function QuotationCreate({
                               min={0}
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                 },
@@ -5229,7 +5229,7 @@ function QuotationCreate({
                               readOnly
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                   backgroundColor: "#f8f9fa",
@@ -5249,7 +5249,7 @@ function QuotationCreate({
                               readOnly
                               styles={{
                                 input: {
-                                  fontSize: "13px",
+                                  fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
                                   backgroundColor: "#f8f9fa",
@@ -5583,12 +5583,12 @@ function QuotationCreate({
                       data={quoteCurrency}
                       styles={{
                         input: {
-                          fontSize: "13px",
+                          fontSize: "14px",
                           fontFamily: "Inter",
                           height: "36px",
                         },
                         label: {
-                          fontSize: "13px",
+                          fontSize: "16px",
                           fontWeight: 500,
                           color: "#424242",
                           marginBottom: "4px",
@@ -5626,12 +5626,12 @@ function QuotationCreate({
                         styles={{
                           input: {
                             height: "36px",
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontFamily: "Inter",
                             fontStyle: "medium",
                           },
                           label: {
-                            fontSize: "13px",
+                            fontSize: "16px",
                             fontWeight: 500,
                             color: "#424242",
                             marginBottom: "4px",
@@ -5679,7 +5679,7 @@ function QuotationCreate({
                       }}
                       styles={{
                         label: {
-                          fontSize: "13px",
+                          fontSize: "14px",
                           fontFamily: "Inter",
                           fontStyle: "medium",
                           color: "#424242",
@@ -5701,12 +5701,12 @@ function QuotationCreate({
                       data={["Standard", "Lumpsum", "All Inclusive"]}
                       styles={{
                         input: {
-                          fontSize: "13px",
+                          fontSize: "14px",
                           fontFamily: "Inter",
                           height: "36px",
                         },
                         label: {
-                          fontSize: "13px",
+                          fontSize: "14px",
                           fontWeight: 500,
                           color: "#424242",
                           marginBottom: "4px",
@@ -5726,12 +5726,12 @@ function QuotationCreate({
                         data={carrierData}
                         styles={{
                           input: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontFamily: "Inter",
                             height: "36px",
                           },
                           label: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontWeight: 500,
                             color: "#424242",
                             marginBottom: "4px",
@@ -5752,12 +5752,12 @@ function QuotationCreate({
                         data={icdData}
                         styles={{
                           input: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontFamily: "Inter",
                             height: "36px",
                           },
                           label: {
-                            fontSize: "13px",
+                            fontSize: "14px",
                             fontWeight: 500,
                             color: "#424242",
                             marginBottom: "4px",
@@ -5781,12 +5781,12 @@ function QuotationCreate({
                       ]}
                       styles={{
                         input: {
-                          fontSize: "13px",
+                          fontSize: "14px",
                           fontFamily: "Inter",
                           height: "36px",
                         },
                         label: {
-                          fontSize: "13px",
+                          fontSize: "14px",
                           fontWeight: 500,
                           color: "#424242",
                           marginBottom: "4px",
@@ -5814,12 +5814,12 @@ function QuotationCreate({
                           }}
                           styles={{
                             input: {
-                              fontSize: "13px",
+                              fontSize: "14px",
                               fontFamily: "Inter",
                               height: "36px",
                             },
                             label: {
-                              fontSize: "13px",
+                              fontSize: "14px",
                               fontWeight: 500,
                               color: "#424242",
                               marginBottom: "4px",
@@ -6017,7 +6017,7 @@ function QuotationCreate({
                                   },
                                   itemLabel: {
                                     fontFamily: "Inter",
-                                    fontSize: "13px",
+                                    fontSize: "14px",
                                     fontWeight: 500,
                                     color: "#424242",
                                   },
@@ -6057,7 +6057,7 @@ function QuotationCreate({
                                   },
                                   itemLabel: {
                                     fontFamily: "Inter",
-                                    fontSize: "13px",
+                                    fontSize: "14px",
                                     fontWeight: 500,
                                     color: "#424242",
                                   },
@@ -6088,7 +6088,7 @@ function QuotationCreate({
                       }}
                       gutter="sm"
                     >
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={2}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -6112,7 +6112,7 @@ function QuotationCreate({
                           Currency
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.75}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -6136,7 +6136,7 @@ function QuotationCreate({
                           Unit
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.5}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -6215,13 +6215,13 @@ function QuotationCreate({
                   {dynamicForm.values.charges.map((_, index) => (
                     <Box key={index}>
                       <Grid gutter="sm">
-                        <Grid.Col span={1.5}>
+                        <Grid.Col span={2}>
                           <TextInput
                             key={`charge-name-${index}`}
                             placeholder="Charge Name"
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
@@ -6239,7 +6239,7 @@ function QuotationCreate({
                             data={currency}
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
@@ -6262,13 +6262,13 @@ function QuotationCreate({
                             }}
                           />
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.75}>
                           <TextInput
                             key={`unit-${index}-roe`}
                             min={1}
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
@@ -6286,7 +6286,7 @@ function QuotationCreate({
                             key={`unit-${index}-no_of_units`}
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
@@ -6316,13 +6316,13 @@ function QuotationCreate({
                             disabled={isLoadingUnitData}
                           />
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.5}>
                           <TextInput
                             key={`unit-${index}-no_of_units`}
                             min={1}
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
@@ -6341,7 +6341,7 @@ function QuotationCreate({
                             min={0}
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
@@ -6360,7 +6360,7 @@ function QuotationCreate({
                             min={0}
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
@@ -6379,7 +6379,7 @@ function QuotationCreate({
                             min={0}
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                               },
@@ -6399,7 +6399,7 @@ function QuotationCreate({
                             readOnly
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                                 backgroundColor: "#f8f9fa",
@@ -6418,7 +6418,7 @@ function QuotationCreate({
                             readOnly
                             styles={{
                               input: {
-                                fontSize: "13px",
+                                fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
                                 backgroundColor: "#f8f9fa",

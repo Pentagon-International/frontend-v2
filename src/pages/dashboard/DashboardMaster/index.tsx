@@ -652,8 +652,18 @@ const Dashboard = () => {
         const restoreCallEntryDetailedView = async () => {
           try {
             setIsLoadingDetailedView(true);
-            // Use the restored period value directly to ensure consistency
-            const dateRange = calculateCallEntryDateRange(restoredPeriod);
+            // Use common date filter if available, otherwise use period-based date range
+            const dateRange =
+              customerInteractionFromDate && customerInteractionToDate
+                ? {
+                    date_from: dayjs(customerInteractionFromDate).format(
+                      "DD-MM-YYYY"
+                    ),
+                    date_to: dayjs(customerInteractionToDate).format(
+                      "DD-MM-YYYY"
+                    ),
+                  }
+                : calculateCallEntryDateRange(restoredPeriod);
             const companyName =
               user?.company?.company_name ||
               selectedCompany ||
@@ -661,15 +671,17 @@ const Dashboard = () => {
 
             if (dashboardState.callEntryDrillLevel === 0) {
               // Restore salesperson list
-              const response = await getCallEntryStatistics({
-                company: companyName,
-                date_from: dateRange.date_from,
-                date_to: dateRange.date_to,
-                // Commented out - type filter not needed when clicking cards
-                // ...(dashboardState.callEntryFilterType !== "all" && {
-                //   type: dashboardState.callEntryFilterType,
-                // }),
-              });
+              const response = await getCallEntryStatistics(
+                addSearchToCallEntryFilters({
+                  company: companyName,
+                  date_from: dateRange.date_from,
+                  date_to: dateRange.date_to,
+                  // Commented out - type filter not needed when clicking cards
+                  // ...(dashboardState.callEntryFilterType !== "all" && {
+                  //   type: dashboardState.callEntryFilterType,
+                  // }),
+                })
+              );
               const tableData = (
                 response.data as CallEntrySalespersonData[]
               ).map((item) => ({
@@ -707,16 +719,18 @@ const Dashboard = () => {
               dashboardState.callEntrySelectedSalesperson
             ) {
               // Restore customer list
-              const response = await getCallEntryStatistics({
-                company: companyName,
-                salesperson: dashboardState.callEntrySelectedSalesperson,
-                date_from: dateRange.date_from,
-                date_to: dateRange.date_to,
-                // Commented out - type filter not needed when clicking cards
-                // ...(dashboardState.callEntryFilterType !== "all" && {
-                //   type: dashboardState.callEntryFilterType,
-                // }),
-              });
+              const response = await getCallEntryStatistics(
+                addSearchToCallEntryFilters({
+                  company: companyName,
+                  salesperson: dashboardState.callEntrySelectedSalesperson,
+                  date_from: dateRange.date_from,
+                  date_to: dateRange.date_to,
+                  // Commented out - type filter not needed when clicking cards
+                  // ...(dashboardState.callEntryFilterType !== "all" && {
+                  //   type: dashboardState.callEntryFilterType,
+                  // }),
+                })
+              );
               const statsResponse = response as CallEntryStatisticsResponse;
               const salespersonEmail = statsResponse.salesperson_email || "";
               const ccMail = statsResponse.cc_mail || [];
@@ -759,17 +773,19 @@ const Dashboard = () => {
               dashboardState.callEntrySelectedCustomer
             ) {
               // Restore call entry details
-              const response = await getCallEntryStatistics({
-                company: companyName,
-                salesperson: dashboardState.callEntrySelectedSalesperson,
-                customer_code: dashboardState.callEntrySelectedCustomer.code,
-                date_from: dateRange.date_from,
-                date_to: dateRange.date_to,
-                // Commented out - type filter not needed when clicking cards
-                // ...(dashboardState.callEntryFilterType !== "all" && {
-                //   type: dashboardState.callEntryFilterType,
-                // }),
-              });
+              const response = await getCallEntryStatistics(
+                addSearchToCallEntryFilters({
+                  company: companyName,
+                  salesperson: dashboardState.callEntrySelectedSalesperson,
+                  customer_code: dashboardState.callEntrySelectedCustomer.code,
+                  date_from: dateRange.date_from,
+                  date_to: dateRange.date_to,
+                  // Commented out - type filter not needed when clicking cards
+                  // ...(dashboardState.callEntryFilterType !== "all" && {
+                  //   type: dashboardState.callEntryFilterType,
+                  // }),
+                })
+              );
               const tableData = (response.data as CallEntryDetailData[]).map(
                 (item) => ({
                   CALL_ENTRY_ID: item.call_entry_id,
@@ -934,10 +950,11 @@ const Dashboard = () => {
         ...(selectedLocation && { location: selectedLocation }),
         ...(searchSalesman && { salesman: searchSalesman }),
         ...(selectedYear && { year: parseInt(selectedYear) }),
-        ...(selectedDate && {
-          date_from: dayjs(selectedDate).format("YYYY-MM-DD"),
-          date_to: dayjs(selectedDate).format("YYYY-MM-DD"),
-        }),
+        ...(customerInteractionFromDate &&
+          customerInteractionToDate && {
+            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+          }),
       };
 
       const budgetFilterData = {
@@ -1098,10 +1115,13 @@ const Dashboard = () => {
       if (searchSalesman) {
         callEntryFilterData.salesman = searchSalesman;
       }
-      if (selectedDate) {
-        callEntryFilterData.date_from =
-          dayjs(selectedDate).format("YYYY-MM-DD");
-        callEntryFilterData.date_to = dayjs(selectedDate).format("YYYY-MM-DD");
+      if (customerInteractionFromDate && customerInteractionToDate) {
+        callEntryFilterData.date_from = dayjs(
+          customerInteractionFromDate
+        ).format("DD-MM-YYYY");
+        callEntryFilterData.date_to = dayjs(customerInteractionToDate).format(
+          "DD-MM-YYYY"
+        );
       }
 
       // Apply filters only if there are any filters
@@ -1352,10 +1372,8 @@ const Dashboard = () => {
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
       const response = await getCallEntryStatistics(
-        addSearchToFilters({
+        addSearchToCallEntryFilters({
           company: companyName,
-          date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
-          date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
         })
       );
 
@@ -1547,12 +1565,41 @@ const Dashboard = () => {
   // Helper function to add search to filters - memoized to prevent unnecessary re-renders
   const addSearchToFilters = useCallback(
     <T extends DashboardFilters>(filters: T): T => {
+      let updatedFilters = { ...filters };
       if (globalSearch && globalSearch.trim()) {
-        return { ...filters, search: globalSearch.trim() };
+        updatedFilters = { ...updatedFilters, search: globalSearch.trim() };
       }
-      return filters;
+      // Add date range filter from common date filter
+      if (customerInteractionFromDate && customerInteractionToDate) {
+        updatedFilters = {
+          ...updatedFilters,
+          date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+          date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+        };
+      }
+      return updatedFilters as T;
     },
-    [globalSearch]
+    [globalSearch, customerInteractionFromDate, customerInteractionToDate]
+  );
+
+  // Helper function for call entry filters - uses DD-MM-YYYY format
+  const addSearchToCallEntryFilters = useCallback(
+    <T extends DashboardFilters>(filters: T): T => {
+      let updatedFilters = { ...filters };
+      if (globalSearch && globalSearch.trim()) {
+        updatedFilters = { ...updatedFilters, search: globalSearch.trim() };
+      }
+      // Add date range filter from common date filter in DD-MM-YYYY format for call entry
+      if (customerInteractionFromDate && customerInteractionToDate) {
+        updatedFilters = {
+          ...updatedFilters,
+          date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+          date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+        };
+      }
+      return updatedFilters as T;
+    },
+    [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
   const loadInitialData = async () => {
@@ -1681,17 +1728,10 @@ const Dashboard = () => {
         // Call entry statistics - use date range instead of period
         (async () => {
           return await getCallEntryStatistics(
-            addSearchToFilters({
+            addSearchToCallEntryFilters({
               company: companyName,
               ...(customerInteractionFromDate && customerInteractionToDate
-                ? {
-                    date_from: dayjs(customerInteractionFromDate).format(
-                      "DD-MM-YYYY"
-                    ),
-                    date_to: dayjs(customerInteractionToDate).format(
-                      "DD-MM-YYYY"
-                    ),
-                  }
+                ? {}
                 : (() => {
                     const dateRange =
                       calculateCallEntryDateRange(callEntryPeriod);
@@ -1996,10 +2036,11 @@ const Dashboard = () => {
         ...(selectedLocation && { location: selectedLocation }),
         ...(searchSalesman && { salesman: searchSalesman }),
         ...(selectedYear && { year: parseInt(selectedYear) }),
-        ...(selectedDate && {
-          date_from: dayjs(selectedDate).format("YYYY-MM-DD"),
-          date_to: dayjs(selectedDate).format("YYYY-MM-DD"),
-        }),
+        ...(customerInteractionFromDate &&
+          customerInteractionToDate && {
+            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+          }),
       });
 
       const response = await getFilteredOutstandingData(filterData);
@@ -2237,18 +2278,28 @@ const Dashboard = () => {
 
     try {
       // Fetch data with search parameter if available
-      const dateRange = calculateCallEntryDateRange(callEntryPeriod);
+      // Use common date filter if available, otherwise use period-based date range
+      const dateRange =
+        customerInteractionFromDate && customerInteractionToDate
+          ? {
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+            }
+          : calculateCallEntryDateRange(callEntryPeriod);
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-      const response = await getCallEntryStatistics({
-        company: companyName,
-        date_from: dateRange.date_from,
-        date_to: dateRange.date_to,
-        // Commented out - type filter not needed when clicking cards
-        // ...(filterType !== "all" && { type: filterType }),
-        ...(globalSearch?.trim() && { search: globalSearch.trim() }),
-      });
+      const response = await getCallEntryStatistics(
+        addSearchToCallEntryFilters({
+          company: companyName,
+          date_from: dateRange.date_from,
+          date_to: dateRange.date_to,
+          // Commented out - type filter not needed when clicking cards
+          // ...(filterType !== "all" && { type: filterType }),
+        })
+      );
 
       const tableData = (response.data as CallEntrySalespersonData[]).map(
         (item) => ({
@@ -3280,12 +3331,26 @@ const Dashboard = () => {
     <T extends DashboardFilters>(filters: T): T => {
       // Use detailedViewSearch first, fallback to globalSearch if not set
       const searchValue = detailedViewSearch?.trim() || globalSearch?.trim();
+      let updatedFilters = { ...filters };
       if (searchValue) {
-        return { ...filters, search: searchValue };
+        updatedFilters = { ...updatedFilters, search: searchValue };
       }
-      return filters;
+      // Add date range filter from common date filter
+      if (customerInteractionFromDate && customerInteractionToDate) {
+        updatedFilters = {
+          ...updatedFilters,
+          date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+          date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+        };
+      }
+      return updatedFilters as T;
     },
-    [detailedViewSearch, globalSearch]
+    [
+      detailedViewSearch,
+      globalSearch,
+      customerInteractionFromDate,
+      customerInteractionToDate,
+    ]
   );
 
   // Handler for search change in DetailedViewTable - immediately triggers API call
@@ -3298,27 +3363,22 @@ const Dashboard = () => {
 
         if (detailedViewType === "outstanding") {
           if (detailedViewDrillLevel === 3) {
-            filterData = {
+            filterData = addSearchToDetailedViewFilters({
               company: detailedViewSelectedCompany || "",
               location: detailedViewSelectedLocation || "",
               salesman: detailedViewSelectedSalesperson || "",
-              ...(search.trim() && { search: search.trim() }),
-            };
+            });
           } else if (detailedViewDrillLevel === 2) {
-            filterData = {
+            filterData = addSearchToDetailedViewFilters({
               company: detailedViewSelectedCompany || "",
               location: detailedViewSelectedLocation || "",
-              ...(search.trim() && { search: search.trim() }),
-            };
+            });
           } else if (detailedViewDrillLevel === 1) {
-            filterData = {
+            filterData = addSearchToDetailedViewFilters({
               company: detailedViewSelectedCompany || "",
-              ...(search.trim() && { search: search.trim() }),
-            };
+            });
           } else {
-            filterData = {
-              ...(search.trim() && { search: search.trim() }),
-            };
+            filterData = addSearchToDetailedViewFilters({});
           }
           const response = await getFilteredOutstandingData(filterData);
           const tableData = convertFilteredResponseToTableData(
@@ -3328,29 +3388,26 @@ const Dashboard = () => {
           setDetailedViewData(tableData);
         } else if (detailedViewType === "budget") {
           if (detailedViewDrillLevel === 2) {
-            filterData = {
+            filterData = addSearchToDetailedViewFilters({
               company: detailedViewSelectedCompany || "",
               salesman: detailedViewSelectedSalesperson || "",
               ...(budgetStartMonth && { start_month: budgetStartMonth }),
               ...(budgetEndMonth && { end_month: budgetEndMonth }),
               type: budgetType,
-              ...(search.trim() && { search: search.trim() }),
-            };
+            });
           } else if (detailedViewDrillLevel === 1) {
-            filterData = {
+            filterData = addSearchToDetailedViewFilters({
               company: detailedViewSelectedCompany || "",
               ...(budgetStartMonth && { start_month: budgetStartMonth }),
               ...(budgetEndMonth && { end_month: budgetEndMonth }),
               type: budgetType,
-              ...(search.trim() && { search: search.trim() }),
-            };
+            });
           } else {
-            filterData = {
+            filterData = addSearchToDetailedViewFilters({
               ...(budgetStartMonth && { start_month: budgetStartMonth }),
               ...(budgetEndMonth && { end_month: budgetEndMonth }),
               type: budgetType,
-              ...(search.trim() && { search: search.trim() }),
-            };
+            });
           }
           const response = await getFilteredBudgetData(filterData as any);
           const tableData = convertBudgetResponseToTableData(
@@ -3469,21 +3526,33 @@ const Dashboard = () => {
           setDetailedViewData(tableData);
         } else if (detailedViewType === "callentry") {
           // Call Entry search handling
-          const dateRange = calculateCallEntryDateRange(callEntryPeriod);
+          // Use common date filter if available, otherwise use period-based date range
+          const dateRange =
+            customerInteractionFromDate && customerInteractionToDate
+              ? {
+                  date_from: dayjs(customerInteractionFromDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                  date_to: dayjs(customerInteractionToDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                }
+              : calculateCallEntryDateRange(callEntryPeriod);
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
           if (callEntryDrillLevel === 0) {
             // Drill Level 0: Salesperson list
-            const response = await getCallEntryStatistics({
-              company: companyName,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
-              ...(callEntryFilterType !== "all" && {
-                type: callEntryFilterType,
-              }),
-              ...(search.trim() && { search: search.trim() }),
-            });
+            const response = await getCallEntryStatistics(
+              addSearchToCallEntryFilters({
+                company: companyName,
+                date_from: dateRange.date_from,
+                date_to: dateRange.date_to,
+                ...(callEntryFilterType !== "all" && {
+                  type: callEntryFilterType,
+                }),
+              })
+            );
             const tableData = (response.data as CallEntrySalespersonData[]).map(
               (item) => ({
                 SALESPERSON: item.salesperson,
@@ -3504,17 +3573,18 @@ const Dashboard = () => {
             callEntrySelectedSalesperson
           ) {
             // Drill Level 1: Customer list
-            const response = await getCallEntryStatistics({
-              company: companyName,
-              salesperson: callEntrySelectedSalesperson,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
-              // Commented out - type filter not needed when clicking cards
-              // ...(callEntryFilterType !== "all" && {
-              //   type: callEntryFilterType,
-              // }),
-              ...(search.trim() && { search: search.trim() }),
-            });
+            const response = await getCallEntryStatistics(
+              addSearchToCallEntryFilters({
+                company: companyName,
+                salesperson: callEntrySelectedSalesperson,
+                date_from: dateRange.date_from,
+                date_to: dateRange.date_to,
+                // Commented out - type filter not needed when clicking cards
+                // ...(callEntryFilterType !== "all" && {
+                //   type: callEntryFilterType,
+                // }),
+              })
+            );
             const statsResponse = response as CallEntryStatisticsResponse;
             const salespersonEmail = statsResponse.salesperson_email || "";
             const ccMail = statsResponse.cc_mail || [];
@@ -3541,18 +3611,19 @@ const Dashboard = () => {
             callEntrySelectedCustomer
           ) {
             // Drill Level 2: Call entry details
-            const response = await getCallEntryStatistics({
-              company: companyName,
-              salesperson: callEntrySelectedSalesperson,
-              customer_code: callEntrySelectedCustomer.code,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
-              // Commented out - type filter not needed when clicking cards
-              // ...(callEntryFilterType !== "all" && {
-              //   type: callEntryFilterType,
-              // }),
-              ...(search.trim() && { search: search.trim() }),
-            });
+            const response = await getCallEntryStatistics(
+              addSearchToCallEntryFilters({
+                company: companyName,
+                salesperson: callEntrySelectedSalesperson,
+                customer_code: callEntrySelectedCustomer.code,
+                date_from: dateRange.date_from,
+                date_to: dateRange.date_to,
+                // Commented out - type filter not needed when clicking cards
+                // ...(callEntryFilterType !== "all" && {
+                //   type: callEntryFilterType,
+                // }),
+              })
+            );
             const tableData = (response.data as CallEntryDetailData[]).map(
               (item) => ({
                 CALL_ENTRY_ID: item.call_entry_id,
@@ -3652,10 +3723,11 @@ const Dashboard = () => {
     }
 
     const callEntryFilterData: DashboardFilters = {
-      ...(selectedDate && {
-        date_from: dayjs(selectedDate).format("YYYY-MM-DD"),
-        date_to: dayjs(selectedDate).format("YYYY-MM-DD"),
-      }),
+      ...(customerInteractionFromDate &&
+        customerInteractionToDate && {
+          date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+          date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+        }),
     };
     const filteredCallEntryData =
       Object.keys(callEntryFilterData).length > 0
@@ -5228,7 +5300,18 @@ const Dashboard = () => {
         setIsLoadingDetailedView(true);
 
         try {
-          const dateRange = calculateCallEntryDateRange(callEntryPeriod);
+          // Use common date filter if available, otherwise use period-based date range
+          const dateRange =
+            customerInteractionFromDate && customerInteractionToDate
+              ? {
+                  date_from: dayjs(customerInteractionFromDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                  date_to: dayjs(customerInteractionToDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                }
+              : calculateCallEntryDateRange(callEntryPeriod);
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
           const isBadgeClick = [
@@ -5343,16 +5426,18 @@ const Dashboard = () => {
               }`
             );
 
-            const response = await getCallEntryStatistics({
-              company: companyName,
-              salesperson: salespersonToFilter,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
-              // Commented out - type filter not needed when clicking cards
-              // ...(callEntryFilterType !== "all" && {
-              //   type: callEntryFilterType,
-              // }),
-            });
+            const response = await getCallEntryStatistics(
+              addSearchToCallEntryFilters({
+                company: companyName,
+                salesperson: salespersonToFilter,
+                date_from: dateRange.date_from,
+                date_to: dateRange.date_to,
+                // Commented out - type filter not needed when clicking cards
+                // ...(callEntryFilterType !== "all" && {
+                //   type: callEntryFilterType,
+                // }),
+              })
+            );
 
             // Extract email metadata for the selected salesperson
             const statsResponse = response as CallEntryStatisticsResponse;
@@ -5485,14 +5570,16 @@ const Dashboard = () => {
             setDetailedViewTitle(`Call Entry - ${customerName} - Details`);
 
             // Fetch call entry details
-            const response = await getCallEntryStatistics({
-              company: companyName,
-              salesperson: callEntrySelectedSalesperson!,
-              customer_code: customerCode,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
-              ...(typeFilter && { type: typeFilter }),
-            });
+            const response = await getCallEntryStatistics(
+              addSearchToCallEntryFilters({
+                company: companyName,
+                salesperson: callEntrySelectedSalesperson!,
+                customer_code: customerCode,
+                date_from: dateRange.date_from,
+                date_to: dateRange.date_to,
+                ...(typeFilter && { type: typeFilter }),
+              })
+            );
 
             const tableData = (response.data as CallEntryDetailData[]).map(
               (item) => ({
@@ -6115,18 +6202,31 @@ const Dashboard = () => {
           setDetailedViewDrillLevel(1);
 
           // Fetch customer list for the selected salesperson
-          const dateRange = calculateCallEntryDateRange(callEntryPeriod);
+          // Use common date filter if available, otherwise use period-based date range
+          const dateRange =
+            customerInteractionFromDate && customerInteractionToDate
+              ? {
+                  date_from: dayjs(customerInteractionFromDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                  date_to: dayjs(customerInteractionToDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                }
+              : calculateCallEntryDateRange(callEntryPeriod);
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-          const response = await getCallEntryStatistics({
-            company: companyName,
-            salesperson: callEntrySelectedSalesperson!,
-            date_from: dateRange.date_from,
-            date_to: dateRange.date_to,
-            // Commented out - type filter not needed when clicking cards
-            // ...(callEntryFilterType !== "all" && { type: callEntryFilterType }),
-          });
+          const response = await getCallEntryStatistics(
+            addSearchToCallEntryFilters({
+              company: companyName,
+              salesperson: callEntrySelectedSalesperson!,
+              date_from: dateRange.date_from,
+              date_to: dateRange.date_to,
+              // Commented out - type filter not needed when clicking cards
+              // ...(callEntryFilterType !== "all" && { type: callEntryFilterType }),
+            })
+          );
 
           // Extract email metadata for the selected salesperson
           const statsResponse = response as CallEntryStatisticsResponse;
@@ -6176,16 +6276,31 @@ const Dashboard = () => {
           setDetailedViewDrillLevel(0);
 
           // Always fetch fresh salesperson list from API
-          const dateRange = calculateCallEntryDateRange(callEntryPeriod);
+          // Use common date filter if available, otherwise use period-based date range
+          const dateRange =
+            customerInteractionFromDate && customerInteractionToDate
+              ? {
+                  date_from: dayjs(customerInteractionFromDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                  date_to: dayjs(customerInteractionToDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                }
+              : calculateCallEntryDateRange(callEntryPeriod);
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-          const response = await getCallEntryStatistics({
-            company: companyName,
-            date_from: dateRange.date_from,
-            date_to: dateRange.date_to,
-            ...(callEntryFilterType !== "all" && { type: callEntryFilterType }),
-          });
+          const response = await getCallEntryStatistics(
+            addSearchToCallEntryFilters({
+              company: companyName,
+              date_from: dateRange.date_from,
+              date_to: dateRange.date_to,
+              ...(callEntryFilterType !== "all" && {
+                type: callEntryFilterType,
+              }),
+            })
+          );
 
           const tableData = (response.data as CallEntrySalespersonData[]).map(
             (item) => ({
@@ -6393,10 +6508,13 @@ const Dashboard = () => {
         });
 
         const callEntryFilterData: DashboardFilters = {
-          ...(selectedDate && {
-            date_from: dayjs(selectedDate).format("YYYY-MM-DD"),
-            date_to: dayjs(selectedDate).format("YYYY-MM-DD"),
-          }),
+          ...(customerInteractionFromDate &&
+            customerInteractionToDate && {
+              date_from: dayjs(customerInteractionFromDate).format(
+                "YYYY-MM-DD"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+            }),
         };
         const filteredCallEntryData =
           Object.keys(callEntryFilterData).length > 0
@@ -6469,10 +6587,13 @@ const Dashboard = () => {
         }
 
         const callEntryFilterData: DashboardFilters = {
-          ...(selectedDate && {
-            date_from: dayjs(selectedDate).format("YYYY-MM-DD"),
-            date_to: dayjs(selectedDate).format("YYYY-MM-DD"),
-          }),
+          ...(customerInteractionFromDate &&
+            customerInteractionToDate && {
+              date_from: dayjs(customerInteractionFromDate).format(
+                "YYYY-MM-DD"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+            }),
         };
         const filteredCallEntryData =
           Object.keys(callEntryFilterData).length > 0
@@ -6583,10 +6704,13 @@ const Dashboard = () => {
           setSearchSalesman("");
 
           const callEntryFilterData: DashboardFilters = {
-            ...(selectedDate && {
-              date_from: dayjs(selectedDate).format("YYYY-MM-DD"),
-              date_to: dayjs(selectedDate).format("YYYY-MM-DD"),
-            }),
+            ...(customerInteractionFromDate &&
+              customerInteractionToDate && {
+                date_from: dayjs(customerInteractionFromDate).format(
+                  "YYYY-MM-DD"
+                ),
+                date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+              }),
           };
           const filteredCallEntryData =
             Object.keys(callEntryFilterData).length > 0
