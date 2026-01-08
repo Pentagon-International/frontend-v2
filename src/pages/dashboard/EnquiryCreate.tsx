@@ -7861,6 +7861,43 @@ function EnquiryCreate() {
                       <Group gap="sm">
                         <Button
                           variant="outline"
+                          size="sm"
+                          styles={{
+                            root: {
+                              borderColor: "#105476",
+                              color: "#666",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          onClick={() => {
+                            if (
+                              customerForm.values.supporting_documents.length === 0
+                            ) {
+                              customerForm.setFieldValue("supporting_documents", [
+                                { name: "", file: null },
+                              ]);
+                            }
+                            // Validate all existing files for size
+                            const newErrors: { [key: number]: string } = {};
+                            customerForm.values.supporting_documents.forEach(
+                              (doc, idx) => {
+                                if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                                  newErrors[idx] =
+                                    `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                                }
+                              }
+                            );
+                            setFileErrors(newErrors);
+                            openDocumentsModal();
+                          }}
+                          disabled={isSubmitting}
+                        >
+                          Attach supporting document
+                        </Button>
+                        <Button
+                          variant="outline"
                           color="gray"
                           size="sm"
                           styles={{
@@ -7997,11 +8034,15 @@ function EnquiryCreate() {
           title="Attach Supporting Documents"
           size="xl"
           centered
+          style={{
+            fontFamily: "Inter",
+            fontStyle: "medium",
+          }}
         >
-          <Stack gap="md">
+          <Stack gap="xs">
             {customerForm.values.supporting_documents.map((doc, index) => (
-              <Grid key={index} gutter="md" align="flex-end">
-                <Grid.Col span={5}>
+              <Grid key={index} columns={12} gutter="sm" align="flex-end">
+                <Grid.Col span={5.5}>
                   <TextInput
                     label="Document Name"
                     placeholder="Enter document name"
@@ -8021,7 +8062,7 @@ function EnquiryCreate() {
                     }}
                   />
                 </Grid.Col>
-                <Grid.Col span={5}>
+                <Grid.Col span={5.5}>
                   <Box>
                     <Text size="sm" fw={500} mb={4}>
                       File
@@ -8232,9 +8273,54 @@ function EnquiryCreate() {
                     )}
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={2}>
-                  <Group gap="xs">
-                    {index ===
+                <Grid.Col span={1}>
+                  <Button
+                    variant="light"
+                    color="red"
+                    onClick={() => {
+                      // Clear error for this index
+                      if (fileErrors[index]) {
+                        const newErrors = { ...fileErrors };
+                        delete newErrors[index];
+                        setFileErrors(newErrors);
+                      }
+
+                      if (
+                        customerForm.values.supporting_documents.length === 1
+                      ) {
+                        // If only one row, clear it instead of removing
+                        customerForm.setFieldValue("supporting_documents", [
+                          { name: "", file: null },
+                        ]);
+                      } else {
+                        // Remove the row and reindex errors
+                        const updatedDocs =
+                          customerForm.values.supporting_documents.filter(
+                            (_, i) => i !== index
+                          );
+                        customerForm.setFieldValue(
+                          "supporting_documents",
+                          updatedDocs
+                        );
+                        // Reindex errors after deletion
+                        const newErrors: { [key: number]: string } = {};
+                        Object.keys(fileErrors).forEach((key) => {
+                          const keyNum = parseInt(key);
+                          if (keyNum < index) {
+                            newErrors[keyNum] = fileErrors[keyNum];
+                          } else if (keyNum > index) {
+                            newErrors[keyNum - 1] = fileErrors[keyNum];
+                          }
+                        });
+                        setFileErrors(newErrors);
+                      }
+                    }}
+                  >
+                    <IconTrash size={16} />
+                  </Button>
+                </Grid.Col>
+                <Grid.Col span={1} offset={11}>
+                  {index ===
                       customerForm.values.supporting_documents.length - 1 && (
                       <Button
                         variant="light"
@@ -8249,51 +8335,6 @@ function EnquiryCreate() {
                         <IconPlus size={16} />
                       </Button>
                     )}
-                    <Button
-                      variant="light"
-                      color="red"
-                      onClick={() => {
-                        // Clear error for this index
-                        if (fileErrors[index]) {
-                          const newErrors = { ...fileErrors };
-                          delete newErrors[index];
-                          setFileErrors(newErrors);
-                        }
-
-                        if (
-                          customerForm.values.supporting_documents.length === 1
-                        ) {
-                          // If only one row, clear it instead of removing
-                          customerForm.setFieldValue("supporting_documents", [
-                            { name: "", file: null },
-                          ]);
-                        } else {
-                          // Remove the row and reindex errors
-                          const updatedDocs =
-                            customerForm.values.supporting_documents.filter(
-                              (_, i) => i !== index
-                            );
-                          customerForm.setFieldValue(
-                            "supporting_documents",
-                            updatedDocs
-                          );
-                          // Reindex errors after deletion
-                          const newErrors: { [key: number]: string } = {};
-                          Object.keys(fileErrors).forEach((key) => {
-                            const keyNum = parseInt(key);
-                            if (keyNum < index) {
-                              newErrors[keyNum] = fileErrors[keyNum];
-                            } else if (keyNum > index) {
-                              newErrors[keyNum - 1] = fileErrors[keyNum];
-                            }
-                          });
-                          setFileErrors(newErrors);
-                        }
-                      }}
-                    >
-                      <IconTrash size={16} />
-                    </Button>
-                  </Group>
                 </Grid.Col>
               </Grid>
             ))}

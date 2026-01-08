@@ -12,6 +12,8 @@ import {
   TextInput,
   ScrollArea,
   Badge,
+  Flex,
+  Center,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconCheck, IconPlus, IconUser } from "@tabler/icons-react";
@@ -292,369 +294,491 @@ function CreateLead() {
   };
 
   return (
-    <Box p="md">
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        {/* Header Section */}
-        <Stack gap="md" mb="xl">
-          <Group gap="sm">
-            <IconUser size={32} color="#105476" />
-            <Box>
-              <Text size="xl" fw={600} c="#105476">
-                {isEditMode ? "Update Lead" : "Create New Lead"}
-              </Text>
-              <Text size="sm" c="dimmed">
-                {isEditMode
-                  ? "Update interest level and add remarks"
-                  : "Fill in company and contact details to create a new lead"}
-              </Text>
-            </Box>
-          </Group>
-        </Stack>
+    <Box
+      component="form"
+      style={{ backgroundColor: "#F8F8F8", position: "relative", borderRadius: "8px", overflow: "hidden" }}
+      onSubmit={form.onSubmit(handleSubmit)}
+    >
+      {isSubmitting && (
+        <Center
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(255, 255, 255, 0.65)",
+            zIndex: 15,
+          }}
+        >
+          <Loader color="#105476" size="lg" />
+        </Center>
+      )}
 
-        <form onSubmit={form.onSubmit(handleSubmit)}>
-          {/* Basic Information Section */}
-          <Card shadow="xs" padding="md" radius="md" withBorder mb="md" bg="#f8f9fa">
-            <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px" }}>
-              Basic Information
-            </Text>
-            <Grid>
-              <Grid.Col span={12}>
-                <TextInput
-                  label="Company Name"
-                  placeholder="Enter company name"
-                  required
-                  {...form.getInputProps("name")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={12}>
-                <TextInput
-                  label="Contact Person's Name"
-                  placeholder="Enter contact person's name"
-                  {...form.getInputProps("contact_person")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="Contact Number"
-                  placeholder="Enter contact number (e.g., +91 9876543210)"
-                  {...form.getInputProps("contact_number")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="Email ID"
-                  placeholder="Enter email address"
-                  type="email"
-                  {...form.getInputProps("email_id")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-            </Grid>
-          </Card>
-
-          {/* Location Section */}
-          <Card shadow="xs" padding="md" radius="md" withBorder mb="md" bg="#f8f9fa">
-            <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px" }}>
-              Location
-            </Text>
-            <Grid>
-              <Grid.Col span={12}>
-                <Textarea
-                  label="Address"
-                  placeholder="Enter full address (Door No, Street, Area)"
-                  minRows={3}
-                  maxRows={5}
-                  {...form.getInputProps("address")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="City"
-                  placeholder="Enter city"
-                  {...form.getInputProps("city")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="State"
-                  placeholder="Enter state"
-                  {...form.getInputProps("state")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="Country"
-                  placeholder="Enter country"
-                  {...form.getInputProps("country")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="Pincode"
-                  placeholder="Enter 6-digit pincode"
-                  maxLength={6}
-                  {...form.getInputProps("pincode")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-            </Grid>
-          </Card>
-
-          {/* Assignment & Status Section */}
-          <Card shadow="xs" padding="md" radius="md" withBorder mb="md" bg="#f8f9fa">
-            <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px" }}>
-              Assignment & Status
-            </Text>
-            <Grid>
-              <Grid.Col span={6}>
-                <Select
-                  label="Assigned To"
-                  placeholder="Select person..."
-                  required
-                  searchable
-                  data={userOptions}
-                  disabled={usersLoading}
-                  {...form.getInputProps("assigned_to")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Select
-                  label="Status"
-                  placeholder="Select status"
-                  data={statusOptions}
-                  {...form.getInputProps("status")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-            </Grid>
-          </Card>
-
-          {/* Remarks Section */}
-          <Card shadow="xs" padding="md" radius="md" withBorder mb="md" bg="#f8f9fa">
-            <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px" }}>
-              Remarks
-            </Text>
-
-            {/* Chat History - Only show in edit mode if messages exist */}
-            {isEditMode && chatHistory.length > 0 && (
-              <Box mb="md">
-                <Text size="sm" fw={600} c="#105476" mb="sm">
-                  Previous Messages
-                </Text>
-                <Card shadow="xs" padding="md" radius="md" withBorder bg="#ffffff" style={{ maxHeight: "300px" }}>
-                  <ScrollArea style={{ maxHeight: "250px" }}>
-                    <Stack gap="xs">
-                      {chatHistory.map((msg, index) => {
-                        const isSentByMe =
-                          msg.sender === user?.full_name ||
-                          msg.sender === user?.username ||
-                          msg.sender_id === user?.user_id;
-                        const prevMessage = index > 0 ? chatHistory[index - 1] : null;
-                        const showSenderHeader =
-                          !prevMessage || prevMessage.sender !== msg.sender;
-                        const showDateSeparator =
-                          !prevMessage ||
-                          dayjs(msg.timestamp).format("DD-MM-YYYY") !==
-                            dayjs(prevMessage.timestamp).format("DD-MM-YYYY");
-
-                        return (
-                          <Box key={index}>
-                            {/* Date Separator */}
-                            {showDateSeparator && (
-                              <Group justify="center" my="md">
-                                <Badge
-                                  size="sm"
-                                  variant="light"
-                                  color="gray"
-                                  style={{ textTransform: "none" }}
-                                >
-                                  {dayjs(msg.timestamp).format("DD MMMM YYYY")}
-                                </Badge>
-                              </Group>
-                            )}
-
-                            {/* Message Bubble */}
-                            <Group
-                              align="flex-start"
-                              gap="xs"
-                              style={{
-                                flexDirection: isSentByMe ? "row-reverse" : "row",
-                              }}
-                            >
-                              <Box
-                                style={{
-                                  maxWidth: "75%",
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  alignItems: isSentByMe ? "flex-end" : "flex-start",
-                                }}
-                              >
-                                {/* Sender Name */}
-                                {showSenderHeader && (
-                                  <Text
-                                    size="xs"
-                                    fw={600}
-                                    c="#105476"
-                                    mb={4}
-                                    style={{
-                                      paddingLeft: isSentByMe ? "0" : "8px",
-                                      paddingRight: isSentByMe ? "8px" : "0",
-                                    }}
-                                  >
-                                    {msg.sender}
-                                  </Text>
-                                )}
-
-                                {/* Message Bubble */}
-                                <Box
-                                  style={{
-                                    backgroundColor: isSentByMe ? "#105476" : "#ffffff",
-                                    color: isSentByMe ? "#ffffff" : "#333",
-                                    padding: "10px 14px",
-                                    borderRadius: isSentByMe
-                                      ? "12px 12px 4px 12px"
-                                      : "12px 12px 12px 4px",
-                                    boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
-                                    border: isSentByMe
-                                      ? "none"
-                                      : "1px solid #e9ecef",
-                                  }}
-                                >
-                                  <Text
-                                    size="sm"
-                                    style={{
-                                      whiteSpace: "pre-wrap",
-                                      wordBreak: "break-word",
-                                      lineHeight: 1.5,
-                                      color: isSentByMe ? "#ffffff" : "#333",
-                                    }}
-                                  >
-                                    {msg.message}
-                                  </Text>
-                                </Box>
-
-                                {/* Timestamp */}
-                                <Text
-                                  size="xs"
-                                  c="dimmed"
-                                  mt={4}
-                                  style={{
-                                    paddingLeft: isSentByMe ? "0" : "8px",
-                                    paddingRight: isSentByMe ? "8px" : "0",
-                                  }}
-                                >
-                                  {dayjs(msg.timestamp).format("HH:mm")}
-                                </Text>
-                              </Box>
-                            </Group>
-                          </Box>
-                        );
-                      })}
-                    </Stack>
-                  </ScrollArea>
-                </Card>
-              </Box>
-            )}
-
-            <Grid>
-              <Grid.Col span={12}>
-                <Textarea
-                  label="New Message (Optional)"
-                  placeholder={isEditMode ? "Add a follow-up message..." : "Enter initial message..."}
-                  minRows={3}
-                  maxRows={5}
-                  maxLength={500}
-                  {...form.getInputProps("message")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-                <Text size="xs" c="dimmed" mt={4} ta="right">
-                  {form.values.message.length} / 500
-                </Text>
-              </Grid.Col>
-              <Grid.Col span={12}>
-                <Select
-                  label="Interest Level"
-                  placeholder="Select interest level"
-                  data={interestLevelOptions}
-                  {...form.getInputProps("interest_level")}
-                  styles={{
-                    label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px" },
-                    input: { fontSize: "13px" },
-                  }}
-                />
-              </Grid.Col>
-            </Grid>
-          </Card>
-
-          {/* Action Buttons */}
-          <Group justify="flex-end" mt="xl">
-            <Button
-              variant="outline"
-              color="#105476"
-              onClick={() => {
-                const returnTo = (location.state as any)?.returnTo || "/lead";
-                navigate(returnTo);
+      <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+        <Flex
+          gap="md"
+          align="flex-start"
+          style={{ height: "calc(100vh - 112px)", width: "100%" }}
+        >
+          {/* Vertical Sidebar */}
+          <Box
+            style={{
+              minWidth: 240,
+              width: "100%",
+              maxWidth: 250,
+              height: "100%",
+              alignSelf: "stretch",
+              borderRadius: "8px",
+              backgroundColor: "#FFFFFF",
+              position: "sticky",
+              top: 0,
+            }}
+          >
+            <Box
+              style={{
+                padding: "20px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 5,
               }}
-              disabled={isSubmitting}
             >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              color="#105476"
-              leftSection={isSubmitting ? <Loader size="sm" /> : isEditMode ? <IconCheck size={18} /> : <IconPlus size={18} />}
-              loading={isSubmitting}
-              disabled={isSubmitting}
+              <Text
+                size="md"
+                fw={600}
+                c="#105476"
+                style={{
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                  fontSize: "16px",
+                  color: "#105476",
+                  textAlign: "center",
+                }}
+              >
+                {isEditMode ? "Edit Lead Entry" : "Create Lead Entry"}
+              </Text>
+              <Text
+                size="sm"
+                fw={500}
+                style={{
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                  color: "#444953",
+                  textAlign: "center",
+                }}
+              >
+                {isEditMode ? "Update interest level and Add remarks" : "Fill in company and contact details to create a New lead"}
+              </Text>
+
+            </Box>
+          </Box>
+
+          {/* Main Content Area */}
+          <Box
+            style={{
+              flex: 1,
+              width: "100%",
+              borderRadius: "8px",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              overflow: "hidden",
+              gap: "8px",
+            }}
+          >
+            <Box
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                borderRadius: "8px",
+                backgroundColor: "#FFFFFF",
+              }}
             >
-              {isEditMode ? "Update Lead" : "Create Lead"}
-            </Button>
-          </Group>
-        </form>
-      </Card>
+              <Grid style={{ padding: "24px" }}>
+                {/* Basic Information Section */}
+                <Grid.Col span={12}>
+                  <Box mb="md">
+                    <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
+                      Basic Information
+                    </Text>
+                    <Grid>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Company Name"
+                          placeholder="Enter company name"
+                          required
+                          {...form.getInputProps("name")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Contact Person's Name"
+                          placeholder="Enter contact person's name"
+                          {...form.getInputProps("contact_person")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Contact Number"
+                          placeholder="Enter contact number (e.g., +91 9876543210)"
+                          {...form.getInputProps("contact_number")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Email ID"
+                          placeholder="Enter email address"
+                          type="email"
+                          {...form.getInputProps("email_id")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  </Box>
+                </Grid.Col>
+
+                {/* Location Section */}
+                <Grid.Col span={12}>
+                  <Box mb="md">
+                    <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
+                      Location
+                    </Text>
+                    <Grid>
+                      <Grid.Col span={12}>
+                        <Textarea
+                          label="Address"
+                          placeholder="Enter full address (Door No, Street, Area)"
+                          minRows={3}
+                          maxRows={5}
+                          {...form.getInputProps("address")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="City"
+                          placeholder="Enter city"
+                          {...form.getInputProps("city")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="State"
+                          placeholder="Enter state"
+                          {...form.getInputProps("state")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Country"
+                          placeholder="Enter country"
+                          {...form.getInputProps("country")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <TextInput
+                          label="Pincode"
+                          placeholder="Enter 6-digit pincode"
+                          maxLength={6}
+                          {...form.getInputProps("pincode")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  </Box>
+                </Grid.Col>
+
+                {/* Assignment & Status Section */}
+                <Grid.Col span={12}>
+                  <Box mb="md">
+                    <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
+                      Assignment & Status
+                    </Text>
+                    <Grid>
+                      <Grid.Col span={6}>
+                        <Select
+                          label="Assigned To"
+                          placeholder="Select person..."
+                          required
+                          searchable
+                          data={userOptions}
+                          disabled={usersLoading}
+                          {...form.getInputProps("assigned_to")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <Select
+                          label="Status"
+                          placeholder="Select status"
+                          data={statusOptions}
+                          {...form.getInputProps("status")}
+                          styles={{
+                            label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                            input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                          }}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  </Box>
+                </Grid.Col>
+
+                {/* Remarks Section */}
+                <Grid.Col span={12}>
+                  <Box mb="md">
+                    <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
+                      Remarks
+                    </Text>
+
+                        {/* Chat History - Only show in edit mode if messages exist */}
+                        {isEditMode && chatHistory.length > 0 && (
+                          <Box mb="md">
+                            <Text size="sm" fw={600} c="#105476" mb="sm" style={{ fontFamily: "Inter" }}>
+                              Previous Messages
+                            </Text>
+                            <Card shadow="xs" padding="md" radius="md" withBorder bg="#ffffff" style={{ maxHeight: "300px" }}>
+                              <ScrollArea style={{ maxHeight: "250px", overflow:"auto" }}>
+                                <Stack gap="xs">
+                                  {chatHistory.map((msg, index) => {
+                                    const isSentByMe =
+                                      msg.sender === user?.full_name ||
+                                      msg.sender === user?.username ||
+                                      msg.sender_id === user?.user_id;
+                                    const prevMessage = index > 0 ? chatHistory[index - 1] : null;
+                                    const showSenderHeader =
+                                      !prevMessage || prevMessage.sender !== msg.sender;
+                                    const showDateSeparator =
+                                      !prevMessage ||
+                                      dayjs(msg.timestamp).format("DD-MM-YYYY") !==
+                                        dayjs(prevMessage.timestamp).format("DD-MM-YYYY");
+
+                                    return (
+                                      <Box key={index} px={4}>
+                                        {/* Date Separator */}
+                                        {showDateSeparator && (
+                                          <Group justify="center" my="md">
+                                            <Badge
+                                              size="sm"
+                                              variant="light"
+                                              color="gray"
+                                              style={{ textTransform: "none" }}
+                                            >
+                                              {dayjs(msg.timestamp).format("DD MMMM YYYY")}
+                                            </Badge>
+                                          </Group>
+                                        )}
+
+                                        {/* Message Bubble */}
+                                        <Group
+                                          align="flex-start"
+                                          gap="xs"
+                                          style={{
+                                            flexDirection: isSentByMe ? "row-reverse" : "row",
+                                          }}
+                                        >
+                                          <Box
+                                            style={{
+                                              maxWidth: "75%",
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              alignItems: isSentByMe ? "flex-end" : "flex-start",
+                                            }}
+                                          >
+                                            {/* Sender Name */}
+                                            {showSenderHeader && (
+                                              <Text
+                                                size="xs"
+                                                fw={600}
+                                                c="#105476"
+                                                mb={4}
+                                                style={{
+                                                  paddingLeft: isSentByMe ? "0" : "8px",
+                                                  paddingRight: isSentByMe ? "8px" : "0",
+                                                  fontFamily: "Inter",
+                                                }}
+                                              >
+                                                {msg.sender}
+                                              </Text>
+                                            )}
+
+                                            {/* Message Bubble */}
+                                            <Box
+                                              style={{
+                                                backgroundColor: isSentByMe ? "#105476" : "#ffffff",
+                                                color: isSentByMe ? "#ffffff" : "#333",
+                                                padding: "10px 14px",
+                                                borderRadius: isSentByMe
+                                                  ? "12px 12px 4px 12px"
+                                                  : "12px 12px 12px 4px",
+                                                boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                                                border: isSentByMe
+                                                  ? "none"
+                                                  : "1px solid #e9ecef",
+                                              }}
+                                            >
+                                              <Text
+                                                size="sm"
+                                                style={{
+                                                  whiteSpace: "pre-wrap",
+                                                  wordBreak: "break-word",
+                                                  lineHeight: 1.5,
+                                                  color: isSentByMe ? "#ffffff" : "#333",
+                                                  fontFamily: "Inter",
+                                                }}
+                                              >
+                                                {msg.message}
+                                              </Text>
+                                            </Box>
+
+                                            {/* Timestamp */}
+                                            <Text
+                                              size="xs"
+                                              c="dimmed"
+                                              mt={4}
+                                              style={{
+                                                paddingLeft: isSentByMe ? "0" : "8px",
+                                                paddingRight: isSentByMe ? "8px" : "0",
+                                                fontFamily: "Inter",
+                                              }}
+                                            >
+                                              {dayjs(msg.timestamp).format("HH:mm")}
+                                            </Text>
+                                          </Box>
+                                        </Group>
+                                      </Box>
+                                    );
+                                  })}
+                                </Stack>
+                              </ScrollArea>
+                            </Card>
+                          </Box>
+                        )}
+
+                        <Grid>
+                          <Grid.Col span={12}>
+                            <Textarea
+                              label="New Message (Optional)"
+                              placeholder={isEditMode ? "Add a follow-up message..." : "Enter initial message..."}
+                              minRows={3}
+                              maxRows={5}
+                              maxLength={500}
+                              {...form.getInputProps("message")}
+                              styles={{
+                                label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                                input: { fontSize: "13px", fontFamily: "Inter" },
+                              }}
+                            />
+                            <Text size="xs" c="dimmed" mt={4} ta="right" style={{ fontFamily: "Inter" }}>
+                              {form.values.message.length} / 500
+                            </Text>
+                          </Grid.Col>
+                          <Grid.Col span={12}>
+                            <Select
+                              label="Interest Level"
+                              placeholder="Select interest level"
+                              data={interestLevelOptions}
+                              {...form.getInputProps("interest_level")}
+                              styles={{
+                                label: { fontSize: "13px", fontWeight: 500, color: "#495057", marginBottom: "6px", fontFamily: "Inter" },
+                                input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                              }}
+                            />
+                          </Grid.Col>
+                        </Grid>
+                      </Box>
+                    </Grid.Col>
+              </Grid>
+            </Box>
+
+            {/* Footer Buttons */}
+            <Box
+              style={{
+                padding: "20px 32px",
+                backgroundColor: "#ffffff",
+                borderRadius: "8px",
+              }}
+            >
+              <Group justify="space-between">
+                <Group gap="sm">
+                  <Button
+                    variant="outline"
+                    color="gray"
+                    size="sm"
+                    styles={{
+                      root: {
+                        borderColor: "#d0d0d0",
+                        color: "#666",
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    onClick={() => {
+                      const returnTo = (location.state as any)?.returnTo || "/lead";
+                      navigate(returnTo);
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                </Group>
+
+                <Group gap="sm">
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isSubmitting}
+                    style={{
+                      backgroundColor: isSubmitting ? "#105476BB" : "#105476",
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    }}
+                    rightSection={<IconCheck size={16} />}
+                  >
+                    {isEditMode ? "Update Lead" : "Create Lead"}
+                  </Button>
+                </Group>
+              </Group>
+            </Box>
+          </Box>
+        </Flex>
+      </Box>
     </Box>
   );
 }
