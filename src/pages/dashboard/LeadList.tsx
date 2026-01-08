@@ -22,6 +22,7 @@ import {
   Modal,
   ScrollArea,
   Menu,
+  UnstyledButton,
 } from "@mantine/core";
 import {
   IconChevronLeft,
@@ -32,6 +33,7 @@ import {
   IconPlus,
   IconEdit,
   IconDotsVertical,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getAPICall } from "../../service/getApiCall";
@@ -44,6 +46,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { useLayoutStore } from "../../store/useLayoutStore";
+import useAuthStore from "../../store/authStore";
 
 type LeadData = {
   id: number;
@@ -102,6 +105,7 @@ function LeadList() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuthStore();
   const { setActiveNav, setActiveSubNav, setTitle } = useLayoutStore();
 
   // Ensure navigation state is set correctly on mount and refresh
@@ -508,7 +512,7 @@ function LeadList() {
       {
         accessorKey: "contact_number",
         header: "Contact Number",
-        size: 130,
+        size: 140,
         Cell: ({ row }) => (
           <Text size="sm">{row.original.contact_number || "-"}</Text>
         ),
@@ -608,7 +612,7 @@ function LeadList() {
               multiline
             >
               <Text
-                size="xs"
+                size="sm"
                 style={{
                   cursor: hasMessages ? "pointer" : "default",
                   color: hasMessages ? "#105476" : "inherit",
@@ -650,36 +654,40 @@ function LeadList() {
       {
         id: "actions",
         header: "Actions",
-        size: 80,
         Cell: ({ row }) => (
-          <Menu shadow="md" width={120}>
+          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
             <Menu.Target>
               <ActionIcon variant="subtle" color="gray">
                 <IconDotsVertical size={16} />
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<IconEdit size={14} />}
-                onClick={() => {
-                  navigate("/lead-create", {
-                    state: {
-                      leadData: row.original,
-                      returnTo: "/lead",
-                      restoreFilters: {
-                        filters: appliedFilters,
-                        filtersApplied,
-                        fromDashboard: fromDashboardRef.current,
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() => {
+                    navigate("/lead-create", {
+                      state: {
+                        leadData: row.original,
+                        returnTo: "/lead",
+                        restoreFilters: {
+                          filters: appliedFilters,
+                          filtersApplied,
+                          fromDashboard: fromDashboardRef.current,
+                        },
                       },
-                    },
-                  });
-                }}
-              >
-                Edit
-              </Menu.Item>
+                    });
+                  }}
+                >
+                  <Group gap={"sm"}>
+                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <Text size="sm">Edit</Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
             </Menu.Dropdown>
           </Menu>
         ),
+        size: 80,
       },
     ],
     [navigate, appliedFilters, filtersApplied]
@@ -698,7 +706,7 @@ function LeadList() {
     enableStickyHeader: true,
     initialState: {
       pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { left: ["sno"] },
+      columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
     mantineTableProps: {
@@ -710,219 +718,325 @@ function LeadList() {
     },
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
       radius: "md",
-    },
-    mantineTableBodyCellProps: {
       style: {
-        padding: "8px 12px",
-        fontSize: "13px",
-        backgroundColor: "#ffffff",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
       },
     },
-    mantineTableHeadCellProps: {
-      style: {
-        padding: "6px 12px",
-        fontSize: "12px",
-        backgroundColor: "#ffffff",
-        top: 0,
-        zIndex: 3,
-        borderBottom: "1px solid #e9ecef",
-      },
+    mantineTableBodyCellProps: ({ column }) => {
+      let extraStyles: Record<string, any> = {};
+      switch (column.id) {
+        case "actions":
+          extraStyles = {
+            position: "sticky",
+            right: 0,
+            minWidth: "30px",
+            zIndex: 2,
+            borderLeft: "1px solid #F3F3F3",
+            boxShadow: "1px -2px 4px 0px #00000040",
+          };
+          break;
+        default:
+          extraStyles = {};
+      }
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontstyle: "regular",
+          fontFamily: "Inter",
+          color: "#333740",
+          backgroundColor: "#ffffff",
+          ...extraStyles,
+        },
+      };
+    },
+    mantineTableHeadCellProps: ({ column }) => {
+      let extraStyles: Record<string, any> = {};
+      switch (column.id) {
+        case "actions":
+          extraStyles = {
+            position: "sticky",
+            right: 0,
+            minWidth: "80px",
+            zIndex: 2,
+            backgroundColor: "#FBFBFB",
+            boxShadow: "0px -2px 4px 0px #00000040",
+          };
+          break;
+        default:
+          extraStyles = {};
+      }
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          fontstyle: "bold",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
+          top: 0,
+          zIndex: 3,
+          borderBottom: "1px solid #F3F3F3",
+          ...extraStyles,
+        },
+      };
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
   });
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Group gap="xs">
-            <Text size="md" fw={600} c={"#105476"}>
+      <Card
+        shadow="sm"
+        pt="md"
+        pb="sm"
+        px="lg"
+        radius="md"
+        withBorder
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          overflow: "hidden",
+          flex: 1,
+        }}
+      >
+        <Box>
+          <Group justify="space-between" align="center" pb="sm">
+            <Text
+              size="md"
+              fw={600}
+              c={"#444955"}
+              style={{ fontFamily: "Inter", fontSize: "16px" }}
+            >
               Lead List
             </Text>
-            {filtersApplied && (
-              <Badge size="sm" color="#105476">
-                Filters Active
-              </Badge>
-            )}
-            <Text size="sm" c="dimmed">
-              ({displayData.length} {displayData.length === 1 ? "lead" : "leads"})
-            </Text>
-          </Group>
 
-          <Group gap="sm" wrap="nowrap">
-            {/* <TextInput
-              placeholder="Search"
-              leftSection={<IconSearch size={16} />}
-              style={{ width: 300 }}
-              radius="sm"
-              size="xs"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.currentTarget.value)}
-            /> */}
-
-            <Button
-              variant="outline"
-              leftSection={<IconFilter size={16} />}
-              size="xs"
-              color="#105476"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              Filters
-            </Button>
-
-            <Button
-              variant="filled"
-              leftSection={<IconPlus size={16} />}
-              size="xs"
-              color="#105476"
-              onClick={() =>
-                navigate("/lead-create", {
-                  state: {
-                    returnTo: "/lead",
-                    restoreFilters: {
-                      filters: appliedFilters,
-                      filtersApplied,
-                      fromDashboard: fromDashboardRef.current,
+            <Group gap="xs" wrap="nowrap">
+              <ActionIcon
+                variant={showFilters ? "filled" : "outline"}
+                size={36}
+                color={showFilters ? "#E0F5FF" : "gray"}
+                onClick={() => setShowFilters(!showFilters)}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                    color: showFilters ? "#105476" : "#737780",
+                    "&:active": {
+                      border: "1px solid #105476",
+                      color: "#FFFFFF",
                     },
                   },
-                })
-              }
-            >
-              Create Lead
-            </Button>
+                }}
+              >
+                <IconFilter size={18} />
+              </ActionIcon>
+
+              <Button
+                leftSection={<IconPlus size={16} />}
+                size="sm"
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    color: "#FFFFFF",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontStyle: "semibold",
+                    "&:hover": {
+                      backgroundColor: "#105476",
+                    },
+                  },
+                }}
+                onClick={() =>
+                  navigate("/lead-create", {
+                    state: {
+                      returnTo: "/lead",
+                      restoreFilters: {
+                        filters: appliedFilters,
+                        filtersApplied,
+                        fromDashboard: fromDashboardRef.current,
+                      },
+                    },
+                  })
+                }
+              >
+                Create New
+              </Button>
+            </Group>
           </Group>
-        </Group>
+        </Box>
 
         {/* Filter Section */}
         {showFilters && (
-          <Card
-            shadow="xs"
-            padding="md"
-            radius="md"
-            withBorder
-            mb="md"
-            bg="#f8f9fa"
+          <Box
+            tt="capitalize"
+            mb="xs"
+            style={{
+              borderRadius: "8px",
+              border: "1px solid #E0E0E0",
+              flexShrink: 0,
+              height: "fit-content",
+            }}
           >
-            <Group justify="space-between" align="center">
-              <Group align="center" gap="xs">
-                <IconFilter size={16} color="#105476" />
-                <Text size="sm" fw={500} c="#105476">
-                  Filters
-                </Text>
-              </Group>
+            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#FAFAFA", padding: "8px 8px", borderRadius: "8px" }}>
+              <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>
+                Filter
+              </Text>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={() => setShowFilters(false)}
+                aria-label="Close filters"
+                size="sm"
+              >
+                <IconX size={18} />
+              </ActionIcon>
             </Group>
 
-            <Grid>
-              <Grid.Col span={12}>
-                <Grid>
-                  {/* Status Filter */}
-                  <Grid.Col span={6}>
-                    <Select
-                      label="Status"
-                      placeholder="Select Status"
-                      searchable
-                      clearable
-                      size="xs"
-                      data={statusOptions}
-                      nothingFoundMessage="No status found"
-                      disabled={isLoading}
-                      value={filterForm.values.status || ""}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("status", value || null)
-                      }
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+            <Grid gutter="md" px="md">
+              {/* Status Filter */}
+              <Grid.Col span={6}>
+                <Select
+                  label="Status"
+                  placeholder="Select Service"
+                  searchable
+                  clearable
+                  size="xs"
+                  data={statusOptions}
+                  nothingFoundMessage="No status found"
+                  disabled={isLoading}
+                  value={filterForm.values.status || ""}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("status", value || null)
+                  }
+                  onFocus={(event) => {
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* Assigned To Filter */}
-                  <Grid.Col span={6}>
-                    <Select
-                      label="Assigned To"
-                      placeholder={
-                        usersLoading
-                          ? "Loading users..."
-                          : "Select User"
-                      }
-                      searchable
-                      clearable
-                      size="xs"
-                      data={userOptions}
-                      nothingFoundMessage={
-                        usersLoading
-                          ? "Loading users..."
-                          : "No users found"
-                      }
-                      disabled={usersLoading}
-                      value={filterForm.values.assigned_to || ""}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("assigned_to", value || null)
-                      }
-                      onFocus={(event) => {
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                </Grid>
+              {/* Assigned To Filter */}
+              <Grid.Col span={6}>
+                <Select
+                  key={`assigned-to-${filterForm.values.assigned_to}-${usersLoading}-${userOptions.length}`}
+                  label="Assigned To"
+                  placeholder={
+                    usersLoading
+                      ? "Loading users..."
+                      : "Select Service"
+                  }
+                  searchable
+                  clearable
+                  size="xs"
+                  data={userOptions}
+                  nothingFoundMessage={
+                    usersLoading
+                      ? "Loading users..."
+                      : "No users found"
+                  }
+                  disabled={usersLoading}
+                  value={filterForm.values.assigned_to || ""}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("assigned_to", value || null)
+                  }
+                  onFocus={(event) => {
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
               </Grid.Col>
             </Grid>
 
-            <Group justify="end" mt="sm">
+            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
               <Button
-                size="xs"
-                variant="outline"
-                color="#105476"
-                leftSection={<IconFilterOff size={14} />}
+                size="sm"
+                variant="default"
                 onClick={clearAllFilters}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    color: "#444955",
+                  },
+                }}
               >
-                Clear Filters
+                Clear
               </Button>
               <Button
-                size="xs"
-                variant="filled"
-                color="#105476"
-                leftSection={isLoading ? <Loader size={14} /> : <IconFilter size={14} />}
+                size="sm"
                 onClick={applyFilters}
                 loading={isLoading}
                 disabled={isLoading}
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    "&:hover": {
+                      backgroundColor: "#0d4261",
+                    },
+                  },
+                }}
               >
-                Apply Filters
+                Apply
               </Button>
             </Group>
-          </Card>
+          </Box>
         )}
 
         {isLoading ? (
-          <Center py="xl">
+          <Center py="xl" style={{ flex: 1 }}>
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
               <Text c="dimmed">Loading leads...</Text>
@@ -940,14 +1054,15 @@ function LeadList() {
               w="100%"
               justify="space-between"
               align="center"
-              px="md"
-              py="xs"
-              style={{ borderTop: "1px solid #e9ecef" }}
+              pt="sm"
+              pl="sm"
+              pr="xl"
+              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
               wrap="nowrap"
-              mt="xs"
+              mt="sm"
             >
-              {/* Left side: Rows per page */}
-              <Group gap="sm" align="center" wrap="nowrap" mt={10}>
+              {/* Rows per page and range */}
+              <Group gap="sm" align="center" wrap="nowrap">
                 <Text size="sm" c="dimmed">
                   Rows per page
                 </Text>
@@ -961,7 +1076,7 @@ function LeadList() {
                     table.setPageIndex(0);
                   }}
                   w={110}
-                  styles={{ input: { fontSize: 12, height: 30 } } as any}
+                  styles={{ input: { fontSize: 12, height: 30 } }}
                 />
                 <Text size="sm" c="dimmed">
                   {(() => {
@@ -976,8 +1091,8 @@ function LeadList() {
                 </Text>
               </Group>
 
-              {/* Right side: Page controls */}
-              <Group gap="xs" align="center" wrap="nowrap" mt={10}>
+              {/* Page controls */}
+              <Group gap="xs" align="center" wrap="nowrap">
                 <ActionIcon
                   variant="default"
                   size="sm"
@@ -1088,132 +1203,120 @@ function LeadList() {
         selectedLeadForRemark.remark.messages.length > 0 ? (
           <Box>
             {/* Conversation Messages */}
-            <ScrollArea style={{ maxHeight: 550 }}>
+            <ScrollArea style={{ maxHeight: "60vh", overflow: "auto" }}>
               <Stack gap="xs" p="md" style={{ backgroundColor: "#f8f9fa" }}>
-                {(() => {
-                  // Get unique senders to determine alignment
-                  const messages = selectedLeadForRemark.remark?.messages || [];
-                  const uniqueSenders = Array.from(
-                    new Set(messages.map((m) => m.sender))
-                  );
-                  const firstSender = uniqueSenders[0];
-                  const isFirstSender = (sender: string) =>
-                    sender === firstSender;
+                {selectedLeadForRemark?.remark?.messages.map((msg, index) => {
+                  const isSentByMe =
+                    msg.sender === user?.full_name ||
+                    msg.sender === user?.username ||
+                    msg.sender_id === user?.user_id;
+                  const prevMessage = index > 0 ? selectedLeadForRemark?.remark?.messages[index - 1] : null;
+                  const showSenderHeader =
+                    !prevMessage || prevMessage.sender !== msg.sender;
+                  const showDateSeparator =
+                    !prevMessage ||
+                    dayjs(msg.timestamp).format("DD-MM-YYYY") !==
+                      dayjs(prevMessage.timestamp).format("DD-MM-YYYY");
 
-                  return messages.map((msg, index) => {
-                      const prevMessage =
-                        index > 0 ? messages[index - 1] : null;
-                      const showSenderHeader =
-                        !prevMessage || prevMessage.sender !== msg.sender;
-                      const showDateSeparator =
-                        !prevMessage ||
-                        dayjs(msg.timestamp).format("DD-MM-YYYY") !==
-                          dayjs(prevMessage.timestamp).format("DD-MM-YYYY");
-                      const isLeftAligned = isFirstSender(msg.sender);
+                  return (
+                    <Box key={index} px={4}>
+                      {/* Date Separator */}
+                      {showDateSeparator && (
+                        <Group justify="center" my="md">
+                          <Badge
+                            size="sm"
+                            variant="light"
+                            color="gray"
+                            style={{ textTransform: "none" }}
+                          >
+                            {dayjs(msg.timestamp).format("DD MMMM YYYY")}
+                          </Badge>
+                        </Group>
+                      )}
 
-                      return (
-                        <Box key={index}>
-                          {/* Date Separator */}
-                          {showDateSeparator && (
-                            <Center my="md">
-                              <Badge
-                                size="sm"
-                                variant="light"
-                                color="gray"
-                                style={{ textTransform: "none" }}
-                              >
-                                {dayjs(msg.timestamp).format("DD MMMM YYYY")}
-                              </Badge>
-                            </Center>
+                      {/* Message Bubble */}
+                      <Group
+                        align="flex-start"
+                        gap="xs"
+                        style={{
+                          flexDirection: isSentByMe ? "row-reverse" : "row",
+                        }}
+                      >
+                        <Box
+                          style={{
+                            maxWidth: "75%",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: isSentByMe ? "flex-end" : "flex-start",
+                          }}
+                        >
+                          {/* Sender Name */}
+                          {showSenderHeader && (
+                            <Text
+                              size="xs"
+                              fw={600}
+                              c="#105476"
+                              mb={4}
+                              style={{
+                                paddingLeft: isSentByMe ? "0" : "8px",
+                                paddingRight: isSentByMe ? "8px" : "0",
+                                fontFamily: "Inter",
+                              }}
+                            >
+                              {msg.sender}
+                            </Text>
                           )}
 
                           {/* Message Bubble */}
-                          <Group
-                            align="flex-start"
-                            gap="xs"
+                          <Box
                             style={{
-                              flexDirection: isLeftAligned
-                                ? "row"
-                                : "row-reverse",
+                              backgroundColor: isSentByMe ? "#105476" : "#ffffff",
+                              color: isSentByMe ? "#ffffff" : "#333",
+                              padding: "10px 14px",
+                              borderRadius: isSentByMe
+                                ? "12px 12px 4px 12px"
+                                : "12px 12px 12px 4px",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                              border: isSentByMe
+                                ? "none"
+                                : "1px solid #e9ecef",
                             }}
                           >
-                            <Box
+                            <Text
+                              size="sm"
                               style={{
-                                maxWidth: "75%",
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: isLeftAligned
-                                  ? "flex-start"
-                                  : "flex-end",
+                                whiteSpace: "pre-wrap",
+                                wordBreak: "break-word",
+                                lineHeight: 1.5,
+                                color: isSentByMe ? "#ffffff" : "#333",
+                                fontFamily: "Inter",
                               }}
                             >
-                              {/* Sender Name */}
-                              {showSenderHeader && (
-                                <Text
-                                  size="xs"
-                                  fw={600}
-                                  c="#105476"
-                                  mb={4}
-                                  style={{
-                                    paddingLeft: isLeftAligned ? "8px" : "0",
-                                    paddingRight: isLeftAligned ? "0" : "8px",
-                                  }}
-                                >
-                                  {msg.sender}
-                                </Text>
-                              )}
+                              {msg.message}
+                            </Text>
+                          </Box>
 
-                              {/* Message Bubble */}
-                              <Box
-                                style={{
-                                  backgroundColor: isLeftAligned
-                                    ? "#ffffff"
-                                    : "#105476",
-                                  color: isLeftAligned ? "#333" : "#ffffff",
-                                  padding: "10px 14px",
-                                  borderRadius: isLeftAligned
-                                    ? "12px 12px 12px 4px"
-                                    : "12px 12px 4px 12px",
-                                  boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
-                                  border: isLeftAligned
-                                    ? "1px solid #e9ecef"
-                                    : "none",
-                                }}
-                              >
-                                <Text
-                                  size="sm"
-                                  style={{
-                                    whiteSpace: "pre-wrap",
-                                    wordBreak: "break-word",
-                                    lineHeight: 1.5,
-                                    color: isLeftAligned ? "#333" : "#ffffff",
-                                  }}
-                                >
-                                  {msg.message}
-                                </Text>
-                              </Box>
-
-                              {/* Timestamp */}
-                              <Text
-                                size="xs"
-                                c="dimmed"
-                                mt={4}
-                                style={{
-                                  paddingLeft: isLeftAligned ? "8px" : "0",
-                                  paddingRight: isLeftAligned ? "0" : "8px",
-                                }}
-                              >
-                                {dayjs(msg.timestamp).format("HH:mm")}
-                              </Text>
-                            </Box>
-                          </Group>
+                          {/* Timestamp */}
+                          <Text
+                            size="xs"
+                            c="dimmed"
+                            mt={4}
+                            style={{
+                              paddingLeft: isSentByMe ? "0" : "8px",
+                              paddingRight: isSentByMe ? "8px" : "0",
+                              fontFamily: "Inter",
+                            }}
+                          >
+                            {dayjs(msg.timestamp).format("HH:mm")}
+                          </Text>
                         </Box>
-                      );
-                    }
+                      </Group>
+                    </Box>
                   );
-                  })()}
-                </Stack>
+                })}
+              </Stack>
             </ScrollArea>
+
 
             {/* Footer */}
             <Box

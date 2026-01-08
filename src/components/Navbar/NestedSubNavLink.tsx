@@ -1,7 +1,7 @@
 import { NavLink } from "@mantine/core";
 import { useLayoutStore } from "../../store/useLayoutStore";
 import { getTariffSubLinkStyles } from "./navbarStyles";
-import { NavLink as RouterLink, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 type Props = {
   parent: string;
@@ -10,6 +10,10 @@ type Props = {
   path: string;
   collapsibles?: {
     setIsCustomerServiceOpen?: (v: boolean) => void;
+    setIsTariffOpen?: (v: boolean) => void;
+    setIsSalesOpen?: (v: boolean) => void;
+    setIsAirOpen?: (v: boolean) => void;
+    setIsSeaExportOpen?: (v: boolean) => void;
   };
   icon?: React.ComponentType<any>;
 };
@@ -22,18 +26,27 @@ export const NestedSubNavLink = ({ parent, subParent, label, path, collapsibles,
     setActiveNav,
     setActiveSubNav,
     setActiveTariffSubNav,
+    setTitle,
     isSidebarCollapsed,
     setOpenCollapsible,
   } = useLayoutStore();
-const navigate = useNavigate();
-const isActive = activeSubNav === "Tariff" && activeTariffSubNav === label
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  
+  // Check active state based on both store values and pathname for reliability
+  const isActive = (activeSubNav === "Tariff" && activeTariffSubNav === label) || pathname === path;
+  
   const style = getTariffSubLinkStyles(
     isActive,
     label
   );
-  const { pathname } = useLocation();
 
-  const handleClick = () => {
+  const handleClick = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     if (
       activeNav !== parent ||
       activeSubNav !== subParent ||
@@ -43,38 +56,63 @@ const isActive = activeSubNav === "Tariff" && activeTariffSubNav === label
       setActiveNav(parent);
       setActiveSubNav(subParent);
       setActiveTariffSubNav(label);
-      navigate(path)
+      setTitle(parent);
+      navigate(path);
+      
       if (isSidebarCollapsed) {
         setOpenCollapsible(parent, false);
         setOpenCollapsible(subParent, false);
       }
     }
-    collapsibles?.setIsCustomerServiceOpen?.(false)
+    
+    // Close other collapsibles like SubNavLink does
+    if (parent === "Sales") {
+      collapsibles?.setIsCustomerServiceOpen?.(false);
+      collapsibles?.setIsAirOpen?.(false);
+      collapsibles?.setIsSeaExportOpen?.(false);
+      setOpenCollapsible("Air", false);
+      setOpenCollapsible("Ocean", false);
+      setOpenCollapsible("Customer Service", false);
+    }
   };
 
   return (
     <NavLink
       label={label}
-      styles={style}
+      styles={{
+        ...style,
+        root: {
+          ...style.root,
+          cursor: "pointer",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          MozUserSelect: "none",
+          msUserSelect: "none",
+        },
+      }}
       leftSection={
-        <div
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: 4,
-            backgroundColor: "transparent",
-            color: isActive ? "#105476" : "#444955",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Icon size={16} />
-        </div>
+        Icon ? (
+          <div
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 4,
+              backgroundColor: "transparent",
+              color: isActive ? "#105476" : "#444955",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              pointerEvents: "none",
+            }}
+          >
+            <Icon size={16} />
+          </div>
+        ) : null
       }
-      onClick={(e) => {
+      onClick={handleClick}
+      onMouseDown={(e) => {
+        // Prevent text selection on some devices
         e.preventDefault();
-        handleClick();
       }}
     />
   );

@@ -9,15 +9,16 @@ export const LayoutSync = () => {
 
   useEffect(() => {
     const path = location.pathname;
-
     if (path.startsWith("/tariff")) {
       setActiveNav("Sales");
       setActiveSubNav("Tariff");
-
-      if (path.includes("freight")) setActiveTariffSubNav("Freight");
-      else if (path.includes("origin")) setActiveTariffSubNav("Origin");
-      else if (path.includes("destination"))
+      if (path.includes("freight")){
+        setActiveTariffSubNav("Freight");
+      } else if (path.includes("origin")) {
+        setActiveTariffSubNav("Origin");
+      } else if (path.includes("destination")) {
         setActiveTariffSubNav("Destination");
+      }
     } else if (path.startsWith("/lead")) {
       setActiveNav("Sales");
       setActiveSubNav("Lead");

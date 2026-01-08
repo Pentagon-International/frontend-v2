@@ -262,13 +262,27 @@ const Navbar = ({
                       label="Freight"
                       path="/tariff/freight"
                       icon={IconPackage}
+                      collapsibles={{
+                        setIsCustomerServiceOpen,
+                        setIsTariffOpen,
+                        setIsSalesOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
                     />
                     <NestedSubNavLink
                       parent="Sales"
                       subParent="Tariff"
                       label="Origin"
                       path="/tariff/origin"
-                       icon={IconMapPin}
+                      icon={IconMapPin}
+                      collapsibles={{
+                        setIsCustomerServiceOpen,
+                        setIsTariffOpen,
+                        setIsSalesOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
                     />
                     <NestedSubNavLink
                       parent="Sales"
@@ -276,6 +290,13 @@ const Navbar = ({
                       label="Destination"
                       path="/tariff/destination"
                       icon={IconMapPinFilled}
+                      collapsibles={{
+                        setIsCustomerServiceOpen,
+                        setIsTariffOpen,
+                        setIsSalesOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
                     />
                   </CollapsibleNav>
                 </CollapsibleNav>
