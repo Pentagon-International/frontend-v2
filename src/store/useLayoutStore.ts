@@ -42,7 +42,7 @@ export const useLayoutStore = create<LayoutState>((set) => ({
   setActiveCustomerServiceSubNav: (customerServiceSubNav) =>
     set({ activeCustomerServiceSubNav: customerServiceSubNav }),
 
-  isSidebarCollapsed: false,
+  isSidebarCollapsed: true,
   setIsSidebarCollapsed: (sideBarCollapsed: Boolean) =>
     set({ isSidebarCollapsed: sideBarCollapsed }),
 

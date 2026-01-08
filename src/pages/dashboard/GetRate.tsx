@@ -12,6 +12,7 @@ import {
   Stack,
   Box,
   Checkbox,
+  Flex,
 } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { SearchableSelect, ToastNotification } from "../../components";
@@ -501,323 +502,601 @@ const GetRate = () => {
   };
 
   return (
-    <Card shadow="sm" padding="xs" radius="md">
-      <Group justify="space-between" mb="md">
-        <Text size="md" fw={600} c="#105476">
-          Get Rate
-        </Text>
-      </Group>
-
-      <Stack gap="sm">
-        {form.values.rate_request_list.map((row, index) => (
+    <Box
+      component="form"
+      style={{ backgroundColor: "#F8F8F8", position: "relative", borderRadius: "8px", overflow: "hidden" }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        form.onSubmit(handleSubmit)();
+      }}
+    >
+      <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+        <Flex
+          gap="md"
+          align="flex-start"
+          style={{ height: "calc(100vh - 112px)", width: "100%" }}
+        >
+          {/* Vertical Stepper Sidebar */}
           <Box
-            key={`rate-row-${index}`}
-            p="md"
-            style={{ border: "1px solid #e0e0e0", borderRadius: "4px" }}
+            style={{
+              minWidth: 240,
+              width: "100%",
+              maxWidth: 250,
+              height: "100%",
+              alignSelf: "stretch",
+              borderRadius: "8px",
+              backgroundColor: "#FFFFFF",
+              position: "sticky",
+              top: 0,
+            }}
           >
-            <Stack gap="sm">
-              {/* First Row: Agent/Vendor and Email */}
-              <Grid>
-                <Grid.Col span={5}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Agent / Vendor"
-                    placeholder="Type agent/vendor"
-                    apiEndpoint={URL.customer}
-                    searchFields={["customer_code", "customer_name"]}
-                    returnOriginalData
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
-                    value={row.agent_vendor}
-                    onChange={(value, _selected, original) => {
-                      updateRow(index, "agent_vendor", value || null);
-                      const selectedData = original as unknown as {
-                        addresses_data?: Array<{
-                          email?: string | null | undefined;
-                        }>;
-                      } | null;
-                      const emailFromSelected = (() => {
-                        const addresses = selectedData?.addresses_data || [];
-                        const found = addresses.find(
-                          (a) => (a?.email || "").trim() !== ""
-                        );
-                        return (found?.email || "").trim();
-                      })();
-                      console.log("emailFromSelected---", emailFromSelected);
-
-                      if (emailFromSelected) {
-                        updateRow(index, "email", emailFromSelected);
-                      }
-                    }}
-                    minSearchLength={3}
-                    className="filter-searchable-select"
-                    error={
-                      (form.errors[
-                        `rate_request_list.${index}.agent_vendor`
-                      ] as string) || undefined
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={5}>
-                  <TextInput
-                    label="Email"
-                    placeholder="name@example.com, name2@example.com or name@example.com; name2@example.com"
-                    size="xs"
-                    value={row.email}
-                    onChange={(e) =>
-                      updateRow(index, "email", e.currentTarget.value)
-                    }
-                    error={
-                      (form.errors[
-                        `rate_request_list.${index}.email`
-                      ] as string) || undefined
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                  <Box mt="1.625rem">
-                    <Group gap="xs">
-                      <ActionIcon
-                        variant="light"
-                        color="#105476"
-                        onClick={() => addRowBelow(index)}
-                        aria-label="Add row"
-                      >
-                        <IconPlus size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="light"
-                        color="red"
-                        onClick={() => removeRow(index)}
-                        aria-label="Remove row"
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Group>
-                  </Box>
-                </Grid.Col>
-              </Grid>
-
-              {/* Second Row: Special Instruction and CC Email */}
-              <Grid>
-                <Grid.Col span={5}>
-                  <Textarea
-                    label="Special Instruction"
-                    placeholder="Enter special instructions"
-                    size="xs"
-                    minRows={3}
-                    maxRows={6}
-                    value={row.special_instructions}
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
-                      updateRowText(
-                        index,
-                        "special_instructions",
-                        formattedValue
-                      );
-                    }}
-                    error={
-                      (form.errors[
-                        `rate_request_list.${index}.special_instructions`
-                      ] as string) || undefined
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={5}>
-                  <TextInput
-                    label="CC Email"
-                    placeholder="cc@example.com, cc2@example.com"
-                    size="xs"
-                    value={row.cc_email}
-                    onChange={(e) =>
-                      updateRowText(index, "cc_email", e.currentTarget.value)
-                    }
-                    error={
-                      (form.errors[
-                        `rate_request_list.${index}.cc_email`
-                      ] as string) || undefined
-                    }
-                  />
-                </Grid.Col>
-              </Grid>
-            </Stack>
-          </Box>
-        ))}
-
-        {/* Subject Field */}
-        <TextInput
-          label="Subject"
-          placeholder="Enter subject"
-          size="xs"
-          my={"sm"}
-          value={form.values.subject}
-          onChange={(e) => form.setFieldValue("subject", e.currentTarget.value)}
-          error={form.errors.subject as string | undefined}
-        />
-
-        {/* Document Checkboxes */}
-        {enquiryData?.documents_list &&
-          enquiryData.documents_list.length > 0 && (
             <Box
-              p="md"
-              style={{ border: "1px solid #e0e0e0", borderRadius: "4px" }}
+              style={{
+                padding: "20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              <Text size="sm" fw={500} mb="sm">
-                Supporting Documents
+              <Text
+                size="md"
+                fw={600}
+                c="#105476"
+                style={{
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                  fontSize: "16px",
+                  color: "#105476",
+                  textAlign: "center",
+                }}
+              >
+                Get Rate
               </Text>
-              <Stack gap="xs">
-                {enquiryData.documents_list.map((doc) => (
-                  <Checkbox
-                    my={3}
-                    key={doc.id}
-                    label={doc.document_name || `Document ${doc.id}`}
-                    checked={selectedDocuments.includes(doc.id || 0)}
-                    onChange={(e) => {
-                      const docId = doc.id || 0;
-                      let updatedDocuments: number[];
-                      if (e.currentTarget.checked) {
-                        updatedDocuments = [...selectedDocuments, docId];
-                      } else {
-                        updatedDocuments = selectedDocuments.filter(
-                          (id) => id !== docId
-                        );
-                      }
-                      setSelectedDocuments(updatedDocuments);
-                      form.setFieldValue("document_id", updatedDocuments);
-                    }}
-                  />
-                ))}
-              </Stack>
             </Box>
-          )}
-      </Stack>
+          </Box>
 
-      <Group justify="space-between" mt="lg">
-        <Button
-          variant="outline"
-          color="#105476"
-          size="xs"
-          onClick={() => {
-            // Restore filter state if preserved
-            const preserveFilters = (location.state as any)?.preserveFilters;
+          {/* Main Content Area */}
+          <Box
+            style={{
+              flex: 1,
+              width: "100%",
+              borderRadius: "8px",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              overflow: "hidden",
+              gap: "8px",
+            }}
+          >
+            <Box
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                borderRadius: "8px",
+                backgroundColor: "#FFFFFF",
+              }}
+            >
+              <Grid style={{ padding: "24px" }}>
+                <Grid.Col span={12}>
+                  <Stack gap="sm">
+                    {/* Subject Field */}
+                    <TextInput
+                      withAsterisk
+                      label="Subject"
+                      placeholder="Enter subject"
+                      size="xs"
+                      mb="sm"
+                      value={form.values.subject}
+                      onChange={(e) => form.setFieldValue("subject", e.currentTarget.value)}
+                      error={form.errors.subject as string | undefined}
+                      styles={{
+                        input: { fontSize: "13px", fontFamily: "Inter", height: "36px" },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                    />
 
-            if (preserveFilters) {
-              navigate("/enquiry", {
-                state: {
-                  restoreFilters: preserveFilters,
-                  refreshData: true,
-                },
-              });
-            } else {
-              navigate("/enquiry", {
-                state: { refreshData: true },
-              });
-            }
-          }}
-        >
-          Back
-        </Button>
-        <Button
-          color="#105476"
-          size="xs"
-          onClick={() => form.onSubmit(handleSubmit)()}
-        >
-          Submit
-        </Button>
-      </Group>
-      {/* Recent Rate Requests Section */}
-      {recentRateRequests.length > 0 && (
-        <Box mt="lg">
-          <Group style={{alignItems:"center",justifyContent:"flex-start", gap:5}} mb="md">
-            <Text size="md" fw={600} c="#105476">
-              Recent Rate Requests 
-            </Text>
-            {recentRateRequests &&
-            <Text fw={500} c="#105476" size="sm">{`(${recentRateRequests[0]?.enquiry})`}</Text>
-            }
-          </Group>
-          <Grid gutter="md">
-              {recentRateRequests.map((rateRequest, index) => (
-                <Grid.Col key={`rate-request-${index}`} span={12}>
-                  <Card
-                    shadow="md"
-                    padding="md"
-                    radius="md"
-                    withBorder
-                    sx={{
-                      border: "1px solid #e0e0e0",
-                      backgroundColor: "#ffffff",
-                      height: "100%",
-                      transition: "all 0.2s ease",
-                      cursor: "pointer",
-                      "&:hover": {
-                        borderColor: "#105476",
-                        boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
+                    {form.values.rate_request_list.map((row, index) => (
+                      <Box
+                        key={`rate-row-${index}`}
+                        p="md"
+                        style={{ border: "1px solid #e0e0e0", borderRadius: "4px" }}
+                      >
+                        <Stack gap="sm">
+                          {/* First Row: Agent/Vendor and Email */}
+                          <Grid>
+                            <Grid.Col span={5}>
+                              <SearchableSelect
+                                withAsterisk={true}
+                                size="xs"
+                                label="Agent / Vendor"
+                                placeholder="Type agent/vendor"
+                                apiEndpoint={URL.customer}
+                                searchFields={["customer_code", "customer_name"]}
+                                returnOriginalData
+                                displayFormat={(item: Record<string, unknown>) => ({
+                                  value: String(item.customer_code),
+                                  label: String(item.customer_name),
+                                })}
+                                value={row.agent_vendor}
+                                onChange={(value, _selected, original) => {
+                                  updateRow(index, "agent_vendor", value || null);
+                                  const selectedData = original as unknown as {
+                                    addresses_data?: Array<{
+                                      email?: string | null | undefined;
+                                    }>;
+                                  } | null;
+                                  const emailFromSelected = (() => {
+                                    const addresses = selectedData?.addresses_data || [];
+                                    const found = addresses.find(
+                                      (a) => (a?.email || "").trim() !== ""
+                                    );
+                                    return (found?.email || "").trim();
+                                  })();
+                                  console.log("emailFromSelected---", emailFromSelected);
+
+                                  if (emailFromSelected) {
+                                    updateRow(index, "email", emailFromSelected);
+                                  }
+                                }}
+                                minSearchLength={3}
+                                className="filter-searchable-select"
+                                error={
+                                  (form.errors[
+                                    `rate_request_list.${index}.agent_vendor`
+                                  ] as string) || undefined
+                                }
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={5}>
+                              <TextInput
+                                withAsterisk
+                                label="Email"
+                                placeholder="name@example.com, name2@example.com or name@example.com; name2@example.com"
+                                size="xs"
+                                value={row.email}
+                                onChange={(e) =>
+                                  updateRow(index, "email", e.currentTarget.value)
+                                }
+                                error={
+                                  (form.errors[
+                                    `rate_request_list.${index}.email`
+                                  ] as string) || undefined
+                                }
+                                styles={{
+                                  input: { fontSize: "13px", fontFamily: "Inter", height: "36px" },
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }}
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={2}>
+                              <Box mt="1.625rem">
+                                <Group gap="xs">
+                                  <ActionIcon
+                                    variant="light"
+                                    color="#105476"
+                                    onClick={() => addRowBelow(index)}
+                                    aria-label="Add row"
+                                  >
+                                    <IconPlus size={16} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="light"
+                                    color="red"
+                                    onClick={() => removeRow(index)}
+                                    aria-label="Remove row"
+                                  >
+                                    <IconTrash size={16} />
+                                  </ActionIcon>
+                                </Group>
+                              </Box>
+                            </Grid.Col>
+                          </Grid>
+
+                          {/* Second Row: Special Instruction and CC Email */}
+                          <Grid>
+                            <Grid.Col span={5}>
+                              <Textarea
+                                label="Special Instruction"
+                                placeholder="Enter special instructions"
+                                size="xs"
+                                minRows={3}
+                                maxRows={6}
+                                value={row.special_instructions}
+                                onChange={(e) => {
+                                  const formattedValue = toTitleCase(e.currentTarget.value);
+                                  updateRowText(
+                                    index,
+                                    "special_instructions",
+                                    formattedValue
+                                  );
+                                }}
+                                error={
+                                  (form.errors[
+                                    `rate_request_list.${index}.special_instructions`
+                                  ] as string) || undefined
+                                }
+                                styles={{
+                                  input: { fontSize: "13px", fontFamily: "Inter" },
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }}
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={5}>
+                              <TextInput
+                                label="CC Email"
+                                placeholder="cc@example.com, cc2@example.com"
+                                size="xs"
+                                value={row.cc_email}
+                                onChange={(e) =>
+                                  updateRowText(index, "cc_email", e.currentTarget.value)
+                                }
+                                error={
+                                  (form.errors[
+                                    `rate_request_list.${index}.cc_email`
+                                  ] as string) || undefined
+                                }
+                                styles={{
+                                  input: { fontSize: "13px", fontFamily: "Inter", height: "36px" },
+                                  label: {
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                    marginBottom: "4px",
+                                    fontFamily: "Inter",
+                                    fontStyle: "medium",
+                                  },
+                                }}
+                              />
+                            </Grid.Col>
+                          </Grid>
+                        </Stack>
+                      </Box>
+                    ))}
+
+                    {/* Document Checkboxes */}
+                    {enquiryData?.documents_list &&
+                      enquiryData.documents_list.length > 0 && (
+                        <Box
+                          p="md"
+                          style={{ border: "1px solid #e0e0e0", borderRadius: "4px" }}
+                        >
+                          <Text 
+                            size="sm" 
+                            fw={500} 
+                            mb="sm"
+                            style={{ 
+                              fontFamily: "Inter",
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                            }}
+                          >
+                            Supporting Documents
+                          </Text>
+                          <Stack gap="xs">
+                            {enquiryData.documents_list.map((doc) => (
+                              <Checkbox
+                                my={3}
+                                key={doc.id}
+                                label={doc.document_name || `Document ${doc.id}`}
+                                checked={selectedDocuments.includes(doc.id || 0)}
+                                onChange={(e) => {
+                                  const docId = doc.id || 0;
+                                  let updatedDocuments: number[];
+                                  if (e.currentTarget.checked) {
+                                    updatedDocuments = [...selectedDocuments, docId];
+                                  } else {
+                                    updatedDocuments = selectedDocuments.filter(
+                                      (id) => id !== docId
+                                    );
+                                  }
+                                  setSelectedDocuments(updatedDocuments);
+                                  form.setFieldValue("document_id", updatedDocuments);
+                                }}
+                                styles={{
+                                  label: {
+                                    fontFamily: "Inter",
+                                    fontSize: "13px",
+                                  },
+                                }}
+                              />
+                            ))}
+                          </Stack>
+                        </Box>
+                      )
+                    }
+                  </Stack>
+                </Grid.Col>
+
+                {/* Recent Rate Requests Section */}
+                {recentRateRequests.length > 0 && (
+                  <Grid.Col span={12}>
+                    <Box mt="lg">
+                      <Group style={{alignItems:"center",justifyContent:"flex-start", gap:5}} mb="md">
+                        <Text 
+                          size="md" 
+                          fw={600} 
+                          c="#105476"
+                          style={{ 
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Recent Rate Requests 
+                        </Text>
+                        {recentRateRequests &&
+                        <Text 
+                          fw={500} 
+                          c="#105476" 
+                          size="sm"
+                          style={{ 
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                          }}
+                        >{`(${recentRateRequests[0]?.enquiry})`}</Text>
+                        }
+                      </Group>
+                      <Grid gutter="md">
+                        {recentRateRequests.map((rateRequest, index) => (
+                          <Grid.Col key={`rate-request-${index}`} span={12}>
+                            <Card
+                              shadow="md"
+                              padding="md"
+                              radius="md"
+                              withBorder
+                              style={{
+                                border: "1px solid #e0e0e0",
+                                backgroundColor: "#ffffff",
+                                height: "100%",
+                                transition: "all 0.2s ease",
+                                cursor: "pointer",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = "#105476";
+                                e.currentTarget.style.boxShadow = "0 8px 20px rgba(0,0,0,0.12)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = "#e0e0e0";
+                                e.currentTarget.style.boxShadow = "none";
+                              }}
+                            >
+                              <Stack gap="sm">
+                                <Grid gutter="md">
+                                  <Grid.Col span={8}>
+                                    <Text 
+                                      size="sm" 
+                                      fw={600} 
+                                      c="#105476" 
+                                      mb={4}
+                                      style={{ 
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 600,
+                                      }}
+                                    >Subject</Text>
+                                    <Text 
+                                      size="sm" 
+                                      fw={500} 
+                                      c="#333" 
+                                      mb={4} 
+                                      truncate
+                                      style={{ 
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                      }}
+                                    >{rateRequest.subject || "-"}</Text>
+                                  </Grid.Col>
+                                  <Grid.Col span={4}>
+                                  <Text 
+                                    size="sm" 
+                                    fw={600} 
+                                    c="#105476" 
+                                    mb={4}
+                                    style={{ 
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                      Agent / Vendor Name
+                                    </Text>
+                                    <Text 
+                                      size="sm" 
+                                      fw={500} 
+                                      c="#333" 
+                                      mb={4}
+                                      style={{ 
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                      }}
+                                    >{rateRequest.agent_vendor_name || "-"}</Text>
+                                  </Grid.Col>
+                                </Grid>
+                                <Box style={{display:"flex", justifyContent:"justify-between", alignItems:"center", gap:20}}>
+                                  <Box style={{flex:1}}>
+                                    <Text 
+                                      size="sm" 
+                                      fw={600} 
+                                      c="#105476" 
+                                      mb={4}
+                                      style={{ 
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      Email ID
+                                    </Text>
+                                    <Text 
+                                      size="sm" 
+                                      fw={500} 
+                                      c="#333"
+                                      style={{ 
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                      }}
+                                    >
+                                      {rateRequest.email_id || "-"}
+                                    </Text>
+                                  </Box>
+                                  <Box style={{flex:1}}>
+                                    <Text 
+                                      size="sm" 
+                                      fw={600} 
+                                      c="#105476" 
+                                      mb={4}
+                                      style={{ 
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      CC Email
+                                    </Text>
+                                    <Text 
+                                      size="sm" 
+                                      fw={500} 
+                                      c="#333"
+                                      style={{ 
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                      }}
+                                    >
+                                      {rateRequest.cc_email || "-"}
+                                    </Text>
+                                  </Box>
+                                  <Box style={{flex:1}}>
+                                    <Text 
+                                      size="sm" 
+                                      fw={600} 
+                                      c="#105476" 
+                                      mb={4}
+                                      style={{ 
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      Special Instructions
+                                    </Text>
+                                    <Text
+                                      size="sm"
+                                      fw={500}
+                                      c="#333"
+                                      style={{
+                                        display: "-webkit-box",
+                                        WebkitLineClamp: 3,
+                                        WebkitBoxOrient: "vertical",
+                                        overflow: "hidden",
+                                        lineHeight: "1.4",
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                      }}
+                                      truncate
+                                    >
+                                      {rateRequest.special_instructions || "-"}
+                                    </Text>
+                                  </Box>
+                                </Box>
+                              </Stack>
+                            </Card>
+                          </Grid.Col>
+                        ))}
+                      </Grid>
+                    </Box>
+                  </Grid.Col>
+                )}
+              </Grid>
+            </Box>
+
+            {/* Footer Buttons */}
+            <Box
+              style={{
+                padding: "20px 32px",
+                backgroundColor: "#ffffff",
+                borderRadius: "8px",
+              }}
+            >
+              <Group justify="space-between">
+                <Group gap="sm">
+                  <Button
+                    variant="outline"
+                    color="gray"
+                    size="sm"
+                    styles={{
+                      root: {
+                        borderColor: "#d0d0d0",
+                        color: "#666",
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
                       },
                     }}
-                  >
-                    <Stack gap="sm">
-                      <Grid gutter="md">
-                        <Grid.Col span={8}>
-                          <Text size="sm" fw={600} c="#105476" mb={4}>Subject</Text>
-                          <Text size="sm" fw={500} c="#333" mb={4} truncate>{rateRequest.subject || "-"}</Text>
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                        <Text size="sm" fw={600} c="#105476" mb={4}>
-                           Agent / Vendor Name
-                          </Text>
-                          <Text size="sm" fw={500} c="#333" mb={4}>{rateRequest.agent_vendor_name || "-"}</Text>
-                        </Grid.Col>
-                      </Grid>
-                      <Box style={{display:"flex", justifyContent:"justify-between", alignItems:"center", gap:20}}>
-                        <Box style={{flex:1}}>
-                          <Text size="sm" fw={600} c="#105476" mb={4}>
-                            Email ID
-                          </Text>
-                          <Text size="sm" fw={500} c="#333">
-                            {rateRequest.email_id || "-"}
-                          </Text>
-                        </Box>
-                        <Box style={{flex:1}}>
-                          <Text size="sm" fw={600} c="#105476" mb={4}>
-                            CC Email
-                          </Text>
-                          <Text size="sm" fw={500} c="#333">
-                            {rateRequest.cc_email || "-"}
-                          </Text>
-                        </Box>
-                        <Box style={{flex:1}}>
-                          <Text size="sm" fw={600} c="#105476" mb={4}>
-                            Special Instructions
-                          </Text>
-                          <Text
-                            size="sm"
-                            fw={500}
-                            c="#333"
-                            style={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 3,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                              lineHeight: "1.4",
-                            }}
-                            truncate
-                          >
-                            {rateRequest.special_instructions || "-"}
-                          </Text>
-                        </Box>
-                      </Box>
-                    </Stack>
-                  </Card>
-                </Grid.Col>
-              ))}
-            </Grid>
-        </Box>
-      )}
+                    onClick={() => {
+                      // Restore filter state if preserved
+                      const preserveFilters = (location.state as any)?.preserveFilters;
 
-    </Card>
+                      if (preserveFilters) {
+                        navigate("/enquiry", {
+                          state: {
+                            restoreFilters: preserveFilters,
+                            refreshData: true,
+                          },
+                        });
+                      } else {
+                        navigate("/enquiry", {
+                          state: { refreshData: true },
+                        });
+                      }
+                    }}
+                  >
+                    Back
+                  </Button>
+                </Group>
+
+                <Group gap="sm">
+                  <Button
+                    type="submit"
+                    size="sm"
+                    style={{
+                      backgroundColor: "#105476",
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    }}
+                  >
+                    Submit
+                  </Button>
+                </Group>
+              </Group>
+            </Box>
+          </Box>
+        </Flex>
+      </Box>
+    </Box>
   );
 };
 

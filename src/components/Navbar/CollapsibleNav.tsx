@@ -262,7 +262,7 @@ export const CollapsibleNav = ({
               position: "fixed",
               top: flyoutPos.top,
               left: flyoutPos.left,
-              zIndex: 9999,
+              zIndex: 100,
               background: "#fff",
               border: "1px solid #BADDEE",
               borderRadius: 6,

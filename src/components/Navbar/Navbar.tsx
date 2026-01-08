@@ -94,7 +94,7 @@ const Navbar = ({
         >
           <Center>
             <Flex
-              justify="space-between"
+              justify="center"
               align="center"
               style={{
                 position: "relative",

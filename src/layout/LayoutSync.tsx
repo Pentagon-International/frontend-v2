@@ -121,6 +121,9 @@ export const LayoutSync = () => {
     } else if (path === "/") {
       setActiveNav("Dashboard");
       setActiveSubNav("");
+    } else if (path === "/get-rate") {
+      setActiveNav("Sales");
+      setActiveSubNav("Enquiry");
     } else {
       setActiveNav("");
       setActiveSubNav("");

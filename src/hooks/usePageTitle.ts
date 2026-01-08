@@ -10,6 +10,7 @@ const pathTitleMap: Record<string, string> = {
   "/call-entry-create": "Sales",
   "/call-entry-calendar": "Sales",
   "/enquiry": "Sales",
+  "/get-rate": "Sales",
   "/enquiry-create": "Sales",
   "/quotation": "Sales",
   "/potential-customers": "Sales",

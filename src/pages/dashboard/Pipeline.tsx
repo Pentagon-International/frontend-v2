@@ -729,6 +729,7 @@ function Pipeline() {
         {/* Filter Section */}
         {showFilters && (
           <Box
+            tt="capitalize"
             mb="xs"
             style={{
               borderRadius: "8px",
@@ -880,7 +881,7 @@ function Pipeline() {
                 <SearchableSelect
                   size="xs"
                   label="Destination"
-                  placeholder="Type destination cod"
+                  placeholder="Type Destination Code"
                   apiEndpoint={URL.portMaster}
                   searchFields={["port_name", "port_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
