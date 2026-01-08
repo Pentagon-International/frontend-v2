@@ -668,9 +668,9 @@ function PipelineCreate() {
           {/* Vertical Stepper Sidebar */}
           <Box
             style={{
-              minWidth: 240,
+              minWidth: 180,
               width: "100%",
-              maxWidth: 250,
+              maxWidth: 220,
               height: "100%",
               alignSelf: "stretch",
               borderRadius: "8px",

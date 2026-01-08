@@ -1998,21 +1998,29 @@ function CallEntryNew() {
   return (
     <Box
       component="form"
-      style={{ backgroundColor: "#F8F8F8" }}
+      style={{
+        backgroundColor: "#F8F8F8",
+        position: "relative",
+        borderRadius: "8px",
+        overflow: "hidden",
+      }}
       onSubmit={callEntryForm.onSubmit(handleCreateForm)}
     >
-      <Box p="xs" maw={1200} mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+      <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
         <Flex
-          gap="lg"
+          gap="md"
           align="flex-start"
-          style={{ minHeight: "calc(100vh - 100px)" }}
+          style={{ height: "calc(100vh - 112px)", width: "100%" }}
         >
           {/* Vertical Stepper Sidebar */}
           <Box
             style={{
-              minWidth: 240,
-              height: "calc(100vh - 100px)",
+              minWidth: 180,
+              width: "100%",
+              maxWidth: 220,
+              height: "100%",
               alignSelf: "stretch",
+              borderRadius: "8px",
               backgroundColor: "#FFFFFF",
               position: "sticky",
               top: 0,

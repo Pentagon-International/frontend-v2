@@ -3877,6 +3877,9 @@ function QuotationCreate({
     <Box
       style={{
         backgroundColor: "#F8F8F8",
+        position: "relative",
+        borderRadius: "8px",
+        overflow: "hidden",
         flex: 1,
         display: "flex",
         flexDirection: "column",
@@ -3884,8 +3887,7 @@ function QuotationCreate({
       }}
     >
       <Box
-        p="xs"
-        maw={1200}
+        p="sm"
         mx="auto"
         style={{
           backgroundColor: "#F8F8F8",
@@ -3910,9 +3912,9 @@ function QuotationCreate({
           return shouldShowLayout;
         })() ? (
           <Flex
-            gap="lg"
+            gap="md"
             align="flex-start"
-            style={{ minHeight: "calc(100vh - 100px)" }}
+            style={{ height: "calc(100vh - 112px)", width: "100%" }}
           >
             {/* Left Pane - Stepper Titles - Show for edit mode without goToStep or when goToStep exists (embedded in EnquiryCreate) */}
             {(() => {
@@ -3928,32 +3930,41 @@ function QuotationCreate({
             })() && (
               <Box
                 style={{
-                  minWidth: 240,
-                  height: "calc(100vh - 100px)",
+                  minWidth: 180,
+                  width: "100%",
+                  maxWidth: 220,
+                  height: "100%",
                   alignSelf: "stretch",
+                  borderRadius: "8px",
                   backgroundColor: "#FFFFFF",
                   position: "sticky",
                   top: 0,
                 }}
               >
+                <Box
+                  style={{
+                    padding: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    size="md"
+                    fw={600}
+                    c="#105476"
+                    style={{
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                      fontSize: "16px",
+                      color: "#105476",
+                      textAlign: "center",
+                    }}
+                  >
+                    {isEditMode ? "Edit Quotation" : "Create Quotation"}
+                  </Text>
+                </Box>
                 <Stack gap="sm" style={{ height: "100%", padding: "10px" }}>
-                  <Box>
-                    <Text
-                      size="md"
-                      fw={600}
-                      c="#105476"
-                      mb="xs"
-                      style={{
-                        fontFamily: "Inter",
-                        fontStyle: "medium",
-                        fontSize: "16px",
-                        color: "#105476",
-                      }}
-                    >
-                      {isEditMode ? "Edit Quotation" : "Create Quotation"}
-                    </Text>
-                  </Box>
-
                   {/* Step 1: Customer Details - Completed */}
                   <Box
                     onClick={(e) => {

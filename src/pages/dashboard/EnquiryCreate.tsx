@@ -2967,30 +2967,73 @@ function EnquiryCreate() {
   return (
     <>
       <Box
-        // py={"2%"}
-        // w={"80%"}
-        style={{ backgroundColor: "#F8F8F8" }}
+        style={{
+          backgroundColor: "#F8F8F8",
+          position: "relative",
+          borderRadius: "8px",
+          overflow: "hidden",
+        }}
       >
-        <Box p="xs" maw={1200} mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+        <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
           {/* Header */}
 
           <Flex
-            gap="lg"
+            gap="md"
             align="flex-start"
-            style={{ minHeight: "calc(100vh - 100px)" }}
+            style={{ height: "calc(100vh - 112px)", width: "100%" }}
           >
             {/* Vertical Stepper Sidebar - Hide when QuotationCreate has its own stepper */}
             {!(showQuotation && active === 2) && (
               <Box
                 style={{
-                  minWidth: 240,
-                  height: "calc(100vh - 100px)",
+                  minWidth: 180,
+                  width: "100%",
+                  maxWidth: 220,
+                  height: "100%",
                   alignSelf: "stretch",
+                  borderRadius: "8px",
                   backgroundColor: "#FFFFFF",
                   position: "sticky",
                   top: 0,
                 }}
               >
+                <Box
+                  style={{
+                    padding: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    size="md"
+                    fw={600}
+                    c="#105476"
+                    style={{
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                      fontSize: "16px",
+                      color: "#105476",
+                      textAlign: "center",
+                    }}
+                  >
+                    {(() => {
+                      // Determine title based on actionType and whether quotation step is shown
+                      if (enq?.actionType === "editQuotation") {
+                        return "Edit Quotation";
+                      } else if (enq?.actionType === "createQuote") {
+                        return "Create Quotation";
+                      } else if (enq?.actionType === "edit") {
+                        return "Edit Enquiry";
+                      } else if (enq?.id || enq?.enquiry_id) {
+                        // Only check for actual enquiry ID, not form values (which could be from create mode)
+                        return "Edit Enquiry";
+                      } else {
+                        return "Create New Enquiry";
+                      }
+                    })()}
+                  </Text>
+                </Box>
                 <Stack gap="sm" style={{ height: "100%", padding: "10px" }}>
                   <Box
                     onClick={() => handleStepClick(0)}
@@ -3000,36 +3043,6 @@ function EnquiryCreate() {
                       transition: "all 0.2s",
                     }}
                   >
-                    <Box>
-                      <Text
-                        size="md"
-                        fw={600}
-                        c="#105476"
-                        mb="xs"
-                        style={{
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                          fontSize: "16px",
-                          color: "#105476",
-                        }}
-                      >
-                        {(() => {
-                          // Determine title based on actionType and whether quotation step is shown
-                          if (enq?.actionType === "editQuotation") {
-                            return "Edit Quotation";
-                          } else if (enq?.actionType === "createQuote") {
-                            return "Create Quotation";
-                          } else if (enq?.actionType === "edit") {
-                            return "Edit Enquiry";
-                          } else if (enq?.id || enq?.enquiry_id) {
-                            // Only check for actual enquiry ID, not form values (which could be from create mode)
-                            return "Edit Enquiry";
-                          } else {
-                            return "Create New Enquiry";
-                          }
-                        })()}
-                      </Text>
-                    </Box>
                     <Flex align="center" gap="sm">
                       <Box
                         style={{
@@ -4807,7 +4820,7 @@ function EnquiryCreate() {
                     style={{
                       flex: 1,
                       overflowY: "auto",
-                      padding: "32px",
+                      // padding: "32px",
                       paddingBottom: "16px",
                       backgroundColor: "#F8F8F8",
                     }}
