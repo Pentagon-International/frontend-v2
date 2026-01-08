@@ -132,12 +132,15 @@ function AirExportBookingMaster() {
     queryKey: ["air-export-booking/filter/", pageIndex, pageSize],
     queryFn: async () => {
       try {
+        // Calculate offset: index should be the number of records to skip
+        const offset = pageIndex * pageSize;
         console.log("🔄 Fetching air export booking data...", {
           pageIndex,
           pageSize,
+          offset,
         });
         // Build URL with query parameters
-        const url = `${URL.customerServiceShipmentFilter}?index=${pageIndex}&limit=${pageSize}`;
+        const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
         const response = (await apiCallProtected.post(url, {
           filters: {
             service_type: "EXPORT",
@@ -246,8 +249,10 @@ function AirExportBookingMaster() {
         };
       }
 
+      // Calculate offset: index should be the number of records to skip
+      const offset = pageIndex * pageSize;
       // Build URL with query parameters
-      const url = `${URL.customerServiceShipmentFilter}?index=${pageIndex}&limit=${pageSize}`;
+      const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
       const response = (await apiCallProtected.post(url, {
         filters: {
           service_type: "EXPORT",
