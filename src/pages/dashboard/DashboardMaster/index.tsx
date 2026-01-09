@@ -354,21 +354,8 @@ const Dashboard = () => {
   const [customerInteractionToDate, setCustomerInteractionToDate] =
     useState<Date | null>(getDefaultToDate());
 
-  // Enquiry date range states
-  const [enquiryFromDate, setEnquiryFromDate] = useState<Date | null>(
-    getDefaultFromDate()
-  );
-  const [enquiryToDate, setEnquiryToDate] = useState<Date | null>(
-    getDefaultToDate()
-  );
-
-  // Call Entry date range states
-  const [callEntryFromDate, setCallEntryFromDate] = useState<Date | null>(
-    getDefaultFromDate()
-  );
-  const [callEntryToDate, setCallEntryToDate] = useState<Date | null>(
-    getDefaultToDate()
-  );
+  // Enquiry and Call Entry now use the universal date selector (customerInteractionFromDate/ToDate)
+  // Removed separate date states to ensure all modules use the same selected dates
 
   // Customer Interaction Status Summary (simplified)
   const [customerInteractionData, setCustomerInteractionData] = useState<{
@@ -488,6 +475,13 @@ const Dashboard = () => {
         );
         setSelectedYear(dashboardState.selectedYear || null);
         setSelectedDate(dashboardState.selectedDate || null);
+        // Restore selected dates from universal date selector
+        if (dashboardState.customerInteractionFromDate) {
+          setCustomerInteractionFromDate(dashboardState.customerInteractionFromDate);
+        }
+        if (dashboardState.customerInteractionToDate) {
+          setCustomerInteractionToDate(dashboardState.customerInteractionToDate);
+        }
         // Restore enquiryPeriod if available (commented out - can be used in future case)
         // if (dashboardState.enquiryPeriod) {
         //   setEnquiryPeriod(dashboardState.enquiryPeriod);
@@ -499,12 +493,11 @@ const Dashboard = () => {
         const restoreDetailedView = async () => {
           try {
             setIsLoadingDetailedView(true);
-            // Calculate date range from restored enquiryPeriod or use default
-            const restoredEnquiryPeriod =
-              dashboardState.enquiryPeriod || "current_month";
-            const dateRange = calculateCallEntryDateRange(
-              restoredEnquiryPeriod
-            );
+            // Use selected dates from universal date selector
+            if (!customerInteractionFromDate || !customerInteractionToDate) {
+              setIsLoadingDetailedView(false);
+              return;
+            }
 
             const typeMap: Record<string, string> = {
               gain: "gained",
@@ -534,9 +527,9 @@ const Dashboard = () => {
                   typeMap[dashboardState.enquiryFilterType] ??
                   dashboardState.enquiryFilterType,
               }),
-              // Use date range from enquiryPeriod instead of selectedDate
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
+              // Use selected dates from universal date selector
+              date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+              date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
             };
 
             const response = await getFilteredEnquiryConversionData(filterData);
@@ -611,6 +604,13 @@ const Dashboard = () => {
             dashboardState.callEntryFilterType ||
             "all"
         );
+        // Restore selected dates from universal date selector
+        if (dashboardState.customerInteractionFromDate) {
+          setCustomerInteractionFromDate(dashboardState.customerInteractionFromDate);
+        }
+        if (dashboardState.customerInteractionToDate) {
+          setCustomerInteractionToDate(dashboardState.customerInteractionToDate);
+        }
         // Set period state first - ensure it's set before any async operations
         // IMPORTANT: Use the period from dashboardState, not the current state
         // Validate that the period is one of the valid options
@@ -652,18 +652,11 @@ const Dashboard = () => {
         const restoreCallEntryDetailedView = async () => {
           try {
             setIsLoadingDetailedView(true);
-            // Use common date filter if available, otherwise use period-based date range
-            const dateRange =
-              customerInteractionFromDate && customerInteractionToDate
-                ? {
-                    date_from: dayjs(customerInteractionFromDate).format(
-                      "DD-MM-YYYY"
-                    ),
-                    date_to: dayjs(customerInteractionToDate).format(
-                      "DD-MM-YYYY"
-                    ),
-                  }
-                : calculateCallEntryDateRange(restoredPeriod);
+            // Use selected dates from universal date selector
+            if (!customerInteractionFromDate || !customerInteractionToDate) {
+              setIsLoadingDetailedView(false);
+              return;
+            }
             const companyName =
               user?.company?.company_name ||
               selectedCompany ||
@@ -674,8 +667,6 @@ const Dashboard = () => {
               const response = await getCallEntryStatistics(
                 addSearchToCallEntryFilters({
                   company: companyName,
-                  date_from: dateRange.date_from,
-                  date_to: dateRange.date_to,
                   // Commented out - type filter not needed when clicking cards
                   // ...(dashboardState.callEntryFilterType !== "all" && {
                   //   type: dashboardState.callEntryFilterType,
@@ -723,8 +714,6 @@ const Dashboard = () => {
                 addSearchToCallEntryFilters({
                   company: companyName,
                   salesperson: dashboardState.callEntrySelectedSalesperson,
-                  date_from: dateRange.date_from,
-                  date_to: dateRange.date_to,
                   // Commented out - type filter not needed when clicking cards
                   // ...(dashboardState.callEntryFilterType !== "all" && {
                   //   type: dashboardState.callEntryFilterType,
@@ -778,8 +767,6 @@ const Dashboard = () => {
                   company: companyName,
                   salesperson: dashboardState.callEntrySelectedSalesperson,
                   customer_code: dashboardState.callEntrySelectedCustomer.code,
-                  date_from: dateRange.date_from,
-                  date_to: dateRange.date_to,
                   // Commented out - type filter not needed when clicking cards
                   // ...(dashboardState.callEntryFilterType !== "all" && {
                   //   type: dashboardState.callEntryFilterType,
@@ -1706,40 +1693,22 @@ const Dashboard = () => {
         (async () => {
           const filterData: DashboardFilters = addSearchToFilters({
             ...(companyName && { company: companyName }),
-            ...(customerInteractionFromDate && customerInteractionToDate
-              ? {
-                  date_from: dayjs(customerInteractionFromDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                  date_to: dayjs(customerInteractionToDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                }
-              : (() => {
-                  const dateRange = calculateCallEntryDateRange(enquiryPeriod);
-                  return {
-                    date_from: dateRange.date_from,
-                    date_to: dateRange.date_to,
-                  };
-                })()),
+            ...(customerInteractionFromDate && customerInteractionToDate && {
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format(
+                "DD-MM-YYYY"
+              ),
+            }),
           });
           return await getFilteredEnquiryConversionData(filterData);
         })(),
-        // Call entry statistics - use date range instead of period
+        // Call entry statistics - use selected date range
         (async () => {
           return await getCallEntryStatistics(
             addSearchToCallEntryFilters({
               company: companyName,
-              ...(customerInteractionFromDate && customerInteractionToDate
-                ? {}
-                : (() => {
-                    const dateRange =
-                      calculateCallEntryDateRange(callEntryPeriod);
-                    return {
-                      date_from: dateRange.date_from,
-                      date_to: dateRange.date_to,
-                    };
-                  })()),
             })
           );
         })(),
@@ -2195,16 +2164,19 @@ const Dashboard = () => {
       }
       setDetailedViewTitle(title);
 
-      // Calculate date range from selected period
-      const dateRange = calculateCallEntryDateRange(enquiryPeriod);
+      // Use selected dates from universal date selector
+      if (!customerInteractionFromDate || !customerInteractionToDate) {
+        toast.error("Please select date range");
+        return;
+      }
 
       const filterData: DashboardFilters = {
         ...(selectedCompany && { company: selectedCompany }),
         ...(selectedLocation && { location: selectedLocation }),
         ...(searchSalesman && { salesman: searchSalesman }),
         ...(selectedYear && { year: parseInt(selectedYear) }),
-        date_from: dateRange.date_from,
-        date_to: dateRange.date_to,
+        date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+        date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
         ...(filterType !== "all" && {
           type:
             filterType === "gain"
@@ -2277,25 +2249,18 @@ const Dashboard = () => {
     setDetailedViewTitle(title);
 
     try {
-      // Fetch data with search parameter if available
-      // Use common date filter if available, otherwise use period-based date range
-      const dateRange =
-        customerInteractionFromDate && customerInteractionToDate
-          ? {
-              date_from: dayjs(customerInteractionFromDate).format(
-                "DD-MM-YYYY"
-              ),
-              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-            }
-          : calculateCallEntryDateRange(callEntryPeriod);
+      // Use selected dates from universal date selector
+      if (!customerInteractionFromDate || !customerInteractionToDate) {
+        toast.error("Please select date range");
+        setIsLoadingDetailedView(false);
+        return;
+      }
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
       const response = await getCallEntryStatistics(
         addSearchToCallEntryFilters({
           company: companyName,
-          date_from: dateRange.date_from,
-          date_to: dateRange.date_to,
           // Commented out - type filter not needed when clicking cards
           // ...(filterType !== "all" && { type: filterType }),
         })
@@ -3417,26 +3382,31 @@ const Dashboard = () => {
           );
           setDetailedViewData(tableData);
         } else if (detailedViewType === "enquiry") {
-          const dateRange = calculateCallEntryDateRange(enquiryPeriod);
+          // Use selected dates from universal date selector
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            toast.error("Please select date range");
+            setIsLoadingDetailedView(false);
+            return;
+          }
           if (detailedViewDrillLevel === 2) {
             filterData = {
               company: detailedViewSelectedCompany || "",
               salesman: detailedViewSelectedSalesperson || "",
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
+              date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+              date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
               ...(search.trim() && { search: search.trim() }),
             };
           } else if (detailedViewDrillLevel === 1) {
             filterData = {
               company: detailedViewSelectedCompany || "",
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
+              date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+              date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
               ...(search.trim() && { search: search.trim() }),
             };
           } else {
             filterData = {
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
+              date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+              date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
               ...(search.trim() && { search: search.trim() }),
             };
           }
@@ -3525,19 +3495,12 @@ const Dashboard = () => {
           );
           setDetailedViewData(tableData);
         } else if (detailedViewType === "callentry") {
-          // Call Entry search handling
-          // Use common date filter if available, otherwise use period-based date range
-          const dateRange =
-            customerInteractionFromDate && customerInteractionToDate
-              ? {
-                  date_from: dayjs(customerInteractionFromDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                  date_to: dayjs(customerInteractionToDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                }
-              : calculateCallEntryDateRange(callEntryPeriod);
+          // Call Entry search handling - use selected dates from universal date selector
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            toast.error("Please select date range");
+            setIsLoadingDetailedView(false);
+            return;
+          }
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
@@ -3546,8 +3509,6 @@ const Dashboard = () => {
             const response = await getCallEntryStatistics(
               addSearchToCallEntryFilters({
                 company: companyName,
-                date_from: dateRange.date_from,
-                date_to: dateRange.date_to,
                 ...(callEntryFilterType !== "all" && {
                   type: callEntryFilterType,
                 }),
@@ -3568,7 +3529,7 @@ const Dashboard = () => {
               })
             );
             setDetailedViewData(tableData);
-          } else if (
+            } else if (
             callEntryDrillLevel === 1 &&
             callEntrySelectedSalesperson
           ) {
@@ -3577,8 +3538,6 @@ const Dashboard = () => {
               addSearchToCallEntryFilters({
                 company: companyName,
                 salesperson: callEntrySelectedSalesperson,
-                date_from: dateRange.date_from,
-                date_to: dateRange.date_to,
                 // Commented out - type filter not needed when clicking cards
                 // ...(callEntryFilterType !== "all" && {
                 //   type: callEntryFilterType,
@@ -3616,8 +3575,6 @@ const Dashboard = () => {
                 company: companyName,
                 salesperson: callEntrySelectedSalesperson,
                 customer_code: callEntrySelectedCustomer.code,
-                date_from: dateRange.date_from,
-                date_to: dateRange.date_to,
                 // Commented out - type filter not needed when clicking cards
                 // ...(callEntryFilterType !== "all" && {
                 //   type: callEntryFilterType,
@@ -4565,15 +4522,19 @@ const Dashboard = () => {
           return;
         }
 
-        // Calculate date range from selected period
-        const dateRange = calculateCallEntryDateRange(enquiryPeriod);
+        // Use selected dates from universal date selector
+        if (!customerInteractionFromDate || !customerInteractionToDate) {
+          toast.error("Please select date range");
+          setIsLoadingDetailedView(false);
+          return;
+        }
 
         // Enquiry: Company → Salesperson (mandatory hierarchy)
         if (columnType === "company") {
           filterData = addSearchToDetailedViewFilters({
             company: value,
-            date_from: dateRange.date_from,
-            date_to: dateRange.date_to,
+            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
           });
           setDetailedViewSelectedCompany(value);
           setDetailedViewSelectedSalesperson(null);
@@ -4623,8 +4584,6 @@ const Dashboard = () => {
           filterData = addSearchToDetailedViewFilters({
             company,
             salesman: value,
-            date_from: dateRange.date_from,
-            date_to: dateRange.date_to,
           });
 
           // Update title based on current filter type when clicking salesperson
@@ -4679,8 +4638,12 @@ const Dashboard = () => {
           columnType === "active" ||
           columnType === "quote"
         ) {
-          // Calculate date range from selected period
-          const dateRange = calculateCallEntryDateRange(enquiryPeriod);
+          // Use selected dates from universal date selector
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            toast.error("Please select date range");
+            setIsLoadingDetailedView(false);
+            return;
+          }
 
           // Check if we're at drill level 2 (customer-wise data level)
           // If so, navigate to EnquiryMaster with customer_code and status filters
@@ -4790,19 +4753,15 @@ const Dashboard = () => {
             // Conditional navigation based on status:
             // ACTIVE -> Navigate to EnquiryMaster
             // GAINED, LOST, QUOTE CREATED -> Navigate to QuotationMaster
-            // Convert dates from DD-MM-YYYY (dashboard format) to YYYY-MM-DD (enquiry/quotation format)
-            const convertDateToYYYYMMDD = (dateStr: string): string => {
-              // Simple format conversion: DD-MM-YYYY -> YYYY-MM-DD
-              const parts = dateStr.split("-");
-              if (parts.length === 3) {
-                // Rearrange: [DD, MM, YYYY] -> [YYYY, MM, DD]
-                return `${parts[2]}-${parts[1]}-${parts[0]}`;
-              }
-              return dateStr; // Return as-is if format doesn't match
-            };
-
-            const enquiryDateFrom = convertDateToYYYYMMDD(dateRange.date_from);
-            const enquiryDateTo = convertDateToYYYYMMDD(dateRange.date_to);
+            // Use selected dates from universal date selector
+            if (!customerInteractionFromDate || !customerInteractionToDate) {
+              toast.error("Please select date range");
+              setIsLoadingDetailedView(false);
+              return;
+            }
+            // Convert dates to YYYY-MM-DD format for navigation
+            const enquiryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
+            const enquiryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
 
             try {
               if (status === "ACTIVE") {
@@ -4831,6 +4790,8 @@ const Dashboard = () => {
                       selectedYear: selectedYear,
                       selectedDate: selectedDate,
                       enquiryPeriod: enquiryPeriod,
+                      customerInteractionFromDate: customerInteractionFromDate,
+                      customerInteractionToDate: customerInteractionToDate,
                     },
                   },
                 });
@@ -4863,6 +4824,8 @@ const Dashboard = () => {
                       selectedYear: selectedYear,
                       selectedDate: selectedDate,
                       enquiryPeriod: enquiryPeriod,
+                      customerInteractionFromDate: customerInteractionFromDate,
+                      customerInteractionToDate: customerInteractionToDate,
                     },
                   },
                 });
@@ -5017,19 +4980,15 @@ const Dashboard = () => {
               additionalData?.company_name ||
               additionalData?.company;
 
-            // Convert dates from DD-MM-YYYY (dashboard format) to YYYY-MM-DD (enquiry/quotation format)
-            const convertDateToYYYYMMDD = (dateStr: string): string => {
-              // Simple format conversion: DD-MM-YYYY -> YYYY-MM-DD
-              const parts = dateStr.split("-");
-              if (parts.length === 3) {
-                // Rearrange: [DD, MM, YYYY] -> [YYYY, MM, DD]
-                return `${parts[2]}-${parts[1]}-${parts[0]}`;
-              }
-              return dateStr; // Return as-is if format doesn't match
-            };
-
-            const enquiryDateFrom = convertDateToYYYYMMDD(dateRange.date_from);
-            const enquiryDateTo = convertDateToYYYYMMDD(dateRange.date_to);
+            // Use selected dates from universal date selector
+            if (!customerInteractionFromDate || !customerInteractionToDate) {
+              toast.error("Please select date range");
+              setIsLoadingDetailedView(false);
+              return;
+            }
+            // Convert dates to YYYY-MM-DD format for navigation
+            const enquiryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
+            const enquiryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
 
             try {
               if (status === "ACTIVE") {
@@ -5058,6 +5017,8 @@ const Dashboard = () => {
                       selectedYear: selectedYear,
                       selectedDate: selectedDate,
                       enquiryPeriod: enquiryPeriod,
+                      customerInteractionFromDate: customerInteractionFromDate,
+                      customerInteractionToDate: customerInteractionToDate,
                     },
                   },
                 });
@@ -5091,6 +5052,8 @@ const Dashboard = () => {
                       selectedYear: selectedYear,
                       selectedDate: selectedDate,
                       enquiryPeriod: enquiryPeriod,
+                      customerInteractionFromDate: customerInteractionFromDate,
+                      customerInteractionToDate: customerInteractionToDate,
                     },
                   },
                 });
@@ -5116,13 +5079,11 @@ const Dashboard = () => {
             additionalData?.salesperson ||
             additionalData?.salesman;
 
-          // Build filter with company and salesperson if available, and include date range
+          // Build filter with company and salesperson if available (dates are included by addSearchToDetailedViewFilters)
           if (company && salesperson) {
             filterData = addSearchToDetailedViewFilters({
               company,
               salesman: salesperson,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
             });
             setDetailedViewSelectedCompany(company);
             setDetailedViewSelectedSalesperson(salesperson);
@@ -5130,16 +5091,11 @@ const Dashboard = () => {
           } else if (company) {
             filterData = addSearchToDetailedViewFilters({
               company,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
             });
             setDetailedViewSelectedCompany(company);
             setDetailedViewDrillLevel(1);
           } else {
-            filterData = addSearchToDetailedViewFilters({
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
-            });
+            filterData = addSearchToDetailedViewFilters({});
             setDetailedViewDrillLevel(0);
           }
 
@@ -5300,18 +5256,12 @@ const Dashboard = () => {
         setIsLoadingDetailedView(true);
 
         try {
-          // Use common date filter if available, otherwise use period-based date range
-          const dateRange =
-            customerInteractionFromDate && customerInteractionToDate
-              ? {
-                  date_from: dayjs(customerInteractionFromDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                  date_to: dayjs(customerInteractionToDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                }
-              : calculateCallEntryDateRange(callEntryPeriod);
+          // Use selected dates from universal date selector
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            toast.error("Please select date range");
+            setIsLoadingDetailedView(false);
+            return;
+          }
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
           const isBadgeClick = [
@@ -5338,19 +5288,15 @@ const Dashboard = () => {
                 | "upcoming"
                 | "closed";
 
-              // Convert dates from DD-MM-YYYY (dashboard format) to YYYY-MM-DD (call entry format)
-              const convertDateToYYYYMMDD = (dateStr: string): string => {
-                const parts = dateStr.split("-");
-                if (parts.length === 3) {
-                  return `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
-                return dateStr;
-              };
-
-              const callEntryDateFrom = convertDateToYYYYMMDD(
-                dateRange.date_from
-              );
-              const callEntryDateTo = convertDateToYYYYMMDD(dateRange.date_to);
+              // Use selected dates from universal date selector
+              if (!customerInteractionFromDate || !customerInteractionToDate) {
+                toast.error("Please select date range");
+                setIsLoadingDetailedView(false);
+                return;
+              }
+              // Convert dates to YYYY-MM-DD format for navigation
+              const callEntryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
+              const callEntryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
 
               // Map badge type to status for CallEntryMaster
               // Note: CallEntryMaster uses followup_action_name, but we'll use the type filter
@@ -5366,6 +5312,12 @@ const Dashboard = () => {
                 navigate("/call-entry", {
                   state: {
                     fromDashboard: true,
+                    initialFilters: {
+                      sales_person: salespersonToFilter,
+                      status: statusMap[typeFilter] || null,
+                      date_from: callEntryDateFrom,
+                      date_to: callEntryDateTo,
+                    },
                     restoreFilters: {
                       filters: {
                         sales_person: salespersonToFilter,
@@ -5398,6 +5350,8 @@ const Dashboard = () => {
                       callEntryFilterType: callEntryFilterType,
                       initialCallEntryFilterType: initialCallEntryFilterType,
                       callEntryPeriod: callEntryPeriod,
+                      customerInteractionFromDate: customerInteractionFromDate,
+                      customerInteractionToDate: customerInteractionToDate,
                     },
                   },
                 });
@@ -5430,8 +5384,6 @@ const Dashboard = () => {
               addSearchToCallEntryFilters({
                 company: companyName,
                 salesperson: salespersonToFilter,
-                date_from: dateRange.date_from,
-                date_to: dateRange.date_to,
                 // Commented out - type filter not needed when clicking cards
                 // ...(callEntryFilterType !== "all" && {
                 //   type: callEntryFilterType,
@@ -5487,19 +5439,15 @@ const Dashboard = () => {
                 | "upcoming"
                 | "closed";
 
-              // Convert dates from DD-MM-YYYY (dashboard format) to YYYY-MM-DD (call entry format)
-              const convertDateToYYYYMMDD = (dateStr: string): string => {
-                const parts = dateStr.split("-");
-                if (parts.length === 3) {
-                  return `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
-                return dateStr;
-              };
-
-              const callEntryDateFrom = convertDateToYYYYMMDD(
-                dateRange.date_from
-              );
-              const callEntryDateTo = convertDateToYYYYMMDD(dateRange.date_to);
+              // Use selected dates from universal date selector
+              if (!customerInteractionFromDate || !customerInteractionToDate) {
+                toast.error("Please select date range");
+                setIsLoadingDetailedView(false);
+                return;
+              }
+              // Convert dates to YYYY-MM-DD format for navigation
+              const callEntryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
+              const callEntryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
 
               // Map badge type to status for CallEntryMaster
               const statusMap: Record<string, string> = {
@@ -5513,6 +5461,13 @@ const Dashboard = () => {
                 navigate("/call-entry", {
                   state: {
                     fromDashboard: true,
+                    initialFilters: {
+                      sales_person: callEntrySelectedSalesperson || null,
+                      customer: customerCode,
+                      status: statusMap[typeFilter] || null,
+                      date_from: callEntryDateFrom,
+                      date_to: callEntryDateTo,
+                    },
                     restoreFilters: {
                       filters: {
                         sales_person: callEntrySelectedSalesperson || null,
@@ -5545,6 +5500,8 @@ const Dashboard = () => {
                       callEntryFilterType: callEntryFilterType,
                       initialCallEntryFilterType: initialCallEntryFilterType,
                       callEntryPeriod: callEntryPeriod,
+                      customerInteractionFromDate: customerInteractionFromDate,
+                      customerInteractionToDate: customerInteractionToDate,
                     },
                   },
                 });
@@ -5575,8 +5532,6 @@ const Dashboard = () => {
                 company: companyName,
                 salesperson: callEntrySelectedSalesperson!,
                 customer_code: customerCode,
-                date_from: dateRange.date_from,
-                date_to: dateRange.date_to,
                 ...(typeFilter && { type: typeFilter }),
               })
             );
@@ -5604,19 +5559,15 @@ const Dashboard = () => {
                 | "upcoming"
                 | "closed";
 
-              // Convert dates from DD-MM-YYYY (dashboard format) to YYYY-MM-DD (call entry format)
-              const convertDateToYYYYMMDD = (dateStr: string): string => {
-                const parts = dateStr.split("-");
-                if (parts.length === 3) {
-                  return `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
-                return dateStr;
-              };
-
-              const callEntryDateFrom = convertDateToYYYYMMDD(
-                dateRange.date_from
-              );
-              const callEntryDateTo = convertDateToYYYYMMDD(dateRange.date_to);
+              // Use selected dates from universal date selector
+              if (!customerInteractionFromDate || !customerInteractionToDate) {
+                toast.error("Please select date range");
+                setIsLoadingDetailedView(false);
+                return;
+              }
+              // Convert dates to YYYY-MM-DD format for navigation
+              const callEntryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
+              const callEntryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
 
               // Map badge type to status for CallEntryMaster
               const statusMap: Record<string, string> = {
@@ -5630,6 +5581,13 @@ const Dashboard = () => {
                 navigate("/call-entry", {
                   state: {
                     fromDashboard: true,
+                    initialFilters: {
+                      sales_person: callEntrySelectedSalesperson || null,
+                      customer: callEntrySelectedCustomer?.code || null,
+                      status: statusMap[typeFilter] || null,
+                      date_from: callEntryDateFrom,
+                      date_to: callEntryDateTo,
+                    },
                     restoreFilters: {
                       filters: {
                         sales_person: callEntrySelectedSalesperson || null,
@@ -5989,8 +5947,12 @@ const Dashboard = () => {
         }
       } else if (detailedViewType === "enquiry") {
         console.log("detailedview enquiry back 1");
-        // Calculate date range from selected period
-        const dateRange = calculateCallEntryDateRange(enquiryPeriod);
+        // Use selected dates from universal date selector
+        if (!customerInteractionFromDate || !customerInteractionToDate) {
+          toast.error("Please select date range");
+          setIsLoadingDetailedView(false);
+          return;
+        }
 
         if (detailedViewDrillLevel === 2) {
           console.log("detailedview enquiry back 2");
@@ -6007,8 +5969,8 @@ const Dashboard = () => {
           };
           const filterData: DashboardFilters = addSearchToDetailedViewFilters({
             company: detailedViewSelectedCompany,
-            date_from: dateRange.date_from,
-            date_to: dateRange.date_to,
+            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
             ...(initialEnquiryFilterType !== "all" && {
               type:
                 typeMap[initialEnquiryFilterType] ?? initialEnquiryFilterType,
@@ -6056,8 +6018,8 @@ const Dashboard = () => {
         } else if (detailedViewDrillLevel === 1) {
           // Go back to initial View All state - check if we need to reset to base or keep initial filter
           const filterData: DashboardFilters = addSearchToDetailedViewFilters({
-            date_from: dateRange.date_from,
-            date_to: dateRange.date_to,
+            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
           });
           const response = await getFilteredEnquiryConversionData(filterData);
           let tableData = convertEnquiryResponseToTableData(response);
@@ -6203,17 +6165,12 @@ const Dashboard = () => {
 
           // Fetch customer list for the selected salesperson
           // Use common date filter if available, otherwise use period-based date range
-          const dateRange =
-            customerInteractionFromDate && customerInteractionToDate
-              ? {
-                  date_from: dayjs(customerInteractionFromDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                  date_to: dayjs(customerInteractionToDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                }
-              : calculateCallEntryDateRange(callEntryPeriod);
+          // Use selected dates from universal date selector
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            toast.error("Please select date range");
+            setIsLoadingDetailedView(false);
+            return;
+          }
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
@@ -6221,8 +6178,6 @@ const Dashboard = () => {
             addSearchToCallEntryFilters({
               company: companyName,
               salesperson: callEntrySelectedSalesperson!,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
               // Commented out - type filter not needed when clicking cards
               // ...(callEntryFilterType !== "all" && { type: callEntryFilterType }),
             })
@@ -6277,25 +6232,18 @@ const Dashboard = () => {
 
           // Always fetch fresh salesperson list from API
           // Use common date filter if available, otherwise use period-based date range
-          const dateRange =
-            customerInteractionFromDate && customerInteractionToDate
-              ? {
-                  date_from: dayjs(customerInteractionFromDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                  date_to: dayjs(customerInteractionToDate).format(
-                    "DD-MM-YYYY"
-                  ),
-                }
-              : calculateCallEntryDateRange(callEntryPeriod);
+          // Use selected dates from universal date selector
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            toast.error("Please select date range");
+            setIsLoadingDetailedView(false);
+            return;
+          }
           const companyName =
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
           const response = await getCallEntryStatistics(
             addSearchToCallEntryFilters({
               company: companyName,
-              date_from: dateRange.date_from,
-              date_to: dateRange.date_to,
               ...(callEntryFilterType !== "all" && {
                 type: callEntryFilterType,
               }),

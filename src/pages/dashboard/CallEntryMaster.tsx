@@ -176,16 +176,31 @@ function CallEntry() {
     queryKey: ["callEntries", pageIndex, pageSize],
     queryFn: async () => {
       try {
-        // Use initial date values in payload (stored in ref, won't change when user modifies dates)
+        // Use dates from location.state if available (from Dashboard), otherwise use initial dates
         // Dates are not in queryKey so changes won't trigger refetch
         // Only Apply Filters button will use the new dates via appliedFilters
         const requestBody: { filters: any } = { filters: {} };
 
-        // Add date range if both initial dates are selected
-        if (initialFromDateRef.current && initialToDateRef.current) {
+        // Check for dates from Dashboard navigation (restoreFilters or initialFilters)
+        let dateFrom: string | null = null;
+        let dateTo: string | null = null;
+
+        if (location.state?.restoreFilters?.fromDate && location.state?.restoreFilters?.toDate) {
+          dateFrom = dayjs(location.state.restoreFilters.fromDate).format("YYYY-MM-DD");
+          dateTo = dayjs(location.state.restoreFilters.toDate).format("YYYY-MM-DD");
+        } else if (location.state?.initialFilters?.date_from && location.state?.initialFilters?.date_to) {
+          dateFrom = location.state.initialFilters.date_from;
+          dateTo = location.state.initialFilters.date_to;
+        } else if (initialFromDateRef.current && initialToDateRef.current) {
+          dateFrom = dayjs(initialFromDateRef.current).format("YYYY-MM-DD");
+          dateTo = dayjs(initialToDateRef.current).format("YYYY-MM-DD");
+        }
+
+        // Add date range if both dates are available
+        if (dateFrom && dateTo) {
           requestBody.filters = {
-            date_from: dayjs(initialFromDateRef.current).format("YYYY-MM-DD"),
-            date_to: dayjs(initialToDateRef.current).format("YYYY-MM-DD"),
+            date_from: dateFrom,
+            date_to: dateTo,
           };
         }
 
@@ -536,6 +551,14 @@ function CallEntry() {
       setToDate(restoreFiltersData.toDate || null);
 
       // Restore applied filters state
+      // Use dates from restoreFiltersData.fromDate/toDate (from Dashboard) or from filters.date_from/date_to
+      const restoredDateFrom = restoreFiltersData.fromDate 
+        ? dayjs(restoreFiltersData.fromDate).format("YYYY-MM-DD")
+        : restoreFiltersData.filters?.date_from || null;
+      const restoredDateTo = restoreFiltersData.toDate
+        ? dayjs(restoreFiltersData.toDate).format("YYYY-MM-DD")
+        : restoreFiltersData.filters?.date_to || null;
+
       setAppliedFilters({
         customer: restoreFiltersData.filters?.customer || null,
         call_date: restoreFiltersData.filters?.call_date || null,
@@ -545,8 +568,8 @@ function CallEntry() {
         sales_person: restoreFiltersData.filters?.sales_person || null,
         city: restoreFiltersData.filters?.city || null,
         area: restoreFiltersData.filters?.area || null,
-        date_from: restoreFiltersData.filters?.date_from || null,
-        date_to: restoreFiltersData.filters?.date_to || null,
+        date_from: restoredDateFrom,
+        date_to: restoredDateTo,
       });
 
       // Restore filters applied state
