@@ -8,11 +8,15 @@ import {
   IconChevronUp,
 } from "@tabler/icons-react";
 import { useLayoutStore } from "../../store/useLayoutStore";
-import { getLinkStyles, sectionIconBackground, sectionIconColors } from "./navbarStyles";
+import {
+  getLinkStyles,
+  sectionIconBackground,
+  sectionIconColors,
+} from "./navbarStyles";
 
 type Props = {
   label: string;
-  icon: React.ComponentType<any>;
+  icon: React.ComponentType<{ size?: number; [key: string]: unknown }>;
   parent?: string;
   children?: ReactNode;
   openedLocal: boolean;
@@ -78,10 +82,13 @@ export const CollapsibleNav = ({
       // Only auto-close when activeNav CHANGES (not just when it doesn't match)
       // This allows manual toggles to work without interference
       const activeNavChanged = prevActiveNavRef.current !== activeNav;
-      
+
       if (activeNavChanged) {
-        const shouldBeOpen = activeNav === label || 
-          (label === "Air" || label === "Ocean" ? activeNav === "Transportation" : false) ||
+        const shouldBeOpen =
+          activeNav === label ||
+          (label === "Air" || label === "Ocean"
+            ? activeNav === "Transportation"
+            : false) ||
           hasActiveChild;
         // Only close if we're navigating away (activeNav changed and doesn't match)
         if (!shouldBeOpen && activeNav !== "" && openedLocal) {
@@ -91,17 +98,27 @@ export const CollapsibleNav = ({
       // Always update ref to track current activeNav for next comparison
       prevActiveNavRef.current = activeNav;
     }
-  }, [activeNav, isSidebarCollapsed, label, hasActiveChild, openedLocal, setOpenedLocal]);
+  }, [
+    activeNav,
+    isSidebarCollapsed,
+    label,
+    hasActiveChild,
+    openedLocal,
+    setOpenedLocal,
+  ]);
 
   // sync store when collapsed - only auto-close when navigating away
   useEffect(() => {
     if (isSidebarCollapsed) {
       // Only auto-close when activeNav CHANGES (not just when it doesn't match)
       const activeNavChanged = prevActiveNavRef.current !== activeNav;
-      
+
       if (activeNavChanged) {
-        const shouldBeOpen = activeNav === label || 
-          (label === "Air" || label === "Ocean" ? activeNav === "Transportation" : false) ||
+        const shouldBeOpen =
+          activeNav === label ||
+          (label === "Air" || label === "Ocean"
+            ? activeNav === "Transportation"
+            : false) ||
           hasActiveChild;
         // Only close if we're navigating away (activeNav changed and doesn't match)
         if (!shouldBeOpen && activeNav !== "" && openCollapsibles[label]) {
@@ -115,7 +132,15 @@ export const CollapsibleNav = ({
         setOpenCollapsible(label, opened);
       }
     }
-  }, [opened, isSidebarCollapsed, label, openCollapsibles, setOpenCollapsible, activeNav, hasActiveChild]);
+  }, [
+    opened,
+    isSidebarCollapsed,
+    label,
+    openCollapsibles,
+    setOpenCollapsible,
+    activeNav,
+    hasActiveChild,
+  ]);
 
   // compute flyout position
   useEffect(() => {
@@ -130,10 +155,25 @@ export const CollapsibleNav = ({
     function handleDocClick(e: MouseEvent) {
       if (!opened || !isSidebarCollapsed) return;
       const target = e.target as Node;
+
+      // Don't close if clicking inside the nav link
       if (navRef.current?.contains(target)) return;
-      if (flyoutRef.current?.contains(target)) return;
-      // delay close to allow nested link navigation
-      setTimeout(() => setOpenCollapsible(label, false), 150);
+
+      // Don't close if clicking inside the flyout
+      if (flyoutRef.current?.contains(target)) {
+        // Check if clicking on a nested nav link - keep flyout open for navigation
+        const nestedLink = (target as HTMLElement).closest(
+          "[data-nested-nav-link]"
+        );
+        if (nestedLink) {
+          return;
+        }
+        // Click inside flyout but not on a link - also keep open
+        return;
+      }
+
+      // Only close if clicking outside both nav and flyout
+      setOpenCollapsible(label, false);
     }
 
     document.addEventListener("mousedown", handleDocClick);
@@ -141,26 +181,27 @@ export const CollapsibleNav = ({
   }, [opened, isSidebarCollapsed, label, setOpenCollapsible]);
 
   const handleClick = () => {
+    // Don't clear activeTariffSubNav when toggling - let the child links handle navigation
+    const shouldClearTariffSubNav = false;
+
     if (isSidebarCollapsed) {
       const isOpening = !openCollapsibles[label];
       setOpenCollapsible(label, isOpening);
       // Close other collapsibles when opening this one (mutual exclusion)
       if (isOpening) {
         if (label === "Air") {
-          // Opening Air, close Ocean and Sales
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Sales", false);
         } else if (label === "Ocean") {
-          // Opening Ocean, close Air and Sales
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Sales", false);
         } else if (label === "Sales") {
-          // Opening Sales, close Air and Ocean
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
         }
       }
       if (
+        shouldClearTariffSubNav &&
         label === "Tariff" &&
         (activeSubNav !== "" || activeTariffSubNav !== "")
       ) {
@@ -169,6 +210,7 @@ export const CollapsibleNav = ({
     } else {
       setOpenedLocal((o) => !o);
       if (
+        shouldClearTariffSubNav &&
         label === "Tariff" &&
         (activeSubNav !== "" || activeTariffSubNav !== "")
       ) {
@@ -190,8 +232,20 @@ export const CollapsibleNav = ({
               width: 24,
               height: 24,
               borderRadius: 4,
-              backgroundColor: label !=="Tariff" ? (isActive ? "#105476" : iconBackground) : "transparent",
-              color: label !== "Tariff" ? (isActive ?"#fff" : iconColor) : (isActive ? "#105476" : "#444955"),
+              backgroundColor:
+                label !== "Tariff"
+                  ? isActive
+                    ? "#105476"
+                    : iconBackground
+                  : "transparent",
+              color:
+                label !== "Tariff"
+                  ? isActive
+                    ? "#fff"
+                    : iconColor
+                  : isActive
+                    ? "#105476"
+                    : "#444955",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -258,6 +312,14 @@ export const CollapsibleNav = ({
         <Portal>
           <Box
             ref={flyoutRef}
+            onClick={(e) => {
+              // Stop propagation to prevent document click handler from closing flyout
+              e.stopPropagation();
+            }}
+            onMouseDown={(e) => {
+              // Stop propagation on mousedown as well
+              e.stopPropagation();
+            }}
             style={{
               position: "fixed",
               top: flyoutPos.top,

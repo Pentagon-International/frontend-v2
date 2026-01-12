@@ -15,10 +15,17 @@ type Props = {
     setIsAirOpen?: (v: boolean) => void;
     setIsSeaExportOpen?: (v: boolean) => void;
   };
-  icon?: React.ComponentType<any>;
+  icon?: React.ComponentType<{ size?: number; [key: string]: unknown }>;
 };
 
-export const NestedSubNavLink = ({ parent, subParent, label, path, collapsibles, icon: Icon }: Props) => {
+export const NestedSubNavLink = ({
+  parent,
+  subParent,
+  label,
+  path,
+  collapsibles,
+  icon: Icon,
+}: Props) => {
   const {
     activeSubNav,
     activeTariffSubNav,
@@ -32,40 +39,41 @@ export const NestedSubNavLink = ({ parent, subParent, label, path, collapsibles,
   } = useLayoutStore();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  
+
   // Check active state based on both store values and pathname for reliability
-  const isActive = (activeSubNav === "Tariff" && activeTariffSubNav === label) || pathname === path;
-  
-  const style = getTariffSubLinkStyles(
-    isActive,
-    label
-  );
+  const isActive =
+    (activeSubNav === "Tariff" && activeTariffSubNav === label) ||
+    pathname === path;
+
+  const style = getTariffSubLinkStyles(isActive, label);
 
   const handleClick = (e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-    
-    if (
+
+    const shouldNavigate =
       activeNav !== parent ||
       activeSubNav !== subParent ||
       activeTariffSubNav !== label ||
-      pathname !== path
-    ) {
+      pathname !== path;
+
+    if (shouldNavigate) {
       setActiveNav(parent);
       setActiveSubNav(subParent);
       setActiveTariffSubNav(label);
       setTitle(parent);
       navigate(path);
-      
+
+      // Close flyout after navigation if sidebar is collapsed
       if (isSidebarCollapsed) {
         setOpenCollapsible(parent, false);
         setOpenCollapsible(subParent, false);
       }
     }
-    
-    // Close other collapsibles like SubNavLink does
+
+    // Close other collapsibles
     if (parent === "Sales") {
       collapsibles?.setIsCustomerServiceOpen?.(false);
       collapsibles?.setIsAirOpen?.(false);
@@ -78,6 +86,7 @@ export const NestedSubNavLink = ({ parent, subParent, label, path, collapsibles,
 
   return (
     <NavLink
+      data-nested-nav-link="true"
       label={label}
       styles={{
         ...style,

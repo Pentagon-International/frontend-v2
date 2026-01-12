@@ -4,31 +4,17 @@ import {
   Text,
   Group,
   Stack,
-  Divider,
   Button,
   Box,
-  Badge,
-  ActionIcon,
   Select,
   Center,
   Paper,
   ThemeIcon,
 } from "@mantine/core";
-import {
-  IconX,
-  IconUser,
-  IconMail,
-  IconPhone,
-  IconMapPin,
-  IconCalendar,
-  IconBuilding,
-  IconFlag,
-  IconId,
-} from "@tabler/icons-react";
+import { IconMapPin, IconBuilding, IconFlag } from "@tabler/icons-react";
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import useAuthStore from "../store/authStore";
-import { putAPICall } from "../service/putApiCall";
 import { URL } from "../api/serverUrls";
 import { API_HEADER } from "../store/storeKeys";
 import { apiCallProtected } from "../api/axios";
@@ -37,6 +23,28 @@ import { ToastNotification } from "./index";
 interface ProfileDrawerProps {
   opened: boolean;
   onClose: () => void;
+}
+
+// Extended branch type that includes country information
+interface BranchWithCountry {
+  user_branch_id: number;
+  branch_id: number;
+  branch_code: string;
+  branch_name: string;
+  is_default: boolean;
+  main_default: boolean;
+  country?: {
+    country_id: number;
+    country_code: string;
+    country_name: string;
+  };
+  // Allow other properties that may exist on branch objects
+  address?: string;
+  pin_code?: string;
+  city?: unknown;
+  state?: unknown;
+  logo_url?: string | null;
+  branch_title?: string | null;
 }
 
 function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
@@ -152,6 +160,67 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
 
   // Check if selected branch is different from default (active) branch
   const isNonActiveBranch = selectedBranch !== defaultBranch?.user_branch_id;
+
+  // Prepare branch data for Select component
+  const getBranchData = () => {
+    if (!user.branches || user.branches.length === 0) return [];
+
+    // If user is not admin, return flat list
+    if (!user.is_staff) {
+      return user.branches.map((branch) => ({
+        value: branch.user_branch_id.toString(),
+        label: branch.branch_name,
+      }));
+    }
+
+    // For admin users: if multiple branches from same country, show country name
+    const branchesByCountry = new Map<
+      number,
+      { countryName: string; branches: BranchWithCountry[] }
+    >();
+
+    // Group branches by country_id
+    (user.branches as BranchWithCountry[]).forEach((branch) => {
+      const countryId = branch.country?.country_id;
+      const countryName = branch.country?.country_name || "Unknown";
+
+      if (countryId) {
+        if (!branchesByCountry.has(countryId)) {
+          branchesByCountry.set(countryId, {
+            countryName,
+            branches: [],
+          });
+        }
+        branchesByCountry.get(countryId)!.branches.push(branch);
+      }
+    });
+
+    // Convert to flat list format
+    const branchData: Array<{ value: string; label: string }> = [];
+
+    branchesByCountry.forEach(({ countryName, branches }) => {
+      if (branches.length > 1) {
+        // Multiple branches from same country - show country name
+        // Prioritize main_default, then is_default, then first branch
+        const defaultBranch =
+          branches.find((b) => b.main_default) ||
+          branches.find((b) => b.is_default) ||
+          branches[0];
+        branchData.push({
+          value: defaultBranch.user_branch_id.toString(),
+          label: countryName,
+        });
+      } else {
+        // Single branch from a country - show branch name
+        branchData.push({
+          value: branches[0].user_branch_id.toString(),
+          label: branches[0].branch_name,
+        });
+      }
+    });
+
+    return branchData;
+  };
 
   return (
     <Drawer
@@ -281,12 +350,7 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
               placeholder="Select branch"
               value={selectedBranch.toString()}
               onChange={handleBranchChange}
-              data={
-                user.branches?.map((branch) => ({
-                  value: branch.user_branch_id.toString(),
-                  label: branch.branch_name,
-                })) || []
-              }
+              data={getBranchData()}
               leftSection={<IconMapPin size={16} />}
               styles={{
                 input: {
