@@ -46,6 +46,7 @@ import {
   ToastNotification,
   SearchableSelect,
   Dropdown,
+  DateRangeInput,
 } from "../../components";
 import dayjs from "dayjs";
 import { postAPICall } from "../../service/postApiCall";
@@ -1706,11 +1707,26 @@ function EnquiryCreate() {
   >(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [totalProfit, setTotalProfit] = useState<number | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<number>(
-    new Date().getMonth() + 1
-  ); // 1-12
-  const [selectedYear, setSelectedYear] = useState<number>(
-    new Date().getFullYear()
+  // Date range for customer data - default to previous month
+  const getPreviousMonthRange = () => {
+    const now = new Date();
+    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayOfPreviousMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      0
+    );
+    return {
+      from: previousMonth,
+      to: lastDayOfPreviousMonth,
+    };
+  };
+  const previousMonthRange = getPreviousMonthRange();
+  const [customerDataFromDate, setCustomerDataFromDate] = useState<Date | null>(
+    previousMonthRange.from
+  );
+  const [customerDataToDate, setCustomerDataToDate] = useState<Date | null>(
+    previousMonthRange.to
   );
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
   const [totalOutstandingAmount, setTotalOutstandingAmount] =
@@ -2851,23 +2867,25 @@ function EnquiryCreate() {
 
   const fetchCustomerData = async (
     customerCode: string,
-    month?: number,
-    year?: number
+    fromDate?: Date | null,
+    toDate?: Date | null
   ) => {
     try {
       setIsLoadingData(true);
 
-      // Use provided month/year or current state values
-      const monthToUse = month ?? selectedMonth;
-      const yearToUse = year ?? selectedYear;
+      // Use provided dates or current state values
+      const fromDateToUse = fromDate ?? customerDataFromDate;
+      const toDateToUse = toDate ?? customerDataToDate;
 
-      // Calculate date_from: First day of the selected month (YYYY-MM-01)
-      const dateFrom = `${yearToUse}-${String(monthToUse).padStart(2, "0")}-01`;
+      if (!fromDateToUse || !toDateToUse) {
+        console.error("Date range is required");
+        setIsLoadingData(false);
+        return;
+      }
 
-      // Calculate date_to: Last day of the selected month
-      // Create a date object for the first day of the next month, then subtract 1 day
-      const lastDayOfMonth = new Date(yearToUse, monthToUse, 0).getDate();
-      const dateTo = `${yearToUse}-${String(monthToUse).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
+      // Format dates as YYYY-MM-DD
+      const dateFrom = dayjs(fromDateToUse).format("YYYY-MM-DD");
+      const dateTo = dayjs(toDateToUse).format("YYYY-MM-DD");
 
       const payload: {
         customer_code: string;
@@ -3450,7 +3468,11 @@ function EnquiryCreate() {
                                   const customerCode =
                                     customerForm.values.customer_code;
                                   if (customerCode) {
-                                    fetchCustomerData(customerCode);
+                                    fetchCustomerData(
+                                      customerCode,
+                                      customerDataFromDate,
+                                      customerDataToDate
+                                    );
                                     openCustomerDataDrawer();
                                   }
                                 }}
@@ -3475,8 +3497,10 @@ function EnquiryCreate() {
                             setCustomerTotalCreditAmount(null);
                             setTotalRevenue(null);
                             setTotalProfit(null);
-                            setSelectedMonth(new Date().getMonth() + 1);
-                            setSelectedYear(new Date().getFullYear());
+                            // Reset date range to previous month
+                            const previousMonthRange = getPreviousMonthRange();
+                            setCustomerDataFromDate(previousMonthRange.from);
+                            setCustomerDataToDate(previousMonthRange.to);
                           }}
                           title={`Customer Data for ${selectedCustomerName || customerForm.values.customer_code}`}
                           size={"70%"}
@@ -3502,17 +3526,67 @@ function EnquiryCreate() {
                                 totalRevenue !== null ||
                                 totalProfit !== null) && (
                                 <Box>
-                                  <Text
-                                    size="lg"
-                                    fw={700}
+                                  <Group
+                                    justify="space-between"
+                                    align="center"
                                     mb="md"
-                                    c="#105476"
-                                    style={{
-                                      paddingBottom: "6px",
-                                    }}
                                   >
-                                    ℹ️ Customer Information
-                                  </Text>
+                                    <Text
+                                      size="lg"
+                                      fw={700}
+                                      c="#105476"
+                                      style={{
+                                        paddingBottom: "6px",
+                                      }}
+                                    >
+                                      ℹ️ Customer Information
+                                    </Text>
+                                    {user?.is_staff && (
+                                      <Box style={{ width: "400px" }}>
+                                        <DateRangeInput
+                                          fromDate={customerDataFromDate}
+                                          toDate={customerDataToDate}
+                                          onFromDateChange={(date) => {
+                                            setCustomerDataFromDate(date);
+                                            const customerCode =
+                                              customerForm.values.customer_code;
+                                            if (
+                                              customerCode &&
+                                              date &&
+                                              customerDataToDate
+                                            ) {
+                                              fetchCustomerData(
+                                                customerCode,
+                                                date,
+                                                customerDataToDate
+                                              );
+                                            }
+                                          }}
+                                          onToDateChange={(date) => {
+                                            setCustomerDataToDate(date);
+                                            const customerCode =
+                                              customerForm.values.customer_code;
+                                            if (
+                                              customerCode &&
+                                              customerDataFromDate &&
+                                              date
+                                            ) {
+                                              fetchCustomerData(
+                                                customerCode,
+                                                customerDataFromDate,
+                                                date
+                                              );
+                                            }
+                                          }}
+                                          fromLabel="From"
+                                          toLabel="To"
+                                          size="xs"
+                                          inputWidth="180px"
+                                          hideLabels={false}
+                                        />
+                                      </Box>
+                                    )}
+                                  </Group>
                                   <Grid gutter="md">
                                     {/* Left Card - General Customer Info */}
                                     <Grid.Col
@@ -3668,170 +3742,6 @@ function EnquiryCreate() {
                                           }}
                                         >
                                           <Stack gap="md">
-                                            {/* Filter Section */}
-                                            <Box>
-                                              {/* <Text
-                                          size="xs"
-                                          fw={600}
-                                          c="#666"
-                                          mb={8}
-                                        >
-                                          Filter by Period
-                                        </Text> */}
-                                              <Group
-                                                gap="xs"
-                                                justify="space-between"
-                                              >
-                                                <Group>
-                                                  <Text
-                                                    size="xs"
-                                                    fw={600}
-                                                    c="#666"
-                                                    mb={6}
-                                                  >
-                                                    Revenue & Profit
-                                                  </Text>
-                                                </Group>
-                                                <Group>
-                                                  <Select
-                                                    size="xs"
-                                                    value={String(
-                                                      selectedMonth
-                                                    )}
-                                                    onChange={(value) => {
-                                                      if (value) {
-                                                        const month = parseInt(
-                                                          value,
-                                                          10
-                                                        );
-                                                        setSelectedMonth(month);
-                                                        const customerCode =
-                                                          customerForm.values
-                                                            .customer_code;
-                                                        if (customerCode) {
-                                                          fetchCustomerData(
-                                                            customerCode,
-                                                            month,
-                                                            selectedYear
-                                                          );
-                                                        }
-                                                      }
-                                                    }}
-                                                    data={[
-                                                      {
-                                                        value: "1",
-                                                        label: "January",
-                                                      },
-                                                      {
-                                                        value: "2",
-                                                        label: "February",
-                                                      },
-                                                      {
-                                                        value: "3",
-                                                        label: "March",
-                                                      },
-                                                      {
-                                                        value: "4",
-                                                        label: "April",
-                                                      },
-                                                      {
-                                                        value: "5",
-                                                        label: "May",
-                                                      },
-                                                      {
-                                                        value: "6",
-                                                        label: "June",
-                                                      },
-                                                      {
-                                                        value: "7",
-                                                        label: "July",
-                                                      },
-                                                      {
-                                                        value: "8",
-                                                        label: "August",
-                                                      },
-                                                      {
-                                                        value: "9",
-                                                        label: "September",
-                                                      },
-                                                      {
-                                                        value: "10",
-                                                        label: "October",
-                                                      },
-                                                      {
-                                                        value: "11",
-                                                        label: "November",
-                                                      },
-                                                      {
-                                                        value: "12",
-                                                        label: "December",
-                                                      },
-                                                    ]}
-                                                    styles={{
-                                                      input: {
-                                                        fontSize: 12,
-                                                        height: 30,
-                                                      },
-                                                      label: {
-                                                        fontSize: "12px",
-                                                        fontWeight: 500,
-                                                        color: "#495057",
-                                                      },
-                                                    }}
-                                                    w={120}
-                                                  />
-                                                  <Select
-                                                    size="xs"
-                                                    value={String(selectedYear)}
-                                                    onChange={(value) => {
-                                                      if (value) {
-                                                        const year = parseInt(
-                                                          value,
-                                                          10
-                                                        );
-                                                        setSelectedYear(year);
-                                                        const customerCode =
-                                                          customerForm.values
-                                                            .customer_code;
-                                                        if (customerCode) {
-                                                          fetchCustomerData(
-                                                            customerCode,
-                                                            selectedMonth,
-                                                            year
-                                                          );
-                                                        }
-                                                      }
-                                                    }}
-                                                    data={Array.from(
-                                                      { length: 10 },
-                                                      (_, i) => {
-                                                        const year =
-                                                          new Date().getFullYear() -
-                                                          9 +
-                                                          i;
-                                                        return {
-                                                          value: String(year),
-                                                          label: String(year),
-                                                        };
-                                                      }
-                                                    )}
-                                                    styles={{
-                                                      input: {
-                                                        fontSize: 12,
-                                                        height: 30,
-                                                      },
-                                                      label: {
-                                                        fontSize: "12px",
-                                                        fontWeight: 500,
-                                                        color: "#495057",
-                                                      },
-                                                    }}
-                                                    w={100}
-                                                  />
-                                                </Group>
-                                              </Group>
-                                            </Box>
-
                                             {/* Revenue and Profit */}
                                             <Group
                                               justify="space-evenly"
@@ -7886,11 +7796,13 @@ function EnquiryCreate() {
                           }}
                           onClick={() => {
                             if (
-                              customerForm.values.supporting_documents.length === 0
+                              customerForm.values.supporting_documents
+                                .length === 0
                             ) {
-                              customerForm.setFieldValue("supporting_documents", [
-                                { name: "", file: null },
-                              ]);
+                              customerForm.setFieldValue(
+                                "supporting_documents",
+                                [{ name: "", file: null }]
+                              );
                             }
                             // Validate all existing files for size
                             const newErrors: { [key: number]: string } = {};
@@ -8334,20 +8246,20 @@ function EnquiryCreate() {
                 </Grid.Col>
                 <Grid.Col span={1} offset={11}>
                   {index ===
-                      customerForm.values.supporting_documents.length - 1 && (
-                      <Button
-                        variant="light"
-                        color="#105476"
-                        onClick={() => {
-                          customerForm.setFieldValue("supporting_documents", [
-                            ...customerForm.values.supporting_documents,
-                            { name: "", file: null },
-                          ]);
-                        }}
-                      >
-                        <IconPlus size={16} />
-                      </Button>
-                    )}
+                    customerForm.values.supporting_documents.length - 1 && (
+                    <Button
+                      variant="light"
+                      color="#105476"
+                      onClick={() => {
+                        customerForm.setFieldValue("supporting_documents", [
+                          ...customerForm.values.supporting_documents,
+                          { name: "", file: null },
+                        ]);
+                      }}
+                    >
+                      <IconPlus size={16} />
+                    </Button>
+                  )}
                 </Grid.Col>
               </Grid>
             ))}

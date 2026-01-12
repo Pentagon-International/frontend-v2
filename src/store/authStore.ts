@@ -209,6 +209,12 @@ const useAuthStore = create<AuthStore>((set) => ({
       localStorage.setItem("accessToken", data.access);
       set({ accessToken: data.access });
 
+      // If the response includes a new refresh token, update it as well
+      if (data.refresh) {
+        localStorage.setItem("refreshToken", data.refresh);
+        set({ refreshToken: data.refresh });
+      }
+
       return data.access;
     } catch (err: any) {
       // Only rethrow - don't logout here

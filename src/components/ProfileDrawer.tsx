@@ -64,9 +64,37 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
     defaultBranch?.user_branch_id || 0
   );
 
-  const handleLogout = () => {
-    logout();
-    onClose();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      // Call logout API
+      const response = await apiCallProtected.post(
+        URL.logoutUser,
+        {},
+        API_HEADER
+      );
+
+      // If API call is successful (no error in response)
+      if (response && !response.data?.error) {
+        // Close drawer first, then clear store and redirect (logout handles redirect)
+        onClose();
+        logout();
+      } else {
+        // Even if API returns an error, still logout locally
+        console.error("Logout API error:", response.data);
+        onClose();
+        logout();
+      }
+    } catch (error) {
+      // If API call fails, still logout locally
+      console.error("Error calling logout API:", error);
+      onClose();
+      logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const handleBranchChange = (value: string | null) => {
@@ -391,13 +419,15 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
             // fullWidth
             size="md"
             onClick={handleLogout}
+            disabled={isLoggingOut}
+            loading={isLoggingOut}
             style={{
               borderRadius: "8px",
               fontWeight: 500,
               width: "200px",
             }}
           >
-            Logout
+            {isLoggingOut ? "Logging out..." : "Logout"}
           </Button>
         </Stack>
       </Stack>

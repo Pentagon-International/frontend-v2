@@ -49,6 +49,7 @@ import {
   ToastNotification,
   SearchableSelect,
   Dropdown,
+  DateRangeInput,
 } from "../../components";
 import useAuthStore from "../../store/authStore";
 import { toTitleCase } from "../../utils/textFormatter";
@@ -395,11 +396,26 @@ function CallEntryNew() {
   >(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [totalProfit, setTotalProfit] = useState<number | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<number>(
-    new Date().getMonth() + 1
-  ); // 1-12
-  const [selectedYear, setSelectedYear] = useState<number>(
-    new Date().getFullYear()
+  // Date range for customer data - default to previous month
+  const getPreviousMonthRange = () => {
+    const now = new Date();
+    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayOfPreviousMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      0
+    );
+    return {
+      from: previousMonth,
+      to: lastDayOfPreviousMonth,
+    };
+  };
+  const previousMonthRange = getPreviousMonthRange();
+  const [customerDataFromDate, setCustomerDataFromDate] = useState<Date | null>(
+    previousMonthRange.from
+  );
+  const [customerDataToDate, setCustomerDataToDate] = useState<Date | null>(
+    previousMonthRange.to
   );
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
   const [totalOutstandingAmount, setTotalOutstandingAmount] =
@@ -694,23 +710,25 @@ function CallEntryNew() {
 
   const fetchCustomerData = async (
     customerCode: string,
-    month?: number,
-    year?: number
+    fromDate?: Date | null,
+    toDate?: Date | null
   ) => {
     try {
       setIsLoadingData(true);
 
-      // Use provided month/year or current state values
-      const monthToUse = month ?? selectedMonth;
-      const yearToUse = year ?? selectedYear;
+      // Use provided dates or current state values
+      const fromDateToUse = fromDate ?? customerDataFromDate;
+      const toDateToUse = toDate ?? customerDataToDate;
 
-      // Calculate date_from: First day of the selected month (YYYY-MM-01)
-      const dateFrom = `${yearToUse}-${String(monthToUse).padStart(2, "0")}-01`;
+      if (!fromDateToUse || !toDateToUse) {
+        console.error("Date range is required");
+        setIsLoadingData(false);
+        return;
+      }
 
-      // Calculate date_to: Last day of the selected month
-      // Create a date object for the first day of the next month, then subtract 1 day
-      const lastDayOfMonth = new Date(yearToUse, monthToUse, 0).getDate();
-      const dateTo = `${yearToUse}-${String(monthToUse).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
+      // Format dates as YYYY-MM-DD
+      const dateFrom = dayjs(fromDateToUse).format("YYYY-MM-DD");
+      const dateTo = dayjs(toDateToUse).format("YYYY-MM-DD");
 
       const payload: {
         customer_code: string;
@@ -856,8 +874,10 @@ function CallEntryNew() {
       setCustomerSalesperson(null);
       setCustomerLastVisited(null);
       setCustomerTotalCreditAmount(null);
-      setSelectedMonth(new Date().getMonth() + 1);
-      setSelectedYear(new Date().getFullYear());
+      // Reset date range to previous month
+      const previousMonthRange = getPreviousMonthRange();
+      setCustomerDataFromDate(previousMonthRange.from);
+      setCustomerDataToDate(previousMonthRange.to);
       setTotalOutstandingAmount(0);
     }
   };
@@ -945,7 +965,7 @@ function CallEntryNew() {
       }
 
       callEntryForm.setFieldValue("customer", customerVal);
-      fetchCustomerData(customerVal);
+      fetchCustomerData(customerVal, customerDataFromDate, customerDataToDate);
       openQuotationDrawer();
     }
     // Handle navigation from PotentialCustomers
@@ -3052,8 +3072,10 @@ function CallEntryNew() {
                     setCustomerTotalCreditAmount(null);
                     setTotalRevenue(null);
                     setTotalProfit(null);
-                    setSelectedMonth(new Date().getMonth() + 1);
-                    setSelectedYear(new Date().getFullYear());
+                    // Reset date range to previous month
+                    const previousMonthRange = getPreviousMonthRange();
+                    setCustomerDataFromDate(previousMonthRange.from);
+                    setCustomerDataToDate(previousMonthRange.to);
                   }}
                   title={`Customer Data for ${selectedCustomerName}`}
                   size={"70%"}
@@ -3087,18 +3109,64 @@ function CallEntryNew() {
                         totalRevenue !== null ||
                         totalProfit !== null) && (
                         <Box>
-                          <Text
-                            size="lg"
-                            fw={700}
-                            mb="md"
-                            c="#105476"
-                            style={{
-                              paddingBottom: "6px",
-                              fontFamily: "Inter, sans-serif",
-                            }}
-                          >
-                            ℹ️ Customer Information
-                          </Text>
+                          <Group justify="space-between" align="center" mb="md">
+                            <Text
+                              size="lg"
+                              fw={700}
+                              c="#105476"
+                              style={{
+                                paddingBottom: "6px",
+                                fontFamily: "Inter, sans-serif",
+                              }}
+                            >
+                              ℹ️ Customer Information
+                            </Text>
+                            {user?.is_staff && (
+                              <Box style={{ width: "400px" }}>
+                                <DateRangeInput
+                                  fromDate={customerDataFromDate}
+                                  toDate={customerDataToDate}
+                                  onFromDateChange={(date) => {
+                                    setCustomerDataFromDate(date);
+                                    const customerVal =
+                                      callEntryForm.getValues().customer;
+                                    if (
+                                      customerVal &&
+                                      date &&
+                                      customerDataToDate
+                                    ) {
+                                      fetchCustomerData(
+                                        customerVal,
+                                        date,
+                                        customerDataToDate
+                                      );
+                                    }
+                                  }}
+                                  onToDateChange={(date) => {
+                                    setCustomerDataToDate(date);
+                                    const customerVal =
+                                      callEntryForm.getValues().customer;
+                                    if (
+                                      customerVal &&
+                                      customerDataFromDate &&
+                                      date
+                                    ) {
+                                      fetchCustomerData(
+                                        customerVal,
+                                        customerDataFromDate,
+                                        date
+                                      );
+                                    }
+                                  }}
+                                  fromLabel="From"
+                                  toLabel="To"
+                                  size="xs"
+                                  inputWidth="180px"
+                                  hideLabels={false}
+                                />
+                              </Box>
+                            )}
+                          </Group>
                           <Grid gutter="md">
                             {/* Left Card - General Customer Info */}
                             <Grid.Col
@@ -3232,130 +3300,6 @@ function CallEntryNew() {
                                   }}
                                 >
                                   <Stack gap="md">
-                                    {/* Filter Section */}
-                                    <Box>
-                                      <Group gap="xs" justify="space-between">
-                                        <Group>
-                                          <Text
-                                            size="xs"
-                                            fw={600}
-                                            c="#666"
-                                            mb={6}
-                                          >
-                                            Revenue & Profit
-                                          </Text>
-                                        </Group>
-                                        <Group>
-                                          <Select
-                                            size="xs"
-                                            value={String(selectedMonth)}
-                                            onChange={(value) => {
-                                              if (value) {
-                                                const month = parseInt(
-                                                  value,
-                                                  10
-                                                );
-                                                setSelectedMonth(month);
-                                                const customerVal =
-                                                  callEntryForm.getValues()
-                                                    .customer;
-                                                if (customerVal) {
-                                                  fetchCustomerData(
-                                                    customerVal,
-                                                    month,
-                                                    selectedYear
-                                                  );
-                                                }
-                                              }
-                                            }}
-                                            data={[
-                                              { value: "1", label: "January" },
-                                              { value: "2", label: "February" },
-                                              { value: "3", label: "March" },
-                                              { value: "4", label: "April" },
-                                              { value: "5", label: "May" },
-                                              { value: "6", label: "June" },
-                                              { value: "7", label: "July" },
-                                              { value: "8", label: "August" },
-                                              {
-                                                value: "9",
-                                                label: "September",
-                                              },
-                                              { value: "10", label: "October" },
-                                              {
-                                                value: "11",
-                                                label: "November",
-                                              },
-                                              {
-                                                value: "12",
-                                                label: "December",
-                                              },
-                                            ]}
-                                            styles={{
-                                              input: {
-                                                fontSize: 12,
-                                                height: 30,
-                                              },
-                                              label: {
-                                                fontSize: "12px",
-                                                fontWeight: 500,
-                                                color: "#495057",
-                                              },
-                                            }}
-                                            w={120}
-                                          />
-                                          <Select
-                                            size="xs"
-                                            value={String(selectedYear)}
-                                            onChange={(value) => {
-                                              if (value) {
-                                                const year = parseInt(
-                                                  value,
-                                                  10
-                                                );
-                                                setSelectedYear(year);
-                                                const customerVal =
-                                                  callEntryForm.getValues()
-                                                    .customer;
-                                                if (customerVal) {
-                                                  fetchCustomerData(
-                                                    customerVal,
-                                                    selectedMonth,
-                                                    year
-                                                  );
-                                                }
-                                              }
-                                            }}
-                                            data={Array.from(
-                                              { length: 10 },
-                                              (_, i) => {
-                                                const year =
-                                                  new Date().getFullYear() -
-                                                  9 +
-                                                  i;
-                                                return {
-                                                  value: String(year),
-                                                  label: String(year),
-                                                };
-                                              }
-                                            )}
-                                            styles={{
-                                              input: {
-                                                fontSize: 12,
-                                                height: 30,
-                                              },
-                                              label: {
-                                                fontSize: "12px",
-                                                fontWeight: 500,
-                                                color: "#495057",
-                                              },
-                                            }}
-                                            w={100}
-                                          />
-                                        </Group>
-                                      </Group>
-                                    </Box>
-
                                     {/* Revenue and Profit */}
                                     <Group justify="space-evenly" mt={10}>
                                       {totalRevenue !== null && (
@@ -4448,7 +4392,11 @@ function CallEntryNew() {
                                 // Fallback to placeholder only if no data available
                                 setSelectedCustomerName(`${customerVal}`);
                               }
-                              fetchCustomerData(customerVal);
+                              fetchCustomerData(
+                                customerVal,
+                                customerDataFromDate,
+                                customerDataToDate
+                              );
                               openQuotationDrawer();
                             } else {
                               ToastNotification({

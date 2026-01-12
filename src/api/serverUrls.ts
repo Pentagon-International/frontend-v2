@@ -1,6 +1,7 @@
 export const URL = {
   base: import.meta.env.VITE_API_BASE_URL,
   loginUser: "accounts/login/",
+  logoutUser: "accounts/logout/",
   refreshToken: "token/refresh/",
   groupCompany: "group-company-master/",
   callMode: "callmode/",
