@@ -328,6 +328,21 @@ const serviceFormSchema = yup.object({
               hazardous_cargo: yup
                 .string()
                 .required("Hazardous cargo is required"),
+              un_no: yup.string().when("hazardous_cargo", {
+                is: (value: string) => value === "Yes",
+                then: (schema) => schema.required("UN no is required"),
+                otherwise: (schema) => schema.nullable(),
+              }),
+              class: yup.string().when("hazardous_cargo", {
+                is: (value: string) => value === "Yes",
+                then: (schema) => schema.required("Class is required"),
+                otherwise: (schema) => schema.nullable(),
+              }),
+              pkg_group: yup.string().when("hazardous_cargo", {
+                is: (value: string) => value === "Yes",
+                then: (schema) => schema.required("PKG Group is required"),
+                otherwise: (schema) => schema.nullable(),
+              }),
               stackable: yup.string().required("Stackable cargo is required"),
             })
           )
@@ -526,6 +541,9 @@ function EnquiryCreate() {
               container_type_code: null,
               no_of_containers: null,
               hazardous_cargo: "No",
+              un_no: null,
+              class: null,
+              pkg_group: null,
               stackable: "Yes",
             },
           ],
@@ -1281,6 +1299,7 @@ function EnquiryCreate() {
         ...customerFormDataWithoutFiles,
         ...(enq?.call_entry_id && { call_entry: enq.call_entry_id }),
         services: serviceForm.values.service_details.map((serviceDetail) => {
+          const cargo = serviceDetail.cargo_details[0];
           const servicePayload: any = {
             service: serviceDetail.service,
             origin_code: serviceDetail.origin_code,
@@ -1289,13 +1308,20 @@ function EnquiryCreate() {
             delivery: serviceDetail.delivery === "true",
             pickup_location: serviceDetail.pickup_location,
             delivery_location: serviceDetail.delivery_location,
-            hazardous_cargo:
-              serviceDetail.cargo_details[0]?.hazardous_cargo === "Yes",
-            stackable: serviceDetail.cargo_details[0]?.stackable === "Yes",
+            hazardous_cargo: cargo?.hazardous_cargo === "Yes",
+            stackable: cargo?.stackable === "Yes",
             shipment_terms_code: serviceDetail.shipment_terms_code,
             service_remark: serviceDetail.service_remark,
             commodity: serviceDetail.commodity,
           };
+
+          // Add hazardous cargo related fields (include even if null)
+          servicePayload.un_no =
+            cargo?.hazardous_cargo === "Yes" ? cargo?.un_no || null : null;
+          servicePayload.class_name =
+            cargo?.hazardous_cargo === "Yes" ? cargo?.class || null : null;
+          servicePayload.pkg_group =
+            cargo?.hazardous_cargo === "Yes" ? cargo?.pkg_group || null : null;
 
           // Handle OTHERS service case
           if (serviceDetail.service === "OTHERS") {
@@ -2073,6 +2099,9 @@ function EnquiryCreate() {
                       fcl.container_type_code || fcl.container_type || null,
                     no_of_containers: fcl.no_of_containers || null,
                     hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
+                    un_no: service.un_no || null,
+                    class: service.class_name || service.class || null,
+                    pkg_group: service.pkg_group || null,
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
@@ -2096,6 +2125,9 @@ function EnquiryCreate() {
                     container_type_code: null,
                     no_of_containers: null,
                     hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
+                    un_no: service.un_no || null,
+                    class: service.class_name || service.class || null,
+                    pkg_group: service.pkg_group || null,
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2117,6 +2149,9 @@ function EnquiryCreate() {
                     container_type_code: null,
                     no_of_containers: null,
                     hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
+                    un_no: service.un_no || null,
+                    class: service.class_name || service.class || null,
+                    pkg_group: service.pkg_group || null,
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2142,6 +2177,9 @@ function EnquiryCreate() {
                     container_type_code: null,
                     no_of_containers: null,
                     hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
+                    un_no: service.un_no || null,
+                    class: service.class_name || service.class || null,
+                    pkg_group: service.pkg_group || null,
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2287,6 +2325,9 @@ function EnquiryCreate() {
                       fcl.container_type_code || fcl.container_type || null,
                     no_of_containers: fcl.no_of_containers || null,
                     hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
+                    un_no: service.un_no || null,
+                    class: service.class_name || service.class || null,
+                    pkg_group: service.pkg_group || null,
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
@@ -2310,6 +2351,9 @@ function EnquiryCreate() {
                     container_type_code: null,
                     no_of_containers: null,
                     hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
+                    un_no: service.un_no || null,
+                    class: service.class_name || service.class || null,
+                    pkg_group: service.pkg_group || null,
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2331,6 +2375,9 @@ function EnquiryCreate() {
                     container_type_code: null,
                     no_of_containers: null,
                     hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
+                    un_no: service.un_no || null,
+                    class: service.class_name || service.class || null,
+                    pkg_group: service.pkg_group || null,
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2356,6 +2403,9 @@ function EnquiryCreate() {
                     container_type_code: null,
                     no_of_containers: null,
                     hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
+                    un_no: service.un_no || null,
+                    class: service.class_name || service.class || null,
+                    pkg_group: service.pkg_group || null,
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2487,6 +2537,14 @@ function EnquiryCreate() {
                 fcl.container_type_code || fcl.container_type || null,
               no_of_containers: fcl.no_of_containers || null,
               hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
+              un_no: enq.un_no || fcl.un_no || null,
+              class:
+                enq.class_name ||
+                fcl.class_name ||
+                enq.class ||
+                fcl.class ||
+                null,
+              pkg_group: enq.pkg_group || fcl.pkg_group || null,
               stackable: enq.stackable ? "Yes" : "No",
             }));
           } else if (enq?.service === "AIR" || isOthersWithAIR) {
@@ -2509,6 +2567,9 @@ function EnquiryCreate() {
                 container_type_code: null,
                 no_of_containers: null,
                 hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
+                un_no: enq.un_no || null,
+                class: enq.class_name || enq.class || null,
+                pkg_group: enq.pkg_group || null,
                 stackable: enq.stackable ? "Yes" : "No",
               },
             ];
@@ -2530,6 +2591,9 @@ function EnquiryCreate() {
                 container_type_code: null,
                 no_of_containers: null,
                 hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
+                un_no: enq.un_no || null,
+                class: enq.class_name || enq.class || null,
+                pkg_group: enq.pkg_group || null,
                 stackable: enq.stackable ? "Yes" : "No",
               },
             ];
@@ -2555,6 +2619,9 @@ function EnquiryCreate() {
                 container_type_code: null,
                 no_of_containers: null,
                 hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
+                un_no: enq.un_no || null,
+                class: enq.class_name || enq.class || null,
+                pkg_group: enq.pkg_group || null,
                 stackable: enq.stackable ? "Yes" : "No",
               },
             ];
@@ -4888,6 +4955,9 @@ function EnquiryCreate() {
                                         container_type_code: null,
                                         no_of_containers: null,
                                         hazardous_cargo: "No",
+                                        un_no: null,
+                                        class: null,
+                                        pkg_group: null,
                                         stackable: "Yes",
                                       };
 
@@ -5224,29 +5294,18 @@ function EnquiryCreate() {
                                 />
                               </Grid.Col>
                               <Grid.Col span={6}>
-                                <Radio.Group
-                                  label="Pickup"
-                                  styles={{
-                                    label: {
-                                      fontSize: "13px",
-                                      fontWeight: 500,
-                                      color: "#424242",
-                                      marginBottom: "4px",
-                                      fontFamily: "Inter",
-                                      fontStyle: "medium",
-                                    },
-                                  }}
-                                  key={serviceForm.key(
-                                    `service_details.${serviceIndex}.pickup`
-                                  )}
-                                  {...serviceForm.getInputProps(
-                                    `service_details.${serviceIndex}.pickup`
-                                  )}
-                                >
-                                  <Group mt={10}>
-                                    <Radio
-                                      value="true"
-                                      label="Yes"
+                                <Grid>
+                                  <Grid.Col
+                                    span={
+                                      serviceForm.values.service_details[
+                                        serviceIndex
+                                      ]?.pickup === "true"
+                                        ? 4
+                                        : 12
+                                    }
+                                  >
+                                    <Radio.Group
+                                      label="Pickup"
                                       styles={{
                                         label: {
                                           fontSize: "13px",
@@ -5257,23 +5316,92 @@ function EnquiryCreate() {
                                           fontStyle: "medium",
                                         },
                                       }}
-                                    />
-                                    <Radio
-                                      value="false"
-                                      label="No"
-                                      styles={{
-                                        label: {
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          color: "#424242",
-                                          marginBottom: "4px",
-                                          fontFamily: "Inter",
-                                          fontStyle: "medium",
-                                        },
-                                      }}
-                                    />
-                                  </Group>
-                                </Radio.Group>
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.pickup`
+                                      )}
+                                      {...serviceForm.getInputProps(
+                                        `service_details.${serviceIndex}.pickup`
+                                      )}
+                                    >
+                                      <Group mt={10}>
+                                        <Radio
+                                          value="true"
+                                          label="Yes"
+                                          styles={{
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                        />
+                                        <Radio
+                                          value="false"
+                                          label="No"
+                                          styles={{
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                        />
+                                      </Group>
+                                    </Radio.Group>
+                                  </Grid.Col>
+                                  {serviceForm.values.service_details[
+                                    serviceIndex
+                                  ]?.pickup === "true" && (
+                                    <Grid.Col span={8}>
+                                      <TextInput
+                                        label="Pickup Location"
+                                        styles={{
+                                          input: {
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            height: "36px",
+                                          },
+                                          label: {
+                                            fontSize: "13px",
+                                            fontWeight: 500,
+                                            color: "#424242",
+                                            marginBottom: "4px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
+                                          },
+                                        }}
+                                        key={serviceForm.key(
+                                          `service_details.${serviceIndex}.pickup_location`
+                                        )}
+                                        value={
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.pickup_location || ""
+                                        }
+                                        onChange={(e) => {
+                                          const formattedValue = toTitleCase(
+                                            e.target.value
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.pickup_location`,
+                                            formattedValue
+                                          );
+                                        }}
+                                        error={
+                                          serviceForm.errors[
+                                            `service_details.${serviceIndex}.pickup_location`
+                                          ] as string
+                                        }
+                                      />
+                                    </Grid.Col>
+                                  )}
+                                </Grid>
                               </Grid.Col>
 
                               <Grid.Col span={6}>
@@ -5383,169 +5511,292 @@ function EnquiryCreate() {
                                   withAsterisk
                                   placeholder="Select Hazardous"
                                   data={["Yes", "No"]}
-                                  {...serviceForm.getInputProps(
-                                    `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
-                                  )}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={6}>
-                                <Radio.Group
-                                  label="Delivery"
-                                  styles={{
-                                    label: {
-                                      fontSize: "13px",
-                                      fontWeight: 500,
-                                      color: "#424242",
-                                      marginBottom: "4px",
-                                      fontFamily: "Inter",
-                                      fontStyle: "medium",
-                                    },
-                                  }}
-                                  key={serviceForm.key(
-                                    `service_details.${serviceIndex}.delivery`
-                                  )}
                                   value={
                                     serviceForm.values.service_details[
                                       serviceIndex
-                                    ]?.delivery
+                                    ]?.cargo_details?.[0]?.hazardous_cargo
                                   }
                                   onChange={(value) => {
                                     serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.delivery`,
-                                      value
+                                      `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`,
+                                      value || ""
                                     );
 
-                                    // Clear delivery_location if "false" is selected
-                                    if (value === "false") {
+                                    // Clear un_no, class, and pkg_group if "No" is selected
+                                    if (value === "No") {
                                       serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.delivery_location`,
-                                        ""
+                                        `service_details.${serviceIndex}.cargo_details.0.un_no`,
+                                        null
+                                      );
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.cargo_details.0.class`,
+                                        null
+                                      );
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.cargo_details.0.pkg_group`,
+                                        null
                                       );
                                     }
                                   }}
-                                >
-                                  <Group mt={10}>
-                                    <Radio
-                                      value="true"
-                                      label="Yes"
-                                      styles={{
-                                        label: {
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          color: "#424242",
-                                          marginBottom: "4px",
-                                          fontFamily: "Inter",
-                                          fontStyle: "medium",
-                                        },
-                                      }}
-                                    />
-                                    <Radio
-                                      value="false"
-                                      label="No"
-                                      styles={{
-                                        label: {
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          color: "#424242",
-                                          marginBottom: "4px",
-                                          fontFamily: "Inter",
-                                          fontStyle: "medium",
-                                        },
-                                      }}
-                                    />
-                                  </Group>
-                                </Radio.Group>
+                                  error={
+                                    serviceForm.errors[
+                                      `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
+                                    ] as string
+                                  }
+                                />
                               </Grid.Col>
                               {serviceForm.values.service_details[serviceIndex]
-                                ?.pickup === "true" && (
-                                <Grid.Col span={6}>
-                                  <TextInput
-                                    label="Pickup Location"
-                                    styles={{
-                                      input: {
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        height: "36px",
-                                      },
-                                      label: {
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                        marginBottom: "4px",
-                                        fontFamily: "Inter",
-                                        fontStyle: "medium",
-                                      },
-                                    }}
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.pickup_location`
-                                    )}
-                                    value={
+                                ?.cargo_details?.[0]?.hazardous_cargo ===
+                                "Yes" && (
+                                <>
+                                  <Grid.Col span={6}>
+                                    <TextInput
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.cargo_details.0.un_no`
+                                      )}
+                                      label="UN no"
+                                      withAsterisk
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.cargo_details?.[0]?.un_no || ""
+                                      }
+                                      onChange={(e) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.cargo_details.0.un_no`,
+                                          e.target.value
+                                        );
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.cargo_details.0.un_no`
+                                        ] as string
+                                      }
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={6}>
+                                    <TextInput
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.cargo_details.0.class`
+                                      )}
+                                      label="Class"
+                                      withAsterisk
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.cargo_details?.[0]?.class || ""
+                                      }
+                                      onChange={(e) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.cargo_details.0.class`,
+                                          e.target.value
+                                        );
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.cargo_details.0.class`
+                                        ] as string
+                                      }
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={6}>
+                                    <TextInput
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.cargo_details.0.pkg_group`
+                                      )}
+                                      label="PKG Group"
+                                      withAsterisk
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.cargo_details?.[0]?.pkg_group || ""
+                                      }
+                                      onChange={(e) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.cargo_details.0.pkg_group`,
+                                          e.target.value
+                                        );
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.cargo_details.0.pkg_group`
+                                        ] as string
+                                      }
+                                    />
+                                  </Grid.Col>
+                                </>
+                              )}
+                              <Grid.Col span={6}>
+                                <Grid>
+                                  <Grid.Col
+                                    span={
                                       serviceForm.values.service_details[
                                         serviceIndex
-                                      ]?.pickup_location || ""
+                                      ]?.delivery === "true"
+                                        ? 4
+                                        : 12
                                     }
-                                    onChange={(e) => {
-                                      const formattedValue = toTitleCase(
-                                        e.target.value
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.pickup_location`,
-                                        formattedValue
-                                      );
-                                    }}
-                                    error={
-                                      serviceForm.errors[
-                                        `service_details.${serviceIndex}.pickup_location`
-                                      ] as string
-                                    }
-                                  />
-                                </Grid.Col>
-                              )}
-                              {serviceForm.values.service_details[serviceIndex]
-                                ?.delivery === "true" && (
-                                <Grid.Col span={6}>
-                                  <TextInput
-                                    key={serviceForm.key(
-                                      `service_details.${serviceIndex}.delivery_location`
-                                    )}
-                                    label="Delivery Location"
-                                    styles={{
-                                      input: {
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        height: "36px",
-                                      },
-                                      label: {
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                        marginBottom: "4px",
-                                        fontFamily: "Inter",
-                                        fontStyle: "medium",
-                                      },
-                                    }}
-                                    value={
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.delivery_location || ""
-                                    }
-                                    onChange={(e) => {
-                                      const formattedValue = toTitleCase(
-                                        e.target.value
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.delivery_location`,
-                                        formattedValue
-                                      );
-                                    }}
-                                    error={
-                                      serviceForm.errors[
-                                        `service_details.${serviceIndex}.delivery_location`
-                                      ] as string
-                                    }
-                                  />
-                                </Grid.Col>
-                              )}
+                                  >
+                                    <Radio.Group
+                                      label="Delivery"
+                                      styles={{
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.delivery`
+                                      )}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.delivery
+                                      }
+                                      onChange={(value) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.delivery`,
+                                          value
+                                        );
+
+                                        // Clear delivery_location if "false" is selected
+                                        if (value === "false") {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_location`,
+                                            ""
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <Group mt={10}>
+                                        <Radio
+                                          value="true"
+                                          label="Yes"
+                                          styles={{
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                        />
+                                        <Radio
+                                          value="false"
+                                          label="No"
+                                          styles={{
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                        />
+                                      </Group>
+                                    </Radio.Group>
+                                  </Grid.Col>
+                                  {serviceForm.values.service_details[
+                                    serviceIndex
+                                  ]?.delivery === "true" && (
+                                    <Grid.Col span={8}>
+                                      <TextInput
+                                        key={serviceForm.key(
+                                          `service_details.${serviceIndex}.delivery_location`
+                                        )}
+                                        label="Delivery Location"
+                                        styles={{
+                                          input: {
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            height: "36px",
+                                          },
+                                          label: {
+                                            fontSize: "13px",
+                                            fontWeight: 500,
+                                            color: "#424242",
+                                            marginBottom: "4px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
+                                          },
+                                        }}
+                                        value={
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.delivery_location || ""
+                                        }
+                                        onChange={(e) => {
+                                          const formattedValue = toTitleCase(
+                                            e.target.value
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_location`,
+                                            formattedValue
+                                          );
+                                        }}
+                                        error={
+                                          serviceForm.errors[
+                                            `service_details.${serviceIndex}.delivery_location`
+                                          ] as string
+                                        }
+                                      />
+                                    </Grid.Col>
+                                  )}
+                                </Grid>
+                              </Grid.Col>
                               <Grid.Col span={6}>
                                 <TextInput
                                   label="Service Remark"
@@ -7667,6 +7918,9 @@ function EnquiryCreate() {
                                 container_type_code: null,
                                 no_of_containers: null,
                                 hazardous_cargo: "No",
+                                un_no: null,
+                                class: null,
+                                pkg_group: null,
                                 stackable: "Yes",
                               },
                             ],
