@@ -1,6 +1,14 @@
-import { Container, Stack, Text } from "@mantine/core";
+import { Box, Flex, Text, Center, Loader } from "@mantine/core";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  IconCircleCheck,
+  IconUser,
+  IconTruckDelivery,
+  IconPackage,
+  IconMapPin,
+  IconCurrencyDollar,
+} from "@tabler/icons-react";
 import OceanExportBookingStepper from "./OceanExportBookingStepper";
 
 function OceanExportBookingCreate() {
@@ -157,9 +165,25 @@ function OceanExportBookingCreate() {
     mappedBookingData
   );
 
+  const [active, setActive] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleStepChange = (step: number) => {
     console.log(`Current step: ${step + 1}`);
+    setActive(step);
   };
+
+  const handleStepClick = (step: number) => {
+    setActive(step);
+  };
+
+  const steps = [
+    { label: "Export Booking", icon: IconUser },
+    { label: "Party Details", icon: IconTruckDelivery },
+    { label: "Cargo Details", icon: IconPackage },
+    { label: "Pickup/Delivery", icon: IconMapPin },
+    { label: "Rate Details", icon: IconCurrencyDollar },
+  ];
 
   const handleComplete = () => {
     console.log("Ocean export booking creation completed!");
@@ -168,23 +192,506 @@ function OceanExportBookingCreate() {
   };
 
   return (
-    <Container size="xl" py="md">
-      <Stack gap="lg">
-        <Text size="xl" fw={600} c="#105476" mb="lg">
-          {isEditMode
-            ? "Edit Ocean Export Booking"
-            : "Create Ocean Export Booking"}
-        </Text>
+    <Box
+      component="form"
+      style={{
+        backgroundColor: "#F8F8F8",
+        position: "relative",
+        borderRadius: "8px",
+        overflow: "hidden",
+      }}
+    >
+      {isSubmitting && (
+        <Center
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(255, 255, 255, 0.65)",
+            zIndex: 15,
+          }}
+        >
+          <Loader color="#105476" size="lg" />
+        </Center>
+      )}
 
-        <OceanExportBookingStepper
-          onStepChange={handleStepChange}
-          onComplete={handleComplete}
-          initialData={isEditMode ? jobData : mappedBookingData}
-          isEditMode={isEditMode}
-          jobData={jobData}
-        />
-      </Stack>
-    </Container>
+      <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+        <Flex
+          gap="md"
+          align="flex-start"
+          style={{ height: "calc(100vh - 112px)", width: "100%" }}
+        >
+          {/* Vertical Stepper Sidebar */}
+          <Box
+            style={{
+              minWidth: 240,
+              width: "100%",
+              maxWidth: 250,
+              height: "100%",
+              alignSelf: "stretch",
+              borderRadius: "8px",
+              backgroundColor: "#FFFFFF",
+              position: "sticky",
+              top: 0,
+              display: "flex",
+              flexDirection: "column",
+              padding: "20px",
+              overflowY: "auto",
+            }}
+          >
+            <Box
+              style={{
+                marginBottom: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                size="md"
+                fw={600}
+                c="#105476"
+                style={{
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                  fontSize: "16px",
+                  color: "#105476",
+                  textAlign: "center",
+                }}
+              >
+                {isEditMode
+                  ? "Edit Ocean Export Booking"
+                  : "Create Ocean Export Booking"}
+              </Text>
+            </Box>
+
+            {/* Step 1 */}
+            <Box
+              onClick={() => handleStepClick(0)}
+              style={{
+                cursor: "pointer",
+                padding: "4px 0",
+                transition: "all 0.2s",
+              }}
+            >
+              <Flex align="center" gap="sm">
+                <Box
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    backgroundColor: active > 0 ? "#EAF9F1" : "#fff",
+                    border:
+                      active > 0
+                        ? "none"
+                        : active === 0
+                          ? "2px solid #105476"
+                          : "2px solid #d1d5db",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    color:
+                      active > 0
+                        ? "white"
+                        : active === 0
+                          ? "#105476"
+                          : "#9ca3af",
+                    transition: "all 0.2s",
+                    flexShrink: 0,
+                  }}
+                >
+                  {active > 0 ? (
+                    <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
+                  ) : (
+                    <IconUser size={20} color="#105476" fill="#E6F2F8" />
+                  )}
+                </Box>
+                <Text
+                  size="sm"
+                  fw={400}
+                  c="#105476"
+                  style={{
+                    lineHeight: 1.3,
+                    fontFamily: "Inter",
+                    fontStyle: "regular",
+                    fontSize: "13px",
+                    color: "#105476",
+                  }}
+                >
+                  Export Booking
+                </Text>
+              </Flex>
+            </Box>
+
+            {/* Vertical dotted line connector */}
+            <Box
+              style={{
+                height: "24px",
+                width: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginLeft: "0",
+                position: "relative",
+              }}
+            >
+              <Box
+                style={{
+                  width: "2px",
+                  height: "100%",
+                  borderLeft: "2px dotted #d1d5db",
+                }}
+              />
+            </Box>
+
+            {/* Step 2 */}
+            <Box
+              onClick={() => handleStepClick(1)}
+              style={{
+                cursor: "pointer",
+                padding: "4px 0",
+                transition: "all 0.2s",
+              }}
+            >
+              <Flex align="center" gap="sm">
+                <Box
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    backgroundColor: active > 1 ? "#EAF9F1" : "#fff",
+                    border:
+                      active > 1
+                        ? "none"
+                        : active === 1
+                          ? "2px solid #105476"
+                          : "2px solid #d1d5db",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    color:
+                      active > 1
+                        ? "white"
+                        : active === 1
+                          ? "#105476"
+                          : "#9ca3af",
+                    transition: "all 0.2s",
+                    flexShrink: 0,
+                  }}
+                >
+                  {active > 1 ? (
+                    <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
+                  ) : (
+                    <IconTruckDelivery
+                      size={20}
+                      color="#105476"
+                      fill="#E6F2F8"
+                    />
+                  )}
+                </Box>
+                <Text
+                  size="sm"
+                  fw={400}
+                  c="#374151"
+                  style={{
+                    lineHeight: 1.3,
+                    fontFamily: "Inter",
+                    fontStyle: "regular",
+                    fontSize: "13px",
+                    color: "#105476",
+                  }}
+                >
+                  Party Details
+                </Text>
+              </Flex>
+            </Box>
+
+            {/* Vertical dotted line connector */}
+            <Box
+              style={{
+                height: "24px",
+                width: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginLeft: "0",
+                position: "relative",
+              }}
+            >
+              <Box
+                style={{
+                  width: "2px",
+                  height: "100%",
+                  borderLeft: "2px dotted #d1d5db",
+                }}
+              />
+            </Box>
+
+            {/* Step 3 */}
+            <Box
+              onClick={() => handleStepClick(2)}
+              style={{
+                cursor: "pointer",
+                padding: "4px 0",
+                transition: "all 0.2s",
+              }}
+            >
+              <Flex align="center" gap="sm">
+                <Box
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    backgroundColor: active > 2 ? "#EAF9F1" : "#fff",
+                    border:
+                      active > 2
+                        ? "none"
+                        : active === 2
+                          ? "2px solid #105476"
+                          : "2px solid #d1d5db",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    color:
+                      active > 2
+                        ? "white"
+                        : active === 2
+                          ? "#105476"
+                          : "#9ca3af",
+                    transition: "all 0.2s",
+                    flexShrink: 0,
+                  }}
+                >
+                  {active > 2 ? (
+                    <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
+                  ) : (
+                    <IconPackage size={20} color="#105476" fill="#E6F2F8" />
+                  )}
+                </Box>
+                <Text
+                  size="sm"
+                  fw={400}
+                  c="#374151"
+                  style={{
+                    lineHeight: 1.3,
+                    fontFamily: "Inter",
+                    fontStyle: "regular",
+                    fontSize: "13px",
+                    color: "#105476",
+                  }}
+                >
+                  Cargo Details
+                </Text>
+              </Flex>
+            </Box>
+
+            {/* Vertical dotted line connector */}
+            <Box
+              style={{
+                height: "24px",
+                width: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginLeft: "0",
+                position: "relative",
+              }}
+            >
+              <Box
+                style={{
+                  width: "2px",
+                  height: "100%",
+                  borderLeft: "2px dotted #d1d5db",
+                }}
+              />
+            </Box>
+
+            {/* Step 4 */}
+            <Box
+              onClick={() => handleStepClick(3)}
+              style={{
+                cursor: "pointer",
+                padding: "4px 0",
+                transition: "all 0.2s",
+              }}
+            >
+              <Flex align="center" gap="sm">
+                <Box
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    backgroundColor: active > 3 ? "#EAF9F1" : "#fff",
+                    border:
+                      active > 3
+                        ? "none"
+                        : active === 3
+                          ? "2px solid #105476"
+                          : "2px solid #d1d5db",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    color:
+                      active > 3
+                        ? "white"
+                        : active === 3
+                          ? "#105476"
+                          : "#9ca3af",
+                    transition: "all 0.2s",
+                    flexShrink: 0,
+                  }}
+                >
+                  {active > 3 ? (
+                    <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
+                  ) : (
+                    <IconMapPin size={20} color="#105476" fill="#E6F2F8" />
+                  )}
+                </Box>
+                <Text
+                  size="sm"
+                  fw={400}
+                  c="#374151"
+                  style={{
+                    lineHeight: 1.3,
+                    fontFamily: "Inter",
+                    fontStyle: "regular",
+                    fontSize: "13px",
+                    color: "#105476",
+                  }}
+                >
+                  Pickup/Delivery
+                </Text>
+              </Flex>
+            </Box>
+
+            {/* Vertical dotted line connector */}
+            <Box
+              style={{
+                height: "24px",
+                width: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginLeft: "0",
+                position: "relative",
+              }}
+            >
+              <Box
+                style={{
+                  width: "2px",
+                  height: "100%",
+                  borderLeft: "2px dotted #d1d5db",
+                }}
+              />
+            </Box>
+
+            {/* Step 5 */}
+            <Box
+              onClick={() => handleStepClick(4)}
+              style={{
+                cursor: "pointer",
+                padding: "4px 0",
+                transition: "all 0.2s",
+              }}
+            >
+              <Flex align="center" gap="sm">
+                <Box
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    backgroundColor: active > 4 ? "#EAF9F1" : "#fff",
+                    border:
+                      active > 4
+                        ? "none"
+                        : active === 4
+                          ? "2px solid #105476"
+                          : "2px solid #d1d5db",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    color:
+                      active > 4
+                        ? "white"
+                        : active === 4
+                          ? "#105476"
+                          : "#9ca3af",
+                    transition: "all 0.2s",
+                    flexShrink: 0,
+                  }}
+                >
+                  {active > 4 ? (
+                    <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
+                  ) : (
+                    <IconCurrencyDollar
+                      size={20}
+                      color="#105476"
+                      fill="#E6F2F8"
+                    />
+                  )}
+                </Box>
+                <Text
+                  size="sm"
+                  fw={400}
+                  c="#374151"
+                  style={{
+                    lineHeight: 1.3,
+                    fontFamily: "Inter",
+                    fontStyle: "regular",
+                    fontSize: "13px",
+                    color: "#105476",
+                  }}
+                >
+                  Rate Details
+                </Text>
+              </Flex>
+            </Box>
+          </Box>
+
+          {/* Main Content Area */}
+          <Box
+            style={{
+              flex: 1,
+              width: "100%",
+              borderRadius: "8px",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              overflow: "hidden",
+              gap: "8px",
+            }}
+          >
+            <Box
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                borderRadius: "8px",
+                backgroundColor: "#FFFFFF",
+              }}
+            >
+              <OceanExportBookingStepper
+                onStepChange={handleStepChange}
+                onComplete={handleComplete}
+                initialData={isEditMode ? jobData : mappedBookingData}
+                isEditMode={isEditMode}
+                jobData={jobData}
+                active={active}
+                setActive={setActive}
+              />
+            </Box>
+          </Box>
+        </Flex>
+      </Box>
+    </Box>
   );
 }
 

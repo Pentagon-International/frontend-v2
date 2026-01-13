@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   Group,
-  Stepper,
   Text,
   Grid,
   TextInput,
@@ -45,6 +44,8 @@ interface ExportShipmentStepperProps {
   initialData?: Record<string, unknown>;
   isEditMode?: boolean;
   jobData?: Record<string, unknown>;
+  active?: number;
+  setActive?: (step: number) => void;
 }
 
 interface RoutingDetail {
@@ -360,8 +361,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   initialData,
   isEditMode = false,
   jobData,
+  active: externalActive,
+  setActive: externalSetActive,
 }) => {
-  const [active, setActive] = useState(0);
+  const [internalActive, setInternalActive] = useState(0);
+
+  // Use external active/setActive if provided, otherwise use internal state
+  const active = externalActive !== undefined ? externalActive : internalActive;
+  const setActive = externalSetActive || setInternalActive;
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [charges, setCharges] = useState([
@@ -1571,21 +1578,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   };
 
   return (
-    <Box px={"lg"}>
-      <Stepper
-        color="#105476"
-        active={active}
-        onStepClick={handleStepClick}
-        orientation="horizontal"
-        allowNextStepsSelect={false}
-      >
-        {/* Step 1: Export Shipment */}
-        <Stepper.Step label="1" description="Export Booking">
-          <Box mt="md">
-            {/* Export Shipment Section */}
-            <Text size="md" fw={600} mb="md" c="#105476">
-              Export Booking
-            </Text>
+    <Box style={{ padding: "24px" }}>
+      {/* Step 1: Export Booking */}
+      {active === 0 && (
+        <Box mt="md">
+          {/* Export Shipment Section */}
+          <Text size="md" fw={600} mb="md" c="#105476">
+            Export Booking
+          </Text>
             <Grid mb="xl">
               <Grid.Col span={4}>
                 <SearchableSelect
@@ -1619,6 +1619,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   withAsterisk
                   data={["FCL", "LCL"]}
                   {...form.getInputProps("service")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1641,7 +1656,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   label="Date"
                   placeholder="YYYY-MM-DD"
                   withAsterisk
-                  defaultValue={new Date()}
+                  value={form.values.date}
+                  onChange={(date) => {
+                    form.setFieldValue("date", date || new Date());
+                  }}
                   valueFormat="YYYY-MM-DD"
                   leftSection={<IconCalendar size={18} />}
                   leftSectionPointerEvents="none"
@@ -1650,7 +1668,22 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   clearable
+                  error={form.errors.date}
                   styles={{
+                    input: {
+                      height: "36px",
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
                     day: {
                       width: "2.25rem",
                       height: "2.25rem",
@@ -1735,6 +1768,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   searchable
                   data={shipmentOptions}
                   {...form.getInputProps("shipment_terms_code")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1745,6 +1793,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   withAsterisk
                   data={["Prepaid", "Collect"]}
                   {...form.getInputProps("freight")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1755,6 +1818,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   searchable
                   data={["Self", "Agent"]}
                   {...form.getInputProps("routed")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1783,6 +1861,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         }
                       }}
                       error={form.errors.routed_by}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
                     />
                   ) : (
                     <TextInput
@@ -1791,6 +1884,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       withAsterisk
                       {...form.getInputProps("routed_by")}
                       error={form.errors.routed_by}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
                     />
                   )
                 ) : form.values.routed === "Agent" ? (
@@ -1819,6 +1927,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     withAsterisk
                     {...form.getInputProps("routed_by")}
                     error={form.errors.routed_by}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
                   />
                 )}
               </Grid.Col>
@@ -1833,6 +1956,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     form.setFieldValue("customer_service_name", formattedValue);
                   }}
                   error={form.errors.customer_service_name}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               {(form.values.service === "AIR" ||
@@ -1882,6 +2020,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   label="Schedule ID"
                   placeholder="Enter schedule ID"
                   {...form.getInputProps("schedule_id")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1920,6 +2073,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     "COSCO SHIPPING UNIVERSE",
                   ]}
                   {...form.getInputProps("vessel_name")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1928,6 +2096,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   placeholder="Enter voyage number"
                   // withAsterisk
                   {...form.getInputProps("voyage_no")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1948,6 +2131,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   styles={{
+                    input: {
+                      height: "36px",
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
                     day: {
                       width: "2.25rem",
                       height: "2.25rem",
@@ -1992,6 +2189,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   styles={{
+                    input: {
+                      height: "36px",
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
                     day: {
                       width: "2.25rem",
                       height: "2.25rem",
@@ -2127,6 +2338,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             `routingDetails.${index}.move_type`
                           ] as string
                         }
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1.25}>
@@ -2234,6 +2460,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         nextIcon={<IconChevronRight size={16} />}
                         previousIcon={<IconChevronLeft size={16} />}
                         styles={{
+                          input: {
+                            height: "36px",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
                           day: {
                             width: "2.25rem",
                             height: "2.25rem",
@@ -2281,6 +2521,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         nextIcon={<IconChevronRight size={16} />}
                         previousIcon={<IconChevronLeft size={16} />}
                         styles={{
+                          input: {
+                            height: "36px",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
                           day: {
                             width: "2.25rem",
                             height: "2.25rem",
@@ -2375,6 +2629,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         {...form.getInputProps(
                           `routingDetails.${index}.flight_no`
                         )}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1.25}>
@@ -2386,6 +2655,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         {...form.getInputProps(
                           `routingDetails.${index}.status`
                         )}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                            marginBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1.5}>
@@ -2431,11 +2715,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Button>
             </Group>
           </Box>
-        </Stepper.Step>
+        )}
 
-        {/* Step 2: Party Details */}
-        <Stepper.Step label="2" description="Party Details">
-          <Box mt="md">
+      {/* Step 2: Party Details */}
+      {active === 1 && (
+        <Box mt="md">
             <Text size="md" fw={600} mb="md" c="#105476">
               Party Details
             </Text>
@@ -2520,6 +2804,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   }}
                   error={form.errors.shipper_address_id}
                   disabled={!isEditMode && shipperAddressOptions.length === 0}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -2527,6 +2826,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   label="Shipper E-mail ID"
                   placeholder="Enter email address"
                   {...form.getInputProps("shipper_email")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -2612,6 +2926,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   }}
                   error={form.errors.consignee_address_id}
                   disabled={!isEditMode && consigneeAddressOptions.length === 0}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -2619,6 +2948,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   label="Consignee Email Id"
                   placeholder="Enter email address"
                   {...form.getInputProps("consignee_email")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -2702,6 +3046,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   }}
                   error={form.errors.forwarder_address_id}
                   disabled={!isEditMode && forwarderAddressOptions.length === 0}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -2709,6 +3068,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   label="Forwarder Email Id"
                   placeholder="Enter email address"
                   {...form.getInputProps("forwarder_email")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -2794,6 +3168,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   }}
                   error={form.errors.destination_agent_address_id}
                   disabled={!isEditMode && agentAddressOptions.length === 0}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -2801,6 +3190,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   label="Destination Agent Email Id"
                   placeholder="Enter email address"
                   {...form.getInputProps("destination_agent_email")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -2888,6 +3292,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   disabled={
                     !isEditMode && billingCustomerAddressOptions.length === 0
                   }
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -2973,6 +3392,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   disabled={
                     !isEditMode && notifyCustomerAddressOptions.length === 0
                   }
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -2980,6 +3414,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   label="Notify Customer Email Id"
                   placeholder="Enter email address"
                   {...form.getInputProps("notify_customer_email")}
+                  styles={{
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      height: "36px",
+                    },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -3076,11 +3525,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Button>
             </Group>
           </Box>
-        </Stepper.Step>
+        )}
 
-        {/* Step 3: Cargo Details */}
-        <Stepper.Step label="3" description="Cargo Details">
-          <Box mt="md">
+      {/* Step 3: Cargo Details */}
+      {active === 2 && (
+        <Box mt="md">
             <Text size="md" fw={600} mb="md" c="#105476">
               Cargo Details
             </Text>
@@ -3339,11 +3788,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Button>
             </Group>
           </Box>
-        </Stepper.Step>
+        )}
 
-        {/* Step 4: Pickup/Delivery */}
-        <Stepper.Step label="4" description="Pickup/Delivery">
-          <Box mt="md">
+      {/* Step 4: Pickup/Delivery */}
+      {active === 3 && (
+        <Box mt="md">
             <Text size="md" fw={600} mb="md" c="#105476">
               Pickup/Delivery Details
             </Text>
@@ -3730,11 +4179,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Button>
             </Group>
           </Box>
-        </Stepper.Step>
+        )}
 
-        {/* Step 5: Rate Details */}
-        <Stepper.Step label="5" description="Rate Details">
-          <Box mt="md">
+      {/* Step 5: Rate Details */}
+      {active === 4 && (
+        <Box mt="md">
             <Text size="md" fw={600} mb="md" c="#105476">
               Rate Details
             </Text>
@@ -4040,8 +4489,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Button>
             </Group>
           </Box>
-        </Stepper.Step>
-      </Stepper>
+        )}
     </Box>
   );
 };

@@ -28,6 +28,7 @@ interface SearchableSelectProps {
   size?: string; // Add size prop
   returnOriginalData?: boolean; // New prop to control whether to return original data
   additionalParams?: Record<string, string>; // Additional query parameters to add to the API call
+  styles?: Record<string, any>; // Styles prop for label and input styling
 }
 
 export default function SearchableSelect({
@@ -48,6 +49,7 @@ export default function SearchableSelect({
   size,
   returnOriginalData = false, // Default to false for backward compatibility
   additionalParams,
+  styles,
 }: SearchableSelectProps) {
   // Initialize selected state - if no value but displayValue exists, create temp value
   // Use a stable hash of displayValue to avoid recreating on every render
@@ -327,7 +329,7 @@ export default function SearchableSelect({
           zIndex: 5,
         }}
         styles={{
-          input: { fontSize: "13px", height: "36px", },
+          input: { fontSize: "13px", height: "36px", fontFamily: "Inter", ...customStyles?.input },
           label: {
             fontSize: "13px",
             fontWeight: 500,
@@ -335,7 +337,9 @@ export default function SearchableSelect({
             marginBottom: "4px",
             fontFamily: "Inter",
             fontStyle: "medium",
+            ...customStyles?.label,
           },
+          ...customStyles,
         }}
         searchable
         data={data}

@@ -54,103 +54,122 @@ const responseInterceptor = () =>
         });
       }
 
-      // Handle 401 Unauthorized errors (access token expired)
-      if (
-        error.response?.status === 401 &&
-        originalRequest &&
-        !originalRequest._retry
-      ) {
-        // Check if this is the refresh token endpoint itself failing
-        if (originalRequest.url?.includes("token/refresh")) {
-          // Refresh token API returned 401 - refresh token is expired, logout user
-          console.error("Refresh token expired. Logging out...");
+      // Handle 401 Unauthorized errors - logout user instead of refreshing token
+      if (error.response?.status === 401 && originalRequest) {
+        // Skip logout for login/signup endpoints
+        if (
+          !originalRequest.url?.includes("/login") &&
+          !originalRequest.url?.includes("/signup")
+        ) {
+          // Logout user and show message
           ToastNotification({
             type: "error",
-            message: "Session expired. Please login again.",
+            message: "Your session has expired. Please log in again.",
           });
           useAuthStore.getState().resetAuth();
           return Promise.reject({
-            message: "Session expired. Please login again.",
+            message: "Your session has expired. Please log in again.",
           });
         }
-
-        // This is a regular API call with expired access token
-        // Mark this request as retried to prevent infinite loops
-        originalRequest._retry = true;
-
-        if (isRefreshing) {
-          // If token refresh is already in progress, queue this request
-          return new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          })
-            .then((token) => {
-              // Update the authorization header with the new token
-              if (originalRequest.headers && token) {
-                originalRequest.headers.Authorization = `Bearer ${token}`;
-              }
-              // Retry the original request
-              return apiCallProtected(originalRequest);
-            })
-            .catch((err) => {
-              return Promise.reject(err);
-            });
-        }
-
-        // Start token refresh process
-        isRefreshing = true;
-
-        try {
-          // Attempt to refresh the access token
-          const newAccessToken = await useAuthStore
-            .getState()
-            .refreshAccessToken();
-
-          // Update the authorization header with the new token
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-          }
-
-          // Process all queued requests with the new token
-          processQueue(null, newAccessToken);
-
-          // Retry the original request with the new token
-          return apiCallProtected(originalRequest);
-        } catch (refreshError: any) {
-          // Check if refresh token itself expired (401 from refresh endpoint)
-          const isRefreshTokenExpired =
-            refreshError?.isRefreshTokenExpired ||
-            refreshError?.message?.includes("Refresh token expired") ||
-            refreshError?.message?.includes("No refresh token available");
-
-          if (isRefreshTokenExpired) {
-            // Refresh token is expired - logout user
-            processQueue(refreshError, null);
-
-            ToastNotification({
-              type: "error",
-              message: "Session expired. Please login again.",
-            });
-
-            useAuthStore.getState().resetAuth();
-
-            return Promise.reject({
-              message: "Session expired. Please login again.",
-            });
-          } else {
-            // Other errors (network, server error, etc.) - don't logout
-            // Just reject the request with error
-            processQueue(refreshError, null);
-
-            return Promise.reject({
-              message:
-                refreshError?.message ||
-                "Failed to refresh token. Please try again.",
-            });
-          }
-        } finally {
-          isRefreshing = false;
-        }
       }
+
+      // COMMENTED OUT: Refresh token logic - now we logout on 401 instead
+      // if (
+      //   error.response?.status === 401 &&
+      //   originalRequest &&
+      //   !originalRequest._retry
+      // ) {
+      //   // Check if this is the refresh token endpoint itself failing
+      //   if (originalRequest.url?.includes("token/refresh")) {
+      //     // Refresh token API returned 401 - refresh token is expired, logout user
+      //     console.error("Refresh token expired. Logging out...");
+      //     ToastNotification({
+      //       type: "error",
+      //       message: "Session expired. Please login again.",
+      //     });
+      //     useAuthStore.getState().resetAuth();
+      //     return Promise.reject({
+      //       message: "Session expired. Please login again.",
+      //     });
+      //   }
+
+      //   // This is a regular API call with expired access token
+      //   // Mark this request as retried to prevent infinite loops
+      //   originalRequest._retry = true;
+
+      //   if (isRefreshing) {
+      //     // If token refresh is already in progress, queue this request
+      //     return new Promise((resolve, reject) => {
+      //       failedQueue.push({ resolve, reject });
+      //     })
+      //       .then((token) => {
+      //         // Update the authorization header with the new token
+      //         if (originalRequest.headers && token) {
+      //           originalRequest.headers.Authorization = `Bearer ${token}`;
+      //         }
+      //         // Retry the original request
+      //         return apiCallProtected(originalRequest);
+      //       })
+      //       .catch((err) => {
+      //         return Promise.reject(err);
+      //       });
+      //   }
+
+      //   // Start token refresh process
+      //   isRefreshing = true;
+
+      //   try {
+      //     // Attempt to refresh the access token
+      //     const newAccessToken = await useAuthStore
+      //       .getState()
+      //       .refreshAccessToken();
+
+      //     // Update the authorization header with the new token
+      //     if (originalRequest.headers) {
+      //       originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+      //     }
+
+      //     // Process all queued requests with the new token
+      //     processQueue(null, newAccessToken);
+
+      //     // Retry the original request with the new token
+      //     return apiCallProtected(originalRequest);
+      //   } catch (refreshError: any) {
+      //     // Check if refresh token itself expired (401 from refresh endpoint)
+      //     const isRefreshTokenExpired =
+      //       refreshError?.isRefreshTokenExpired ||
+      //       refreshError?.message?.includes("Refresh token expired") ||
+      //       refreshError?.message?.includes("No refresh token available");
+
+      //     if (isRefreshTokenExpired) {
+      //       // Refresh token is expired - logout user
+      //       processQueue(refreshError, null);
+
+      //       ToastNotification({
+      //         type: "error",
+      //         message: "Session expired. Please login again.",
+      //       });
+
+      //       useAuthStore.getState().resetAuth();
+
+      //       return Promise.reject({
+      //         message: "Session expired. Please login again.",
+      //       });
+      //     } else {
+      //       // Other errors (network, server error, etc.) - don't logout
+      //       // Just reject the request with error
+      //       processQueue(refreshError, null);
+
+      //       return Promise.reject({
+      //         message:
+      //           refreshError?.message ||
+      //           "Failed to refresh token. Please try again.",
+      //       });
+      //     }
+      //   } finally {
+      //     isRefreshing = false;
+      //   }
+      // }
 
       // Handle other error responses
       if (error.response) {
