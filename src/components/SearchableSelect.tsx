@@ -329,7 +329,7 @@ export default function SearchableSelect({
           zIndex: 5,
         }}
         styles={{
-          input: { fontSize: "13px", height: "36px", fontFamily: "Inter", ...customStyles?.input },
+          input: { fontSize: "13px", height: "36px", fontFamily: "Inter", ...styles?.input },
           label: {
             fontSize: "13px",
             fontWeight: 500,
@@ -337,9 +337,9 @@ export default function SearchableSelect({
             marginBottom: "4px",
             fontFamily: "Inter",
             fontStyle: "medium",
-            ...customStyles?.label,
+            ...styles?.label,
           },
-          ...customStyles,
+          ...styles,
         }}
         searchable
         data={data}
