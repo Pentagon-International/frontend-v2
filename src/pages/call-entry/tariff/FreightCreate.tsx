@@ -1,6 +1,5 @@
 import {
   Box,
-  Title,
   Grid,
   Select,
   Button,
@@ -16,6 +15,8 @@ import {
   LoadingOverlay,
   Center,
   Loader,
+  Menu,
+  ActionIcon,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
@@ -26,6 +27,7 @@ import {
   IconInfoCircle,
   IconSparkles,
   IconCheck,
+  IconDotsVertical,
 } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import { useEffect, useState, useMemo, useCallback } from "react";
@@ -70,6 +72,7 @@ const gridFormSchema = yup.object({
         .number()
         .required("Rate is required")
         .positive("Rate must be positive"),
+      minimum: yup.number().nullable().min(0, "Minimum must be positive"),
     })
   ),
 });
@@ -110,6 +113,12 @@ function FreightCreate() {
 
   // State for number of containers
   const [numberOfContainers, setNumberOfContainers] = useState(1);
+
+  // State for unit data
+  const [unitData, setUnitData] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [isLoadingUnitData, setIsLoadingUnitData] = useState(false);
 
   // State for SearchableSelect display values in edit mode
   const [originDisplayValue, setOriginDisplayValue] = useState<string>("");
@@ -203,7 +212,7 @@ function FreightCreate() {
           unit: "",
           currency_code: "",
           rate: "",
-          containers: 1, // Add containers field for view mode
+          minimum: null,
         },
       ],
     },
@@ -300,6 +309,56 @@ function FreightCreate() {
   );
   const { unitTotals } = totals;
 
+  // Fetch unit data based on service type
+  const fetchUnitData = useCallback(async (serviceType: string) => {
+    if (!serviceType) {
+      setUnitData([]);
+      return;
+    }
+
+    setIsLoadingUnitData(true);
+    try {
+      const payload = {
+        filters: {
+          service_type: serviceType,
+        },
+      };
+      const response: any = await postAPICall(
+        URL.unitMasterFilter,
+        payload,
+        API_HEADER
+      );
+      console.log("Unit data response:", response);
+
+      if (response && response.data && Array.isArray(response.data)) {
+        // Use all data from response without filtering
+        const formattedData = response.data.map((item: any) => ({
+          value: item.unit_code,
+          label: item.unit_code,
+        }));
+        console.log("formattedData unitdata---", formattedData);
+
+        setUnitData(formattedData);
+      } else {
+        setUnitData([]);
+      }
+    } catch (error) {
+      console.error("Error fetching unit data:", error);
+      setUnitData([]);
+    } finally {
+      setIsLoadingUnitData(false);
+    }
+  }, []);
+
+  // Fetch unit data when service changes
+  useEffect(() => {
+    if (mainForm.values.service) {
+      fetchUnitData(mainForm.values.service);
+    } else {
+      setUnitData([]);
+    }
+  }, [mainForm.values.service, fetchUnitData]);
+
   // Simplified effect to update form values when editData changes
   useEffect(() => {
     if (editData && (isEditMode || isViewMode)) {
@@ -313,7 +372,7 @@ function FreightCreate() {
         status: editData.status || "ACTIVE",
       });
 
-      // Set display values for SearchableSelect
+      // Set display values for SearchableSelect - allow clearing by setting to empty string
       setOriginDisplayValue(editData.origin_name || "");
       setDestinationDisplayValue(editData.destination_name || "");
 
@@ -329,7 +388,7 @@ function FreightCreate() {
           currency_code: charge.currency_code || "",
           currency_name: charge.currency_name || "",
           rate: charge.rate || "",
-          containers: 1, // Default containers for view mode
+          minimum: charge.minimum ? parseFloat(String(charge.minimum)) : null,
         }));
 
         gridForm.setValues({
@@ -337,9 +396,11 @@ function FreightCreate() {
         });
 
         // Set display values for SearchableSelect components
+        // For customer: display customer_name, store customer_code
         const customerDisplays = mappedCharges.map(
-          (charge: any) => charge.customer_name || charge.customer_code || ""
+          (charge: any) => charge.customer_name || ""
         );
+        // For carrier: display carrier_name, store carrier_code
         const carrierDisplays = mappedCharges.map(
           (charge: any) => charge.carrier_name || ""
         );
@@ -352,7 +413,7 @@ function FreightCreate() {
         setCurrencyDisplayValues(currencyDisplays);
       }
     }
-  }, [editData, isEditMode, isViewMode]);
+  }, [editData, isEditMode, isViewMode, mainForm, gridForm]);
 
   const tariffSubmit = async () => {
     setIsSubmitting(true);
@@ -371,9 +432,27 @@ function FreightCreate() {
 
     const mainFormVal = mainForm.values;
     const gridFormVal = gridForm.values;
+
+    // Format payload according to API requirements
+    // Only send codes, not names, and format tariff_charges properly
+    const tariffCharges = gridFormVal.tariff_charges.map((charge: any) => ({
+      customer_code: charge.customer_code || null,
+      currency_code: charge.currency_code || "",
+      carrier_code: charge.carrier_code || "",
+      charge_name: charge.charge_name || "",
+      unit: charge.unit || "",
+      rate: String(charge.rate || ""),
+      minimum: charge.minimum ? String(charge.minimum) : null,
+    }));
+
     const values = {
-      ...mainFormVal,
-      ...gridFormVal,
+      origin_code: mainFormVal.origin_code,
+      destination_code: mainFormVal.destination_code,
+      service: mainFormVal.service,
+      valid_from: mainFormVal.valid_from,
+      valid_to: mainFormVal.valid_to,
+      status: mainFormVal.status,
+      tariff_charges: tariffCharges,
     };
     console.log("Final data----", values);
 
@@ -381,10 +460,15 @@ function FreightCreate() {
       let res;
       if (isEditMode) {
         // Update existing freight
-        const updateUrl = `${URL.freight}${editData.id}/`;
+        // putAPICall appends ${formValue.id}/ to the URL, so we pass the base URL and include id in values
+        const updateUrl = `${URL.freight}`;
+        const valuesWithId = {
+          ...values,
+          id: editData.id,
+        };
         console.log("PUT URL:", updateUrl);
-        console.log("PUT Values:", values);
-        res = await putAPICall(updateUrl, values as any, API_HEADER);
+        console.log("PUT Values:", valuesWithId);
+        res = await putAPICall(updateUrl, valuesWithId as any, API_HEADER);
         if (res) {
           ToastNotification({
             type: "success",
@@ -721,6 +805,91 @@ function FreightCreate() {
                 }}
               >
                 <Grid style={{ padding: "24px" }}>
+                  {/* Action Menu - Only show in view or edit mode */}
+                  {(isViewMode || isEditMode) && (
+                    <Grid.Col span={12}>
+                      <Box
+                        style={{
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          marginBottom: "16px",
+                        }}
+                      >
+                        <Menu shadow="md" width={220} position="bottom-end">
+                          <Menu.Target>
+                            <ActionIcon
+                              variant="subtle"
+                              color="#105476"
+                              size="lg"
+                              styles={{
+                                root: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  border: "1px solid #E9ECEF",
+                                  borderRadius: "8px",
+                                  "&:hover": {
+                                    backgroundColor: "#F8F9FA",
+                                  },
+                                },
+                              }}
+                            >
+                              <IconDotsVertical size={18} />
+                            </ActionIcon>
+                          </Menu.Target>
+                          <Menu.Dropdown
+                            styles={{
+                              dropdown: {
+                                border: "1px solid #E9ECEF",
+                                borderRadius: "8px",
+                                padding: "8px",
+                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                              },
+                            }}
+                          >
+                            <Menu.Item
+                              leftSection={
+                                <Box
+                                  style={{
+                                    backgroundColor: "#E7F5FF",
+                                    borderRadius: "6px",
+                                    padding: "6px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconSparkles size={16} color="#105476" />
+                                </Box>
+                              }
+                              styles={{
+                                item: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  borderRadius: "6px",
+                                  padding: "10px 12px",
+                                  marginBottom: "4px",
+                                  "&:hover": {
+                                    backgroundColor: "#F8F9FA",
+                                  },
+                                },
+                                itemLabel: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                },
+                              }}
+                              onClick={handleOpenQuoteModal}
+                            >
+                              Create Quotation
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
+                      </Box>
+                    </Grid.Col>
+                  )}
+
                   {/* Origin Selection */}
                   <Grid.Col span={4}>
                     <Box maw={400}>
@@ -735,8 +904,8 @@ function FreightCreate() {
                             apiEndpoint={URL.portMaster}
                             label="Origin"
                             placeholder="Search by port code or name"
-                            value={mainForm.values.origin_code}
-                            displayValue={originDisplayValue}
+                            value={mainForm.values.origin_code || null}
+                            displayValue={originDisplayValue || null}
                             onChange={(value, selectedData) => {
                               mainForm.setFieldValue(
                                 "origin_code",
@@ -794,8 +963,8 @@ function FreightCreate() {
                             apiEndpoint={URL.portMaster}
                             label="Destination"
                             placeholder="Search by port code or name"
-                            value={mainForm.values.destination_code}
-                            displayValue={destinationDisplayValue}
+                            value={mainForm.values.destination_code || null}
+                            displayValue={destinationDisplayValue || null}
                             onChange={(value, selectedData) => {
                               mainForm.setFieldValue(
                                 "destination_code",
@@ -900,44 +1069,19 @@ function FreightCreate() {
                         leftSectionPointerEvents="none"
                         radius="md"
                         size="sm"
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                          label: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                          },
-                          calendar: {
-                            padding: "0.5rem",
-                            gap: "0.25rem",
-                          },
-                          day: {
-                            width: "2.25rem",
-                            height: "2.25rem",
-                            fontSize: "0.9rem",
-                          },
-                          calendarHeaderLevel: {
-                            fontSize: "1rem",
-                            fontWeight: 500,
-                            marginBottom: "0.5rem",
-                            flex: 1,
-                            textAlign: "center",
-                          },
-                          calendarHeaderControl: {
-                            width: "2rem",
-                            height: "2rem",
-                            margin: "0 0.5rem",
-                          },
-                          calendarHeader: {
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "0.5rem",
-                          },
-                        }}
+                        styles={
+                          {
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                            },
+                          } as any
+                        }
                       />
                     </Box>
                   </Grid.Col>
@@ -967,44 +1111,19 @@ function FreightCreate() {
                         leftSectionPointerEvents="none"
                         radius="md"
                         size="sm"
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                          label: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                          },
-                          calendar: {
-                            padding: "0.5rem",
-                            gap: "0.25rem",
-                          },
-                          day: {
-                            width: "2.25rem",
-                            height: "2.25rem",
-                            fontSize: "0.9rem",
-                          },
-                          calendarHeaderLevel: {
-                            fontSize: "1rem",
-                            fontWeight: 500,
-                            marginBottom: "0.5rem",
-                            flex: 1,
-                            textAlign: "center",
-                          },
-                          calendarHeaderControl: {
-                            width: "2rem",
-                            height: "2rem",
-                            margin: "0 0.5rem",
-                          },
-                          calendarHeader: {
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "0.5rem",
-                          },
-                        }}
+                        styles={
+                          {
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                            },
+                          } as any
+                        }
                       />
                     </Box>
                   </Grid.Col>
@@ -1039,7 +1158,7 @@ function FreightCreate() {
                   <Grid.Col span={12}>
                     <Stack gap="md">
                       {gridForm.values.tariff_charges.map((_, index) => (
-                        <Grid key={index} w="100%" gutter="md">
+                        <Grid key={index} w="100%" gutter="sm">
                           <Grid.Col span={isViewMode ? 2.5 : 2.5}>
                             <SearchableSelect
                               apiEndpoint={URL.customer}
@@ -1047,26 +1166,35 @@ function FreightCreate() {
                               placeholder="Search by customer code or name"
                               value={
                                 gridForm.values.tariff_charges[index]
-                                  .customer_code
+                                  .customer_code || null
                               }
-                              displayValue={customerDisplayValues[index] || ""}
-                              onChange={(value, selectedData) => {
+                              displayValue={
+                                customerDisplayValues[index] || null
+                              }
+                              returnOriginalData={true}
+                              onChange={(value, selectedData, originalData) => {
                                 gridForm.setFieldValue(
                                   `tariff_charges.${index}.customer_code`,
                                   value || ""
                                 );
                                 // Update the display value for this specific index
+                                // Use customer_name from original data if available, otherwise use label
+                                const customerName =
+                                  (originalData as any)?.customer_name ||
+                                  selectedData?.label ||
+                                  "";
                                 const newDisplayValues = [
                                   ...customerDisplayValues,
                                 ];
-                                newDisplayValues[index] =
-                                  selectedData?.label || "";
+                                newDisplayValues[index] = customerName;
                                 setCustomerDisplayValues(newDisplayValues);
                               }}
                               searchFields={["customer_code", "customer_name"]}
                               displayFormat={(item) => ({
                                 value: String(item.customer_code),
-                                label: `${item.customer_code} - ${item.customer_name}`,
+                                label: String(
+                                  item.customer_name || item.customer_code || ""
+                                ),
                               })}
                               required={!isViewMode}
                               disabled={isViewMode}
@@ -1114,28 +1242,33 @@ function FreightCreate() {
                               placeholder="Search by carrier code or name"
                               value={
                                 gridForm.values.tariff_charges[index]
-                                  .carrier_code
+                                  .carrier_code || null
                               }
-                              displayValue={carrierDisplayValues[index] || ""}
-                              onChange={(value, selectedData) => {
+                              displayValue={carrierDisplayValues[index] || null}
+                              returnOriginalData={true}
+                              onChange={(value, selectedData, originalData) => {
                                 gridForm.setFieldValue(
                                   `tariff_charges.${index}.carrier_code`,
                                   value || ""
                                 );
                                 // Update the display value for this specific index
+                                // Use carrier_name from original data if available, otherwise use label
+                                const carrierName =
+                                  (originalData as any)?.carrier_name ||
+                                  selectedData?.label ||
+                                  "";
                                 const newDisplayValues = [
                                   ...carrierDisplayValues,
                                 ];
-                                if (selectedData) {
-                                  newDisplayValues[index] =
-                                    selectedData.label || "";
-                                }
+                                newDisplayValues[index] = carrierName;
                                 setCarrierDisplayValues(newDisplayValues);
                               }}
                               searchFields={["carrier_code", "carrier_name"]}
                               displayFormat={(item: any) => ({
                                 value: String(item.carrier_code),
-                                label: String(item.carrier_name),
+                                label: String(
+                                  item.carrier_name || item.carrier_code || ""
+                                ),
                               })}
                               required={!isViewMode}
                               disabled={isViewMode}
@@ -1153,24 +1286,28 @@ function FreightCreate() {
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={isViewMode ? 1.5 : 1.5}>
+                          <Grid.Col span={isViewMode ? 1 : 1}>
                             <Select
                               searchable
                               label={index === 0 ? "Unit" : ""}
                               withAsterisk={!isViewMode}
-                              placeholder="Select Unit"
-                              data={[
-                                { value: "20ft", label: "20ft Container" },
-                                { value: "40ft", label: "40ft Container" },
-                                { value: "shipment", label: "shipment" },
-                                { value: "W/M", label: "W/m" },
-                                { value: "CBM", label: "CBM" },
-                              ]}
+                              placeholder={
+                                isLoadingUnitData
+                                  ? "Loading units..."
+                                  : unitData.length === 0
+                                    ? "Select service first"
+                                    : "Select Unit"
+                              }
+                              data={unitData}
                               key={
                                 gridForm.values.tariff_charges[index].unit ||
                                 `unit-${index}-unit`
                               }
-                              disabled={isViewMode}
+                              disabled={
+                                isViewMode ||
+                                isLoadingUnitData ||
+                                unitData.length === 0
+                              }
                               {...gridForm.getInputProps(
                                 `tariff_charges.${index}.unit`
                               )}
@@ -1194,16 +1331,18 @@ function FreightCreate() {
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={isViewMode ? 1.5 : 1.5}>
+                          <Grid.Col span={isViewMode ? 1 : 1}>
                             <SearchableSelect
                               apiEndpoint={URL.currencyMaster}
                               label={index === 0 ? "Currency" : ""}
                               placeholder="Search by currency code"
                               value={
                                 gridForm.values.tariff_charges[index]
-                                  .currency_code
+                                  .currency_code || null
                               }
-                              displayValue={currencyDisplayValues[index] || ""}
+                              displayValue={
+                                currencyDisplayValues[index] || null
+                              }
                               onChange={(value, selectedData) => {
                                 gridForm.setFieldValue(
                                   `tariff_charges.${index}.currency_code`,
@@ -1216,6 +1355,8 @@ function FreightCreate() {
                                 if (selectedData) {
                                   newDisplayValues[index] =
                                     selectedData.label || "";
+                                } else {
+                                  newDisplayValues[index] = "";
                                 }
                                 setCurrencyDisplayValues(newDisplayValues);
                               }}
@@ -1240,7 +1381,7 @@ function FreightCreate() {
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={isViewMode ? 2 : 1.5}>
+                          <Grid.Col span={isViewMode ? 1.25 : 1.25}>
                             <NumberInput
                               key={`rate-name-${index}`}
                               min={1}
@@ -1249,6 +1390,29 @@ function FreightCreate() {
                               disabled={isViewMode}
                               {...gridForm.getInputProps(
                                 `tariff_charges.${index}.rate`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={isViewMode ? 1.25 : 1.25}>
+                            <TextInput
+                              key={`minimum-name-${index}`}
+                              type="number"
+                              label={index === 0 ? "Minimum" : ""}
+                              placeholder="Enter value"
+                              disabled={isViewMode}
+                              {...gridForm.getInputProps(
+                                `tariff_charges.${index}.minimum`
                               )}
                               styles={{
                                 input: {
@@ -1280,7 +1444,7 @@ function FreightCreate() {
                                       unit: "",
                                       currency_code: "",
                                       rate: "",
-                                      containers: 1,
+                                      minimum: null,
                                     })
                                   }
                                 >
@@ -1381,25 +1545,6 @@ function FreightCreate() {
                     >
                       {isViewMode ? "Back" : "Cancel"}
                     </Button>
-
-                    {(isViewMode || isEditMode) && (
-                      <Button
-                        variant="outline"
-                        color="#105476"
-                        size="sm"
-                        leftSection={<IconSparkles size={16} />}
-                        onClick={handleOpenQuoteModal}
-                        styles={{
-                          root: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                        }}
-                      >
-                        Create Quotation
-                      </Button>
-                    )}
                   </Group>
 
                   <Group gap="sm">
@@ -1590,6 +1735,9 @@ function FreightCreate() {
                             },
                             label: {
                               fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#000000",
+                              marginBottom: "4px",
                               fontFamily: "Inter",
                             },
                           }}
@@ -1607,6 +1755,20 @@ function FreightCreate() {
                           {...quoteForm.getInputProps(
                             `container_details.${containerIndex}.no_of_containers`
                           )}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#000000",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={3}>
@@ -1622,6 +1784,20 @@ function FreightCreate() {
                           {...quoteForm.getInputProps(
                             `container_details.${containerIndex}.gross_weight`
                           )}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#000000",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       {/* Add button only on the last container detail */}

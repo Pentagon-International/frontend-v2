@@ -6,14 +6,12 @@ import {
 } from "mantine-react-table";
 import {
   ActionIcon,
-  Badge,
   Box,
   Button,
   Card,
   Group,
   Menu,
   Text,
-  TextInput,
   UnstyledButton,
   Grid,
   Loader,
@@ -34,10 +32,7 @@ import {
 } from "@tabler/icons-react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { ToastNotification, SearchableSelect } from "../../../components";
-import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
-import { deleteApiCall } from "../../../service/deleteApiCall";
-import { API_HEADER } from "../../../store/storeKeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../../store/authStore";
 import { useForm } from "@mantine/form";
@@ -119,51 +114,62 @@ export default function Freight() {
     []
   );
 
-  // Fetch freight data with React Query - initial fetch without filters
+  // Fetch freight data with React Query - initial fetch without filters with pagination
   const {
     data: freightVal = [],
     isLoading: isFreightLoading,
     refetch: refetchFreight,
   } = useQuery({
-    queryKey: ["freight"],
+    queryKey: ["freight", currentPage, pageSize],
     queryFn: async () => {
       try {
         const requestBody: { filters: any } = { filters: {} };
 
         const response = await apiCallProtected.post(
-          URL.filter_freight,
+          `${URL.filter_freight}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
         console.log("Initial load API response:", data);
 
-        // Handle response - API returns { results: [...] } or { result: [...] }
-        if (data && Array.isArray(data.results)) {
+        // Handle response - API returns { data: [...], total: ... } or { results: [...], total: ... }
+        if (data && Array.isArray(data.data)) {
+          setTotalRecords(data.total || data.data.length);
+          return data.data;
+        } else if (data && Array.isArray(data.results)) {
+          setTotalRecords(data.total || data.results.length);
           return data.results;
         } else if (data && Array.isArray(data.result)) {
+          setTotalRecords(data.total || data.result.length);
           return data.result;
-        } else if (data && Array.isArray(data.data)) {
-          return data.data;
         }
+        setTotalRecords(0);
         return [];
       } catch (error) {
         console.error("Error fetching freight data:", error);
+        setTotalRecords(0);
         return [];
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 0,
+    gcTime: 0,
     refetchOnWindowFocus: false,
-    enabled: true, // Enable to run automatically on mount with empty filters
+    enabled: true, // Enable to run automatically on mount
   });
 
-  // Separate query for filtered data - only runs when filters are applied
+  // Separate query for filtered data - only runs when filters are applied with pagination
   const {
     data: filteredFreightData = [],
     isLoading: filteredFreightLoading,
     refetch: refetchFilteredFreight,
   } = useQuery({
-    queryKey: ["filteredFreight", filtersApplied, appliedFilters],
+    queryKey: [
+      "filteredFreight",
+      filtersApplied,
+      appliedFilters,
+      currentPage,
+      pageSize,
+    ],
     queryFn: async () => {
       try {
         if (!filtersApplied) return [];
@@ -187,23 +193,28 @@ export default function Freight() {
 
         const requestBody = { filters: payload };
         const response = await apiCallProtected.post(
-          URL.filter_freight,
+          `${URL.filter_freight}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
         console.log("Filter API response:", data);
 
-        // Handle both 'result' and 'results' properties
-        if (data && Array.isArray(data.result)) {
+        // Handle response with total count
+        if (data && Array.isArray(data.data)) {
+          setTotalRecords(data.total || data.data.length);
+          return data.data;
+        } else if (data && Array.isArray(data.result)) {
+          setTotalRecords(data.total || data.result.length);
           return data.result;
         } else if (data && Array.isArray(data.results)) {
+          setTotalRecords(data.total || data.results.length);
           return data.results;
-        } else if (data && Array.isArray(data.data)) {
-          return data.data;
         }
+        setTotalRecords(0);
         return [];
       } catch (error) {
         console.error("Error fetching filtered freight data:", error);
+        setTotalRecords(0);
         return [];
       }
     },
@@ -294,6 +305,9 @@ export default function Freight() {
           valid_to: null,
         });
 
+        // Reset to first page
+        setCurrentPage(1);
+
         // Invalidate and refetch unfiltered data
         await queryClient.invalidateQueries({ queryKey: ["freight"] });
         await refetchFreight();
@@ -315,6 +329,9 @@ export default function Freight() {
         valid_from: filterForm.values.valid_from,
         valid_to: filterForm.values.valid_to,
       });
+
+      // Reset to first page when applying filters
+      setCurrentPage(1);
 
       // Enable the filtered query and refetch
       await queryClient.invalidateQueries({
@@ -349,6 +366,9 @@ export default function Freight() {
     setOriginDisplayValue(null);
     setDestinationDisplayValue(null);
 
+    // Reset to first page
+    setCurrentPage(1);
+
     // Invalidate queries and refetch unfiltered data
     await queryClient.invalidateQueries({ queryKey: ["freight"] });
     await queryClient.invalidateQueries({ queryKey: ["filteredFreight"] });
@@ -359,22 +379,6 @@ export default function Freight() {
       type: "success",
       message: "All filters cleared successfully",
     });
-  };
-
-  const handleDelete = async (value: any) => {
-    try {
-      const res = await deleteApiCall(URL.freight, API_HEADER, value);
-      await refetchFreight();
-      ToastNotification({
-        type: "success",
-        message: `Freight is successfully deleted`,
-      });
-    } catch (err: any) {
-      ToastNotification({
-        type: "error",
-        message: `Error while deleting data: ${err?.message || err}`,
-      });
-    }
   };
 
   const columns = useMemo<MRT_ColumnDef<Freight>[]>(
@@ -484,7 +488,7 @@ export default function Freight() {
     enableColumnPinning: true,
     enableStickyHeader: true,
     initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
+      pagination: { pageSize: pageSize, pageIndex: currentPage - 1 },
       columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
@@ -588,6 +592,16 @@ export default function Freight() {
     setPageSize(newPageSize);
     setCurrentPage(1); // Reset to first page when changing page size
   };
+
+  // Refetch data when pagination changes
+  useEffect(() => {
+    if (filtersApplied) {
+      refetchFilteredFreight();
+    } else {
+      refetchFreight();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize]);
 
   return (
     <>
@@ -928,23 +942,20 @@ export default function Freight() {
                 <Select
                   size="xs"
                   data={["10", "25", "50"]}
-                  value={String(table.getState().pagination.pageSize)}
+                  value={String(pageSize)}
                   onChange={(val) => {
                     if (!val) return;
-                    table.setPageSize(Number(val));
-                    table.setPageIndex(0);
+                    handlePageSizeChange(Number(val));
                   }}
                   w={110}
                   styles={{ input: { fontSize: 12, height: 30 } }}
                 />
                 <Text size="sm" c="dimmed">
                   {(() => {
-                    const { pageIndex, pageSize } = table.getState().pagination;
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
+                    const total = totalRecords || 0;
                     if (total === 0) return "0–0 of 0";
-                    const start = pageIndex * pageSize + 1;
-                    const end = Math.min((pageIndex + 1) * pageSize, total);
+                    const start = (currentPage - 1) * pageSize + 1;
+                    const end = Math.min(currentPage * pageSize, total);
                     return `${start}–${end} of ${total}`;
                   })()}
                 </Text>
@@ -955,56 +966,28 @@ export default function Freight() {
                 <ActionIcon
                   variant="default"
                   size="sm"
-                  onClick={() =>
-                    table.setPageIndex(
-                      Math.max(0, table.getState().pagination.pageIndex - 1)
-                    )
-                  }
-                  disabled={table.getState().pagination.pageIndex === 0}
+                  onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
                 >
                   <IconChevronLeft size={16} />
                 </ActionIcon>
                 <Text size="sm" ta="center" style={{ width: 26 }}>
-                  {table.getState().pagination.pageIndex + 1}
+                  {currentPage}
                 </Text>
                 <Text size="sm" c="dimmed">
-                  of{" "}
-                  {Math.max(
-                    1,
-                    Math.ceil(
-                      (table.getPrePaginationRowModel().rows.length || 0) /
-                        table.getState().pagination.pageSize
-                    )
-                  )}
+                  of {Math.max(1, Math.ceil(totalRecords / pageSize))}
                 </Text>
                 <ActionIcon
                   variant="default"
                   size="sm"
                   onClick={() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
                     const totalPages = Math.max(
                       1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
+                      Math.ceil(totalRecords / pageSize)
                     );
-                    table.setPageIndex(
-                      Math.min(
-                        totalPages - 1,
-                        table.getState().pagination.pageIndex + 1
-                      )
-                    );
+                    handlePageChange(Math.min(totalPages, currentPage + 1));
                   }}
-                  disabled={(() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    return (
-                      table.getState().pagination.pageIndex >= totalPages - 1
-                    );
-                  })()}
+                  disabled={currentPage >= Math.ceil(totalRecords / pageSize)}
                 >
                   <IconChevronRight size={16} />
                 </ActionIcon>
