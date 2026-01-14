@@ -2643,7 +2643,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           </Group>
 
           {/* Page controls */}
-          <Group gap="xs" align="center" wrap="nowrap" mt={10}>
+          <Group gap="xs" align="center" wrap="nowrap" mt={10} pr={50}>
             <ActionIcon
               variant="default"
               size="sm"
