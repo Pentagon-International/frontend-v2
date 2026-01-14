@@ -4522,7 +4522,7 @@ function EnquiryCreate() {
                       </Grid.Col>
                       <Grid.Col span={6}>
                         <TextInput
-                          label="Sales Co-ordinator"
+                          label="Pricing"
                           styles={{
                             input: {
                               fontSize: "13px",

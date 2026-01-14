@@ -15,6 +15,7 @@ import {
   Divider,
   LoadingOverlay,
   Center,
+  Loader,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
@@ -24,6 +25,7 @@ import {
   IconTrash,
   IconInfoCircle,
   IconSparkles,
+  IconCheck,
 } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import { useEffect, useState, useMemo, useCallback } from "react";
@@ -353,11 +355,13 @@ function FreightCreate() {
   }, [editData, isEditMode, isViewMode]);
 
   const tariffSubmit = async () => {
+    setIsSubmitting(true);
     // Validate forms before submission
     const mainFormValidation = mainForm.validate();
     const gridFormValidation = gridForm.validate();
 
     if (mainFormValidation.hasErrors || gridFormValidation.hasErrors) {
+      setIsSubmitting(false);
       ToastNotification({
         type: "error",
         message: "Please fix validation errors before submitting",
@@ -386,6 +390,7 @@ function FreightCreate() {
             type: "success",
             message: "Freight is updated successfully",
           });
+          setIsSubmitting(false);
           navigate("/tariff/freight");
         }
       } else {
@@ -396,10 +401,12 @@ function FreightCreate() {
             type: "success",
             message: "Freight Charge is created",
           });
+          setIsSubmitting(false);
           navigate("/tariff/freight");
         }
       }
     } catch (err: any) {
+      setIsSubmitting(false);
       ToastNotification({
         type: "error",
         message: `Error while ${isEditMode ? "updating" : "creating"} freight: ${err?.message}`,
@@ -611,528 +618,812 @@ function FreightCreate() {
     }
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   return (
     <>
-      {/* Use full width container for better alignment */}
-      <Box w="100%" p="md">
-        <Title order={4} mt="md" mb={"sm"} c={"#105476"}>
-          {isViewMode
-            ? "View Freight"
-            : isEditMode
-              ? "Edit Freight"
-              : "Create Freight"}
-        </Title>
-
-        <Grid w="100%" mb="lg" gutter="md">
-          <Grid.Col span={2.5}>
-            <Flex gap="sm" align="flex-end">
-              <div
-                style={{
-                  flex: mainForm.values.origin_code ? 0.75 : 1,
-                  transition: "flex 0.3s ease",
-                }}
-              >
-                <SearchableSelect
-                  apiEndpoint={URL.portMaster}
-                  label="Origin"
-                  placeholder="Search by port code or name"
-                  value={mainForm.values.origin_code}
-                  displayValue={originDisplayValue}
-                  onChange={(value, selectedData) => {
-                    mainForm.setFieldValue("origin_code", value || "");
-                    setOriginDisplayValue(selectedData?.label || "");
-                  }}
-                  searchFields={["port_code", "port_name"]}
-                  displayFormat={(item) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
-                  required={!isViewMode}
-                  disabled={isViewMode}
-                />
-              </div>
-
-              {mainForm.values.origin_code && (
-                <div style={{ flex: 0.25 }}>
-                  <Button
-                    size="sm"
-                    color="#105476"
-                    onClick={() => openOrigin()}
-                  >
-                    <IconInfoCircle size={16} />
-                  </Button>
-                </div>
-              )}
-            </Flex>
-          </Grid.Col>
-
-          <Grid.Col span={2.5}>
-            <Flex gap="sm" align="flex-end">
-              <div
-                style={{
-                  flex: mainForm.values.destination_code ? 0.75 : 1,
-                  transition: "flex 0.3s ease",
-                }}
-              >
-                <SearchableSelect
-                  apiEndpoint={URL.portMaster}
-                  label="Destination"
-                  placeholder="Search by port code or name"
-                  value={mainForm.values.destination_code}
-                  displayValue={destinationDisplayValue}
-                  onChange={(value, selectedData) => {
-                    mainForm.setFieldValue("destination_code", value || "");
-                    setDestinationDisplayValue(selectedData?.label || "");
-                  }}
-                  searchFields={["port_code", "port_name"]}
-                  displayFormat={(item) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
-                  required={!isViewMode}
-                  disabled={isViewMode}
-                />
-              </div>
-
-              {mainForm.values.destination_code && (
-                <div style={{ flex: 0.25 }}>
-                  <Button
-                    size="sm"
-                    color="#105476"
-                    onClick={() => openDestination()}
-                  >
-                    <IconInfoCircle size={16} />
-                  </Button>
-                </div>
-              )}
-            </Flex>
-          </Grid.Col>
-
-          <Grid.Col span={1.5}>
-            <Select
-              searchable
-              key={mainForm.key("service")}
-              label="Service"
-              withAsterisk={!isViewMode}
-              placeholder="Select Service"
-              data={serviceData}
-              disabled={isViewMode}
-              {...mainForm.getInputProps("service")}
-              onFocus={(event) => {
-                // Auto-select all text when input is focused
-                const input = event.target as HTMLInputElement;
-                if (input && input.value) {
-                  input.select();
-                }
-              }}
-            />
-          </Grid.Col>
-
-          <Grid.Col span={2}>
-            <DateInput
-              label="Valid From"
-              withAsterisk={!isViewMode}
-              key={mainForm.key("valid_from")}
-              placeholder="YYYY-MM-DD"
-              disabled={isViewMode}
-              value={
-                mainForm.values.valid_from
-                  ? dayjs(mainForm.values.valid_from).toDate()
-                  : null
-              }
-              onChange={(date) => {
-                const formatted = date ? dayjs(date).format("YYYY-MM-DD") : "";
-                mainForm.setFieldValue("valid_from", formatted);
-              }}
-              valueFormat="YYYY-MM-DD"
-              leftSection={<IconCalendar size={18} />}
-              leftSectionPointerEvents="none"
-              radius="md"
-              size="sm"
-              styles={{
-                calendar: {
-                  padding: "0.5rem",
-                  gap: "0.25rem",
-                },
-                day: {
-                  width: "2.25rem",
-                  height: "2.25rem",
-                  fontSize: "0.9rem",
-                },
-                calendarHeaderLevel: {
-                  fontSize: "1rem",
-                  fontWeight: 500,
-                  marginBottom: "0.5rem",
-                  flex: 1,
-                  textAlign: "center",
-                },
-                calendarHeaderControl: {
-                  width: "2rem",
-                  height: "2rem",
-                  margin: "0 0.5rem",
-                },
-                calendarHeader: {
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "0.5rem",
-                },
-              }}
-            />
-          </Grid.Col>
-
-          <Grid.Col span={2}>
-            <DateInput
-              label="Valid To"
-              withAsterisk={!isViewMode}
-              key={mainForm.key("valid_to")}
-              placeholder="YYYY-MM-DD"
-              disabled={isViewMode}
-              value={
-                mainForm.values.valid_to
-                  ? dayjs(mainForm.values.valid_to).toDate()
-                  : null
-              }
-              onChange={(date) => {
-                const formatted = date ? dayjs(date).format("YYYY-MM-DD") : "";
-                mainForm.setFieldValue("valid_to", formatted);
-              }}
-              valueFormat="YYYY-MM-DD"
-              leftSection={<IconCalendar size={18} />}
-              leftSectionPointerEvents="none"
-              radius="md"
-              size="sm"
-              styles={{
-                calendar: {
-                  padding: "0.5rem",
-                  gap: "0.25rem",
-                },
-                day: {
-                  width: "2.25rem",
-                  height: "2.25rem",
-                  fontSize: "0.9rem",
-                },
-                calendarHeaderLevel: {
-                  fontSize: "1rem",
-                  fontWeight: 500,
-                  marginBottom: "0.5rem",
-                  flex: 1,
-                  textAlign: "center",
-                },
-                calendarHeaderControl: {
-                  width: "2rem",
-                  height: "2rem",
-                  margin: "0 0.5rem",
-                },
-                calendarHeader: {
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "0.5rem",
-                },
-              }}
-            />
-          </Grid.Col>
-          <Grid.Col span={1.5}>
-            <NumberInput
-              label="No of Containers"
-              min={1}
-              value={numberOfContainers}
-              onChange={(value) => setNumberOfContainers(Number(value) || 1)}
-              disabled={false}
-            />
-          </Grid.Col>
-        </Grid>
-        <Stack gap="md">
-          {gridForm.values.tariff_charges.map((_, index) => (
-            <Grid key={index} w="100%" gutter="md">
-              <Grid.Col span={isViewMode ? 2.5 : 2.5}>
-                <SearchableSelect
-                  apiEndpoint={URL.customer}
-                  label={index === 0 ? "Customer Name" : ""}
-                  placeholder="Search by customer code or name"
-                  value={gridForm.values.tariff_charges[index].customer_code}
-                  displayValue={customerDisplayValues[index] || ""}
-                  onChange={(value, selectedData) => {
-                    gridForm.setFieldValue(
-                      `tariff_charges.${index}.customer_code`,
-                      value || ""
-                    );
-                    // Update the display value for this specific index
-                    const newDisplayValues = [...customerDisplayValues];
-                    newDisplayValues[index] = selectedData?.label || "";
-                    setCustomerDisplayValues(newDisplayValues);
-                  }}
-                  searchFields={["customer_code", "customer_name"]}
-                  displayFormat={(item) => ({
-                    value: String(item.customer_code),
-                    label: `${item.customer_code} - ${item.customer_name}`,
-                  })}
-                  required={!isViewMode}
-                  disabled={isViewMode}
-                />
-              </Grid.Col>
-              <Grid.Col span={isViewMode ? 2 : 2}>
-                <TextInput
-                  label={index === 0 ? "Charge Name" : ""}
-                  withAsterisk={!isViewMode}
-                  placeholder="Enter Charge Name"
-                  key={`charge-name-${index}`}
-                  variant="default"
-                  disabled={isViewMode}
-                  {...gridForm.getInputProps(
-                    `tariff_charges.${index}.charge_name`
-                  )}
-                />
-              </Grid.Col>
-              <Grid.Col span={isViewMode ? 2.5 : 1.5}>
-                <SearchableSelect
-                  apiEndpoint={URL.carrier}
-                  label={index === 0 ? "Carrier" : ""}
-                  placeholder="Search by carrier code or name"
-                  value={gridForm.values.tariff_charges[index].carrier_code}
-                  displayValue={carrierDisplayValues[index] || ""}
-                  onChange={(value, selectedData) => {
-                    gridForm.setFieldValue(
-                      `tariff_charges.${index}.carrier_code`,
-                      value || ""
-                    );
-                    // Update the display value for this specific index
-                    const newDisplayValues = [...carrierDisplayValues];
-                    if (selectedData) {
-                      newDisplayValues[index] = selectedData.label || "";
-                    }
-                    setCarrierDisplayValues(newDisplayValues);
-                  }}
-                  searchFields={["carrier_code", "carrier_name"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.carrier_code),
-                    label: String(item.carrier_name),
-                  })}
-                  required={!isViewMode}
-                  disabled={isViewMode}
-                  minSearchLength={3}
-                />
-              </Grid.Col>
-              <Grid.Col span={isViewMode ? 1.5 : 1.5}>
-                <Select
-                  searchable
-                  label={index === 0 ? "Unit" : ""}
-                  withAsterisk={!isViewMode}
-                  placeholder="Select Unit"
-                  data={[
-                    { value: "20ft", label: "20ft Container" },
-                    { value: "40ft", label: "40ft Container" },
-                    { value: "shipment", label: "shipment" },
-                    { value: "W/M", label: "W/m" },
-                    { value: "CBM", label: "CBM" },
-                  ]}
-                  key={
-                    gridForm.values.tariff_charges[index].unit ||
-                    `unit-${index}-unit`
-                  }
-                  disabled={isViewMode}
-                  {...gridForm.getInputProps(`tariff_charges.${index}.unit`)}
-                  onFocus={(event) => {
-                    // Auto-select all text when input is focused
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
-                    }
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={isViewMode ? 1.5 : 1.5}>
-                <SearchableSelect
-                  apiEndpoint={URL.currencyMaster}
-                  label={index === 0 ? "Currency" : ""}
-                  placeholder="Search by currency code"
-                  value={gridForm.values.tariff_charges[index].currency_code}
-                  displayValue={currencyDisplayValues[index] || ""}
-                  onChange={(value, selectedData) => {
-                    gridForm.setFieldValue(
-                      `tariff_charges.${index}.currency_code`,
-                      value || ""
-                    );
-                    // Update the display value for this specific index
-                    const newDisplayValues = [...currencyDisplayValues];
-                    if (selectedData) {
-                      newDisplayValues[index] = selectedData.label || "";
-                    }
-                    setCurrencyDisplayValues(newDisplayValues);
-                  }}
-                  searchFields={["code", "name"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.code),
-                    label: String(item.code),
-                  })}
-                  required={!isViewMode}
-                  disabled={isViewMode}
-                  minSearchLength={2}
-                />
-              </Grid.Col>
-              <Grid.Col span={isViewMode ? 2 : 1.5}>
-                <NumberInput
-                  key={`rate-name-${index}`}
-                  min={1}
-                  label={index === 0 ? "Rate" : ""}
-                  withAsterisk={!isViewMode}
-                  disabled={isViewMode}
-                  {...gridForm.getInputProps(`tariff_charges.${index}.rate`)}
-                />
-              </Grid.Col>
-              {!isViewMode && (
-                <>
-                  <Grid.Col span={0.75}>
-                    <Button
-                      radius={"sm"}
-                      mt={index === 0 ? 25 : 0}
-                      variant="light"
-                      color="#105476"
-                      size="sm"
-                      onClick={() =>
-                        gridForm.insertListItem("tariff_charges", {
-                          customer_code: "",
-                          charge_name: "",
-                          carrier_code: "",
-                          unit: "",
-                          currency_code: "",
-                          rate: "",
-                          containers: 1,
-                        })
-                      }
-                    >
-                      <IconPlus size={16} />
-                    </Button>
-                  </Grid.Col>
-                  <Grid.Col span={0.5}>
-                    <Button
-                      mt={index === 0 ? 25 : 0}
-                      variant="light"
-                      color="red"
-                      size="sm"
-                      onClick={() =>
-                        gridForm.removeListItem("tariff_charges", index)
-                      }
-                    >
-                      <IconTrash size={16} />
-                    </Button>
-                  </Grid.Col>
-                </>
-              )}
-            </Grid>
-          ))}
-        </Stack>
-        {/* Total Rate Display for All Modes */}
-        <Paper mt="lg" maw={600} style={{ marginLeft: "auto", marginRight: 0 }}>
-          <Text size="lg" fw={600} c="#105476" mb="md">
-            Total Calculations
-          </Text>
-
-          {/* Unit Type Totals */}
-          {Object.keys(unitTotals).length > 0 && (
-            <Stack gap="xs" mb="md">
-              {Object.entries(unitTotals)
-                .filter(([unit]) => unit !== "shipment") // Hide shipment from display
-                .map(([unit, total]) => {
-                  return (
-                    <div key={unit}>
-                      <Group justify="space-between">
-                        <Text size="sm" fw={500}>
-                          Total {unit}:
-                        </Text>
-                        <Text size="sm" fw={600} c="#105476">
-                          {total.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </Text>
-                      </Group>
-                      <Text size="xs" c="dimmed" ml="md">
-                        Per Container :{" "}
-                        {(total / numberOfContainers).toFixed(2)}
-                      </Text>
-                    </div>
-                  );
-                })}
-            </Stack>
-          )}
-
-          {/* Overall Total */}
-          {/* <Box
-            p="sm"
+      <Box
+        component="form"
+        style={{
+          backgroundColor: "#F8F8F8",
+          position: "relative",
+          borderRadius: "8px",
+          overflow: "hidden",
+        }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!isViewMode) {
+            tariffSubmit();
+          }
+        }}
+      >
+        {isSubmitting && (
+          <Center
             style={{
-              backgroundColor: "#f8f9fa",
-              borderRadius: 4,
-              border: "1px solid #dee2e6",
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(255, 255, 255, 0.65)",
+              zIndex: 15,
             }}
           >
-            <Group justify="space-between">
-              <Text size="md" fw={600} c="#105476">
-                Overall Total:
-              </Text>
-              <Text size="md" fw={600} c="#105476">
-                {overallTotal.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-            </Group>
-          </Box> */}
+            <Loader color="#105476" size="lg" />
+          </Center>
+        )}
 
-          {/* Total with Containers */}
-          {/* <Box
-            p="sm"
-            mt="sm"
-            style={{
-              backgroundColor: "#e3f2fd",
-              borderRadius: 4,
-              border: "1px solid #2196f3",
-            }}
+        <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+          <Flex
+            gap="md"
+            align="flex-start"
+            style={{ height: "calc(100vh - 112px)", width: "100%" }}
           >
-            <Group justify="space-between">
-              <Text size="md" fw={600} c="#1976d2">
-                Total with {numberOfContainers} Container(s):
-              </Text>
-              <Text size="md" fw={600} c="#1976d2">
-                {overallTotal.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-            </Group>
-          </Box> */}
-        </Paper>
-        <Group justify={"space-between"} mt="xl">
-          <Group gap="sm">
-            <Button
-              variant="outline"
-              color="#105476"
-              onClick={() => navigate("/tariff/freight")}
+            {/* Vertical Stepper Sidebar */}
+            <Box
+              style={{
+                minWidth: 180,
+                width: "100%",
+                maxWidth: 220,
+                height: "100%",
+                alignSelf: "stretch",
+                borderRadius: "8px",
+                backgroundColor: "#FFFFFF",
+                position: "sticky",
+                top: 0,
+              }}
             >
-              Back to List
-            </Button>
-
-            {(isViewMode || isEditMode) && (
-              <Button
-                variant="outline"
-                color="#105476"
-                leftSection={<IconSparkles size={16} />}
-                onClick={handleOpenQuoteModal}
+              <Box
+                style={{
+                  padding: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
               >
-                Create Quotation
-              </Button>
-            )}
-          </Group>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isViewMode
+                    ? "Freight Entry Details (View Only)"
+                    : isEditMode
+                      ? "Edit Freight Entry"
+                      : "Create Freight Entry"}
+                </Text>
+              </Box>
+            </Box>
 
-          <Group justify="space-between">
-            {!isViewMode && (
-              <Button color="#105476" onClick={() => tariffSubmit()}>
-                {isEditMode ? "Update" : "Submit"}
-              </Button>
-            )}
-          </Group>
-        </Group>
+            {/* Main Content Area */}
+            <Box
+              style={{
+                flex: 1,
+                width: "100%",
+                borderRadius: "8px",
+                display: "flex",
+                flexDirection: "column",
+                height: "100%",
+                overflow: "hidden",
+                gap: "8px",
+              }}
+            >
+              <Box
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  borderRadius: "8px",
+                  backgroundColor: "#FFFFFF",
+                }}
+              >
+                <Grid style={{ padding: "24px" }}>
+                  {/* Origin Selection */}
+                  <Grid.Col span={4}>
+                    <Box maw={400}>
+                      <Flex gap="sm" align="flex-end">
+                        <div
+                          style={{
+                            flex: mainForm.values.origin_code ? 0.75 : 1,
+                            transition: "flex 0.3s ease",
+                          }}
+                        >
+                          <SearchableSelect
+                            apiEndpoint={URL.portMaster}
+                            label="Origin"
+                            placeholder="Search by port code or name"
+                            value={mainForm.values.origin_code}
+                            displayValue={originDisplayValue}
+                            onChange={(value, selectedData) => {
+                              mainForm.setFieldValue(
+                                "origin_code",
+                                value || ""
+                              );
+                              setOriginDisplayValue(selectedData?.label || "");
+                            }}
+                            searchFields={["port_code", "port_name"]}
+                            displayFormat={(item) => ({
+                              value: String(item.port_code),
+                              label: `${item.port_name} (${item.port_code})`,
+                            })}
+                            required={!isViewMode}
+                            disabled={isViewMode}
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                              label: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </div>
+
+                        {mainForm.values.origin_code && (
+                          <div style={{ flex: 0.25 }}>
+                            <Button
+                              size="sm"
+                              color="#105476"
+                              onClick={() => openOrigin()}
+                            >
+                              <IconInfoCircle size={16} />
+                            </Button>
+                          </div>
+                        )}
+                      </Flex>
+                    </Box>
+                  </Grid.Col>
+
+                  {/* Destination Selection */}
+                  <Grid.Col span={4}>
+                    <Box maw={400}>
+                      <Flex gap="sm" align="flex-end">
+                        <div
+                          style={{
+                            flex: mainForm.values.destination_code ? 0.75 : 1,
+                            transition: "flex 0.3s ease",
+                          }}
+                        >
+                          <SearchableSelect
+                            apiEndpoint={URL.portMaster}
+                            label="Destination"
+                            placeholder="Search by port code or name"
+                            value={mainForm.values.destination_code}
+                            displayValue={destinationDisplayValue}
+                            onChange={(value, selectedData) => {
+                              mainForm.setFieldValue(
+                                "destination_code",
+                                value || ""
+                              );
+                              setDestinationDisplayValue(
+                                selectedData?.label || ""
+                              );
+                            }}
+                            searchFields={["port_code", "port_name"]}
+                            displayFormat={(item) => ({
+                              value: String(item.port_code),
+                              label: `${item.port_name} (${item.port_code})`,
+                            })}
+                            required={!isViewMode}
+                            disabled={isViewMode}
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                              label: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </div>
+
+                        {mainForm.values.destination_code && (
+                          <div style={{ flex: 0.25 }}>
+                            <Button
+                              size="sm"
+                              color="#105476"
+                              onClick={() => openDestination()}
+                            >
+                              <IconInfoCircle size={16} />
+                            </Button>
+                          </div>
+                        )}
+                      </Flex>
+                    </Box>
+                  </Grid.Col>
+
+                  {/* Service Selection */}
+                  <Grid.Col span={4}>
+                    <Box maw={400}>
+                      <Select
+                        searchable
+                        key={mainForm.key("service")}
+                        label="Service"
+                        withAsterisk={!isViewMode}
+                        placeholder="Select Service"
+                        data={serviceData}
+                        disabled={isViewMode}
+                        {...mainForm.getInputProps("service")}
+                        onFocus={(event) => {
+                          // Auto-select all text when input is focused
+                          const input = event.target as HTMLInputElement;
+                          if (input && input.value) {
+                            input.select();
+                          }
+                        }}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                          },
+                        }}
+                      />
+                    </Box>
+                  </Grid.Col>
+
+                  {/* Valid From Date */}
+                  <Grid.Col span={4}>
+                    <Box maw={400}>
+                      <DateInput
+                        label="Valid From"
+                        withAsterisk={!isViewMode}
+                        key={mainForm.key("valid_from")}
+                        placeholder="YYYY-MM-DD"
+                        disabled={isViewMode}
+                        value={
+                          mainForm.values.valid_from
+                            ? dayjs(mainForm.values.valid_from).toDate()
+                            : null
+                        }
+                        onChange={(date) => {
+                          const formatted = date
+                            ? dayjs(date).format("YYYY-MM-DD")
+                            : "";
+                          mainForm.setFieldValue("valid_from", formatted);
+                        }}
+                        valueFormat="YYYY-MM-DD"
+                        leftSection={<IconCalendar size={18} />}
+                        leftSectionPointerEvents="none"
+                        radius="md"
+                        size="sm"
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                          },
+                          calendar: {
+                            padding: "0.5rem",
+                            gap: "0.25rem",
+                          },
+                          day: {
+                            width: "2.25rem",
+                            height: "2.25rem",
+                            fontSize: "0.9rem",
+                          },
+                          calendarHeaderLevel: {
+                            fontSize: "1rem",
+                            fontWeight: 500,
+                            marginBottom: "0.5rem",
+                            flex: 1,
+                            textAlign: "center",
+                          },
+                          calendarHeaderControl: {
+                            width: "2rem",
+                            height: "2rem",
+                            margin: "0 0.5rem",
+                          },
+                          calendarHeader: {
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "0.5rem",
+                          },
+                        }}
+                      />
+                    </Box>
+                  </Grid.Col>
+
+                  {/* Valid To Date */}
+                  <Grid.Col span={4}>
+                    <Box maw={400}>
+                      <DateInput
+                        label="Valid To"
+                        withAsterisk={!isViewMode}
+                        key={mainForm.key("valid_to")}
+                        placeholder="YYYY-MM-DD"
+                        disabled={isViewMode}
+                        value={
+                          mainForm.values.valid_to
+                            ? dayjs(mainForm.values.valid_to).toDate()
+                            : null
+                        }
+                        onChange={(date) => {
+                          const formatted = date
+                            ? dayjs(date).format("YYYY-MM-DD")
+                            : "";
+                          mainForm.setFieldValue("valid_to", formatted);
+                        }}
+                        valueFormat="YYYY-MM-DD"
+                        leftSection={<IconCalendar size={18} />}
+                        leftSectionPointerEvents="none"
+                        radius="md"
+                        size="sm"
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                          },
+                          calendar: {
+                            padding: "0.5rem",
+                            gap: "0.25rem",
+                          },
+                          day: {
+                            width: "2.25rem",
+                            height: "2.25rem",
+                            fontSize: "0.9rem",
+                          },
+                          calendarHeaderLevel: {
+                            fontSize: "1rem",
+                            fontWeight: 500,
+                            marginBottom: "0.5rem",
+                            flex: 1,
+                            textAlign: "center",
+                          },
+                          calendarHeaderControl: {
+                            width: "2rem",
+                            height: "2rem",
+                            margin: "0 0.5rem",
+                          },
+                          calendarHeader: {
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "0.5rem",
+                          },
+                        }}
+                      />
+                    </Box>
+                  </Grid.Col>
+
+                  {/* No of Containers */}
+                  <Grid.Col span={4}>
+                    <Box maw={400}>
+                      <NumberInput
+                        label="No of Containers"
+                        min={1}
+                        value={numberOfContainers}
+                        onChange={(value) =>
+                          setNumberOfContainers(Number(value) || 1)
+                        }
+                        disabled={isViewMode}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                          label: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                          },
+                        }}
+                      />
+                    </Box>
+                  </Grid.Col>
+
+                  {/* Tariff Charges Grid */}
+                  <Grid.Col span={12}>
+                    <Stack gap="md">
+                      {gridForm.values.tariff_charges.map((_, index) => (
+                        <Grid key={index} w="100%" gutter="md">
+                          <Grid.Col span={isViewMode ? 2.5 : 2.5}>
+                            <SearchableSelect
+                              apiEndpoint={URL.customer}
+                              label={index === 0 ? "Customer Name" : ""}
+                              placeholder="Search by customer code or name"
+                              value={
+                                gridForm.values.tariff_charges[index]
+                                  .customer_code
+                              }
+                              displayValue={customerDisplayValues[index] || ""}
+                              onChange={(value, selectedData) => {
+                                gridForm.setFieldValue(
+                                  `tariff_charges.${index}.customer_code`,
+                                  value || ""
+                                );
+                                // Update the display value for this specific index
+                                const newDisplayValues = [
+                                  ...customerDisplayValues,
+                                ];
+                                newDisplayValues[index] =
+                                  selectedData?.label || "";
+                                setCustomerDisplayValues(newDisplayValues);
+                              }}
+                              searchFields={["customer_code", "customer_name"]}
+                              displayFormat={(item) => ({
+                                value: String(item.customer_code),
+                                label: `${item.customer_code} - ${item.customer_name}`,
+                              })}
+                              required={!isViewMode}
+                              disabled={isViewMode}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={isViewMode ? 2 : 2}>
+                            <TextInput
+                              label={index === 0 ? "Charge Name" : ""}
+                              withAsterisk={!isViewMode}
+                              placeholder="Enter Charge Name"
+                              key={`charge-name-${index}`}
+                              variant="default"
+                              disabled={isViewMode}
+                              {...gridForm.getInputProps(
+                                `tariff_charges.${index}.charge_name`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={isViewMode ? 2.5 : 1.5}>
+                            <SearchableSelect
+                              apiEndpoint={URL.carrier}
+                              label={index === 0 ? "Carrier" : ""}
+                              placeholder="Search by carrier code or name"
+                              value={
+                                gridForm.values.tariff_charges[index]
+                                  .carrier_code
+                              }
+                              displayValue={carrierDisplayValues[index] || ""}
+                              onChange={(value, selectedData) => {
+                                gridForm.setFieldValue(
+                                  `tariff_charges.${index}.carrier_code`,
+                                  value || ""
+                                );
+                                // Update the display value for this specific index
+                                const newDisplayValues = [
+                                  ...carrierDisplayValues,
+                                ];
+                                if (selectedData) {
+                                  newDisplayValues[index] =
+                                    selectedData.label || "";
+                                }
+                                setCarrierDisplayValues(newDisplayValues);
+                              }}
+                              searchFields={["carrier_code", "carrier_name"]}
+                              displayFormat={(item: any) => ({
+                                value: String(item.carrier_code),
+                                label: String(item.carrier_name),
+                              })}
+                              required={!isViewMode}
+                              disabled={isViewMode}
+                              minSearchLength={3}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={isViewMode ? 1.5 : 1.5}>
+                            <Select
+                              searchable
+                              label={index === 0 ? "Unit" : ""}
+                              withAsterisk={!isViewMode}
+                              placeholder="Select Unit"
+                              data={[
+                                { value: "20ft", label: "20ft Container" },
+                                { value: "40ft", label: "40ft Container" },
+                                { value: "shipment", label: "shipment" },
+                                { value: "W/M", label: "W/m" },
+                                { value: "CBM", label: "CBM" },
+                              ]}
+                              key={
+                                gridForm.values.tariff_charges[index].unit ||
+                                `unit-${index}-unit`
+                              }
+                              disabled={isViewMode}
+                              {...gridForm.getInputProps(
+                                `tariff_charges.${index}.unit`
+                              )}
+                              onFocus={(event) => {
+                                // Auto-select all text when input is focused
+                                const input = event.target as HTMLInputElement;
+                                if (input && input.value) {
+                                  input.select();
+                                }
+                              }}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={isViewMode ? 1.5 : 1.5}>
+                            <SearchableSelect
+                              apiEndpoint={URL.currencyMaster}
+                              label={index === 0 ? "Currency" : ""}
+                              placeholder="Search by currency code"
+                              value={
+                                gridForm.values.tariff_charges[index]
+                                  .currency_code
+                              }
+                              displayValue={currencyDisplayValues[index] || ""}
+                              onChange={(value, selectedData) => {
+                                gridForm.setFieldValue(
+                                  `tariff_charges.${index}.currency_code`,
+                                  value || ""
+                                );
+                                // Update the display value for this specific index
+                                const newDisplayValues = [
+                                  ...currencyDisplayValues,
+                                ];
+                                if (selectedData) {
+                                  newDisplayValues[index] =
+                                    selectedData.label || "";
+                                }
+                                setCurrencyDisplayValues(newDisplayValues);
+                              }}
+                              searchFields={["code", "name"]}
+                              displayFormat={(item: any) => ({
+                                value: String(item.code),
+                                label: String(item.code),
+                              })}
+                              required={!isViewMode}
+                              disabled={isViewMode}
+                              minSearchLength={2}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={isViewMode ? 2 : 1.5}>
+                            <NumberInput
+                              key={`rate-name-${index}`}
+                              min={1}
+                              label={index === 0 ? "Rate" : ""}
+                              withAsterisk={!isViewMode}
+                              disabled={isViewMode}
+                              {...gridForm.getInputProps(
+                                `tariff_charges.${index}.rate`
+                              )}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          {!isViewMode && (
+                            <>
+                              <Grid.Col span={0.75}>
+                                <Button
+                                  radius={"sm"}
+                                  mt={index === 0 ? 25 : 0}
+                                  variant="light"
+                                  color="#105476"
+                                  size="sm"
+                                  onClick={() =>
+                                    gridForm.insertListItem("tariff_charges", {
+                                      customer_code: "",
+                                      charge_name: "",
+                                      carrier_code: "",
+                                      unit: "",
+                                      currency_code: "",
+                                      rate: "",
+                                      containers: 1,
+                                    })
+                                  }
+                                >
+                                  <IconPlus size={16} />
+                                </Button>
+                              </Grid.Col>
+                              <Grid.Col span={0.5}>
+                                <Button
+                                  mt={index === 0 ? 25 : 0}
+                                  variant="light"
+                                  color="red"
+                                  size="sm"
+                                  onClick={() =>
+                                    gridForm.removeListItem(
+                                      "tariff_charges",
+                                      index
+                                    )
+                                  }
+                                >
+                                  <IconTrash size={16} />
+                                </Button>
+                              </Grid.Col>
+                            </>
+                          )}
+                        </Grid>
+                      ))}
+                    </Stack>
+                  </Grid.Col>
+
+                  {/* Total Rate Display for All Modes */}
+                  <Grid.Col span={12}>
+                    <Paper
+                      mt="lg"
+                      maw={600}
+                      style={{ marginLeft: "auto", marginRight: 0 }}
+                    >
+                      <Text size="lg" fw={600} c="#105476" mb="md">
+                        Total Calculations
+                      </Text>
+
+                      {/* Unit Type Totals */}
+                      {Object.keys(unitTotals).length > 0 && (
+                        <Stack gap="xs" mb="md">
+                          {Object.entries(unitTotals)
+                            .filter(([unit]) => unit !== "shipment") // Hide shipment from display
+                            .map(([unit, total]) => {
+                              return (
+                                <div key={unit}>
+                                  <Group justify="space-between">
+                                    <Text size="sm" fw={500}>
+                                      Total {unit}:
+                                    </Text>
+                                    <Text size="sm" fw={600} c="#105476">
+                                      {total.toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
+                                    </Text>
+                                  </Group>
+                                  <Text size="xs" c="dimmed" ml="md">
+                                    Per Container :{" "}
+                                    {(total / numberOfContainers).toFixed(2)}
+                                  </Text>
+                                </div>
+                              );
+                            })}
+                        </Stack>
+                      )}
+                    </Paper>
+                  </Grid.Col>
+                </Grid>
+              </Box>
+
+              {/* Footer Buttons */}
+              <Box
+                style={{
+                  padding: "20px 32px",
+                  backgroundColor: "#ffffff",
+                  borderRadius: "8px",
+                }}
+              >
+                <Group justify="space-between">
+                  <Group gap="sm">
+                    <Button
+                      variant="outline"
+                      color="gray"
+                      size="sm"
+                      styles={{
+                        root: {
+                          borderColor: "#d0d0d0",
+                          color: "#666",
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                      onClick={() => navigate("/tariff/freight")}
+                    >
+                      {isViewMode ? "Back" : "Cancel"}
+                    </Button>
+
+                    {(isViewMode || isEditMode) && (
+                      <Button
+                        variant="outline"
+                        color="#105476"
+                        size="sm"
+                        leftSection={<IconSparkles size={16} />}
+                        onClick={handleOpenQuoteModal}
+                        styles={{
+                          root: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                      >
+                        Create Quotation
+                      </Button>
+                    )}
+                  </Group>
+
+                  <Group gap="sm">
+                    {!isViewMode && (
+                      <Button
+                        type="submit"
+                        size="sm"
+                        style={{
+                          backgroundColor: "#105476",
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        }}
+                        rightSection={<IconCheck size={16} />}
+                      >
+                        {isEditMode ? "Update" : "Submit"}
+                      </Button>
+                    )}
+                  </Group>
+                </Group>
+              </Box>
+            </Box>
+          </Flex>
+        </Box>
 
         {/* Create Quote Modal */}
         <Modal
@@ -1199,6 +1490,17 @@ function FreightCreate() {
                 required
                 minSearchLength={3}
                 error={quoteForm.errors.origin_code as string}
+                styles={{
+                  input: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    height: "36px",
+                  },
+                  label: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                  },
+                }}
               />
 
               <SearchableSelect
@@ -1231,6 +1533,17 @@ function FreightCreate() {
                 required
                 minSearchLength={3}
                 error={quoteForm.errors.destination_code as string}
+                styles={{
+                  input: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    height: "36px",
+                  },
+                  label: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                  },
+                }}
               />
 
               {/* Container Details - Multiple containers like enquiry create */}
@@ -1268,6 +1581,17 @@ function FreightCreate() {
                             if (input && input.value) {
                               input.select();
                             }
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                            },
                           }}
                         />
                       </Grid.Col>

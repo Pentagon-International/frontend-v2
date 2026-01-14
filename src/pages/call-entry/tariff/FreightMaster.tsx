@@ -18,18 +18,19 @@ import {
   Grid,
   Loader,
   Select,
+  Center,
+  Stack,
 } from "@mantine/core";
 import {
   IconDotsVertical,
   IconEdit,
-  IconEyeSpark,
   IconPlus,
-  IconSearch,
   IconFilter,
-  IconFilterOff,
   IconCalendar,
   IconChevronLeft,
   IconChevronRight,
+  IconX,
+  IconEye,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { ToastNotification, SearchableSelect } from "../../../components";
@@ -81,8 +82,12 @@ export default function Freight() {
   const [filtersApplied, setFiltersApplied] = useState(false);
 
   // Store display values (labels) for SearchableSelect fields
-  const [originDisplayValue, setOriginDisplayValue] = useState<string | null>(null);
-  const [destinationDisplayValue, setDestinationDisplayValue] = useState<string | null>(null);
+  const [originDisplayValue, setOriginDisplayValue] = useState<string | null>(
+    null
+  );
+  const [destinationDisplayValue, setDestinationDisplayValue] = useState<
+    string | null
+  >(null);
 
   // Filter form to minimize state variables
   const filterForm = useForm<FilterState>({
@@ -165,16 +170,18 @@ export default function Freight() {
 
         const payload: any = {};
 
-        if (appliedFilters.origin)
-          payload.origin_code = appliedFilters.origin;
+        if (appliedFilters.origin) payload.origin_code = appliedFilters.origin;
         if (appliedFilters.destination)
           payload.destination_code = appliedFilters.destination;
-        if (appliedFilters.service)
-          payload.service = appliedFilters.service;
+        if (appliedFilters.service) payload.service = appliedFilters.service;
         if (appliedFilters.valid_from)
-          payload.valid_from = dayjs(appliedFilters.valid_from).format("YYYY-MM-DD");
+          payload.valid_from = dayjs(appliedFilters.valid_from).format(
+            "YYYY-MM-DD"
+          );
         if (appliedFilters.valid_to)
-          payload.valid_to = dayjs(appliedFilters.valid_to).format("YYYY-MM-DD");
+          payload.valid_to = dayjs(appliedFilters.valid_to).format(
+            "YYYY-MM-DD"
+          );
 
         if (Object.keys(payload)?.length === 0) return [];
 
@@ -408,8 +415,7 @@ export default function Freight() {
       },
       {
         id: "actions",
-        header: "Action",
-        size: 80,
+        header: "Actions",
         Cell: ({ row }) => (
           <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
             <Menu.Target>
@@ -430,8 +436,8 @@ export default function Freight() {
                   }
                 >
                   <Group gap={"sm"}>
-                    <IconEyeSpark size={16} style={{ color: "#105476" }} />
-                    <Text size="sm">View Freight</Text>
+                    <IconEye size={16} style={{ color: "#105476" }} />
+                    <Text size="sm">View</Text>
                   </Group>
                 </UnstyledButton>
               </Box>
@@ -451,7 +457,7 @@ export default function Freight() {
                     >
                       <Group gap={"sm"}>
                         <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text size="sm">Edit Freight</Text>
+                        <Text size="sm">Edit</Text>
                       </Group>
                     </UnstyledButton>
                   </Box>
@@ -460,6 +466,7 @@ export default function Freight() {
             </Menu.Dropdown>
           </Menu>
         ),
+        size: 80,
       },
     ],
     [navigate, user?.is_staff]
@@ -489,11 +496,18 @@ export default function Freight() {
     },
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
       radius: "md",
+      style: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
+      },
     },
     mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles = {};
+      let extraStyles: Record<string, any> = {};
       switch (column.id) {
         case "actions":
           extraStyles = {
@@ -501,6 +515,8 @@ export default function Freight() {
             right: 0,
             minWidth: "30px",
             zIndex: 2,
+            borderLeft: "1px solid #F3F3F3",
+            boxShadow: "1px -2px 4px 0px #00000040",
           };
           break;
         default:
@@ -509,22 +525,27 @@ export default function Freight() {
       return {
         style: {
           width: "fit-content",
-          padding: "6px 8px",
-          fontSize: "13px",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontstyle: "regular",
+          fontFamily: "Inter",
+          color: "#333740",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
       };
     },
     mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles = {};
+      let extraStyles: Record<string, any> = {};
       switch (column.id) {
         case "actions":
           extraStyles = {
             position: "sticky",
             right: 0,
-            minWidth: "30px",
+            minWidth: "80px",
             zIndex: 2,
+            backgroundColor: "#FBFBFB",
+            boxShadow: "0px -2px 4px 0px #00000040",
           };
           break;
         default:
@@ -533,25 +554,26 @@ export default function Freight() {
       return {
         style: {
           width: "fit-content",
-          padding: "6px 8px",
-          fontSize: "12px",
-          backgroundColor: "#ffffff",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          fontstyle: "bold",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
           top: 0,
           zIndex: 3,
-          borderBottom: "1px solid #e9ecef",
+          borderBottom: "1px solid #F3F3F3",
           ...extraStyles,
         },
       };
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
   });
@@ -569,370 +591,427 @@ export default function Freight() {
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Group align="center" gap="xs">
-            <Text size="md" fw={600}>
+      <Card
+        shadow="sm"
+        pt="md"
+        pb="sm"
+        px="lg"
+        radius="md"
+        withBorder
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          overflow: "hidden",
+          flex: 1,
+        }}
+      >
+        <Box>
+          <Group justify="space-between" align="center" pb="sm">
+            <Text
+              size="md"
+              fw={600}
+              c={"#444955"}
+              style={{ fontFamily: "Inter", fontSize: "16px" }}
+            >
               List of Freight
             </Text>
-            {(() => {
-              // Check if origin/destination are selected via filters
-              const hasFilterSelection = filtersApplied && (appliedFilters.origin || appliedFilters.destination);
-              
-              if (hasFilterSelection) {
-                // Show filter selection
-                return (
-                  <>
-                    {appliedFilters.origin && (
-                      <>
-                        <Text size="md" fw={600}>
-                          from:
-                        </Text>
-                        <Badge variant="light" color="#105476" size="md">
-                          {originDisplayValue || appliedFilters.origin}
-                        </Badge>
-                      </>
-                    )}
-                    {appliedFilters.origin && appliedFilters.destination && (
-                      <Text size="md" fw={600}>
-                        to:
-                      </Text>
-                    )}
-                    {appliedFilters.destination && (
-                      <Badge variant="light" color="#105476" size="md">
-                        {destinationDisplayValue || appliedFilters.destination}
-                      </Badge>
-                    )}
-                  </>
-                );
-              } else {
-                // Show All
-                return (
-                  <>
-                    <Text size="md" fw={600}>
-                      :
-                    </Text>
-                    <Badge variant="light" color="#105476" size="md">
-                      All
-                    </Badge>
-                  </>
-                );
-              }
-            })()}
-          </Group>
 
-          <Group gap="sm" wrap="nowrap">
-            <TextInput
-              placeholder="Search by charge name"
-              leftSection={<IconSearch size={16} />}
-              style={{ width: 350, height: 32, fontSize: 14 }}
-              radius="sm"
-              size="xs"
-              value={localSearchTerm}
-              onChange={(e) => setLocalSearchTerm(e.target.value)}
-              disabled={isFreightLoading}
-            />
-
-            <Button
-              variant="outline"
-              leftSection={<IconFilter size={16} />}
-              size="xs"
-              color="#105476"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              Filters
-            </Button>
-
-            {user?.is_staff && (
-              <Button
-                color={"#105476"}
-                leftSection={<IconPlus size={16} />}
-                size="xs"
-                onClick={() => navigate("/tariff/freight/create")}
-                disabled={false}
+            <Group gap="xs" wrap="nowrap">
+              <ActionIcon
+                variant={showFilters ? "filled" : "outline"}
+                size={36}
+                color={showFilters ? "#E0F5FF" : "gray"}
+                onClick={() => setShowFilters(!showFilters)}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                    border: showFilters
+                      ? "1px solid #105476"
+                      : "1px solid #737780",
+                    color: showFilters ? "#105476" : "#737780",
+                    "&:active": {
+                      border: "1px solid #105476",
+                      color: "#FFFFFF",
+                    },
+                  },
+                }}
               >
-                Create New
-              </Button>
-            )}
+                <IconFilter size={18} />
+              </ActionIcon>
+
+              {user?.is_staff && (
+                <Button
+                  leftSection={<IconPlus size={16} />}
+                  size="sm"
+                  styles={{
+                    root: {
+                      backgroundColor: "#105476",
+                      borderRadius: "4px",
+                      color: "#FFFFFF",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      fontStyle: "semibold",
+                      "&:hover": {
+                        backgroundColor: "#105476",
+                      },
+                    },
+                  }}
+                  onClick={() => navigate("/tariff/freight/create")}
+                >
+                  Create New
+                </Button>
+              )}
+            </Group>
           </Group>
-        </Group>
+        </Box>
 
         {/* Filter Section */}
         {showFilters && (
-          <Card
-            shadow="xs"
-            padding="md"
-            radius="md"
-            withBorder
-            mb="md"
-            bg="#f8f9fa"
+          <Box
+            tt="capitalize"
+            mb="xs"
+            style={{
+              borderRadius: "8px",
+              border: "1px solid #E0E0E0",
+              flexShrink: 0,
+              height: "fit-content",
+            }}
           >
-            <Group justify="space-between" align="center">
-              <Group align="center" gap="xs">
-                <IconFilter size={16} color="#105476" />
-                <Text size="sm" fw={500} c="#105476">
-                  Filters
-                </Text>
-              </Group>
+            <Group
+              justify="space-between"
+              align="center"
+              mb="sm"
+              px="md"
+              style={{
+                backgroundColor: "#FAFAFA",
+                padding: "8px 8px",
+                borderRadius: "8px",
+              }}
+            >
+              <Text
+                size="sm"
+                fw={600}
+                c="#000000"
+                style={{ fontFamily: "Inter", fontSize: "14px" }}
+              >
+                Filter
+              </Text>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={() => setShowFilters(false)}
+                aria-label="Close filters"
+                size="sm"
+              >
+                <IconX size={18} />
+              </ActionIcon>
             </Group>
 
-            <Grid>
-              <Grid.Col span={12}>
-                <Grid>
-                  {/* Origin Filter */}
-                  <Grid.Col span={2.4}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Origin"
-                      placeholder="Type origin code or name"
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_code", "port_name"]}
-                      displayFormat={(item: any) => ({
-                        value: String(item.port_code),
-                        label: `${item.port_name} (${item.port_code})`,
-                      })}
-                      value={filterForm.values.origin}
-                      displayValue={originDisplayValue}
-                      onChange={(value, selectedData) => {
-                        filterForm.setFieldValue("origin", value || null);
-                        setOriginDisplayValue(selectedData?.label || null);
-                      }}
-                      minSearchLength={3}
-                      className="filter-searchable-select"
-                    />
-                  </Grid.Col>
+            <Grid gutter="md" px="md">
+              {/* Origin Filter */}
+              <Grid.Col span={2.4}>
+                <SearchableSelect
+                  size="xs"
+                  label="Origin"
+                  placeholder="Type Origin Code"
+                  apiEndpoint={URL.portMaster}
+                  searchFields={["port_name", "port_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filterForm.values.origin}
+                  displayValue={originDisplayValue}
+                  onChange={(value, selectedData) => {
+                    filterForm.setFieldValue("origin", value || null);
+                    setOriginDisplayValue(selectedData?.label || null);
+                  }}
+                  minSearchLength={3}
+                  className="filter-searchable-select"
+                />
+              </Grid.Col>
 
-                  {/* Destination Filter */}
-                  <Grid.Col span={2.4}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Destination"
-                      placeholder="Type destination code or name"
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_code", "port_name"]}
-                      displayFormat={(item: any) => ({
-                        value: String(item.port_code),
-                        label: `${item.port_name} (${item.port_code})`,
-                      })}
-                      value={filterForm.values.destination}
-                      displayValue={destinationDisplayValue}
-                      onChange={(value, selectedData) => {
-                        filterForm.setFieldValue("destination", value || null);
-                        setDestinationDisplayValue(selectedData?.label || null);
-                      }}
-                      minSearchLength={3}
-                      className="filter-searchable-select"
-                    />
-                  </Grid.Col>
+              {/* Destination Filter */}
+              <Grid.Col span={2.4}>
+                <SearchableSelect
+                  size="xs"
+                  label="Destination"
+                  placeholder="Type Destination Code"
+                  apiEndpoint={URL.portMaster}
+                  searchFields={["port_name", "port_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filterForm.values.destination}
+                  displayValue={destinationDisplayValue}
+                  onChange={(value, selectedData) => {
+                    filterForm.setFieldValue("destination", value || null);
+                    setDestinationDisplayValue(selectedData?.label || null);
+                  }}
+                  minSearchLength={3}
+                  className="filter-searchable-select"
+                />
+              </Grid.Col>
 
-                  {/* Service Filter */}
-                  <Grid.Col span={2.4}>
-                    <Select
-                      key={`service-${filterForm.values.service}`}
-                      label="Service"
-                      placeholder="Select Service"
-                      searchable
-                      clearable
-                      size="xs"
-                      data={serviceOptions}
-                      {...filterForm.getInputProps("service")}
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+              {/* Service Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  key={`service-${filterForm.values.service}`}
+                  label="Service"
+                  placeholder="Select Service"
+                  searchable
+                  clearable
+                  size="xs"
+                  data={serviceOptions}
+                  value={filterForm.values.service}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("service", value || null)
+                  }
+                  onFocus={(event) => {
+                    const input = event.target as HTMLInputElement;
+                    if (input && input.value) {
+                      input.select();
+                    }
+                  }}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* Valid From Date Filter */}
-                  <Grid.Col span={2.4}>
-                    <DateInput
-                      key={`valid-from-${filterForm.values.valid_from}`}
-                      label="Valid From"
-                      placeholder="YYYY-MM-DD"
-                      size="xs"
-                      {...filterForm.getInputProps("valid_from")}
-                      valueFormat="YYYY-MM-DD"
-                      leftSection={<IconCalendar size={14} />}
-                      leftSectionPointerEvents="none"
-                      radius="md"
-                      nextIcon={<IconChevronRight size={16} />}
-                      previousIcon={<IconChevronLeft size={16} />}
-                      clearable
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      } as any}
-                    />
-                  </Grid.Col>
+              {/* Valid From Date Filter */}
+              <Grid.Col span={2.4}>
+                <DateInput
+                  key={`valid-from-${filterForm.values.valid_from}`}
+                  label="Valid From"
+                  placeholder="YYYY-MM-DD"
+                  size="xs"
+                  {...filterForm.getInputProps("valid_from")}
+                  valueFormat="YYYY-MM-DD"
+                  leftSection={<IconCalendar size={14} />}
+                  leftSectionPointerEvents="none"
+                  radius="md"
+                  nextIcon={<IconChevronRight size={16} />}
+                  previousIcon={<IconChevronLeft size={16} />}
+                  clearable
+                  styles={
+                    {
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    } as any
+                  }
+                />
+              </Grid.Col>
 
-                  {/* Valid To Date Filter */}
-                  <Grid.Col span={2.4}>
-                    <DateInput
-                      key={`valid-to-${filterForm.values.valid_to}`}
-                      label="Valid To"
-                      placeholder="YYYY-MM-DD"
-                      size="xs"
-                      {...filterForm.getInputProps("valid_to")}
-                      valueFormat="YYYY-MM-DD"
-                      leftSection={<IconCalendar size={14} />}
-                      leftSectionPointerEvents="none"
-                      radius="md"
-                      nextIcon={<IconChevronRight size={16} />}
-                      previousIcon={<IconChevronLeft size={16} />}
-                      clearable
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      } as any}
-                    />
-                  </Grid.Col>
-                </Grid>
+              {/* Valid To Date Filter */}
+              <Grid.Col span={2.4}>
+                <DateInput
+                  key={`valid-to-${filterForm.values.valid_to}`}
+                  label="Valid To"
+                  placeholder="YYYY-MM-DD"
+                  size="xs"
+                  {...filterForm.getInputProps("valid_to")}
+                  valueFormat="YYYY-MM-DD"
+                  leftSection={<IconCalendar size={14} />}
+                  leftSectionPointerEvents="none"
+                  radius="md"
+                  nextIcon={<IconChevronRight size={16} />}
+                  previousIcon={<IconChevronLeft size={16} />}
+                  clearable
+                  styles={
+                    {
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    } as any
+                  }
+                />
               </Grid.Col>
             </Grid>
 
-            <Group justify="end" mt="sm">
+            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
               <Button
-                size="xs"
-                variant="outline"
-                color="#105476"
-                leftSection={<IconFilterOff size={14} />}
+                size="sm"
+                variant="default"
                 onClick={clearAllFilters}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    color: "#444955",
+                  },
+                }}
               >
-                Clear Filters
+                Clear
               </Button>
               <Button
-                size="xs"
-                variant="filled"
-                color="#105476"
-                leftSection={
-                  isLoading ? <Loader size={14} /> : <IconFilter size={14} />
-                }
+                size="sm"
                 onClick={applyFilters}
                 loading={isLoading}
                 disabled={isLoading}
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    "&:hover": {
+                      backgroundColor: "#0d4261",
+                    },
+                  },
+                }}
               >
-                Apply Filters
+                Apply
               </Button>
             </Group>
-          </Card>
+          </Box>
         )}
 
-        {/* Show table */}
-        {(() => {
-          if (isLoading) {
-            return (
-              <Box p="xl" style={{ textAlign: "center", display:"flex", alignItems:"center", justifyContent:"center", gap:"5px" }}>
-                <Loader color="#105475" size="sm"/>
-                <Text>Loading freight...</Text>
-              </Box>
-            );
-          }
-          
-          if ((displayData as Freight[]).length === 0) {
-            return (
-              <Box p="xl" style={{ textAlign: "center" }}>
-                <Text c="dimmed">
-                  No freight found {filtersApplied && "for this filters"}
+        {isLoading ? (
+          <Center py="xl" style={{ flex: 1 }}>
+            <Stack align="center" gap="md">
+              <Loader size="lg" color="#105476" />
+              <Text c="dimmed">Loading freight data...</Text>
+            </Stack>
+          </Center>
+        ) : (
+          <>
+            <MantineReactTable
+              key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${filteredFreightDataForDisplay.length}`}
+              table={table}
+            />
+
+            {/* Custom Pagination Bar */}
+            <Group
+              w="100%"
+              justify="space-between"
+              align="center"
+              pt="sm"
+              pl="sm"
+              pr="xl"
+              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
+              wrap="nowrap"
+              mt="sm"
+            >
+              {/* Rows per page and range */}
+              <Group gap="sm" align="center" wrap="nowrap">
+                <Text size="sm" c="dimmed">
+                  Rows per page
                 </Text>
-              </Box>
-            );
-          }
-          
-          return (
-            <>
-              <MantineReactTable table={table} />
-
-              {/* Custom Pagination Bar */}
-              <Group
-                w="100%"
-                justify="space-between"
-                align="center"
-                p="xs"
-                wrap="nowrap"
-                pt="md"
-              >
-                {/* Rows per page and range */}
-                <Group gap="sm" align="center" wrap="nowrap">
-                  <Text size="sm" c="dimmed">
-                    Rows per page
-                  </Text>
-                  <Select
-                    size="xs"
-                    data={["10", "25", "50"]}
-                    value={String(pageSize)}
-                    onChange={(val) => {
-                      if (!val) return;
-                      handlePageSizeChange(Number(val));
-                    }}
-                    w={110}
-                    styles={{ input: { fontSize: 12, height: 30 } } as any}
-                  />
-                  <Text size="sm" c="dimmed">
-                    {(() => {
-                      const total = totalRecords || filteredFreightDataForDisplay.length || 0;
-                      if (total === 0) return "0–0 of 0";
-                      const start = (currentPage - 1) * pageSize + 1;
-                      const end = Math.min(currentPage * pageSize, total);
-                      return `${start}–${end} of ${total}`;
-                    })()}
-                  </Text>
-                </Group>
-
-                {/* Page controls */}
-                <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-                  <ActionIcon
-                    variant="default"
-                    size="sm"
-                    onClick={() =>
-                      handlePageChange(Math.max(1, currentPage - 1))
-                    }
-                    disabled={currentPage === 1}
-                  >
-                    <IconChevronLeft size={16} />
-                  </ActionIcon>
-                  <Text size="sm" ta="center" style={{ width: 26 }}>
-                    {currentPage}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    of {Math.max(1, Math.ceil((totalRecords || filteredFreightDataForDisplay.length || 0) / pageSize))}
-                  </Text>
-                  <ActionIcon
-                    variant="default"
-                    size="sm"
-                    onClick={() => {
-                      const totalPages = Math.max(
-                        1,
-                        Math.ceil((totalRecords || filteredFreightDataForDisplay.length || 0) / pageSize)
-                      );
-                      handlePageChange(Math.min(totalPages, currentPage + 1));
-                    }}
-                    disabled={(() => {
-                      const totalPages = Math.max(
-                        1,
-                        Math.ceil((totalRecords || filteredFreightDataForDisplay.length || 0) / pageSize)
-                      );
-                      return currentPage >= totalPages;
-                    })()}
-                  >
-                    <IconChevronRight size={16} />
-                  </ActionIcon>
-                </Group>
+                <Select
+                  size="xs"
+                  data={["10", "25", "50"]}
+                  value={String(table.getState().pagination.pageSize)}
+                  onChange={(val) => {
+                    if (!val) return;
+                    table.setPageSize(Number(val));
+                    table.setPageIndex(0);
+                  }}
+                  w={110}
+                  styles={{ input: { fontSize: 12, height: 30 } }}
+                />
+                <Text size="sm" c="dimmed">
+                  {(() => {
+                    const { pageIndex, pageSize } = table.getState().pagination;
+                    const total =
+                      table.getPrePaginationRowModel().rows.length || 0;
+                    if (total === 0) return "0–0 of 0";
+                    const start = pageIndex * pageSize + 1;
+                    const end = Math.min((pageIndex + 1) * pageSize, total);
+                    return `${start}–${end} of ${total}`;
+                  })()}
+                </Text>
               </Group>
-            </>
-          );
-        })()}
+
+              {/* Page controls */}
+              <Group gap="xs" align="center" wrap="nowrap">
+                <ActionIcon
+                  variant="default"
+                  size="sm"
+                  onClick={() =>
+                    table.setPageIndex(
+                      Math.max(0, table.getState().pagination.pageIndex - 1)
+                    )
+                  }
+                  disabled={table.getState().pagination.pageIndex === 0}
+                >
+                  <IconChevronLeft size={16} />
+                </ActionIcon>
+                <Text size="sm" ta="center" style={{ width: 26 }}>
+                  {table.getState().pagination.pageIndex + 1}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  of{" "}
+                  {Math.max(
+                    1,
+                    Math.ceil(
+                      (table.getPrePaginationRowModel().rows.length || 0) /
+                        table.getState().pagination.pageSize
+                    )
+                  )}
+                </Text>
+                <ActionIcon
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    const total =
+                      table.getPrePaginationRowModel().rows.length || 0;
+                    const totalPages = Math.max(
+                      1,
+                      Math.ceil(total / table.getState().pagination.pageSize)
+                    );
+                    table.setPageIndex(
+                      Math.min(
+                        totalPages - 1,
+                        table.getState().pagination.pageIndex + 1
+                      )
+                    );
+                  }}
+                  disabled={(() => {
+                    const total =
+                      table.getPrePaginationRowModel().rows.length || 0;
+                    const totalPages = Math.max(
+                      1,
+                      Math.ceil(total / table.getState().pagination.pageSize)
+                    );
+                    return (
+                      table.getState().pagination.pageIndex >= totalPages - 1
+                    );
+                  })()}
+                >
+                  <IconChevronRight size={16} />
+                </ActionIcon>
+              </Group>
+            </Group>
+          </>
+        )}
 
         <Outlet />
       </Card>
