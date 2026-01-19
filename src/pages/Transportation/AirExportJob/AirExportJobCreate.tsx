@@ -45,7 +45,8 @@ import { toTitleCase } from "../../../utils/textFormatter";
 // Type definitions
 type MAWBDetailsForm = {
   service: string;
-  origin_agent: string;
+  origin_agent: string; // Stores agent_code (code) for API payload
+  origin_agent_name: string; // Stores agent_name (name) for display
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -60,7 +61,6 @@ type CarrierDetailsForm = {
   schedule_id: string;
   carrier_code: string;
   carrier_name: string;
-  flight_name: string;
   flight_number: string;
   mawb_number: string;
   mawb_date: Date | null;
@@ -135,7 +135,7 @@ type HAWBDetail = {
 // Validation schemas
 const mawbDetailsSchema = yup.object({
   service: yup.string().required("Service is required"),
-  origin_agent: yup.string().required("Origin Agent is required"),
+  origin_agent: yup.string().required("Destination Agent is required"),
   origin_code: yup.string().required("Origin is required"),
   destination_code: yup.string().required("Destination is required"),
   etd: yup.date().required("ETD is required"),
@@ -148,9 +148,11 @@ const carrierDetailsSchema = yup.object({
   schedule_id: yup.string().nullable(),
   carrier_code: yup.string().required("Carrier is required"),
   carrier_name: yup.string().required("Carrier is required"),
-  flight_name: yup.string().required("Flight Name is required"),
   flight_number: yup.string().required("Flight Number is required"),
-  mawb_number: yup.string().required("MAWB Number is required"),
+  mawb_number: yup
+    .string()
+    .required("MAWB Number is required")
+    .matches(/^[A-Za-z0-9]{11}$/, "MAWB Number must be exactly 11 characters"),
   mawb_date: yup.date().nullable(),
 });
 
@@ -239,9 +241,14 @@ function AirExportJobCreate() {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
       origin_agent:
-        jobData?.origin_agent_name ||
+        jobData?.agent_code ||
         jobData?.origin_agent ||
         location.state?.mawbDetails?.origin_agent ||
+        "",
+      origin_agent_name:
+        jobData?.agent_name ||
+        jobData?.origin_agent_name ||
+        location.state?.mawbDetails?.origin_agent_name ||
         "",
       origin_code:
         jobData?.origin_code || location.state?.mawbDetails?.origin_code || "",
@@ -294,11 +301,6 @@ function AirExportJobCreate() {
       carrier_name:
         jobData?.carrier_name ||
         location.state?.carrierDetails?.carrier_name ||
-        "",
-      flight_name:
-        jobData?.vessel_name ||
-        jobData?.flight_name ||
-        location.state?.carrierDetails?.flight_name ||
         "",
       flight_number:
         jobData?.flight_number ||
@@ -377,8 +379,10 @@ function AirExportJobCreate() {
         // Populate MAWB Details using setValues - ensure all fields are set
         const mawbInitialValues = {
           service: jobData.service || "AIR",
-          // Use origin_agent_name from API response, fallback to origin_agent for backward compatibility
-          origin_agent: jobData.origin_agent_name || jobData.origin_agent || "",
+          // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
+          origin_agent: jobData.agent_code || jobData.origin_agent || "",
+          origin_agent_name:
+            jobData.agent_name || jobData.origin_agent_name || "",
           origin_code: jobData.origin_code || "",
           origin_name: jobData.origin_name || "",
           destination_code: jobData.destination_code || "",
@@ -1121,10 +1125,6 @@ function AirExportJobCreate() {
             schedule_id: savedCarrierDetails.schedule_id || "",
             carrier_code: savedCarrierDetails.carrier_code || "",
             carrier_name: savedCarrierDetails.carrier_name || "",
-            flight_name:
-              savedCarrierDetails.flight_name ||
-              savedCarrierDetails.vessel_name ||
-              "",
             flight_number:
               savedCarrierDetails.flight_number ||
               savedCarrierDetails.voyage_number ||
@@ -1419,7 +1419,7 @@ function AirExportJobCreate() {
       const payload = {
         service: mawbDetailsForm.values.service,
         service_type: "Export",
-        origin_agent: mawbDetailsForm.values.origin_agent || null,
+        agent: mawbDetailsForm.values.origin_agent || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
         etd: mawbDetailsForm.values.etd
@@ -1451,7 +1451,6 @@ function AirExportJobCreate() {
             : null
           : null,
         carrier_code: carrierDetailsForm.values.carrier_code,
-        vessel_name: carrierDetailsForm.values.flight_name || null,
         voyage_number: carrierDetailsForm.values.flight_number || null,
         mbl_date: carrierDetailsForm.values.mawb_date
           ? dayjs(carrierDetailsForm.values.mawb_date).isValid()
@@ -1651,23 +1650,31 @@ function AirExportJobCreate() {
               <Grid.Col span={3}>
                 <SearchableSelect
                   key={`origin-agent-${formInitializedKey}`}
-                  label="Origin Agent"
+                  label="Destination Agent"
                   required
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_name),
-                    label: String(item.customer_name),
+                    value: String(item.customer_code), // Use code as value for API payload
+                    label: String(item.customer_name), // Display name to user
                   })}
-                  value={mawbDetailsForm.values.origin_agent || null}
-                  displayValue={mawbDetailsForm.values.origin_agent || null}
-                  onChange={(value, _selectedData, originalData) => {
-                    const agentName = value || "";
-                    mawbDetailsForm.setFieldValue("origin_agent", agentName);
+                  value={mawbDetailsForm.values.origin_agent || null} // Stores agent_code
+                  displayValue={
+                    mawbDetailsForm.values.origin_agent_name || null
+                  } // Displays agent_name
+                  onChange={(value, selectedData, originalData) => {
+                    // Store customer_code as value (for API payload)
+                    mawbDetailsForm.setFieldValue("origin_agent", value || "");
+                    // Store customer_name for display
+                    mawbDetailsForm.setFieldValue(
+                      "origin_agent_name",
+                      selectedData?.label || ""
+                    );
 
-                    console.log("🔍 MAWB Origin Agent Selected:", {
-                      agentName,
+                    console.log("🔍 MAWB Destination Agent Selected:", {
+                      agentCode: value,
+                      agentName: selectedData?.label,
                       originalData,
                       hasAddressesData: originalData?.addresses_data,
                       addressesData: originalData?.addresses_data,
@@ -1865,23 +1872,6 @@ function AirExportJobCreate() {
 
               <Grid.Col span={2}>
                 <TextInput
-                  label="Flight Name"
-                  required
-                  placeholder="Enter flight name"
-                  value={carrierDetailsForm.values.flight_name}
-                  onChange={(e) => {
-                    const formattedValue = toTitleCase(e.target.value);
-                    carrierDetailsForm.setFieldValue(
-                      "flight_name",
-                      formattedValue
-                    );
-                  }}
-                  error={carrierDetailsForm.errors.flight_name}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={2}>
-                <TextInput
                   label="Flight Number"
                   required
                   placeholder="Enter Flight number"
@@ -1894,6 +1884,7 @@ function AirExportJobCreate() {
                   label="MAWB Number"
                   required
                   placeholder="Enter MAWB number"
+                  maxLength={11}
                   {...carrierDetailsForm.getInputProps("mawb_number")}
                 />
               </Grid.Col>

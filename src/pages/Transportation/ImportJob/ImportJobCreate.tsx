@@ -135,7 +135,10 @@ const carrierDetailsSchema = yup.object({
 
 const containerDetailSchema = yup.object({
   container_type: yup.string().required("Container Type is required"),
-  container_no: yup.string().required("Container No is required"),
+  container_no: yup
+    .string()
+    .required("Container No is required")
+    .matches(/^[A-Za-z0-9]{11}$/, "Container No must be exactly 11 characters"),
   actual_seal_no: yup.string().nullable(),
   customs_seal_no: yup.string().nullable(),
   loading_date: yup.date().nullable(),
@@ -404,8 +407,13 @@ function ImportJobCreate() {
 
         mblDetailsForm.setValues({
           service: mblData.service || "",
-          origin_agent: mblData.origin_agent_code || mblData.origin_agent || "",
-          origin_agent_name: mblData.origin_agent_name || "",
+          origin_agent:
+            mblData.agent_code ||
+            mblData.origin_agent_code ||
+            mblData.origin_agent ||
+            "",
+          origin_agent_name:
+            mblData.agent_name || mblData.origin_agent_name || "",
           origin_agent_address: originAgentAddress,
           origin_code: mblData.origin_code || "",
           origin_name: mblData.origin_name || "",
@@ -1700,7 +1708,7 @@ function ImportJobCreate() {
       const payload = {
         service: mblDetailsForm.values.service,
         service_type: "Import", // Based on the example payload
-        origin_agent: mblDetailsForm.values.origin_agent || null,
+        agent: mblDetailsForm.values.origin_agent || null,
         origin_code: mblDetailsForm.values.origin_code,
         destination_code: mblDetailsForm.values.destination_code,
         etd: mblDetailsForm.values.etd
@@ -2293,6 +2301,7 @@ function ImportJobCreate() {
                   required
                   placeholder="Enter MBL number"
                   {...carrierDetailsForm.getInputProps("mbl_number")}
+                  // No maxLength restriction for MBL Number
                 />
               </Grid.Col>
 
@@ -2923,6 +2932,7 @@ function ImportJobCreate() {
                     <TextInput
                       required
                       placeholder="Container number"
+                      maxLength={11}
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.container_no`
                       )}

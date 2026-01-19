@@ -38,8 +38,10 @@ type AirImportJobData = {
   id: number;
   service: string;
   service_type: string;
-  origin_agent_code: string | null;
-  origin_agent_name: string | null;
+  agent_code: string | null;
+  agent_name: string | null;
+  origin_agent_code: string | null; // Deprecated, use agent_code
+  origin_agent_name: string | null; // Deprecated, use agent_name
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -158,8 +160,8 @@ function AirImportJobMaster() {
         },
       },
       {
-        accessorKey: "origin_agent_name",
-        header: "Origin Agent",
+        accessorKey: "agent_name",
+        header: "Destination Agent",
         size: 150,
         Cell: ({ cell }) => {
           const value = cell.getValue<string | null>();

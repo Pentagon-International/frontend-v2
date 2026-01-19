@@ -176,9 +176,8 @@ function HouseCreate() {
   const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
-  const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] = useState<
-    Array<{ value: string; label: string }>
-  >([]);
+  const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
+    useState<Array<{ value: string; label: string }>>([]);
   const [originAgentAddressOptions, setOriginAgentAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
@@ -282,7 +281,7 @@ function HouseCreate() {
             ""
           : ""),
       customer_service: editData?.customer_service || "",
-      trade: editData?.trade || "",
+      trade: editData?.trade || "Re Export",
       origin_agent_name: editData?.origin_agent_name || "",
       origin_agent_address: editData?.origin_agent_address || "",
       origin_agent_email: editData?.origin_agent_email || "",
@@ -358,7 +357,7 @@ function HouseCreate() {
         destination_code: editData.destination_code || "",
         destination_name: editData.destination_name || "",
         customer_service: editData.customer_service || "",
-        trade: editData.trade || "",
+        trade: editData.trade || "Re Export",
         origin_agent_name: editData.origin_agent_name || "",
         origin_agent_address: editData.origin_agent_address || "",
         origin_agent_email: editData.origin_agent_email || "",
@@ -383,7 +382,9 @@ function HouseCreate() {
           (cargo: Record<string, unknown>) => ({
             no_of_packages: cargo.no_of_packages as number | null,
             gross_weight: cargo.gross_weight as number | null,
-            volume_weight: (cargo.volume_weight || cargo.volume) as number | null,
+            volume_weight: (cargo.volume_weight || cargo.volume) as
+              | number
+              | null,
             chargeable_weight: cargo.chargeable_weight as number | null,
             haz: cargo.haz ? String(cargo.haz) : "",
           })
@@ -614,12 +615,20 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.routed]);
 
-  // Trade dropdown options
+  // Trade dropdown options (not used for export pages - trade is always "Export")
   const tradeOptions = [
     { value: "Import", label: "Import" },
     { value: "Transshipment", label: "Transshipment" },
     { value: "Re Export", label: "Re Export" },
   ];
+
+  // Ensure trade is always "Re Export" for export pages
+  useEffect(() => {
+    if (form.values.trade !== "Re Export") {
+      form.setFieldValue("trade", "Re Export");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.trade]);
 
   // Function to update Trade field based on destination comparison
   const updateTradeField = (hawbDestinationCode: string) => {
@@ -1343,23 +1352,21 @@ function HouseCreate() {
 
               <Grid.Col span={4}>
                 <Dropdown
-                  key={`trade-${form.values.trade}`}
                   label="Trade"
                   required
                   placeholder="Select Trade"
-                  searchable
                   data={tradeOptions}
-                  value={form.values.trade || null}
-                  onChange={(value) => {
-                    console.log(
-                      "📥 Trade Dropdown onChange triggered with value:",
-                      value
-                    );
-                    form.setFieldValue("trade", value || "");
-                    console.log(
-                      "📝 Trade Dropdown after setFieldValue, form.values.trade:",
-                      form.values.trade
-                    );
+                  value={form.values.trade || "Re Export"}
+                  disabled
+                  onChange={() => {
+                    // Prevent changes - trade is always "Re Export" for export pages
+                    form.setFieldValue("trade", "Re Export");
+                  }}
+                  styles={{
+                    input: {
+                      backgroundColor: "#f8f9fa",
+                      cursor: "not-allowed",
+                    },
                   }}
                   error={form.errors.trade}
                 />
@@ -1684,7 +1691,11 @@ function HouseCreate() {
                     value: String(item.customer_code),
                     label: String(item.customer_name),
                   })}
-                  value={form.values.notify_customer1_name ? String(form.values.notify_customer1_name) : ""}
+                  value={
+                    form.values.notify_customer1_name
+                      ? String(form.values.notify_customer1_name)
+                      : ""
+                  }
                   displayValue={form.values.notify_customer1_name}
                   onChange={(value, selectedData, originalData) => {
                     const previousValue = form.values.notify_customer1_name;
@@ -1779,14 +1790,14 @@ function HouseCreate() {
                 )}
               </Grid.Col>
             </Grid>
-            {/* Origin Agent Section */}
+            {/* Destination Agent Section */}
             <Text size="lg" fw={600} c="#105476" mb="xs">
-              Origin Agent
+              Destination Agent
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
                 <SearchableSelect
-                  label="Origin Agent Name"
+                  label="Destination Agent Name"
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
                   searchFields={["customer_name", "customer_code"]}
@@ -1848,9 +1859,9 @@ function HouseCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <TextInput
-                  label="Origin Agent Email"
+                  label="Destination Agent Email"
                   type="email"
-                  placeholder="Enter Origin Agent Email"
+                  placeholder="Enter Destination Agent Email"
                   {...form.getInputProps("origin_agent_email")}
                   error={form.errors.origin_agent_email}
                 />
@@ -1859,26 +1870,32 @@ function HouseCreate() {
               <Grid.Col span={4}>
                 {originAgentAddressOptions.length > 0 ? (
                   <Dropdown
-                    label="Origin Agent Address"
-                    placeholder="Select origin agent address"
+                    label="Destination Agent Address"
+                    placeholder="Select destination agent address"
                     searchable
                     data={originAgentAddressOptions}
                     value={form.values.origin_agent_address || ""}
                     onChange={(value) => {
                       const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("origin_agent_address", formattedValue);
+                      form.setFieldValue(
+                        "origin_agent_address",
+                        formattedValue
+                      );
                     }}
                     error={form.errors.origin_agent_address}
                   />
                 ) : (
                   <TextInput
-                    label="Origin Agent Address"
-                    placeholder="Enter Origin Agent Address"
+                    label="Destination Agent Address"
+                    placeholder="Enter Destination Agent Address"
                     minRows={2}
                     value={form.values.origin_agent_address}
                     onChange={(e) => {
                       const formattedValue = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue("origin_agent_address", formattedValue);
+                      form.setFieldValue(
+                        "origin_agent_address",
+                        formattedValue
+                      );
                     }}
                     error={form.errors.origin_agent_address}
                   />

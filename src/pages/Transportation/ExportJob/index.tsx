@@ -43,8 +43,10 @@ import dayjs from "dayjs";
 type ExportJobData = {
   id: number;
   service: string;
-  origin_agent: string | null;
-  origin_agent_name: string | null;
+  agent_code: string | null;
+  agent_name: string | null;
+  origin_agent: string | null; // Deprecated, use agent_code
+  origin_agent_name: string | null; // Deprecated, use agent_name
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -120,7 +122,7 @@ function ExportJobMaster() {
       payload.mbl_number = filters.mbl_number.trim();
     }
 
-    // Origin Agent - icontains search
+    // Destination Agent - icontains search
     if (filters.origin_agent && filters.origin_agent.trim()) {
       payload.origin_agent = filters.origin_agent.trim();
     }
@@ -290,7 +292,7 @@ function ExportJobMaster() {
     return data.filter((job) => {
       return (
         job.mbl_number?.toLowerCase().includes(query) ||
-        job.origin_agent_name?.toLowerCase().includes(query) ||
+        job.agent_name?.toLowerCase().includes(query) ||
         job.origin_name?.toLowerCase().includes(query) ||
         job.destination_name?.toLowerCase().includes(query) ||
         job.carrier_name?.toLowerCase().includes(query)
@@ -425,8 +427,8 @@ function ExportJobMaster() {
         },
       },
       {
-        accessorKey: "origin_agent_name",
-        header: "Origin Agent",
+        accessorKey: "agent_name",
+        header: "Destination Agent",
         size: 150,
         Cell: ({ cell }) => {
           const value = cell.getValue<string | null>();
@@ -663,7 +665,7 @@ function ExportJobMaster() {
             <Grid.Col span={3}>
               <SearchableSelect
                 size="xs"
-                label="Origin Agent"
+                label="Destination Agent"
                 placeholder="Type agent name"
                 apiEndpoint={URL.agent}
                 searchFields={["customer_name", "customer_code"]}

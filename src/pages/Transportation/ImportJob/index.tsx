@@ -43,8 +43,10 @@ import dayjs from "dayjs";
 type ImportJobData = {
   id: number;
   service: string;
-  origin_agent: string | null;
-  origin_agent_name: string | null;
+  agent_code: string | null;
+  agent_name: string | null;
+  origin_agent: string | null; // Deprecated, use agent_code
+  origin_agent_name: string | null; // Deprecated, use agent_name
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -312,7 +314,7 @@ function ImportJobMaster() {
     return data.filter((job) => {
       return (
         job.mbl_number?.toLowerCase().includes(query) ||
-        job.origin_agent_name?.toLowerCase().includes(query) ||
+        job.agent_name?.toLowerCase().includes(query) ||
         job.origin_name?.toLowerCase().includes(query) ||
         job.destination_name?.toLowerCase().includes(query) ||
         job.carrier_name?.toLowerCase().includes(query)
@@ -447,8 +449,8 @@ function ImportJobMaster() {
         },
       },
       {
-        accessorKey: "origin_agent_name",
-        header: "Origin Agent",
+        accessorKey: "agent_name",
+        header: "Destination Agent",
         size: 150,
         Cell: ({ cell }) => {
           const value = cell.getValue<string | null>();

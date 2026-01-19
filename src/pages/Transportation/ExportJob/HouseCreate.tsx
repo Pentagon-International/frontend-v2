@@ -435,7 +435,7 @@ function HouseCreate() {
           ? location.state?.mblDetails?.destination_name || ""
           : ""),
       customer_service: editData?.customer_service || "",
-      trade: editData?.trade || "",
+      trade: editData?.trade || "Re Export",
       origin_agent: "", // Will be set from editData or MBL details if available
       origin_agent_name: editData?.origin_agent_name || "",
       origin_agent_address: editData?.origin_agent_address || "",
@@ -684,12 +684,19 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.routed]);
 
-  // Trade dropdown options
+  // Trade dropdown options (not used for export pages - trade is always "Export")
   const tradeOptions = [
     { value: "Import", label: "Import" },
     { value: "Transshipment", label: "Transshipment" },
     { value: "Re Export", label: "Re Export" },
   ];
+
+  // Ensure trade is always "Re Export" for export pages
+  useEffect(() => {
+    if (form.values.trade !== "Re Export") {
+      form.setFieldValue("trade", "Re Export");
+    }
+  }, [form.values.trade]);
 
   // Function to update Trade field based on destination comparison
   const updateTradeField = (hblDestinationCode: string) => {
@@ -1514,23 +1521,21 @@ function HouseCreate() {
 
               <Grid.Col span={4}>
                 <Dropdown
-                  key={`trade-${form.values.trade}`}
                   label="Trade"
                   required
                   placeholder="Select Trade"
-                  searchable
                   data={tradeOptions}
-                  value={form.values.trade || null}
-                  onChange={(value) => {
-                    console.log(
-                      "📥 Trade Dropdown onChange triggered with value:",
-                      value
-                    );
-                    form.setFieldValue("trade", value || "");
-                    console.log(
-                      "📝 Trade Dropdown after setFieldValue, form.values.trade:",
-                      form.values.trade
-                    );
+                  value={form.values.trade || "Re Export"}
+                  disabled
+                  onChange={() => {
+                    // Prevent changes - trade is always "Re Export" for export pages
+                    form.setFieldValue("trade", "Re Export");
+                  }}
+                  styles={{
+                    input: {
+                      backgroundColor: "#f8f9fa",
+                      cursor: "not-allowed",
+                    },
                   }}
                   error={form.errors.trade}
                 />
@@ -1856,14 +1861,14 @@ function HouseCreate() {
                 />
               </Grid.Col>
             </Grid>
-            {/* Origin Agent Section */}
+            {/* Destination Agent Section */}
             <Text size="lg" fw={600} c="#105476" mb="xs">
-              Origin Agent
+              Destination Agent
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
                 <SearchableSelect
-                  label="Origin Agent Name"
+                  label="Destination Agent Name"
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
                   searchFields={["customer_name", "customer_code"]}
@@ -1918,9 +1923,9 @@ function HouseCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <TextInput
-                  label="Origin Agent Email"
+                  label="Destination Agent Email"
                   type="email"
-                  placeholder="Enter Origin Agent Email"
+                  placeholder="Enter Destination Agent Email"
                   {...form.getInputProps("origin_agent_email")}
                   error={form.errors.origin_agent_email}
                 />
@@ -1928,8 +1933,8 @@ function HouseCreate() {
 
               <Grid.Col span={4}>
                 <Textarea
-                  label="Origin Agent Address"
-                  placeholder="Enter Origin Agent Address"
+                  label="Destination Agent Address"
+                  placeholder="Enter Destination Agent Address"
                   minRows={2}
                   value={form.values.origin_agent_address}
                   onChange={(e) => {
