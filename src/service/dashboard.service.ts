@@ -756,12 +756,32 @@ export const getFilteredEnquiryConversionData = async (
   filters: DashboardFilters
 ): Promise<EnquiryFilteredResponse> => {
   try {
+    // Format dates to DD-MM-YYYY for enquiry conversion endpoint
+    let formattedDateFrom = filters.date_from;
+    let formattedDateTo = filters.date_to;
+    
+    if (filters.date_from) {
+      // Parse the date (handles both YYYY-MM-DD and DD-MM-YYYY formats)
+      const parsedDate = dayjs(filters.date_from);
+      if (parsedDate.isValid()) {
+        formattedDateFrom = parsedDate.format("DD-MM-YYYY");
+      }
+    }
+    
+    if (filters.date_to) {
+      // Parse the date (handles both YYYY-MM-DD and DD-MM-YYYY formats)
+      const parsedDate = dayjs(filters.date_to);
+      if (parsedDate.isValid()) {
+        formattedDateTo = parsedDate.format("DD-MM-YYYY");
+      }
+    }
+
     const payload = {
       ...(filters.company && { company: filters.company }),
       ...(filters.location && { location: filters.location }),
       ...(filters.salesman && { salesperson: filters.salesman }),
-      ...(filters.date_from && { date_from: filters.date_from }),
-      ...(filters.date_to && { date_to: filters.date_to }),
+      ...(formattedDateFrom && { date_from: formattedDateFrom }),
+      ...(formattedDateTo && { date_to: formattedDateTo }),
       ...(filters.search && { search: filters.search }),
       ...(filters.type && { type: filters.type }),
     };

@@ -477,10 +477,14 @@ const Dashboard = () => {
         setSelectedDate(dashboardState.selectedDate || null);
         // Restore selected dates from universal date selector
         if (dashboardState.customerInteractionFromDate) {
-          setCustomerInteractionFromDate(dashboardState.customerInteractionFromDate);
+          setCustomerInteractionFromDate(
+            dashboardState.customerInteractionFromDate
+          );
         }
         if (dashboardState.customerInteractionToDate) {
-          setCustomerInteractionToDate(dashboardState.customerInteractionToDate);
+          setCustomerInteractionToDate(
+            dashboardState.customerInteractionToDate
+          );
         }
         // Restore enquiryPeriod if available (commented out - can be used in future case)
         // if (dashboardState.enquiryPeriod) {
@@ -528,8 +532,10 @@ const Dashboard = () => {
                   dashboardState.enquiryFilterType,
               }),
               // Use selected dates from universal date selector
-              date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-              date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
             };
 
             const response = await getFilteredEnquiryConversionData(filterData);
@@ -606,10 +612,14 @@ const Dashboard = () => {
         );
         // Restore selected dates from universal date selector
         if (dashboardState.customerInteractionFromDate) {
-          setCustomerInteractionFromDate(dashboardState.customerInteractionFromDate);
+          setCustomerInteractionFromDate(
+            dashboardState.customerInteractionFromDate
+          );
         }
         if (dashboardState.customerInteractionToDate) {
-          setCustomerInteractionToDate(dashboardState.customerInteractionToDate);
+          setCustomerInteractionToDate(
+            dashboardState.customerInteractionToDate
+          );
         }
         // Set period state first - ensure it's set before any async operations
         // IMPORTANT: Use the period from dashboardState, not the current state
@@ -1589,6 +1599,26 @@ const Dashboard = () => {
     [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
+  // Helper function for enquiry conversion filters - uses DD-MM-YYYY format
+  const addSearchToEnquiryFilters = useCallback(
+    <T extends DashboardFilters>(filters: T): T => {
+      let updatedFilters = { ...filters };
+      if (globalSearch && globalSearch.trim()) {
+        updatedFilters = { ...updatedFilters, search: globalSearch.trim() };
+      }
+      // Add date range filter from common date filter in DD-MM-YYYY format for enquiry conversion
+      if (customerInteractionFromDate && customerInteractionToDate) {
+        updatedFilters = {
+          ...updatedFilters,
+          date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+          date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+        };
+      }
+      return updatedFilters as T;
+    },
+    [globalSearch, customerInteractionFromDate, customerInteractionToDate]
+  );
+
   const loadInitialData = async () => {
     // Prevent duplicate concurrent calls
     if (isLoadingRef.current) {
@@ -1693,14 +1723,13 @@ const Dashboard = () => {
         (async () => {
           const filterData: DashboardFilters = addSearchToFilters({
             ...(companyName && { company: companyName }),
-            ...(customerInteractionFromDate && customerInteractionToDate && {
-              date_from: dayjs(customerInteractionFromDate).format(
-                "DD-MM-YYYY"
-              ),
-              date_to: dayjs(customerInteractionToDate).format(
-                "DD-MM-YYYY"
-              ),
-            }),
+            ...(customerInteractionFromDate &&
+              customerInteractionToDate && {
+                date_from: dayjs(customerInteractionFromDate).format(
+                  "DD-MM-YYYY"
+                ),
+                date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+              }),
           });
           return await getFilteredEnquiryConversionData(filterData);
         })(),
@@ -2175,8 +2204,8 @@ const Dashboard = () => {
         ...(selectedLocation && { location: selectedLocation }),
         ...(searchSalesman && { salesman: searchSalesman }),
         ...(selectedYear && { year: parseInt(selectedYear) }),
-        date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-        date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+        date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+        date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
         ...(filterType !== "all" && {
           type:
             filterType === "gain"
@@ -3392,21 +3421,27 @@ const Dashboard = () => {
             filterData = {
               company: detailedViewSelectedCompany || "",
               salesman: detailedViewSelectedSalesperson || "",
-              date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+              date_from: dayjs(customerInteractionFromDate).format(
+                "YYYY-MM-DD"
+              ),
               date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
               ...(search.trim() && { search: search.trim() }),
             };
           } else if (detailedViewDrillLevel === 1) {
             filterData = {
               company: detailedViewSelectedCompany || "",
-              date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
+              date_from: dayjs(customerInteractionFromDate).format(
+                "YYYY-MM-DD"
+              ),
               date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
               ...(search.trim() && { search: search.trim() }),
             };
           } else {
             filterData = {
-              date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-              date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
               ...(search.trim() && { search: search.trim() }),
             };
           }
@@ -3529,7 +3564,7 @@ const Dashboard = () => {
               })
             );
             setDetailedViewData(tableData);
-            } else if (
+          } else if (
             callEntryDrillLevel === 1 &&
             callEntrySelectedSalesperson
           ) {
@@ -4533,8 +4568,8 @@ const Dashboard = () => {
         if (columnType === "company") {
           filterData = addSearchToDetailedViewFilters({
             company: value,
-            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+            date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+            date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
           });
           setDetailedViewSelectedCompany(value);
           setDetailedViewSelectedSalesperson(null);
@@ -4585,6 +4620,16 @@ const Dashboard = () => {
             company,
             salesman: value,
           });
+          // Override dates to DD-MM-YYYY format for enquiry conversion
+          if (customerInteractionFromDate && customerInteractionToDate) {
+            filterData = {
+              ...filterData,
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+            };
+          }
 
           // Update title based on current filter type when clicking salesperson
           let titleForSalesperson = "Enquiry Conversion - Detailed View";
@@ -4760,8 +4805,12 @@ const Dashboard = () => {
               return;
             }
             // Convert dates to YYYY-MM-DD format for navigation
-            const enquiryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
-            const enquiryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
+            const enquiryDateFrom = dayjs(customerInteractionFromDate).format(
+              "YYYY-MM-DD"
+            );
+            const enquiryDateTo = dayjs(customerInteractionToDate).format(
+              "YYYY-MM-DD"
+            );
 
             try {
               if (status === "ACTIVE") {
@@ -4987,8 +5036,12 @@ const Dashboard = () => {
               return;
             }
             // Convert dates to YYYY-MM-DD format for navigation
-            const enquiryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
-            const enquiryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
+            const enquiryDateFrom = dayjs(customerInteractionFromDate).format(
+              "YYYY-MM-DD"
+            );
+            const enquiryDateTo = dayjs(customerInteractionToDate).format(
+              "YYYY-MM-DD"
+            );
 
             try {
               if (status === "ACTIVE") {
@@ -5097,6 +5150,16 @@ const Dashboard = () => {
           } else {
             filterData = addSearchToDetailedViewFilters({});
             setDetailedViewDrillLevel(0);
+          }
+          // Override dates to DD-MM-YYYY format for enquiry conversion
+          if (customerInteractionFromDate && customerInteractionToDate) {
+            filterData = {
+              ...filterData,
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+            };
           }
 
           // Set the filter type based on badge clicked
@@ -5295,8 +5358,12 @@ const Dashboard = () => {
                 return;
               }
               // Convert dates to YYYY-MM-DD format for navigation
-              const callEntryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
-              const callEntryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
+              const callEntryDateFrom = dayjs(
+                customerInteractionFromDate
+              ).format("YYYY-MM-DD");
+              const callEntryDateTo = dayjs(customerInteractionToDate).format(
+                "YYYY-MM-DD"
+              );
 
               // Map badge type to status for CallEntryMaster
               // Note: CallEntryMaster uses followup_action_name, but we'll use the type filter
@@ -5446,8 +5513,12 @@ const Dashboard = () => {
                 return;
               }
               // Convert dates to YYYY-MM-DD format for navigation
-              const callEntryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
-              const callEntryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
+              const callEntryDateFrom = dayjs(
+                customerInteractionFromDate
+              ).format("YYYY-MM-DD");
+              const callEntryDateTo = dayjs(customerInteractionToDate).format(
+                "YYYY-MM-DD"
+              );
 
               // Map badge type to status for CallEntryMaster
               const statusMap: Record<string, string> = {
@@ -5566,8 +5637,12 @@ const Dashboard = () => {
                 return;
               }
               // Convert dates to YYYY-MM-DD format for navigation
-              const callEntryDateFrom = dayjs(customerInteractionFromDate).format("YYYY-MM-DD");
-              const callEntryDateTo = dayjs(customerInteractionToDate).format("YYYY-MM-DD");
+              const callEntryDateFrom = dayjs(
+                customerInteractionFromDate
+              ).format("YYYY-MM-DD");
+              const callEntryDateTo = dayjs(customerInteractionToDate).format(
+                "YYYY-MM-DD"
+              );
 
               // Map badge type to status for CallEntryMaster
               const statusMap: Record<string, string> = {
@@ -5969,8 +6044,8 @@ const Dashboard = () => {
           };
           const filterData: DashboardFilters = addSearchToDetailedViewFilters({
             company: detailedViewSelectedCompany,
-            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+            date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+            date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
             ...(initialEnquiryFilterType !== "all" && {
               type:
                 typeMap[initialEnquiryFilterType] ?? initialEnquiryFilterType,
@@ -6018,8 +6093,8 @@ const Dashboard = () => {
         } else if (detailedViewDrillLevel === 1) {
           // Go back to initial View All state - check if we need to reset to base or keep initial filter
           const filterData: DashboardFilters = addSearchToDetailedViewFilters({
-            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
+            date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+            date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
           });
           const response = await getFilteredEnquiryConversionData(filterData);
           let tableData = convertEnquiryResponseToTableData(response);
@@ -6327,8 +6402,8 @@ const Dashboard = () => {
           ...(searchSalesman && { salesman: searchSalesman }),
           ...(selectedYear && { year: parseInt(selectedYear) }),
           ...(selectedDate && {
-            date_from: dayjs(selectedDate).format("YYYY-MM-DD"),
-            date_to: dayjs(selectedDate).format("YYYY-MM-DD"),
+            date_from: dayjs(selectedDate).format("DD-MM-YYYY"),
+            date_to: dayjs(selectedDate).format("DD-MM-YYYY"),
           }),
         };
 
