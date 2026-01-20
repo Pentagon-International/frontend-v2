@@ -72,6 +72,7 @@ interface DetailedViewTableProps {
   ) => void; // Callback for cell editing
   initialSearch?: string; // Initial search value from parent
   onSearchChange?: (search: string) => void; // Callback when search changes
+  selectedColumnType?: string | null; // Selected column type for dynamic header display
 }
 
 const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
@@ -89,6 +90,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
   showCloseButton = true,
   headerActions,
   onCellEdit,
+  selectedColumnType,
 }) => {
   // State to track which cell is being edited (rowIndex, columnKey)
   const [editingCell, setEditingCell] = useState<{
@@ -292,9 +294,22 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       region: "Region",
       product: "Product",
       volume: "Volume",
-      // For pipeline report, show quotation date as "Quote Date"
+      // For pipeline report, dynamically show header based on selectedColumnType
+      // If navigating from Gained -> "Quote Approved Date"
+      // If navigating from Lost -> "Quote Rejected Date"
+      // If navigating from Quoted -> "Quote Date"
       // For other modules, keep existing "Booking Date" label
-      date: moduleType === "pipelineReport" ? "Quote Date" : "Booking Date",
+      date:
+        moduleType === "pipelineReport"
+          ? selectedColumnType === "gained"
+            ? "Quote Approved Date"
+            : selectedColumnType === "lost"
+              ? "Quote Rejected Date"
+              : selectedColumnType === "quoted_created" ||
+                  selectedColumnType === "quote"
+                ? "Quote Date"
+                : "Quote Date"
+          : "Booking Date",
       OVERDUE: "Overdue",
       TODAY: "Today",
       UPCOMING: "Upcoming",
@@ -1113,6 +1128,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     editingCell,
     editValue,
     originalCellValue,
+    selectedColumnType,
   ]);
 
   const columnOrder = useMemo(() => {

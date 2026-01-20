@@ -2639,7 +2639,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
   // Show financial column detail view when drillLevel === 2 (from clicking financial columns)
   // This takes precedence over sector/product drill level views
-  if (drillLevel === 2 && selectedCustomer && selectedColumnType) {
+  if (drillLevel === 2 && selectedColumnType) {
     // Determine which back handler to use based on context
     let backHandler = handleBack;
     if (selectedSector) {
@@ -2660,6 +2660,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         onBack={backHandler}
         showBackButton={true}
         showCloseButton={true}
+        selectedColumnType={selectedColumnType}
         headerActions={
           <Group gap="sm" align="center">
             {/* <SegmentedControl
@@ -2728,6 +2729,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         onBack={productDrillLevel > 0 ? handleProductBack : undefined}
         showBackButton={productDrillLevel > 0}
         showCloseButton={productDrillLevel > 0}
+        selectedColumnType={productDrillLevel === 2 ? selectedColumnType : null}
         headerActions={
           <Group gap="sm" align="center">
             {/* <SegmentedControl
@@ -2796,6 +2798,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         onBack={sectorDrillLevel > 0 ? handleSectorBack : undefined}
         showBackButton={sectorDrillLevel > 0}
         showCloseButton={sectorDrillLevel > 0}
+        selectedColumnType={sectorDrillLevel === 2 ? selectedColumnType : null}
         headerActions={
           <Group gap="sm" align="center">
             {/* <SegmentedControl
