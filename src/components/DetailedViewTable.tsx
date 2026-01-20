@@ -185,6 +185,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       "multi_carrier",
       "icd",
       "remark",
+      // Hide validity field for pipeline report quotation views
+      // Quote date will be shown using the `date` field instead
+      ...(moduleType === "pipelineReport" ? ["valid_upto"] : []),
       // Only hide location for quotation-related responses, not for outstanding module
       ...(moduleType !== "outstanding" ? ["location"] : []),
 
@@ -289,7 +292,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       region: "Region",
       product: "Product",
       volume: "Volume",
-      date: "Booking Date",
+      // For pipeline report, show quotation date as "Quote Date"
+      // For other modules, keep existing "Booking Date" label
+      date: moduleType === "pipelineReport" ? "Quote Date" : "Booking Date",
       OVERDUE: "Overdue",
       TODAY: "Today",
       UPCOMING: "Upcoming",
