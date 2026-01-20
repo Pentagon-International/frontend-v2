@@ -433,6 +433,8 @@ const Dashboard = () => {
     cc_email: "",
   });
   const [currentEmailData, setCurrentEmailData] = useState<any>(null);
+  const [isRestoringFromNavigation, setIsRestoringFromNavigation] =
+    useState(false);
 
   // Handle location state for pipeline report restoration
   useEffect(() => {
@@ -451,6 +453,7 @@ const Dashboard = () => {
     if (location.state?.returnToEnquiryDetailedView) {
       const dashboardState = location.state?.dashboardState;
       if (dashboardState) {
+        setIsRestoringFromNavigation(true);
         // Restore detailed view state
         setShowDetailedView(true);
         setDetailedViewType("enquiry");
@@ -476,16 +479,18 @@ const Dashboard = () => {
         setSelectedYear(dashboardState.selectedYear || null);
         setSelectedDate(dashboardState.selectedDate || null);
         // Restore selected dates from universal date selector
-        if (dashboardState.customerInteractionFromDate) {
-          setCustomerInteractionFromDate(
-            dashboardState.customerInteractionFromDate
-          );
-        }
-        if (dashboardState.customerInteractionToDate) {
-          setCustomerInteractionToDate(
-            dashboardState.customerInteractionToDate
-          );
-        }
+        // NOTE: use these restored values for the immediate restore API call (state updates are async)
+        const restoredFromDate: Date | null =
+          dashboardState.customerInteractionFromDate
+            ? new Date(dashboardState.customerInteractionFromDate)
+            : null;
+        const restoredToDate: Date | null =
+          dashboardState.customerInteractionToDate
+            ? new Date(dashboardState.customerInteractionToDate)
+            : null;
+
+        if (restoredFromDate) setCustomerInteractionFromDate(restoredFromDate);
+        if (restoredToDate) setCustomerInteractionToDate(restoredToDate);
         // Restore enquiryPeriod if available (commented out - can be used in future case)
         // if (dashboardState.enquiryPeriod) {
         //   setEnquiryPeriod(dashboardState.enquiryPeriod);
@@ -497,9 +502,12 @@ const Dashboard = () => {
         const restoreDetailedView = async () => {
           try {
             setIsLoadingDetailedView(true);
+            setIsLoadingEnquiryConversion(true);
             // Use selected dates from universal date selector
-            if (!customerInteractionFromDate || !customerInteractionToDate) {
+            if (!restoredFromDate || !restoredToDate) {
               setIsLoadingDetailedView(false);
+              setIsLoadingEnquiryConversion(false);
+              setIsRestoringFromNavigation(false);
               return;
             }
 
@@ -532,10 +540,8 @@ const Dashboard = () => {
                   dashboardState.enquiryFilterType,
               }),
               // Use selected dates from universal date selector
-              date_from: dayjs(customerInteractionFromDate).format(
-                "DD-MM-YYYY"
-              ),
-              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+              date_from: dayjs(restoredFromDate).format("DD-MM-YYYY"),
+              date_to: dayjs(restoredToDate).format("DD-MM-YYYY"),
             };
 
             const response = await getFilteredEnquiryConversionData(filterData);
@@ -577,6 +583,8 @@ const Dashboard = () => {
             console.error("Error restoring enquiry detailed view:", error);
           } finally {
             setIsLoadingDetailedView(false);
+            setIsLoadingEnquiryConversion(false);
+            setIsRestoringFromNavigation(false);
           }
         };
 
@@ -1447,6 +1455,10 @@ const Dashboard = () => {
 
   // Consolidated effect to load initial data and handle company/search changes
   useEffect(() => {
+    // When returning from a drill-down navigation, we restore date range + detailed view first.
+    // Skip the normal initial load fetch to avoid rendering charts with the default/current date range.
+    if (isRestoringFromNavigation) return;
+
     const companyName = user?.company?.company_name || null;
     const hasCompanyChanged = companyName !== lastCompanyNameRef.current;
     const hasSearchChanged = globalSearch !== lastGlobalSearchRef.current;
@@ -1567,7 +1579,13 @@ const Dashboard = () => {
         updatedFilters = { ...updatedFilters, search: globalSearch.trim() };
       }
       // Add date range filter from common date filter
-      if (customerInteractionFromDate && customerInteractionToDate) {
+      // Only add dates if they're not already provided in filters (to preserve custom formats)
+      if (
+        customerInteractionFromDate &&
+        customerInteractionToDate &&
+        !filters.date_from &&
+        !filters.date_to
+      ) {
         updatedFilters = {
           ...updatedFilters,
           date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
@@ -1720,18 +1738,21 @@ const Dashboard = () => {
             }),
         // Use filtered API call with company name and date range for enquiry conversion data
         // Updated to use date range instead of period
+        // Always use selected dates if available, otherwise fall back to getEnquiryConversionData
         (async () => {
-          const filterData: DashboardFilters = addSearchToFilters({
-            ...(companyName && { company: companyName }),
-            ...(customerInteractionFromDate &&
-              customerInteractionToDate && {
-                date_from: dayjs(customerInteractionFromDate).format(
-                  "DD-MM-YYYY"
-                ),
-                date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-              }),
-          });
-          return await getFilteredEnquiryConversionData(filterData);
+          if (customerInteractionFromDate && customerInteractionToDate) {
+            const filterData: DashboardFilters = addSearchToFilters({
+              ...(companyName && { company: companyName }),
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+            });
+            return await getFilteredEnquiryConversionData(filterData);
+          } else {
+            // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
+            return await getEnquiryConversionData();
+          }
         })(),
         // Call entry statistics - use selected date range
         (async () => {
@@ -1961,10 +1982,28 @@ const Dashboard = () => {
         });
       }
 
-      const enquiryResponse = await getEnquiryConversionData();
-      const aggregatedEnquiryConversion =
-        calculateEnquiryConversionAggregatedData(enquiryResponse);
-      setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+      // Use selected dates from universal date selector instead of default dates
+      const companyNameForEnquiry =
+        user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+      if (customerInteractionFromDate && customerInteractionToDate) {
+        const enquiryFilterData: DashboardFilters = {
+          company: companyNameForEnquiry,
+          date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
+          date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+        };
+        const enquiryResponse =
+          await getFilteredEnquiryConversionData(enquiryFilterData);
+        const aggregatedEnquiryConversion =
+          calculateFilteredEnquiryConversionAggregatedData(enquiryResponse);
+        setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+      } else {
+        // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
+        const enquiryResponse = await getEnquiryConversionData();
+        const aggregatedEnquiryConversion =
+          calculateEnquiryConversionAggregatedData(enquiryResponse);
+        setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+      }
       // Don't reset period here - preserve user's selected period
 
       if (callEntryData.length > 0) {
@@ -2199,8 +2238,12 @@ const Dashboard = () => {
         return;
       }
 
+      // Always include company - use selectedCompany if available, otherwise fall back to user's company
+      const companyName =
+        selectedCompany || user?.company?.company_name || "PENTAGON INDIA";
+
       const filterData: DashboardFilters = {
-        ...(selectedCompany && { company: selectedCompany }),
+        company: companyName,
         ...(selectedLocation && { location: selectedLocation }),
         ...(searchSalesman && { salesman: searchSalesman }),
         ...(selectedYear && { year: parseInt(selectedYear) }),
@@ -3330,7 +3373,13 @@ const Dashboard = () => {
         updatedFilters = { ...updatedFilters, search: searchValue };
       }
       // Add date range filter from common date filter
-      if (customerInteractionFromDate && customerInteractionToDate) {
+      // Only add dates if they're not already provided in filters (to preserve custom formats)
+      if (
+        customerInteractionFromDate &&
+        customerInteractionToDate &&
+        !filters.date_from &&
+        !filters.date_to
+      ) {
         updatedFilters = {
           ...updatedFilters,
           date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
@@ -4619,17 +4668,15 @@ const Dashboard = () => {
           filterData = addSearchToDetailedViewFilters({
             company,
             salesman: value,
+            // Pass dates directly in DD-MM-YYYY format for enquiry conversion
+            ...(customerInteractionFromDate &&
+              customerInteractionToDate && {
+                date_from: dayjs(customerInteractionFromDate).format(
+                  "DD-MM-YYYY"
+                ),
+                date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+              }),
           });
-          // Override dates to DD-MM-YYYY format for enquiry conversion
-          if (customerInteractionFromDate && customerInteractionToDate) {
-            filterData = {
-              ...filterData,
-              date_from: dayjs(customerInteractionFromDate).format(
-                "DD-MM-YYYY"
-              ),
-              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-            };
-          }
 
           // Update title based on current filter type when clicking salesperson
           let titleForSalesperson = "Enquiry Conversion - Detailed View";
@@ -5132,11 +5179,25 @@ const Dashboard = () => {
             additionalData?.salesperson ||
             additionalData?.salesman;
 
-          // Build filter with company and salesperson if available (dates are included by addSearchToDetailedViewFilters)
+          // Build filter with company and salesperson if available
+          // Pass dates directly in DD-MM-YYYY format for enquiry conversion
+          const enquiryDateFilters =
+            customerInteractionFromDate && customerInteractionToDate
+              ? {
+                  date_from: dayjs(customerInteractionFromDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                  date_to: dayjs(customerInteractionToDate).format(
+                    "DD-MM-YYYY"
+                  ),
+                }
+              : {};
+
           if (company && salesperson) {
             filterData = addSearchToDetailedViewFilters({
               company,
               salesman: salesperson,
+              ...enquiryDateFilters,
             });
             setDetailedViewSelectedCompany(company);
             setDetailedViewSelectedSalesperson(salesperson);
@@ -5144,22 +5205,15 @@ const Dashboard = () => {
           } else if (company) {
             filterData = addSearchToDetailedViewFilters({
               company,
+              ...enquiryDateFilters,
             });
             setDetailedViewSelectedCompany(company);
             setDetailedViewDrillLevel(1);
           } else {
-            filterData = addSearchToDetailedViewFilters({});
+            filterData = addSearchToDetailedViewFilters({
+              ...enquiryDateFilters,
+            });
             setDetailedViewDrillLevel(0);
-          }
-          // Override dates to DD-MM-YYYY format for enquiry conversion
-          if (customerInteractionFromDate && customerInteractionToDate) {
-            filterData = {
-              ...filterData,
-              date_from: dayjs(customerInteractionFromDate).format(
-                "DD-MM-YYYY"
-              ),
-              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-            };
           }
 
           // Set the filter type based on badge clicked
@@ -6044,6 +6098,7 @@ const Dashboard = () => {
           };
           const filterData: DashboardFilters = addSearchToDetailedViewFilters({
             company: detailedViewSelectedCompany,
+            // Pass dates directly in DD-MM-YYYY format for enquiry conversion
             date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
             date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
             ...(initialEnquiryFilterType !== "all" && {
@@ -6092,6 +6147,7 @@ const Dashboard = () => {
           setDetailedViewTitle(titleForLevel1);
         } else if (detailedViewDrillLevel === 1) {
           // Go back to initial View All state - check if we need to reset to base or keep initial filter
+          // Pass dates directly in DD-MM-YYYY format for enquiry conversion
           const filterData: DashboardFilters = addSearchToDetailedViewFilters({
             date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
             date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
@@ -6580,10 +6636,30 @@ const Dashboard = () => {
             });
           }
 
-          const enquiryResponse = await getEnquiryConversionData();
-          const aggregatedEnquiryConversion =
-            calculateEnquiryConversionAggregatedData(enquiryResponse);
-          setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+          // Use selected dates from universal date selector instead of default dates
+          const companyNameForEnquiry =
+            user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+
+          if (customerInteractionFromDate && customerInteractionToDate) {
+            const enquiryFilterData: DashboardFilters = {
+              company: companyNameForEnquiry,
+              date_from: dayjs(customerInteractionFromDate).format(
+                "DD-MM-YYYY"
+              ),
+              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+            };
+            const enquiryResponse =
+              await getFilteredEnquiryConversionData(enquiryFilterData);
+            const aggregatedEnquiryConversion =
+              calculateFilteredEnquiryConversionAggregatedData(enquiryResponse);
+            setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+          } else {
+            // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
+            const enquiryResponse = await getEnquiryConversionData();
+            const aggregatedEnquiryConversion =
+              calculateEnquiryConversionAggregatedData(enquiryResponse);
+            setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+          }
 
           await refreshBudgetData();
         } else {

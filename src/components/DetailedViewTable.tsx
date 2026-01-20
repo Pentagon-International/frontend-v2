@@ -267,7 +267,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       destination_port_name: "Destination Port",
       carrier_name: "Carrier",
       quote_currency: "Currency",
-      valid_upto: "Quote Date",
+      valid_upto: "Valid Upto",
       quote_type: "Quote Type",
       total_cost: "Total Cost",
       total_sell: "Total Sell",

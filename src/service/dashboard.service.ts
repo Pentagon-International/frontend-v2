@@ -761,18 +761,54 @@ export const getFilteredEnquiryConversionData = async (
     let formattedDateTo = filters.date_to;
     
     if (filters.date_from) {
-      // Parse the date (handles both YYYY-MM-DD and DD-MM-YYYY formats)
-      const parsedDate = dayjs(filters.date_from);
-      if (parsedDate.isValid()) {
-        formattedDateFrom = parsedDate.format("DD-MM-YYYY");
+      // Check if the date is already in DD-MM-YYYY format (regex: DD-MM-YYYY)
+      const ddMmYyyyPattern = /^\d{2}-\d{2}-\d{4}$/;
+      if (typeof filters.date_from === 'string' && ddMmYyyyPattern.test(filters.date_from)) {
+        // Already in DD-MM-YYYY format, use as-is
+        formattedDateFrom = filters.date_from;
+      } else {
+        // Try parsing as DD-MM-YYYY first (expected format for enquiry conversion)
+        let parsedDate = dayjs(filters.date_from, "DD-MM-YYYY", true);
+        
+        // If that fails, try YYYY-MM-DD format
+        if (!parsedDate.isValid()) {
+          parsedDate = dayjs(filters.date_from, "YYYY-MM-DD", true);
+        }
+        
+        // If still invalid, try default parsing (for Date objects converted to strings)
+        if (!parsedDate.isValid()) {
+          parsedDate = dayjs(filters.date_from);
+        }
+        
+        if (parsedDate.isValid()) {
+          formattedDateFrom = parsedDate.format("DD-MM-YYYY");
+        }
       }
     }
     
     if (filters.date_to) {
-      // Parse the date (handles both YYYY-MM-DD and DD-MM-YYYY formats)
-      const parsedDate = dayjs(filters.date_to);
-      if (parsedDate.isValid()) {
-        formattedDateTo = parsedDate.format("DD-MM-YYYY");
+      // Check if the date is already in DD-MM-YYYY format (regex: DD-MM-YYYY)
+      const ddMmYyyyPattern = /^\d{2}-\d{2}-\d{4}$/;
+      if (typeof filters.date_to === 'string' && ddMmYyyyPattern.test(filters.date_to)) {
+        // Already in DD-MM-YYYY format, use as-is
+        formattedDateTo = filters.date_to;
+      } else {
+        // Try parsing as DD-MM-YYYY first (expected format for enquiry conversion)
+        let parsedDate = dayjs(filters.date_to, "DD-MM-YYYY", true);
+        
+        // If that fails, try YYYY-MM-DD format
+        if (!parsedDate.isValid()) {
+          parsedDate = dayjs(filters.date_to, "YYYY-MM-DD", true);
+        }
+        
+        // If still invalid, try default parsing (for Date objects converted to strings)
+        if (!parsedDate.isValid()) {
+          parsedDate = dayjs(filters.date_to);
+        }
+        
+        if (parsedDate.isValid()) {
+          formattedDateTo = parsedDate.format("DD-MM-YYYY");
+        }
       }
     }
 
