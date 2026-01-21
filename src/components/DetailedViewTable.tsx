@@ -248,6 +248,15 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       // Hide email-related fields - salesperson_email and cc_mail
       "salesperson_email",
       "cc_mail",
+
+      // Hide id field for pipelineReport at drill level 2 (product tab customer drill level)
+      ...(moduleType === "pipelineReport" &&
+      drillLevel === 2 &&
+      data &&
+      data.length > 0 &&
+      data[0]?.id !== undefined
+        ? ["id"]
+        : []),
     ]);
 
     // Helper function to capitalize headers properly (first letter of each word)
