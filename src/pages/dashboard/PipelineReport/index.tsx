@@ -165,6 +165,14 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const [potentialCustomersData, setPotentialCustomersData] = useState<
     PotentialCustomerItem[]
   >([]);
+  const [potentialCustomersSummary, setPotentialCustomersSummary] = useState<{
+    total_expected: number;
+    total_potential: number;
+    total_pipeline: number;
+    total_quoted: number;
+    total_gained: number;
+    total_lost: number;
+  } | null>(null);
   const [pipelineData, setPipelineData] = useState<PipelineSalespersonRow[]>(
     []
   );
@@ -399,10 +407,17 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             response = await getPotentialCustomersData(filters);
           }
 
-          setPotentialCustomersData(response.data);
+          setPotentialCustomersData(transformNullValues(response.data || []));
+          // Store summary if available
+          if ((response as any).summary) {
+            setPotentialCustomersSummary((response as any).summary);
+          } else {
+            setPotentialCustomersSummary(null);
+          }
         } catch (error) {
           console.error("Error reloading data with search:", error);
           setPotentialCustomersData([]);
+          setPotentialCustomersSummary(null);
         } finally {
           setDrilldownLoading(false);
         }
@@ -509,6 +524,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 setPotentialCustomersData(
                   transformNullValues(response.data || [])
                 );
+                // Store summary if available
+                if (response.summary) {
+                  setPotentialCustomersSummary(response.summary);
+                } else {
+                  setPotentialCustomersSummary(null);
+                }
               } catch (error) {
                 console.error(
                   "Error loading product customer financial column data:",
@@ -594,6 +615,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 setPotentialCustomersData(
                   transformNullValues(response.data || [])
                 );
+                // Store summary if available
+                if (response.summary) {
+                  setPotentialCustomersSummary(response.summary);
+                } else {
+                  setPotentialCustomersSummary(null);
+                }
               } catch (error) {
                 console.error(
                   "Error loading sector customer financial column data:",
@@ -660,9 +687,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
           const response = await getPotentialCustomersData(filters);
           setPotentialCustomersData(transformNullValues(response.data || []));
+          // Store summary if available
+          if ((response as any).summary) {
+            setPotentialCustomersSummary((response as any).summary);
+          } else {
+            setPotentialCustomersSummary(null);
+          }
         } catch (error) {
           console.error("Error loading financial column data:", error);
           setPotentialCustomersData([]);
+          setPotentialCustomersSummary(null);
         } finally {
           setDrilldownLoading(false);
         }
@@ -1223,9 +1257,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
           const response = await getPotentialCustomersData(filters);
           setPotentialCustomersData(transformNullValues(response.data || []));
+          // Store summary if available
+          if ((response as any).summary) {
+            setPotentialCustomersSummary((response as any).summary);
+          } else {
+            setPotentialCustomersSummary(null);
+          }
         } catch (error) {
           console.error("Error loading financial column data:", error);
           setPotentialCustomersData([]);
+          setPotentialCustomersSummary(null);
         } finally {
           setDrilldownLoading(false);
         }
@@ -1279,9 +1320,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
           const response = await getPotentialCustomersData(filters);
           setPotentialCustomersData(transformNullValues(response.data || []));
+          // Store summary if available
+          if ((response as any).summary) {
+            setPotentialCustomersSummary((response as any).summary);
+          } else {
+            setPotentialCustomersSummary(null);
+          }
         } catch (error) {
           console.error("Error loading financial column data:", error);
           setPotentialCustomersData([]);
+          setPotentialCustomersSummary(null);
         } finally {
           setDrilldownLoading(false);
         }
@@ -1471,9 +1519,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
         const response = await getPotentialCustomersDataForRegional(filters);
         setPotentialCustomersData(transformNullValues(response.data || []));
+        // Store summary if available
+        if (response.summary) {
+          setPotentialCustomersSummary(response.summary);
+        } else {
+          setPotentialCustomersSummary(null);
+        }
       } catch (error) {
         console.error("Error loading sector financial detail data:", error);
         setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
       } finally {
         setDrilldownLoading(false);
       }
@@ -1587,12 +1642,19 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
         const response = await getPotentialCustomersDataForRegional(filters);
         setPotentialCustomersData(transformNullValues(response.data || []));
+        // Store summary if available
+        if (response.summary) {
+          setPotentialCustomersSummary(response.summary);
+        } else {
+          setPotentialCustomersSummary(null);
+        }
       } catch (error) {
         console.error(
           "Error loading sector customer financial column data:",
           error
         );
         setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
       } finally {
         setDrilldownLoading(false);
       }
@@ -1815,9 +1877,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             response = await getPotentialCustomersData(filters);
           }
           setPotentialCustomersData(transformNullValues(response.data || []));
+          // Store summary if available
+          if ((response as any).summary) {
+            setPotentialCustomersSummary((response as any).summary);
+          } else {
+            setPotentialCustomersSummary(null);
+          }
         } catch (error) {
           console.error("Error reloading data with calculation change:", error);
           setPotentialCustomersData([]);
+          setPotentialCustomersSummary(null);
         } finally {
           setDrilldownLoading(false);
         }
@@ -2759,6 +2828,67 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     return [...data, totalRow];
   };
 
+  // Helper function to add total row for drill level 2 (quotation details view)
+  // Shows only the profit value in the profit column based on selectedColumnType
+  const addTotalRowForDrillLevel2 = (
+    data: any[],
+    summary: {
+      total_expected: number;
+      total_potential: number;
+      total_pipeline: number;
+      total_quoted: number;
+      total_gained: number;
+      total_lost: number;
+    } | null,
+    selectedColumnType: string | null,
+    firstColumnKey: string = "customer_name"
+  ): any[] => {
+    if (!summary || !selectedColumnType || data.length === 0) {
+      return data;
+    }
+
+    // Map selectedColumnType to summary key
+    const columnTypeToSummaryKey: Record<string, keyof typeof summary> = {
+      quoted_created: "total_quoted",
+      quote: "total_quoted",
+      quoted: "total_quoted",
+      gained: "total_gained",
+      lost: "total_lost",
+      pipeline: "total_pipeline",
+      potential: "total_potential",
+    };
+
+    const summaryKey = columnTypeToSummaryKey[selectedColumnType];
+    if (!summaryKey) {
+      return data;
+    }
+
+    const totalProfit = summary[summaryKey] || 0;
+
+    // Create total row based on data structure
+    const firstRow = data[0];
+    const totalRow: any = {
+      sno: "Total:", // Put Total in the first column (sno)
+      _isTotalRow: true, // Flag to identify total row
+    };
+
+    // For potential type, use potential_profit field; for others, use profit field
+    if (selectedColumnType === "potential") {
+      totalRow.potential_profit = totalProfit;
+    } else {
+      totalRow.profit = totalProfit;
+    }
+
+    // Set all other fields to empty string to match the structure
+    Object.keys(firstRow).forEach((key) => {
+      if (!["sno", "profit", "potential_profit"].includes(key)) {
+        totalRow[key] = "";
+      }
+    });
+
+    return [...data, totalRow];
+  };
+
   // Determine which sector data to show and add totals
   const displaySectorData = useMemo(() => {
     // When there's a type filter, show totals at drill level 2 but not at other levels
@@ -2923,9 +3053,22 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       backHandler = handleProductBack;
     }
 
+    // Add total row to potentialCustomersData if summary is available
+    // Only for salesperson tab (when neither selectedSector nor selectedService is set)
+    let displayPotentialCustomersData = potentialCustomersData;
+    // Check if this is salesperson tab: no selectedSector, no selectedService, but we have selectedColumnType
+    if (!selectedSector && !selectedService) {
+      displayPotentialCustomersData = addTotalRowForDrillLevel2(
+        potentialCustomersData,
+        potentialCustomersSummary,
+        selectedColumnType,
+        "customer_name"
+      );
+    }
+
     return (
       <DetailedViewTable
-        data={potentialCustomersData}
+        data={displayPotentialCustomersData}
         title={getTitle()}
         drillLevel={2}
         moduleType="pipelineReport"

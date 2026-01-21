@@ -197,6 +197,12 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+
+  // Refs to persist returnToDashboard flag and dashboard state
+  const returnToDashboardRef = useRef<boolean>(
+    Boolean(location.state?.returnToDashboard)
+  ); // Persist returnToDashboard flag
+  const dashboardStateRef = useRef<any>(location.state?.dashboardState); // Persist dashboard state
   const isManagerOrAdmin = Boolean(user?.is_manager || user?.is_staff);
   const hasQuotationApprovalPermission = Boolean(
     user?.screen_permissions?.quotation_approval
@@ -211,7 +217,9 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const setStoreSearch = useListFilterStore((state) => state.setSearch);
   const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
   const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
-  const clearStoreAllExcept = useListFilterStore((state) => state.clearAllExcept);
+  const clearStoreAllExcept = useListFilterStore(
+    (state) => state.clearAllExcept
+  );
 
   // Check if we have initialFilters to determine initial date state
   const hasInitialFilters = location.state?.initialFilters;
@@ -268,12 +276,24 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     };
     setStoreFilters(currentListKey, filtersWithDates);
     setStoreSearch(currentListKey, searchQuery);
-    console.log(`💾 [Quotation${isApprovalMode ? ' Approval' : ''}] Saved filters to store:`, {
-      filters: filtersWithDates,
-      search: searchQuery,
-      timestamp: new Date().toISOString(),
-    });
-  }, [filters, fromDate, toDate, searchQuery, setStoreFilters, setStoreSearch, currentListKey, isApprovalMode]);
+    console.log(
+      `💾 [Quotation${isApprovalMode ? " Approval" : ""}] Saved filters to store:`,
+      {
+        filters: filtersWithDates,
+        search: searchQuery,
+        timestamp: new Date().toISOString(),
+      }
+    );
+  }, [
+    filters,
+    fromDate,
+    toDate,
+    searchQuery,
+    setStoreFilters,
+    setStoreSearch,
+    currentListKey,
+    isApprovalMode,
+  ]);
 
   // Track if we've restored from store to prevent duplicate API calls
   const hasRestoredFromStore = useRef(false);
@@ -283,16 +303,21 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     clearStoreAllExcept(currentListKey);
   }, [currentListKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  console.log("filters------------------",filters)
+  console.log("filters------------------", filters);
   // Restore filters and search from store on mount and fetch data
   // Prioritize store-based restoration over location.state restoration
   useEffect(() => {
-    console.log("restore state",hasRestoredFromStore.current, useListFilterStore.getState().getState(currentListKey))
+    console.log(
+      "restore state",
+      hasRestoredFromStore.current,
+      useListFilterStore.getState().getState(currentListKey)
+    );
     if (hasRestoredFromStore.current) return;
-    
-    const restoredState =
-      useListFilterStore.getState().getState(currentListKey);
-    
+
+    const restoredState = useListFilterStore
+      .getState()
+      .getState(currentListKey);
+
     const performRestore = async () => {
       if (!restoredState) {
         // No restored state, load default data if dates are set or approval mode
@@ -320,7 +345,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       let hasFilters = false;
       const restoredFilters = restoredState.filters as FilterState;
       if (restoredFilters && Object.keys(restoredFilters).length > 0) {
-        console.log(`📥 [Quotation${isApprovalMode ? ' Approval' : ''}] Restoring filters from store:`, restoredFilters);
+        console.log(
+          `📥 [Quotation${isApprovalMode ? " Approval" : ""}] Restoring filters from store:`,
+          restoredFilters
+        );
         setFilters(restoredFilters);
         // Restore date range from filters
         if (restoredFilters.enquiry_received_date) {
@@ -332,15 +360,17 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         // Check if any non-date filters exist
         hasFilters = Boolean(
           restoredFilters.customer_code ||
-          restoredFilters.sales_person ||
-          restoredFilters.origin_code ||
-          restoredFilters.destination_code ||
-          restoredFilters.valid_upto ||
-          (restoredFilters.quote_type && restoredFilters.quote_type !== "all") ||
-          (restoredFilters.status && restoredFilters.status !== "all") ||
-          restoredFilters.remark ||
-          restoredFilters.revision ||
-          (restoredFilters.enquiry_received_date && restoredFilters.enquiry_received_date_to)
+            restoredFilters.sales_person ||
+            restoredFilters.origin_code ||
+            restoredFilters.destination_code ||
+            restoredFilters.valid_upto ||
+            (restoredFilters.quote_type &&
+              restoredFilters.quote_type !== "all") ||
+            (restoredFilters.status && restoredFilters.status !== "all") ||
+            restoredFilters.remark ||
+            restoredFilters.revision ||
+            (restoredFilters.enquiry_received_date &&
+              restoredFilters.enquiry_received_date_to)
         );
         console.log("📥 [Quotation] Filter restoration check:", {
           hasFilters,
@@ -359,14 +389,22 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
       // 2️⃣ Restore search
       let hasSearch = false;
-      if (typeof restoredState.search === "string" && restoredState.search.trim()) {
-        console.log(`📥 [Quotation${isApprovalMode ? ' Approval' : ''}] Restoring search from store:`, restoredState.search);
+      if (
+        typeof restoredState.search === "string" &&
+        restoredState.search.trim()
+      ) {
+        console.log(
+          `📥 [Quotation${isApprovalMode ? " Approval" : ""}] Restoring search from store:`,
+          restoredState.search
+        );
         setSearchQuery(restoredState.search);
         hasSearch = true;
       }
 
       // 3️⃣ Restore display values if available in location.state (for SearchableSelect fields)
-      const displayValues = location.state?.preserveFilters?.displayValues || location.state?.restoreFilters?.displayValues;
+      const displayValues =
+        location.state?.preserveFilters?.displayValues ||
+        location.state?.restoreFilters?.displayValues;
       if (displayValues) {
         if (displayValues.customer_code) {
           setCustomerDisplayValue(displayValues.customer_code);
@@ -416,8 +454,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         }
       }
     };
-    
-    if(restoredState?.shouldRestore){
+
+    if (restoredState?.shouldRestore) {
       performRestore();
       useListFilterStore.getState().setShouldRestore(currentListKey, false);
       hasRestoredFromStore.current = true;
@@ -425,6 +463,16 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.refreshData, isApprovalMode, currentListKey]);
+
+  // Sync refs with location.state when it changes
+  useEffect(() => {
+    if (location.state?.returnToDashboard !== undefined) {
+      returnToDashboardRef.current = Boolean(location.state.returnToDashboard);
+    }
+    if (location.state?.dashboardState !== undefined) {
+      dashboardStateRef.current = location.state.dashboardState;
+    }
+  }, [location.state?.returnToDashboard, location.state?.dashboardState]);
 
   // Memoized filter payload - prevents stale closures in queryFn
   const memoizedFilterPayload = useMemo(() => {
@@ -566,23 +614,23 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const hasActiveFiltersOrSearch = useMemo(() => {
     return Boolean(
       filters.customer_code ||
-      filters.sales_person ||
-      filters.origin_code ||
-      filters.destination_code ||
-      filters.valid_upto ||
-      (filters.quote_type && filters.quote_type !== "all") ||
-      (filters.status && filters.status !== "all") ||
-      filters.remark ||
-      filters.revision ||
-      (fromDate && toDate) ||
-      debouncedSearch.trim() ||
-      isApprovalMode
+        filters.sales_person ||
+        filters.origin_code ||
+        filters.destination_code ||
+        filters.valid_upto ||
+        (filters.quote_type && filters.quote_type !== "all") ||
+        (filters.status && filters.status !== "all") ||
+        filters.remark ||
+        filters.revision ||
+        (fromDate && toDate) ||
+        debouncedSearch.trim() ||
+        isApprovalMode
     );
   }, [filters, fromDate, toDate, debouncedSearch, isApprovalMode]);
 
   // Single-flight protection for refetchFilteredQuotations
   const isRefetchingRef = useRef(false);
-  
+
   // Table ref for pagination reset
   const tableRef = useRef<any>(null);
 
@@ -649,7 +697,9 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   // Wrapped refetch with single-flight protection
   const refetchFilteredQuotations = useCallback(async () => {
     if (isRefetchingRef.current) {
-      console.log("⏸️ [Quotation] Refetch already in progress, skipping duplicate call");
+      console.log(
+        "⏸️ [Quotation] Refetch already in progress, skipping duplicate call"
+      );
       return { data: filteredQuotationData, status: "skipped" } as any;
     }
     isRefetchingRef.current = true;
@@ -739,15 +789,11 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   // Use isFetching states (not isLoading) as they remain true during refetch
   // isInitialLoading is set manually before/after explicit refetch calls
   const tableLoading =
-    isInitialLoading ||
-    quotationFetching ||
-    filteredQuotationFetching;
-  
+    isInitialLoading || quotationFetching || filteredQuotationFetching;
+
   // Keep isLoading for backward compatibility (used elsewhere)
   const isLoading =
-    isInitialLoading ||
-    quotationFetching ||
-    filteredQuotationLoading;
+    isInitialLoading || quotationFetching || filteredQuotationLoading;
   // Use isFetching to show progress bars while keeping previous data visible
   const isFetching = filteredQuotationFetching || quotationFetching;
 
@@ -1146,7 +1192,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   //     // Store restoration effect will handle filters/search restoration
   //     // This effect only clears the refreshData flag and triggers data refresh if needed
   //     console.log("🔄 [Quotation] Refreshing data after create/edit operation");
-      
+
   //     // Clear the refresh flag but preserve dashboard return state
   //     navigate(location.pathname, {
   //       replace: true,
@@ -1160,14 +1206,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   //     // then just refresh with current state or load default data
   //     const restoredState = useListFilterStore.getState().getState(currentListKey);
   //     const hasStoreData = restoredState && (Object.keys(restoredState.filters || {}).length > 0 || (restoredState.search || "").trim() !== "");
-      
+
   //     // If store has data, restoration effect will handle it
   //     // Otherwise, just refresh with current filters/search state
   //     if (!hasStoreData) {
   //       const refreshData = async () => {
   //         try {
   //           setIsInitialLoading(true);
-            
+
   //           // Check current state to determine which query to use
   //           const hasActiveFiltersOrSearch = Boolean(
   //             filters.customer_code ||
@@ -1189,7 +1235,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   //           } else if (fromDate && toDate) {
   //             await loadAllQuotations();
   //           }
-            
+
   //           setIsInitialLoading(false);
   //           if (tableRef.current) {
   //             tableRef.current.setPageIndex(0);
@@ -2013,7 +2059,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const handleEditQuotation = (rowData: any) => {
     // Preserve filters and search in store before navigation
     saveFiltersToStore();
-    
+
     // Preserve current filter state when navigating to edit (includes search and pagination)
     const currentFilterState = {
       filters,
@@ -2428,7 +2474,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       isApprovalMode,
       location,
       buildFilterPayload,
-      filteredQuotationData
+      filteredQuotationData,
     ]
   );
 
@@ -2619,7 +2665,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                           filters.origin_code ||
                           filters.destination_code ||
                           filters.valid_upto ||
-                          (filters.quote_type && filters.quote_type !== "all") ||
+                          (filters.quote_type &&
+                            filters.quote_type !== "all") ||
                           (filters.status && filters.status !== "all") ||
                           filters.remark ||
                           filters.revision ||
@@ -3145,9 +3192,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
               <Text c="dimmed">
-                {isInitialLoading
-                  ? "Fetching data..."
-                  : "Loading data..."}
+                {isInitialLoading ? "Fetching data..." : "Loading data..."}
               </Text>
             </Stack>
           </Center>
@@ -3191,140 +3236,184 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             </Box>
 
             {/* Custom Pagination Bar */}
-            {/* Back to Dashboard Button - Only show when navigated from dashboard */}
-            {location.state?.returnToDashboard && (
-              <Group justify="center" mt="md" mb="sm">
-                <Button
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => {
-                    const dashboardState = (location.state as any)
-                      ?.dashboardState;
-                    if (dashboardState) {
-                      // Navigate back to dashboard with state to restore detailed view
-                      navigate("/", {
-                        state: {
-                          returnToEnquiryDetailedView: true,
-                          dashboardState: dashboardState,
+            <Group
+              w="100%"
+              justify="space-between"
+              align="center"
+              p="xs"
+              wrap="nowrap"
+              pt="md"
+            >
+              {/* Left side: Back to Dashboard Button or Rows per page */}
+              <Group gap="sm" align="center" wrap="nowrap">
+                {location.state?.returnToDashboard ||
+                returnToDashboardRef.current ? (
+                  <Button
+                    leftSection={<IconArrowLeft size={16} />}
+                    onClick={() => {
+                      const dashboardState =
+                        location.state?.dashboardState ||
+                        dashboardStateRef.current;
+                      if (dashboardState) {
+                        navigate("/", {
+                          state: {
+                            returnToEnquiryDetailedView: true,
+                            dashboardState: dashboardState,
+                          },
+                        });
+                      } else {
+                        navigate("/");
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    color="#105476"
+                  >
+                    Back to Dashboard
+                  </Button>
+                ) : (
+                  <>
+                    <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
+                      Rows per page
+                    </Text>
+                    <Select
+                      size="xs"
+                      data={["10", "25", "50"]}
+                      value={String(table.getState().pagination.pageSize)}
+                      onChange={(val) => {
+                        if (!val) return;
+                        table.setPageSize(Number(val));
+                        table.setPageIndex(0);
+                      }}
+                      w={110}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          height: "30px",
+                          fontFamily: "Inter",
                         },
-                      });
-                    } else {
-                      // Fallback to regular dashboard navigation
-                      navigate("/");
-                    }
-                  }}
-                  variant="outline"
-                  size="sm"
-                  color="#105476"
-                >
-                  Back to Dashboard
-                </Button>
+                      }}
+                    />
+                    <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
+                      {(() => {
+                        const { pageIndex, pageSize } =
+                          table.getState().pagination;
+                        const total =
+                          table.getPrePaginationRowModel().rows.length || 0;
+                        if (total === 0) return "0–0 of 0";
+                        const start = pageIndex * pageSize + 1;
+                        const end = Math.min((pageIndex + 1) * pageSize, total);
+                        return `${start}–${end} of ${total}`;
+                      })()}
+                    </Text>
+                  </>
+                )}
               </Group>
-            )}
+
+              {/* Right side: Page controls or Rows per page (if button is shown) */}
+              <Group gap="xs" align="center" wrap="nowrap" pr={50}>
+                {(location.state?.returnToDashboard ||
+                  returnToDashboardRef.current) && (
+                  <>
+                    <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
+                      Rows per page
+                    </Text>
+                    <Select
+                      size="xs"
+                      data={["10", "25", "50"]}
+                      value={String(table.getState().pagination.pageSize)}
+                      onChange={(val) => {
+                        if (!val) return;
+                        table.setPageSize(Number(val));
+                        table.setPageIndex(0);
+                      }}
+                      w={110}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          height: "30px",
+                          fontFamily: "Inter",
+                        },
+                      }}
+                    />
+                    <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
+                      {(() => {
+                        const { pageIndex, pageSize } =
+                          table.getState().pagination;
+                        const total =
+                          table.getPrePaginationRowModel().rows.length || 0;
+                        if (total === 0) return "0–0 of 0";
+                        const start = pageIndex * pageSize + 1;
+                        const end = Math.min((pageIndex + 1) * pageSize, total);
+                        return `${start}–${end} of ${total}`;
+                      })()}
+                    </Text>
+                  </>
+                )}
+                <ActionIcon
+                  variant="default"
+                  size="sm"
+                  onClick={() =>
+                    table.setPageIndex(
+                      Math.max(0, table.getState().pagination.pageIndex - 1)
+                    )
+                  }
+                  disabled={table.getState().pagination.pageIndex === 0}
+                >
+                  <IconChevronLeft size={16} />
+                </ActionIcon>
+                <Text
+                  size="sm"
+                  ta="center"
+                  style={{ width: 26, fontFamily: "Inter" }}
+                >
+                  {table.getState().pagination.pageIndex + 1}
+                </Text>
+                <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
+                  of{" "}
+                  {Math.max(
+                    1,
+                    Math.ceil(
+                      (table.getPrePaginationRowModel().rows.length || 0) /
+                        table.getState().pagination.pageSize
+                    )
+                  )}
+                </Text>
+                <ActionIcon
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    const total =
+                      table.getPrePaginationRowModel().rows.length || 0;
+                    const totalPages = Math.max(
+                      1,
+                      Math.ceil(total / table.getState().pagination.pageSize)
+                    );
+                    table.setPageIndex(
+                      Math.min(
+                        totalPages - 1,
+                        table.getState().pagination.pageIndex + 1
+                      )
+                    );
+                  }}
+                  disabled={(() => {
+                    const total =
+                      table.getPrePaginationRowModel().rows.length || 0;
+                    const totalPages = Math.max(
+                      1,
+                      Math.ceil(total / table.getState().pagination.pageSize)
+                    );
+                    return (
+                      table.getState().pagination.pageIndex >= totalPages - 1
+                    );
+                  })()}
+                >
+                  <IconChevronRight size={16} />
+                </ActionIcon>
+              </Group>
+            </Group>
           </>
         )}
-        <Group
-          w="100%"
-          justify="space-between"
-          align="center"
-          p="xs"
-          wrap="nowrap"
-          pt="md"
-        >
-          {/* Rows per page and range */}
-          <Group gap="sm" align="center" wrap="nowrap">
-            <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-              Rows per page
-            </Text>
-            <Select
-              size="xs"
-              data={["10", "25", "50"]}
-              value={String(table.getState().pagination.pageSize)}
-              onChange={(val) => {
-                if (!val) return;
-                table.setPageSize(Number(val));
-                table.setPageIndex(0);
-              }}
-              w={110}
-              styles={{
-                input: {
-                  fontSize: "13px",
-                  height: "30px",
-                  fontFamily: "Inter",
-                },
-              }}
-            />
-            <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-              {(() => {
-                const { pageIndex, pageSize } = table.getState().pagination;
-                const total = table.getPrePaginationRowModel().rows.length || 0;
-                if (total === 0) return "0–0 of 0";
-                const start = pageIndex * pageSize + 1;
-                const end = Math.min((pageIndex + 1) * pageSize, total);
-                return `${start}–${end} of ${total}`;
-              })()}
-            </Text>
-          </Group>
-
-          {/* Page controls */}
-          <Group gap="xs" align="center" wrap="nowrap" mt={10} pr={50}>
-            <ActionIcon
-              variant="default"
-              size="sm"
-              onClick={() =>
-                table.setPageIndex(
-                  Math.max(0, table.getState().pagination.pageIndex - 1)
-                )
-              }
-              disabled={table.getState().pagination.pageIndex === 0}
-            >
-              <IconChevronLeft size={16} />
-            </ActionIcon>
-            <Text
-              size="sm"
-              ta="center"
-              style={{ width: 26, fontFamily: "Inter" }}
-            >
-              {table.getState().pagination.pageIndex + 1}
-            </Text>
-            <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-              of{" "}
-              {Math.max(
-                1,
-                Math.ceil(
-                  (table.getPrePaginationRowModel().rows.length || 0) /
-                    table.getState().pagination.pageSize
-                )
-              )}
-            </Text>
-            <ActionIcon
-              variant="default"
-              size="sm"
-              onClick={() => {
-                const total = table.getPrePaginationRowModel().rows.length || 0;
-                const totalPages = Math.max(
-                  1,
-                  Math.ceil(total / table.getState().pagination.pageSize)
-                );
-                table.setPageIndex(
-                  Math.min(
-                    totalPages - 1,
-                    table.getState().pagination.pageIndex + 1
-                  )
-                );
-              }}
-              disabled={(() => {
-                const total = table.getPrePaginationRowModel().rows.length || 0;
-                const totalPages = Math.max(
-                  1,
-                  Math.ceil(total / table.getState().pagination.pageSize)
-                );
-                return table.getState().pagination.pageIndex >= totalPages - 1;
-              })()}
-            >
-              <IconChevronRight size={16} />
-            </ActionIcon>
-          </Group>
-        </Group>
 
         {/* PDF Preview Modal */}
         <Modal

@@ -131,16 +131,19 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           moduleType === "newCustomer" ||
           moduleType === "lostCustomer";
 
-        const displayValue =
-          row.original?._isTotalRow === true
-            ? "" // keep total rows clean
-            : useApiValueOnly
-              ? apiSno !== undefined && apiSno !== null && apiSno !== ""
-                ? apiSno
-                : ""
-              : apiSno !== undefined && apiSno !== null && apiSno !== ""
-                ? apiSno
-                : row.index + 1;
+        // For total rows, display the value if it exists (e.g., "Total:"), otherwise keep empty
+        const isTotalRow = row.original?._isTotalRow === true;
+        const displayValue = isTotalRow
+          ? apiSno !== undefined && apiSno !== null && apiSno !== ""
+            ? apiSno
+            : "" // keep total rows clean if no value provided
+          : useApiValueOnly
+            ? apiSno !== undefined && apiSno !== null && apiSno !== ""
+              ? apiSno
+              : ""
+            : apiSno !== undefined && apiSno !== null && apiSno !== ""
+              ? apiSno
+              : row.index + 1;
 
         return (
           <Text size="sm" style={{ fontWeight: 500 }}>
@@ -787,7 +790,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               );
             }
 
-            // For total row, show badge but make it non-clickable
+            // For total row, show plain text without color highlights
             if (
               isTotalRow &&
               (key === "potential" ||
@@ -798,27 +801,22 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 key === "quoted" ||
                 key === "quote_created" ||
                 key === "expected" ||
+                (key as string) === "profit" ||
+                (key as string) === "potential_profit" ||
                 key === "OVERDUE" ||
                 key === "TODAY" ||
                 key === "UPCOMING" ||
                 key === "CLOSED")
             ) {
-              const isTotalRowBadgeZero =
-                cellValue === 0 || cellValue === "0" || !cellValue;
               return (
-                <Badge
-                  color={getPipelineColor(key)}
-                  size="md"
-                  variant="filled"
+                <Text
+                  size="sm"
                   style={{
-                    cursor: "default",
-                    color: "white",
-                    fontWeight: 700,
-                    opacity: isTotalRowBadgeZero ? 0.5 : 1, // Reduce opacity for 0 values
+                    fontWeight: 400,
                   }}
                 >
                   {displayValue}
-                </Badge>
+                </Text>
               );
             }
 
@@ -1086,10 +1084,11 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               );
             }
 
-            // For total row first column (salesperson/customer_name/region/service), make it uppercase and bold
+            // For total row first column (sno/salesperson/customer_name/region/service), make it uppercase and bold
             if (
               isTotalRow &&
-              (key === "salesperson" ||
+              (key === "sno" ||
+                key === "salesperson" ||
                 key === "salesman_name" ||
                 key === "salesman" ||
                 key === "customer_name" ||
@@ -1222,8 +1221,14 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       style: {
         fontSize: "13px",
         width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
+        minHeight:
+          moduleType === "pipelineReport" && drillLevel === 2
+            ? "500px"
+            : "400px",
+        maxHeight:
+          moduleType === "pipelineReport" && drillLevel === 2
+            ? "calc(100vh - 180px)"
+            : "75vh",
         overflowY: "auto",
         overflowX: "auto",
         position: "relative",
