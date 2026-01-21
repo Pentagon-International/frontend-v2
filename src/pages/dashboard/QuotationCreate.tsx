@@ -938,7 +938,6 @@ function QuotationCreate({
     }
   }, [selectedServiceIndex, selectedService?.id]);
 
-
   // Fetch quotation details when quotationId is provided from URL
   useEffect(() => {
     const fetchQuotationDetails = async () => {
@@ -5242,16 +5241,20 @@ function QuotationCreate({
                                 "0.00"
                               }
                               readOnly
+                              disabled={isViewMode}
                               styles={{
                                 input: {
                                   fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
-                                  backgroundColor: "#f8f9fa",
-                                  cursor: "not-allowed",
+                                  backgroundColor: isViewMode
+                                    ? "#ffffff"
+                                    : "#f8f9fa",
+                                  cursor: isViewMode
+                                    ? "default"
+                                    : "not-allowed",
                                 },
                               }}
-                              // disabled
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
@@ -5262,16 +5265,20 @@ function QuotationCreate({
                                 "0.00"
                               }
                               readOnly
+                              disabled={isViewMode}
                               styles={{
                                 input: {
                                   fontSize: "14px",
                                   fontFamily: "Inter",
                                   height: "36px",
-                                  backgroundColor: "#f8f9fa",
-                                  cursor: "not-allowed",
+                                  backgroundColor: isViewMode
+                                    ? "#ffffff"
+                                    : "#f8f9fa",
+                                  cursor: isViewMode
+                                    ? "default"
+                                    : "not-allowed",
                                 },
                               }}
-                              // disabled
                             />
                           </Grid.Col>
 
@@ -6403,13 +6410,16 @@ function QuotationCreate({
                               "0.00"
                             }
                             readOnly
+                            disabled={isViewMode}
                             styles={{
                               input: {
                                 fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
-                                backgroundColor: "#f8f9fa",
-                                cursor: "not-allowed",
+                                backgroundColor: isViewMode
+                                  ? "#ffffff"
+                                  : "#f8f9fa",
+                                cursor: isViewMode ? "default" : "not-allowed",
                               },
                             }}
                           />
@@ -6422,13 +6432,16 @@ function QuotationCreate({
                               "0.00"
                             }
                             readOnly
+                            disabled={isViewMode}
                             styles={{
                               input: {
                                 fontSize: "14px",
                                 fontFamily: "Inter",
                                 height: "36px",
-                                backgroundColor: "#f8f9fa",
-                                cursor: "not-allowed",
+                                backgroundColor: isViewMode
+                                  ? "#ffffff"
+                                  : "#f8f9fa",
+                                cursor: isViewMode ? "default" : "not-allowed",
                               },
                             }}
                           />
