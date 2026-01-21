@@ -260,6 +260,7 @@ const serviceFormSchema = yup.object({
         shipment_terms_code: yup
           .string()
           .required("Shipment terms are required"),
+        icd: yup.string().optional(),
 
         pickup_location: yup.string().when("pickup", {
           is: "true",
@@ -399,6 +400,17 @@ const fetchContainerType = async () => {
   return response;
 };
 
+const fetchIcdData = async () => {
+  // In production, this would be: const response = await getAPICall(URL.ICD_MASTER, API_HEADER);
+  const response = [
+    {
+      label: "Tumb",
+      value: "Tumb",
+    },
+  ];
+  return response;
+};
+
 const fetchSalespersons = async (customerId: string = "") => {
   const payload = {
     customer_code: customerId,
@@ -468,10 +480,23 @@ function EnquiryCreate() {
   const [lastCheckedServiceIndex, setLastCheckedServiceIndex] = useState<
     number | null
   >(null);
+  // Track service indices that have already been processed (user made a decision)
+  const [processedServiceIndices, setProcessedServiceIndices] = useState<
+    Set<number>
+  >(new Set());
 
   const { data: termsOfShipment = [] } = useQuery({
     queryKey: ["tosData"],
     queryFn: fetchTermsofShipment,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const { data: icdData = [] } = useQuery({
+    queryKey: ["icdData"],
+    queryFn: fetchIcdData,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -485,6 +510,14 @@ function EnquiryCreate() {
       label: `${item.tos_name} (${item.tos_code})`,
     }));
   }, [termsOfShipment]);
+
+  const icdOptions = useMemo(() => {
+    if (!Array.isArray(icdData) || !icdData.length) return [];
+    return icdData.map((item: any) => ({
+      value: item.value || item.label || "",
+      label: item.label || item.value || "",
+    }));
+  }, [icdData]);
 
   // Customer Form
   const customerForm = useForm({
@@ -525,6 +558,7 @@ function EnquiryCreate() {
           pickup_location: "",
           delivery_location: "",
           shipment_terms_code: "",
+          icd: "", // Added ICD field
           service_remark: "", // Added service remark field
           commodity: "", // Added commodity description field
           dimension_unit: "Centimeter",
@@ -959,18 +993,8 @@ function EnquiryCreate() {
           message: "Enquiry is created successfully",
         });
 
-        // Preserve filters if they were preserved when navigating here
-        const preserveFilters = (location.state as any)?.preserveFilters;
-        if (preserveFilters) {
-          navigate("/enquiry", {
-            state: {
-              restoreFilters: preserveFilters,
-              refreshData: true,
-            },
-          });
-        } else {
-          navigate("/enquiry", { state: { refreshData: true } });
-        }
+        // Filters and search are now managed via store, just refresh data
+        navigate("/enquiry", { state: { refreshData: true } });
       }
     } catch (err: any) {
       setIsSubmitting(false);
@@ -1050,8 +1074,7 @@ function EnquiryCreate() {
           if (preserveFilters) {
             navigate("/quotation", {
               state: {
-                restoreFilters: preserveFilters,
-                refreshData: true,
+              refreshData: true,
               },
             });
           } else {
@@ -1062,8 +1085,7 @@ function EnquiryCreate() {
           if (preserveFilters) {
             navigate("/enquiry", {
               state: {
-                // restoreFilters: preserveFilters,
-                refreshData: true,
+                //               refreshData: true,
               },
             });
           } else {
@@ -1311,6 +1333,7 @@ function EnquiryCreate() {
             hazardous_cargo: cargo?.hazardous_cargo === "Yes",
             stackable: cargo?.stackable === "Yes",
             shipment_terms_code: serviceDetail.shipment_terms_code,
+            icd: serviceDetail.icd || "",
             service_remark: serviceDetail.service_remark,
             commodity: serviceDetail.commodity,
           };
@@ -1503,6 +1526,8 @@ function EnquiryCreate() {
     }
   };
 
+  const checkedServiceIndicesRef = useRef<Set<number>>(new Set());
+
   // Function to check salesperson data from API
   const checkSalespersonData = async (serviceIndex: number) => {
     const customerCode = customerForm.values.customer_code;
@@ -1521,9 +1546,23 @@ function EnquiryCreate() {
       return;
     }
 
-    // Don't check again if we already checked this service index
-    if (lastCheckedServiceIndex === serviceIndex) {
-      console.log("⏭️ Already checked for service index:", serviceIndex);
+    // Don't check again if this service index has already been processed (user made a decision)
+    // 🚫 Already checked (API already called)
+    if (checkedServiceIndicesRef.current.has(serviceIndex)) {
+      console.log("⛔ API already checked for service index:", serviceIndex);
+      return;
+    }
+
+    // 🚫 Modal already open
+    if (salespersonModalOpened) {
+      console.log("⛔ Modal open, skipping API call");
+      return;
+    }
+
+
+    // Don't check again if we're currently checking this service index
+    if (lastCheckedServiceIndex === serviceIndex && isCheckingSalesperson) {
+      console.log("⏭️ Already checking for service index:", serviceIndex);
       return;
     }
 
@@ -1544,6 +1583,7 @@ function EnquiryCreate() {
         message?: string;
         data?: SalespersonData[];
       };
+      checkedServiceIndicesRef.current.add(serviceIndex);
 
       if (response?.success && response?.data && response.data.length > 0) {
         const apiSalesperson = response.data[0];
@@ -1555,10 +1595,16 @@ function EnquiryCreate() {
           currentSalesperson &&
           apiSalesperson.sales_person !== currentSalesperson
         ) {
-          // Salesperson doesn't match - show modal
-          setSalespersonModalData(apiSalesperson);
-          openSalespersonModal();
-          setLastCheckedServiceIndex(serviceIndex);
+          // Only show modal if this service index hasn't been processed yet
+          if (!processedServiceIndices.has(serviceIndex)) {
+            // Salesperson doesn't match - show modal
+            setSalespersonModalData(apiSalesperson);
+            openSalespersonModal();
+            setLastCheckedServiceIndex(serviceIndex);
+          }
+        } else {
+          // Salesperson matches or no mismatch - mark as processed to avoid future checks
+          setProcessedServiceIndices((prev) => new Set(prev).add(serviceIndex));
         }
       }
     } catch (error) {
@@ -1570,7 +1616,7 @@ function EnquiryCreate() {
 
   // Function to handle Yes button in modal - update form with API data
   const handleUpdateSalespersonData = () => {
-    if (salespersonModalData) {
+    if (salespersonModalData && lastCheckedServiceIndex !== null) {
       if (salespersonModalData.sales_person) {
         customerForm.setFieldValue(
           "sales_person",
@@ -1593,6 +1639,12 @@ function EnquiryCreate() {
       } else {
         customerForm.setFieldValue("customer_services", "");
       }
+      
+      // Mark this service index as processed so modal won't open again
+      setProcessedServiceIndices((prev) => 
+        new Set(prev).add(lastCheckedServiceIndex)
+      );
+      
       // Close modal first
       closeSalespersonModal();
       setSalespersonModalData(null);
@@ -1602,6 +1654,18 @@ function EnquiryCreate() {
         setActive(0);
       }, 200);
     }
+  };
+
+  // Function to handle Cancel button - mark as processed without updating
+  const handleCancelSalespersonModal = () => {
+    if (lastCheckedServiceIndex !== null) {
+      // Mark this service index as processed so modal won't open again
+      setProcessedServiceIndices((prev) => 
+        new Set(prev).add(lastCheckedServiceIndex)
+      );
+    }
+    closeSalespersonModal();
+    setSalespersonModalData(null);
   };
 
   // Function to validate a specific step
@@ -2017,6 +2081,7 @@ function EnquiryCreate() {
                   service.shipment_terms_code_read ||
                   service.shipment_terms_code ||
                   "",
+                icd: service.icd || "",
                 dimension_unit: "Centimeter",
                 diemensions: [] as any[],
                 cargo_details: [] as any[],
@@ -2244,6 +2309,7 @@ function EnquiryCreate() {
                   service.shipment_terms_code_read ||
                   service.shipment_terms_code ||
                   "",
+                icd: service.icd || "",
                 dimension_unit: "Centimeter",
                 diemensions: [] as any[],
                 cargo_details: [] as any[],
@@ -2460,6 +2526,7 @@ function EnquiryCreate() {
             delivery_location: enq?.delivery_location || "",
             shipment_terms_code:
               enq?.shipment_terms_code_read || enq?.shipment_terms_code || "",
+            icd: enq?.icd || "",
             service_remark: enq?.service_remark || "",
             commodity: enq?.commodity || "",
             dimension_unit: "Centimeter",
@@ -2716,6 +2783,14 @@ function EnquiryCreate() {
   //   }
   // }, [enq, serviceForm.values.service_details]);
 
+  // Reset processed service indices when customer changes
+  useEffect(() => {
+    const customerCode = customerForm.values.customer_code;
+    // Reset processed indices when customer changes so modal can show again for new customer
+    setProcessedServiceIndices(new Set());
+    setLastCheckedServiceIndex(null);
+  }, [customerForm.values.customer_code]);
+
   // useEffect to check salesperson data when customer, service, and trade are all selected
   useEffect(() => {
     const customerCode = customerForm.values.customer_code;
@@ -2731,7 +2806,8 @@ function EnquiryCreate() {
         const service = serviceDetail?.service;
         const trade = serviceDetail?.trade;
 
-        if (service && trade && lastCheckedServiceIndex !== serviceIndex) {
+        // Only check if service index hasn't been processed yet
+        if (service && trade && !processedServiceIndices.has(serviceIndex)) {
           // Small delay to ensure form values are updated
           const timeoutId = setTimeout(() => {
             checkSalespersonData(serviceIndex);
@@ -2748,7 +2824,7 @@ function EnquiryCreate() {
   }, [
     customerForm.values.customer_code,
     serviceForm.values.service_details,
-    lastCheckedServiceIndex,
+    processedServiceIndices,
   ]);
 
   // Additional effect to populate fields when data is loaded
@@ -4664,8 +4740,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/call-entry", {
                                   state: {
-                                    restoreFilters: preserveFilters,
-                                    refreshData: true,
+              refreshData: true,
                                   },
                                 });
                               } else {
@@ -4678,8 +4753,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/enquiry", {
                                   state: {
-                                    restoreFilters: preserveFilters,
-                                    refreshData: true,
+              refreshData: true,
                                   },
                                 });
                               } else {
@@ -4692,8 +4766,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/quotation", {
                                   state: {
-                                    restoreFilters: preserveFilters,
-                                    refreshData: true,
+              refreshData: true,
                                   },
                                 });
                               } else {
@@ -4759,8 +4832,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/quotation", {
                                   state: {
-                                    restoreFilters: preserveFilters,
-                                    refreshData: true,
+              refreshData: true,
                                   },
                                 });
                               } else {
@@ -5456,7 +5528,7 @@ function EnquiryCreate() {
                                 />
                               </Grid.Col>
 
-                              <Grid.Col span={6}>
+                              <Grid.Col span={3}>
                                 <Dropdown
                                   placeholder="Select Shipment Terms"
                                   styles={{
@@ -5486,6 +5558,39 @@ function EnquiryCreate() {
                                   )}
                                 />
                               </Grid.Col>
+                              {/* ICD Field - Only show for non-LCL services */}
+                              {serviceForm.values.service_details[serviceIndex]
+                                ?.service !== "LCL" && (
+                                <Grid.Col span={3}>
+                                  <Dropdown
+                                    placeholder="Select ICD"
+                                    styles={{
+                                      input: {
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        height: "36px",
+                                      },
+                                      label: {
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                        marginBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "medium",
+                                      },
+                                    }}
+                                    searchable
+                                    key={serviceForm.key(
+                                      `service_details.${serviceIndex}.icd`
+                                    )}
+                                    label="ICD"
+                                    data={icdOptions}
+                                    {...serviceForm.getInputProps(
+                                      `service_details.${serviceIndex}.icd`
+                                    )}
+                                  />
+                                </Grid.Col>
+                              )}
                               <Grid.Col span={6}>
                                 <Dropdown
                                   key={serviceForm.key(
@@ -7972,8 +8077,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/call-entry", {
                                   state: {
-                                    restoreFilters: preserveFilters,
-                                    refreshData: true,
+              refreshData: true,
                                   },
                                 });
                               } else {
@@ -7986,8 +8090,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/enquiry", {
                                   state: {
-                                    restoreFilters: preserveFilters,
-                                    refreshData: true,
+              refreshData: true,
                                   },
                                 });
                               } else {
@@ -8000,8 +8103,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/quotation", {
                                   state: {
-                                    restoreFilters: preserveFilters,
-                                    refreshData: true,
+              refreshData: true,
                                   },
                                 });
                               } else {
@@ -8620,7 +8722,7 @@ function EnquiryCreate() {
           <Group justify="flex-end" mt="md">
             <Button
               variant="outline"
-              onClick={closeSalespersonModal}
+              onClick={handleCancelSalespersonModal}
               styles={{
                 root: {
                   fontSize: "13px",

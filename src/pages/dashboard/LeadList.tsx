@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, startTransition, useCallback } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -27,7 +27,6 @@ import {
 import {
   IconChevronLeft,
   IconChevronRight,
-  IconFilterOff,
   IconSearch,
   IconFilter,
   IconPlus,
@@ -47,6 +46,9 @@ import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { useLayoutStore } from "../../store/useLayoutStore";
 import useAuthStore from "../../store/authStore";
+import { useListFilterStore } from "../../store/listFilterStore";
+
+const LIST_KEY = "LEAD_LIST";
 
 type LeadData = {
   id: number;
@@ -124,14 +126,30 @@ function LeadList() {
     Boolean(location.state?.fromDashboard)
   ); // Track if page was opened from dashboard
 
-  // Search Debounce
-  const [searchQuery, setSearchQuery] = useState("");
+  // Zustand store for filter and search preservation
+  const setStoreFilters = useListFilterStore((state) => state.setFilters);
+  const setStoreSearch = useListFilterStore((state) => state.setSearch);
+  const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
+  const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
+  const getState = useListFilterStore((state) => state.getState);
+  const clearStoreAllExcept = useListFilterStore((state) => state.clearAllExcept);
+
+  // CRITICAL: Capture restore data immediately to prevent loss during re-renders
+  const restoreFiltersDataRef = useRef<any>(
+    location.state?.restoreFilters ? { ...location.state.restoreFilters } : null
+  );
+  const hasRestoredRef = useRef(false);
+  const restoreFiltersProcessed = useRef(false);
+
+  //Search Debounce - initialize from restoreFilters if present
+  const shouldRestore = Boolean(location.state?.restoreFilters);
+  const [searchQuery, setSearchQuery] = useState(
+    shouldRestore && restoreFiltersDataRef.current?.searchQuery !== undefined
+      ? restoreFiltersDataRef.current.searchQuery || ""
+      : ""
+  );
   const [debounced] = useDebouncedValue(searchQuery, 500);
   const [showFilters, setShowFilters] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
-
-  // Track if we're restoring filters to trigger refetch after state updates
-  const [isRestoringFilters, setIsRestoringFilters] = useState(false);
 
   // Modal state for remark conversation
   const [
@@ -149,11 +167,48 @@ function LeadList() {
     },
   });
 
-  // State to store the actual applied filter values
+  // State to store the actual applied filter values - initialize from restoreFilters if present
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({
-    assigned_to: null,
-    status: null,
+    assigned_to:
+      shouldRestore && restoreFiltersDataRef.current?.filters?.assigned_to !== undefined
+        ? restoreFiltersDataRef.current.filters.assigned_to || null
+        : null,
+    status:
+      shouldRestore && restoreFiltersDataRef.current?.filters?.status !== undefined
+        ? restoreFiltersDataRef.current.filters.status || null
+        : null,
   });
+  
+  const [filtersApplied, setFiltersApplied] = useState(
+    shouldRestore && restoreFiltersDataRef.current?.filtersApplied !== undefined
+      ? restoreFiltersDataRef.current.filtersApplied || Boolean(restoreFiltersDataRef.current?.searchQuery?.trim())
+      : false
+  );
+
+  // Ref to hold latest appliedFilters to avoid stale closure in buildLeadPayload
+  const appliedFiltersRef = useRef(appliedFilters);
+  
+  useEffect(() => {
+      clearStoreAllExcept(LIST_KEY);
+    }, []);
+
+  // Update ref whenever appliedFilters changes
+  useEffect(() => {
+    appliedFiltersRef.current = appliedFilters;
+  }, [appliedFilters]);
+
+  // Memoized filter payload - includes filters + search together
+  // Use ONLY debounced value for search to prevent API calls on every keystroke
+  // Always include search field in payload (even if empty) to match API structure
+  const buildLeadPayload = useMemo(() => {
+    const payload: any = {
+      assigned_to: appliedFiltersRef.current.assigned_to || "",
+      status: appliedFiltersRef.current.status || "",
+      search: debounced.trim() || "", // Always include search field (use debounced value)
+    };
+
+    return payload;
+  }, [appliedFilters, debounced]); // Removed searchQuery from dependencies to use only debounced value
 
   // Fetch users for assigned_to filter
   const { data: usersData = [], isLoading: usersLoading } = useQuery({
@@ -198,18 +253,20 @@ function LeadList() {
     }
   }, [location.state?.returnToDashboard, location.state?.dashboardState, location.state?.fromDashboard]);
 
-  // Fetch lead data with React Query
+  // Fetch lead data with React Query - initial load (no filters, no search)
   const {
     data: leadData = [],
     isLoading: leadLoading,
+    isFetching: leadFetching,
     refetch: refetchLeads,
   } = useQuery({
-    queryKey: ["leads", appliedFilters],
+    queryKey: ["leads"],
     queryFn: async () => {
       try {
+        // Initial payload - empty filters (not wrapped in filters object)
         const requestBody: { assigned_to: string; status: string } = {
-          assigned_to: appliedFilters.assigned_to || "",
-          status: appliedFilters.status || "",
+          assigned_to: "",
+          status: "",
         };
 
         const response = await apiCallProtected.post(
@@ -218,8 +275,10 @@ function LeadList() {
         );
         const data = response as any;
 
-        // Handle response - API returns { data: [...] }
-        if (data && Array.isArray(data.data)) {
+        // Handle response - API returns { status: true, data: [...], message: "..." }
+        if (data?.status === true && Array.isArray(data.data)) {
+          return data.data;
+        } else if (data && Array.isArray(data.data)) {
           return data.data;
         } else if (data && Array.isArray(data.results)) {
           return data.results;
@@ -234,55 +293,128 @@ function LeadList() {
         return [];
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    enabled: false, // Don't run automatically
+    staleTime: 0,
+    gcTime: 0,
     refetchOnWindowFocus: false,
-    refetchOnMount: !!location.state?.refreshData, // Refetch on mount if we have refresh flag
+    refetchOnMount: false,
+    // Keep previous data visible while fetching to prevent "No records to display" flicker
+    placeholderData: (previousData) => previousData || [],
+  });
+
+  // Separate query for filtered data - with filters and search
+  const {
+    data: filteredLeadData = [],
+    isLoading: filteredLeadLoading,
+    isFetching: filteredLeadFetching,
+    refetch: refetchFilteredLeads,
+  } = useQuery({
+    queryKey: [
+      "filteredLeads",
+      buildLeadPayload, // Includes search when present - queryKey change auto-triggers refetch
+    ],
+    queryFn: async () => {
+      try {
+        const filterPayload = buildLeadPayload;
+        // buildLeadPayload always includes existing filters + search (when present)
+        // This ensures filters and search are sent together in a single API call
+
+        const requestBody = filterPayload; // Not wrapped in 'filters' object
+
+        const response = await apiCallProtected.post(
+          URL.leadFilter,
+          requestBody
+        );
+        const data = response as any;
+
+        // Handle response - API returns { status: true, data: [...], message: "..." }
+        if (data?.status === true && Array.isArray(data.data)) {
+          return data.data;
+        } else if (data && Array.isArray(data.data)) {
+          return data.data;
+        } else if (data && Array.isArray(data.results)) {
+          return data.results;
+        }
+        return [];
+      } catch (error) {
+        console.error("Error fetching filtered lead data:", error);
+        ToastNotification({
+          type: "error",
+          message: "Error fetching leads. Please try again.",
+        });
+        return [];
+      }
+    },
+    // Enable query when filters are applied OR search is present
+    enabled: filtersApplied || Boolean(debounced.trim()),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    // Keep previous data visible while fetching to prevent "No records to display" flicker
+    placeholderData: (previousData) => previousData || [],
   });
 
   // Determine which data to display
+  // Search is merged into filter payload - use filteredLeadData when filters are applied OR search is present
+  // placeholderData ensures previous data remains visible during fetch, preventing empty state flicker
   const displayData = useMemo(() => {
-    let filtered = leadData;
-
-    // Apply search filter if search query exists
-    if (debounced.trim() !== "") {
-      const searchLower = debounced.toLowerCase();
-      filtered = filtered.filter((lead: LeadData) => {
-        return (
-          lead.name?.toLowerCase().includes(searchLower) ||
-          lead.contact_person?.toLowerCase().includes(searchLower) ||
-          lead.contact_number?.toLowerCase().includes(searchLower) ||
-          lead.email_id?.toLowerCase().includes(searchLower) ||
-          lead.assigned_to?.toLowerCase().includes(searchLower) ||
-          lead.created_by?.toLowerCase().includes(searchLower) ||
-          lead.location?.city?.toLowerCase().includes(searchLower) ||
-          lead.location?.country?.toLowerCase().includes(searchLower)
-        );
-      });
+    // If filters were applied OR search is present, show filtered results
+    // (buildLeadPayload includes search when present, ensuring search is sent with filters)
+    if (filtersApplied || debounced.trim()) {
+      // placeholderData keeps previous data visible while fetching, so filteredLeadData won't be empty during fetch
+      return filteredLeadData || [];
     }
 
-    return filtered;
-  }, [leadData, debounced]);
+    // Otherwise, show the original lead data (no filters, no search)
+    // placeholderData ensures leadData won't be empty during fetch
+    return leadData || [];
+  }, [leadData, filteredLeadData, filtersApplied, debounced]);
 
-  // Loading state
-  const isLoading = leadLoading || usersLoading;
+  // Helper function to check if filters have real values (not just null keys)
+  const hasRealFilterValues = useCallback((filters: FilterState): boolean => {
+    return Boolean(
+      (filters.assigned_to && filters.assigned_to.trim() !== "") ||
+      (filters.status && filters.status.trim() !== "")
+    );
+  }, []);
+
+  // Loading state - include refreshing state
+  const isLoading =
+    leadLoading ||
+    filteredLeadLoading ||
+    usersLoading;
+  // Use isFetching to show loader while keeping previous data visible (prevents empty state flicker)
+  const isFetching =
+    leadFetching ||
+    filteredLeadFetching;
 
   const applyFilters = async () => {
     try {
-      // Check if there are any actual filter values
+      // Check if there are any actual filter values (including search)
+      // Search is treated as a filter and requires filtersApplied to be true
       const hasFilterValues =
-        filterForm.values.assigned_to || filterForm.values.status;
+        filterForm.values.assigned_to ||
+        filterForm.values.status ||
+        debounced.trim(); // Include search value
 
       if (!hasFilterValues) {
-        // If no filter values, show all data
+        // If no filter values, show unfiltered data
         setFiltersApplied(false);
-        setAppliedFilters({
+        const emptyFilters = {
           assigned_to: null,
           status: null,
-        });
+        };
+        setAppliedFilters(emptyFilters);
+        appliedFiltersRef.current = emptyFilters; // Sync ref immediately
 
+        // Clear filters and search from store
+        clearStoreFilters(LIST_KEY);
+        clearStoreSearch(LIST_KEY);
+
+        // Invalidate and refetch unfiltered data
         await queryClient.invalidateQueries({ queryKey: ["leads"] });
         await refetchLeads();
+        setShowFilters(false)
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
@@ -293,16 +425,20 @@ function LeadList() {
       setFiltersApplied(true);
 
       // Store the current filter form values as applied filters
-      setAppliedFilters({
+      const newAppliedFilters = {
         assigned_to: filterForm.values.assigned_to,
         status: filterForm.values.status,
-      });
+      };
+      setAppliedFilters(newAppliedFilters);
+      appliedFiltersRef.current = newAppliedFilters;
 
-      // Invalidate and refetch
-      await queryClient.invalidateQueries({ queryKey: ["leads"] });
+      // Save filters and search to store
+      setStoreFilters(LIST_KEY, newAppliedFilters);
+      setStoreSearch(LIST_KEY, searchQuery);
+
+      // React Query will auto-refetch when queryKey changes (buildLeadPayload will update)
+      // No manual refetch needed - queryKey change triggers exactly ONE API call
       setShowFilters(false);
-
-      await refetchLeads();
 
       ToastNotification({
         type: "success",
@@ -324,14 +460,21 @@ function LeadList() {
     setFiltersApplied(false);
 
     // Reset applied filters state
-    setAppliedFilters({
+    const emptyFilters = {
       assigned_to: null,
       status: null,
-    });
+    };
+    setAppliedFilters(emptyFilters);
+    appliedFiltersRef.current = emptyFilters; // Sync ref immediately
 
-    // Invalidate queries and refetch
+    // Clear filters and search in store
+    clearStoreFilters(LIST_KEY);
+    clearStoreSearch(LIST_KEY);
+
+    // Invalidate queries and refetch with initial payload (empty filters)
     await queryClient.invalidateQueries({ queryKey: ["leads"] });
-    await refetchLeads();
+    await queryClient.invalidateQueries({ queryKey: ["filteredLeads"] });
+    await refetchLeads(); // This uses empty filters - initial payload
 
     ToastNotification({
       type: "success",
@@ -339,34 +482,223 @@ function LeadList() {
     });
   };
 
+  // Track previous search value to detect changes
+  const prevSearchRef = useRef<string>("");
+  const searchInitializedRef = useRef(false);
+
+  // Handle search changes - trigger API when search value changes (including when cleared)
+  useEffect(() => {
+    // Skip on initial mount if search hasn't changed
+    if (!searchInitializedRef.current) {
+      searchInitializedRef.current = true;
+      prevSearchRef.current = debounced;
+      return;
+    }
+
+    // Only trigger API if search actually changed (debounced)
+    if (prevSearchRef.current === debounced) {
+      return;
+    }
+
+    // Update ref for next comparison
+    prevSearchRef.current = debounced;
+    
+    // Save search to store immediately
+    setStoreSearch(LIST_KEY, searchQuery);
+    
+    // React Query will auto-refetch when queryKey changes (buildLeadPayload includes search)
+    // buildLeadPayload is in queryKey, so when debounced changes, queryKey changes and triggers refetch
+    if (debounced.trim() !== "") {
+      // Search exists - set filtersApplied to true so filtered query is enabled
+      setFiltersApplied(true);
+    } else {
+      // Search cleared
+      if (!appliedFilters.assigned_to && !appliedFilters.status) {
+        // No other filters - use default query
+        setFiltersApplied(false);
+      }
+      // If other filters exist, filtersApplied stays true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debounced]);
+
+  // Track if we've restored from store to prevent duplicate restoration calls
+  const hasRestoredFromStore = useRef(false);
+  // Track initial mount to trigger initial API call
+  const isMountedRef = useRef(false);
+
+  // Restore filters and search from store on mount and fetch data
+  // Skip if refreshData is present (let refreshData effect handle it)
+  useEffect(() => {
+    if (hasRestoredFromStore.current) return;
+    // Skip restoration if refreshData is present - let refreshData effect handle it
+    if (location.state?.refreshData) return;
+
+    const restoredState = useListFilterStore.getState().getState(LIST_KEY);
+
+    const performRestore = async () => {
+      if (!restoredState) {
+        // No restored state, load default data
+        await refetchLeads();
+        return;
+      }
+
+      // 1️⃣ Restore filters
+      let hasFilters = false;
+      const restoredFilters = restoredState.filters as FilterState;
+      console.log("restored filters---------------",restoredFilters)
+      // Check for REAL filter values (not just null keys)
+      if (restoredFilters && hasRealFilterValues(restoredFilters)) {
+        setAppliedFilters(restoredFilters);
+        appliedFiltersRef.current.assigned_to = restoredFilters.assigned_to;
+        appliedFiltersRef.current.status = restoredFilters.status;
+        // Restore filter form values
+        filterForm.setValues({
+          assigned_to: restoredFilters.assigned_to || null,
+          status: restoredFilters.status || null,
+        });
+        hasFilters = true;
+      }
+
+      // 2️⃣ Restore search
+      let hasSearch = false;
+      if (typeof restoredState.search === "string" && restoredState.search.trim()) {
+        setSearchQuery(restoredState.search);
+        hasSearch = true;
+      }
+
+      // Set filtersApplied FIRST to ensure query is enabled before refetch
+      if (hasFilters || hasSearch) {
+        setFiltersApplied(true);
+      }
+
+      // Wait for state updates to flush and buildLeadPayload useMemo to recalculate
+      // Increased delay to ensure:
+      // 1. debounced search value is updated (debounce is 500ms)
+      // 2. appliedFilters state triggers useMemo recalculation
+      // 3. buildLeadPayload reads updated values from appliedFiltersRef.current
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // 3️⃣ Fetch data based on restored state
+      if (hasFilters || hasSearch) {
+        // Manually refetch filtered leads AFTER:
+        // - filtersApplied is set (query is enabled)
+        // - restored state + refs are synced
+        // - buildLeadPayload useMemo has recalculated with preserved values
+        // This ensures the payload uses preserved filters/search instead of defaults
+        await refetchFilteredLeads();
+      } else {
+        // No filters/search - load default data
+        await refetchLeads();
+      }
+    };
+
+    if(restoredState?.shouldRestore){
+      performRestore();
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
+      hasRestoredFromStore.current = true;
+      isMountedRef.current = true;
+    } else if (!isMountedRef.current && !restoredState) {
+      // Initial mount with no stored state - load default data
+      isMountedRef.current = true;
+      refetchLeads();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.refreshData]);
+
   // Handle refresh when navigating from create/edit operations
   useEffect(() => {
     if (location.state?.refreshData) {
-      // Refetch all lead related data
-      refetchLeads();
+      const refreshData = async () => {
+        // Check if we have filters or search from store
+        const restoredState = getState(LIST_KEY);
+        const hasActiveFilters = restoredState?.filters && hasRealFilterValues(restoredState.filters as FilterState);
+        const hasActiveSearch = restoredState?.search && restoredState.search.trim() !== "";
 
-      // Clear the refresh state but preserve dashboard return state
-      navigate(location.pathname, {
-        replace: true,
-        state: {
-          returnToDashboard: returnToDashboardRef.current,
-          dashboardState: dashboardStateRef.current,
-          fromDashboard: fromDashboardRef.current,
-        },
-      });
+        // If we have filters/search in store, restore them first
+        if (restoredState && (hasActiveFilters || hasActiveSearch)) {
+          // Restore filters from store if they exist
+          if (hasActiveFilters) {
+            const restoredFilters = restoredState.filters as FilterState;
+            setAppliedFilters(restoredFilters);
+            appliedFiltersRef.current = restoredFilters; // Update ref immediately
+            // Restore filter form values
+            filterForm.setValues({
+              assigned_to: restoredFilters.assigned_to || null,
+              status: restoredFilters.status || null,
+            });
+          }
+
+          // Restore search from store if it exists
+          if (hasActiveSearch) {
+            setSearchQuery(restoredState.search);
+          }
+
+          // Set filtersApplied FIRST to ensure query is enabled
+          setFiltersApplied(true);
+
+          // Wait for state updates to flush and buildLeadPayload to recalculate
+          // This ensures buildLeadPayload will use the restored values from refs
+          // Increased delay to ensure debounced value is updated and useMemo recalculates
+          await new Promise((resolve) => setTimeout(resolve, 600));
+
+          // Manually refetch filtered leads AFTER restored state + refs are synced + useMemo recalculated
+          // This ensures the payload uses preserved filters/search instead of defaults
+          await refetchFilteredLeads();
+        } else {
+          // No filters/search - refetch default data
+          await refetchLeads();
+        }
+
+        // Clear the refresh state but preserve dashboard return state
+        navigate(location.pathname, {
+          replace: true,
+          state: {
+            returnToDashboard: returnToDashboardRef.current,
+            dashboardState: dashboardStateRef.current,
+            fromDashboard: fromDashboardRef.current,
+          },
+        });
+      };
+
+      refreshData();
     }
   }, [
     location.state?.refreshData,
     refetchLeads,
+    refetchFilteredLeads,
     navigate,
     location.pathname,
+    getState,
+    filterForm,
+    hasRealFilterValues,
   ]);
+
+  // Track if we're restoring filters to trigger refetch after state updates
+  const [isRestoringFilters, setIsRestoringFilters] = useState(
+    Boolean(location.state?.restoreFilters)
+  );
 
   // Add effect to restore filters when returning from create/edit operations
   useEffect(() => {
     // Check if we're returning from a create/edit operation with filter restoration
-    if (location.state?.restoreFilters) {
-      const restoreFiltersData = location.state.restoreFilters;
+    // Only restore if we haven't already restored (prevents re-initialization)
+    if (
+      location.state?.restoreFilters &&
+      restoreFiltersDataRef.current &&
+      !restoreFiltersProcessed.current &&
+      !hasRestoredRef.current
+    ) {
+      restoreFiltersProcessed.current = true;
+      hasRestoredRef.current = true;
+      console.log(
+        "🔄 Restoring filters and search after create/edit operation"
+      );
+
+      const restoreFiltersData = restoreFiltersDataRef.current;
+      
+      // Set restore guard FIRST to block all refetch logic during restore
+      setIsRestoringFilters(true);
 
       // Restore filter form state
       filterForm.setValues({
@@ -374,25 +706,46 @@ function LeadList() {
         status: restoreFiltersData.filters?.status || null,
       });
 
-      // Restore applied filters state
-      setAppliedFilters({
+      // Restore applied filters state FIRST (synchronously) to ensure refs are updated
+      const restoredFilters = {
         assigned_to: restoreFiltersData.filters?.assigned_to || null,
         status: restoreFiltersData.filters?.status || null,
-      });
+      };
+      setAppliedFilters(restoredFilters);
+      appliedFiltersRef.current = restoredFilters; // Sync ref immediately BEFORE startTransition
 
-      // Restore filters applied state
-      const shouldApplyFilters = restoreFiltersData.filtersApplied || false;
+      // Check for REAL filter values and search to determine filtersApplied
+      // This must be done BEFORE startTransition to ensure query is enabled
+      const hasRealFilters = hasRealFilterValues(restoredFilters);
+      const hasSearch = Boolean(restoreFiltersData.searchQuery?.trim());
+      const shouldApplyFilters = restoreFiltersData.filtersApplied || hasRealFilters || hasSearch;
+      
+      // Set filtersApplied FIRST (synchronously) to ensure query is enabled before refetch
       setFiltersApplied(shouldApplyFilters);
 
-      // Restore fromDashboard flag if present
-      if (restoreFiltersData.fromDashboard !== undefined) {
-        fromDashboardRef.current = Boolean(restoreFiltersData.fromDashboard);
+      // Batch remaining state restoration together to prevent multiple queryKey changes
+      // This ensures React Query queryKey changes only ONCE after all state is restored
+      // Using startTransition to batch state updates in a single render cycle
+      startTransition(() => {
+        // Restore search value
+        if (restoreFiltersData.searchQuery !== undefined) {
+          setSearchQuery(restoreFiltersData.searchQuery || "");
+        }
+
+        // Restore fromDashboard flag if present
+        if (restoreFiltersData.fromDashboard !== undefined) {
+          fromDashboardRef.current = Boolean(restoreFiltersData.fromDashboard);
+        }
+      });
+
+      // Save to store (use the same restoredFilters variable declared above)
+      setStoreFilters(LIST_KEY, restoredFilters);
+      if (restoreFiltersData.searchQuery !== undefined) {
+        setStoreSearch(LIST_KEY, restoreFiltersData.searchQuery || "");
       }
 
-      // Set flag to trigger refetch after state updates
-      setIsRestoringFilters(true);
-
       // Clear the restore filters flag but preserve dashboard return state
+      // Use refs to ensure persistence
       navigate(location.pathname, {
         replace: true,
         state: {
@@ -401,31 +754,50 @@ function LeadList() {
           fromDashboard: fromDashboardRef.current,
         },
       });
+
+      // Wait for state updates to flush and queryKey to stabilize, then manually refetch
+      const performRestore = async () => {
+        try {
+          // Wait for all state updates to flush and buildLeadPayload useMemo to recalculate
+          // This ensures queryKey changes only ONCE with complete payload
+          // Increased delay to ensure:
+          // 1. debounced value is updated (debounce is 500ms, so 600ms should be enough)
+          // 2. appliedFiltersRef.current is fully synchronized
+          // 3. appliedFilters state change triggers useMemo recalculation
+          // 4. buildLeadPayload reads updated values from appliedFiltersRef.current
+          await new Promise((resolve) => setTimeout(resolve, 600));
+
+          // Manually refetch filtered leads AFTER:
+          // - filtersApplied is set (query is enabled)
+          // - restored state + refs are synced
+          // - buildLeadPayload useMemo has recalculated with preserved values
+          // This ensures the payload uses preserved filters/search instead of defaults
+          await refetchFilteredLeads();
+
+          console.log("🔄 State restored - Manually refetched with restored filters/search", {
+            filters: restoreFiltersData.filters,
+            filtersApplied: restoreFiltersData.filtersApplied,
+            searchQuery: restoreFiltersData.searchQuery,
+            debounced: debounced, // Log debounced value to verify it's updated
+          });
+        } catch (error) {
+          console.error("Error during restore:", error);
+        } finally {
+          // Release restore guard after state is stable and queryKey has changed
+          setIsRestoringFilters(false);
+        }
+      };
+
+      performRestore();
+      return;
+    }
+
+    if (!location.state?.restoreFilters && restoreFiltersProcessed.current) {
+      restoreFiltersProcessed.current = false;
+      hasRestoredRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.restoreFilters, navigate, location.pathname]);
-
-  // Effect to refetch data after filters are restored and state is updated
-  useEffect(() => {
-    if (isRestoringFilters) {
-      const refreshData = async () => {
-        if (filtersApplied) {
-          // If filters were applied, invalidate and refetch filtered data
-          await queryClient.invalidateQueries({
-            queryKey: ["leads"],
-          });
-          await refetchLeads();
-        } else {
-          // Otherwise, refetch unfiltered data
-          await refetchLeads();
-        }
-        setIsRestoringFilters(false);
-      };
-
-      refreshData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRestoringFilters, filtersApplied]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -665,6 +1037,7 @@ function LeadList() {
               <Box px={10} py={5}>
                 <UnstyledButton
                   onClick={() => {
+                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
                     navigate("/lead-create", {
                       state: {
                         leadData: row.original,
@@ -704,6 +1077,10 @@ function LeadList() {
     enableBottomToolbar: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
+    // Use table's built-in loading state - shows loader while keeping previous rows visible
+    state: {
+      isLoading: isFetching,
+    },
     initialState: {
       pagination: { pageSize: 25, pageIndex: 0 },
       columnPinning: { right: ["actions"] },
@@ -829,6 +1206,56 @@ function LeadList() {
             </Text>
 
             <Group gap="xs" wrap="nowrap">
+              <TextInput
+                placeholder="Search..."
+                leftSection={<IconSearch size={16} />}
+                rightSection={
+                  searchQuery ? (
+                    <ActionIcon
+                      variant="transparent"
+                      size="sm"
+                      onClick={() => {
+                        // Clear search and update filtersApplied if no other filters exist
+                        setSearchQuery("");
+                        clearStoreSearch(LIST_KEY);
+                        // Check if other filters exist to determine filtersApplied state
+                        const hasOtherFilters =
+                          appliedFilters.assigned_to ||
+                          appliedFilters.status;
+                        if (!hasOtherFilters) {
+                          setFiltersApplied(false);
+                        }
+                        // React Query will auto-refetch when queryKey changes (buildLeadPayload will update)
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
+                w={248}
+                size="sm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                styles={{
+                  input: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontstyle: "regular",
+                    color: "#333740",
+                    minWidth: "24px",
+                    minHeight: "24px",
+                    width: "248px",
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    "&:focus": {
+                      border: "1px solid #105476",
+                    },
+                  },
+                }}
+              />
+
               <ActionIcon
                 variant={showFilters ? "filled" : "outline"}
                 size={36}
@@ -866,7 +1293,8 @@ function LeadList() {
                     },
                   },
                 }}
-                onClick={() =>
+                onClick={() =>{
+                  useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
                   navigate("/lead-create", {
                     state: {
                       returnTo: "/lead",
@@ -877,6 +1305,7 @@ function LeadList() {
                       },
                     },
                   })
+                }
                 }
               >
                 Create New
@@ -1035,15 +1464,23 @@ function LeadList() {
           </Box>
         )}
 
-        {isLoading ? (
+        {/* Show full-screen loader when loading and no data available */}
+        {/* Loader should show when: */}
+        {/* 1. Initial load (isLoading) and no data exists */}
+        {/* 2. Fetching (isFetching) and we don't have data yet (check if data is undefined, not just empty) */}
+        {/* Use table's built-in loading state for refetches to keep previous data visible */}
+        {(isLoading || isFetching) ? (
           <Center py="xl" style={{ flex: 1 }}>
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading leads...</Text>
+              <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+                Loading leads...
+              </Text>
             </Stack>
           </Center>
         ) : (
           <>
+            {/* Table's built-in loading state handles display during refetches - placeholderData keeps previous rows visible */}
             <MantineReactTable
               key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
               table={table}
@@ -1200,17 +1637,18 @@ function LeadList() {
         }}
       >
         {selectedLeadForRemark?.remark?.messages &&
+        selectedLeadForRemark.remark.messages &&
         selectedLeadForRemark.remark.messages.length > 0 ? (
           <Box>
             {/* Conversation Messages */}
             <ScrollArea style={{ maxHeight: "60vh", overflow: "auto" }}>
               <Stack gap="xs" p="md" style={{ backgroundColor: "#f8f9fa" }}>
-                {selectedLeadForRemark?.remark?.messages.map((msg, index) => {
+                {selectedLeadForRemark?.remark?.messages?.map((msg, index) => {
                   const isSentByMe =
                     msg.sender === user?.full_name ||
                     msg.sender === user?.username ||
                     msg.sender_id === user?.user_id;
-                  const prevMessage = index > 0 ? selectedLeadForRemark?.remark?.messages[index - 1] : null;
+                  const prevMessage = index > 0 && selectedLeadForRemark?.remark?.messages ? selectedLeadForRemark.remark.messages[index - 1] : null;
                   const showSenderHeader =
                     !prevMessage || prevMessage.sender !== msg.sender;
                   const showDateSeparator =

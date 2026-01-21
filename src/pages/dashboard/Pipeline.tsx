@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -18,6 +18,7 @@ import {
   Menu,
   UnstyledButton,
   Box,
+  TextInput,
 } from "@mantine/core";
 import {
   IconChevronLeft,
@@ -28,6 +29,7 @@ import {
   IconEdit,
   IconEye,
   IconX,
+  IconSearch,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getAPICall } from "../../service/getApiCall";
@@ -35,10 +37,10 @@ import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
 import { ToastNotification, SearchableSelect } from "../../components";
 import { useDebouncedValue } from "@mantine/hooks";
-import { searchAPI } from "../../service/searchApi";
 import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
+import { useListFilterStore } from "../../store/listFilterStore";
 
 type PipelineData = {
   id: number;
@@ -73,12 +75,25 @@ type FilterState = {
   destination: string | null;
   frequency: string | null;
   sales_person: string | null;
+  search: string | null;
 };
+
+const LIST_KEY = "PIPELINE";
 
 function Pipeline() {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize] = useState(5);
   const queryClient = useQueryClient();
+  const hasRestoredFromStore = useRef(false);
+
+  // Zustand store for filter and search preservation
+  const setStoreFilters = useListFilterStore((state) => state.setFilters);
+  const setStoreSearch = useListFilterStore((state) => state.setSearch);
+  const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
+  const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
+  const clearStoreAllExcept = useListFilterStore(
+    (state) => state.clearAllExcept
+  );
 
   // Filter form to minimize state variables
   const filterForm = useForm<FilterState>({
@@ -89,6 +104,7 @@ function Pipeline() {
       destination: null,
       frequency: null,
       sales_person: null,
+      search: null,
     },
   });
 
@@ -97,7 +113,7 @@ function Pipeline() {
 
   //Search Debounce
   const [searchQuery, setSearchQuery] = useState("");
-  const [debounced] = useDebouncedValue(searchQuery, 500);
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
 
@@ -150,19 +166,22 @@ function Pipeline() {
     destination: null,
     frequency: null,
     sales_person: null,
+    search: null,
   });
 
-  // Separate query for filtered data - only runs when filters are applied
+  // Separate query for filtered data - only runs when filters/search are applied
   const {
     data: filteredPipelineData = [],
     isLoading: filteredPipelineLoading,
+    isFetching: filteredPipelineFetching,
     refetch: refetchFilteredPipeline,
   } = useQuery({
-    queryKey: ["filteredPipeline", filtersApplied, appliedFilters],
+    // Note: filtersApplied is intentionally NOT part of queryKey.
+    // It only controls "enabled" state to avoid multiple refetches
+    // when toggling filtersApplied and updating appliedFilters/search.
+    queryKey: ["filteredPipeline", appliedFilters, debouncedSearch],
     queryFn: async () => {
       try {
-        if (!filtersApplied) return [];
-
         const payload: Record<string, unknown> = {};
 
         if (appliedFilters.customer)
@@ -176,6 +195,17 @@ function Pipeline() {
           payload.frequency_id = appliedFilters.frequency;
         if (appliedFilters.sales_person)
           payload.created_by = appliedFilters.sales_person;
+
+        // Ensure full, debounced search value is sent in payload
+        let searchValue =
+          (appliedFilters.search ?? "").toString().trim() || "";
+        const debouncedTrimmed = debouncedSearch.trim();
+        if (debouncedTrimmed) {
+          searchValue = debouncedTrimmed;
+        }
+        if (searchValue) {
+          payload.search = searchValue;
+        }
 
         if (Object.keys(payload)?.length === 0) return [];
 
@@ -206,10 +236,88 @@ function Pipeline() {
         return [];
       }
     },
-    enabled: false, // Don't run automatically - only when Apply Filters is clicked
+    enabled: filtersApplied || debouncedSearch.trim() !== "",
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
   });
+
+  // Clear other keys in store on mount (keep only current LIST_KEY)
+  useEffect(() => {
+    clearStoreAllExcept(LIST_KEY);
+  }, []);
+
+  // Restore filters and search from store on mount (before API calls)
+  useEffect(() => {
+    if (hasRestoredFromStore.current) return;
+
+    const restoredState = useListFilterStore.getState().getState(LIST_KEY);
+    
+    const performRestore = async () => {
+      if (!restoredState) {
+        return; // No stored state, use defaults
+      }
+
+      // Restore filters
+      let hasFilters = false;
+      const restoredFilters = restoredState.filters as FilterState;
+      if (restoredFilters && Object.keys(restoredFilters).length > 0) {
+        // Remove search from filters as it's handled separately
+        const { search: _, ...filtersWithoutSearch } = restoredFilters;
+        filterForm.setValues({
+          customer: filtersWithoutSearch.customer || null,
+          service: filtersWithoutSearch.service || null,
+          origin: filtersWithoutSearch.origin || null,
+          destination: filtersWithoutSearch.destination || null,
+          frequency: filtersWithoutSearch.frequency || null,
+          sales_person: filtersWithoutSearch.sales_person || null,
+          search: null, // Search is handled separately
+        });
+        hasFilters = Boolean(
+          filtersWithoutSearch.customer ||
+            filtersWithoutSearch.service ||
+            filtersWithoutSearch.origin ||
+            filtersWithoutSearch.destination ||
+            filtersWithoutSearch.frequency ||
+            filtersWithoutSearch.sales_person
+        );
+      }
+
+      // Restore search
+      let hasSearch = false;
+      if (
+        typeof restoredState.search === "string" &&
+        restoredState.search.trim()
+      ) {
+        setSearchQuery(restoredState.search);
+        hasSearch = true;
+      }
+
+      // Wait for state updates to flush (including debounced search)
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // Set applied filters and filtersApplied if we have filters or search
+      if (hasFilters || hasSearch) {
+        const filtersToApply: FilterState = {
+          customer: restoredFilters?.customer || null,
+          service: restoredFilters?.service || null,
+          origin: restoredFilters?.origin || null,
+          destination: restoredFilters?.destination || null,
+          frequency: restoredFilters?.frequency || null,
+          sales_person: restoredFilters?.sales_person || null,
+          search: hasSearch ? restoredState.search.trim() : null,
+        };
+        setAppliedFilters(filtersToApply);
+        setFiltersApplied(true);
+      }
+    };
+
+    if(restoredState?.shouldRestore){
+      performRestore();
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
+      hasRestoredFromStore.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle refresh when navigating from PipelineCreate
   useEffect(() => {
@@ -300,31 +408,8 @@ function Pipeline() {
       }));
   }, [salespersonsData]);
 
-  // Search data with React Query
-  const { data: searchData, isLoading: searchLoading } = useQuery({
-    queryKey: ["pipelineSearch", debounced],
-    queryFn: async () => {
-      if (!debounced.trim()) return null;
-      try {
-        const result = await searchAPI(debounced, new AbortController().signal);
-        return result;
-      } catch (error) {
-        console.error("Search API Error:", error);
-        return [];
-      }
-    },
-    enabled: debounced.trim() !== "",
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-  });
-
   // Determine which data to display
   const displayData = useMemo(() => {
-    if (debounced.trim() !== "" && searchData) {
-      console.log("Displaying search data:", searchData);
-      return searchData;
-    }
     // Check if we have filtered data (filters were applied)
     if (filtersApplied) {
       console.log("Displaying filtered data:", filteredPipelineData);
@@ -334,8 +419,7 @@ function Pipeline() {
     console.log("Displaying unfiltered data:", pipelineData);
     return pipelineData;
   }, [
-    debounced,
-    searchData,
+    debouncedSearch,
     pipelineData,
     filteredPipelineData,
     filtersApplied,
@@ -344,10 +428,29 @@ function Pipeline() {
   // Loading state
   const isLoading = useMemo(() => {
     if (filtersApplied) {
-      return filteredPipelineLoading || searchLoading;
+      return filteredPipelineLoading;
     }
-    return pipelineLoading || searchLoading;
-  }, [pipelineLoading, filteredPipelineLoading, searchLoading, filtersApplied]);
+    return pipelineLoading;
+  }, [pipelineLoading, filteredPipelineLoading, filtersApplied]);
+
+  // Helper function to save filters and search to store
+  const saveFiltersToStore = useCallback(() => {
+    const filtersWithValues = {
+      customer: filterForm.values.customer,
+      service: filterForm.values.service,
+      origin: filterForm.values.origin,
+      destination: filterForm.values.destination,
+      frequency: filterForm.values.frequency,
+      sales_person: filterForm.values.sales_person,
+    };
+    setStoreFilters(LIST_KEY, filtersWithValues);
+    setStoreSearch(LIST_KEY, searchQuery);
+  }, [
+    filterForm.values,
+    searchQuery,
+    setStoreFilters,
+    setStoreSearch,
+  ]);
 
   const applyFilters = async () => {
     try {
@@ -373,35 +476,41 @@ function Pipeline() {
           destination: null,
           frequency: null,
           sales_person: null,
+          search: null,
         });
 
         // Invalidate and refetch unfiltered data
         await queryClient.invalidateQueries({ queryKey: ["pipeline"] });
         await refetchPipeline();
 
+        // Clear filters and search from store
+        clearStoreFilters(LIST_KEY);
+        clearStoreSearch(LIST_KEY);
+
         console.log("No filter values provided, showing unfiltered data");
         return;
       }
 
-      setPageIndex(0); // Reset to first page when applying filters
-      setFiltersApplied(true); // Mark filters as applied
-
       // Store the current filter form values as applied filters
-      setAppliedFilters({
+      const filtersToApply: FilterState = {
         customer: filterForm.values.customer,
         service: filterForm.values.service,
         origin: filterForm.values.origin,
         destination: filterForm.values.destination,
         frequency: filterForm.values.frequency,
         sales_person: filterForm.values.sales_person,
-      });
+        search: appliedFilters.search,
+      };
+      setAppliedFilters(filtersToApply);
 
-      // Enable the filtered query and refetch
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredPipeline"],
-      });
-      await refetchFilteredPipeline();
+      setPageIndex(0); // Reset to first page when applying filters
+      setFiltersApplied(true); // Mark filters as applied
+
       setShowFilters(false);
+      
+      // Save filters and search to store
+      saveFiltersToStore();
+      
       console.log("Filters applied successfully");
     } catch (error) {
       console.error("Error applying filters:", error);
@@ -424,6 +533,7 @@ function Pipeline() {
       destination: null,
       frequency: null,
       sales_person: null,
+      search: null,
     });
 
     // Invalidate queries and refetch unfiltered data
@@ -432,11 +542,75 @@ function Pipeline() {
     await queryClient.removeQueries({ queryKey: ["filteredPipeline"] }); // Remove filtered data from cache
     await refetchPipeline();
 
+    // Clear filters and search from store
+    clearStoreFilters(LIST_KEY);
+    clearStoreSearch(LIST_KEY);
+
     ToastNotification({
       type: "success",
       message: "All filters cleared successfully",
     });
   };
+
+  // Trigger filtered API when debounced search changes
+  useEffect(() => {
+    const trimmedSearch = debouncedSearch.trim();
+
+    // If nothing is applied and search is empty, nothing to do
+    if (!filtersApplied && trimmedSearch === "") {
+      return;
+    }
+
+    const runSearchEffect = async () => {
+      try {
+        if (trimmedSearch !== "") {
+          setPageIndex(0);
+
+          setAppliedFilters((prev) => ({
+            ...prev,
+            search: trimmedSearch,
+          }));
+
+          setFiltersApplied(true);
+          
+          // Save filters and search to store
+          saveFiltersToStore();
+        } else {
+          // Search cleared
+          setAppliedFilters((prev) => ({
+            ...prev,
+            search: null,
+          }));
+
+          const hasOtherFilters =
+            appliedFilters.customer ||
+            appliedFilters.service ||
+            appliedFilters.origin ||
+            appliedFilters.destination ||
+            appliedFilters.frequency ||
+            appliedFilters.sales_person;
+
+          if (hasOtherFilters) {
+            // Save filters and search to store (with cleared search)
+            saveFiltersToStore();
+          } else {
+            setFiltersApplied(false);
+            await queryClient.invalidateQueries({ queryKey: ["pipeline"] });
+            await refetchPipeline();
+            
+            // Clear filters and search from store
+            clearStoreFilters(LIST_KEY);
+            clearStoreSearch(LIST_KEY);
+          }
+        }
+      } catch (error) {
+        console.error("Error applying search filter:", error);
+      }
+    };
+
+    void runSearchEffect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch]);
 
   const columns = useMemo<MRT_ColumnDef<CustomerPipelineData>[]>(
     () => [
@@ -498,6 +672,7 @@ function Pipeline() {
               <Box px={10} py={5}>
                 <UnstyledButton
                   onClick={() => {
+                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
                     navigate("/pipeline/create", {
                       state: {
                         customer_code: row.original.customer_code,
@@ -519,6 +694,7 @@ function Pipeline() {
               <Box px={10} py={5}>
                 <UnstyledButton
                   onClick={() => {
+                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
                     navigate("/pipeline/create", {
                       state: {
                         customer_code: row.original.customer_code,
@@ -681,6 +857,41 @@ function Pipeline() {
             </Text>
 
             <Group gap="xs" wrap="nowrap">
+              <TextInput
+                placeholder="Search pipelines"
+                leftSection={<IconSearch size={16} />}
+                rightSection={
+                  searchQuery ? (
+                    <ActionIcon
+                      variant="transparent"
+                      size="sm"
+                      aria-label="Clear search"
+                      onClick={() => setSearchQuery("")}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
+                w={260}
+                size="xs"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                styles={{
+                  input: {
+                    fontSize: "13px",
+                    height: "36px",
+                    borderRadius: "4px",
+                    fontFamily: "Inter",
+                    fontstyle: "regular",
+                    color: "#333740",
+                    border: "1px solid #D0D1D4",
+                    "&:focus": {
+                      border: "1px solid #105476",
+                    },
+                  },
+                }}
+              />
               <ActionIcon
                 variant={showFilters ? "filled" : "outline"}
                 size={36}
@@ -718,7 +929,10 @@ function Pipeline() {
                     },
                   },
                 }}
-                onClick={() => navigate("/pipeline/create")}
+                onClick={() => {
+                  useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                  navigate("/pipeline/create");
+                }}
               >
                 Create New
               </Button>
@@ -982,7 +1196,7 @@ function Pipeline() {
           </Box>
         )}
 
-        {isLoading ? (
+        {isLoading || filteredPipelineFetching ? (
           <Center py="xl" style={{flex:1}}>
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />

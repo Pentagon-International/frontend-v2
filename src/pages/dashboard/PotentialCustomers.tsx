@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -37,8 +36,9 @@ import {
   IconChevronRight,
   IconFilter,
   IconFilterOff,
+  IconSearch,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../api/serverUrls";
 import { ToastNotification } from "../../components";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -48,8 +48,9 @@ import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { getAPICall } from "../../service/getApiCall";
 import useAuthStore from "../../store/authStore";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
+import { useListFilterStore } from "../../store/listFilterStore";
 import uploadImage from "../../assets/images/upload.png";
 import {
   uploadPotentialCustomersCsv,
@@ -145,6 +146,8 @@ type StateData = {
   state_name: string;
 };
 
+const LIST_KEY = "POTENTIAL_CUSTOMERS";
+
 function PotentialCustomers() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -165,6 +168,18 @@ function PotentialCustomers() {
   const [citySearchValue, setCitySearchValue] = useState("");
   const [debouncedCitySearch] = useDebouncedValue(citySearchValue, 400);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
+  const hasRestoredFromStore = useRef(false);
+  const location = useLocation();
+
+  // Zustand store for filter and search preservation
+  const setStoreFilters = useListFilterStore((state) => state.setFilters);
+  const setStoreSearch = useListFilterStore((state) => state.setSearch);
+  const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
+  const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
+  const clearStoreAll = useListFilterStore((state) => state.clearAll);
+  const clearStoreAllExcept = useListFilterStore((state) => state.clearAllExcept);
 
   const form = useForm<AssignFormValues>({
     initialValues: {
@@ -189,7 +204,7 @@ function PotentialCustomers() {
   });
 
   useEffect(() => {
-    if (user?.is_manager || user?.is_staff) {
+    if ((user?.is_manager || user?.is_staff) && location.state?.statusFilter !== "assigned") {
       setStatusFilter("unassigned");
     } else {
       setStatusFilter("assigned");
@@ -208,6 +223,67 @@ function PotentialCustomers() {
     }
   }, [statusFilter, filterForm]);
 
+  // Clear other keys in store on mount (keep only current LIST_KEY)
+  useEffect(() => {
+    clearStoreAllExcept(LIST_KEY);
+  }, []);
+
+  // Restore filters and search from store on mount
+  useEffect(() => {
+    if (hasRestoredFromStore.current) return;
+    if (!statusFilter) return; // Wait for statusFilter to be set
+
+    const restoredState = useListFilterStore.getState().getState(LIST_KEY);
+    
+    const performRestore = async () => {
+      if (!restoredState) {
+        return; // No stored state, use defaults
+      }
+      
+      // Restore filters
+      let hasFilters = false;
+      const restoredFilters = restoredState.filters as FilterState;
+      if (restoredFilters && Object.keys(restoredFilters).length > 0) {
+        filterForm.setValues(restoredFilters);
+        hasFilters = Boolean(
+          restoredFilters.commodity ||
+          restoredFilters.city ||
+          restoredFilters.state ||
+          restoredFilters.sales_person
+        );
+      }
+
+      // Restore search
+      let hasSearch = false;
+      if (
+        typeof restoredState.search === "string" &&
+        restoredState.search.trim()
+      ) {
+        setSearchQuery(restoredState.search);
+        hasSearch = true;
+      }
+
+      // Wait for state updates to flush (including debounced search)
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // Set filtersApplied if we have filters or search
+      if (hasFilters || hasSearch) {
+        setFiltersApplied(true);
+        // Invalidate query to trigger refetch with restored filters/search
+        queryClient.invalidateQueries({
+          queryKey: ["filteredPotentialCustomers"],
+        });
+      }
+    };
+    if(restoredState?.shouldRestore){
+      performRestore();
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
+      hasRestoredFromStore.current = true;
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
+
   // Handle page change
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
@@ -218,6 +294,16 @@ function PotentialCustomers() {
     setPageSize(newPageSize);
     setCurrentPage(1); // Reset to first page when changing page size
   };
+
+  // Helper function to save filters and search to store
+  const saveFiltersToStore = useCallback(() => {
+    const filtersWithValues = {
+      ...filterForm.values,
+    };
+    setStoreFilters(LIST_KEY, filtersWithValues);
+    setStoreSearch(LIST_KEY, searchQuery);
+  }, [filterForm.values, searchQuery, setStoreFilters, setStoreSearch]);
+
 
   // Fetch potential customers data using useQuery
   const {
@@ -376,6 +462,7 @@ function PotentialCustomers() {
       currentPage,
       pageSize,
       filtersApplied,
+      debouncedSearch,
       // Remove filterForm.values from queryKey to prevent auto-triggering
     ],
     queryFn: async () => {
@@ -403,6 +490,10 @@ function PotentialCustomers() {
         // Only include salesperson filter when statusFilter is "assigned"
         if (statusFilter === "assigned" && filterForm.values.sales_person) {
           baseFilters.assigned_to = filterForm.values.sales_person;
+        }
+        // Add search value to filters if it exists
+        if (debouncedSearch.trim()) {
+          baseFilters.search = debouncedSearch.trim();
         }
 
         const filterPayload = { filters: baseFilters };
@@ -438,10 +529,46 @@ function PotentialCustomers() {
         return [];
       }
     },
-    enabled: !!statusFilter && filtersApplied,
+    enabled: !!statusFilter && (filtersApplied || debouncedSearch.trim() !== ""),
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
   });
+
+  // Trigger filtered API when debounced search changes
+  useEffect(() => {
+    if (debouncedSearch.trim() !== "") {
+      setFiltersApplied(true);
+      setCurrentPage(1);
+      // Save to store when search changes
+      saveFiltersToStore();
+      queryClient.invalidateQueries({
+        queryKey: ["filteredPotentialCustomers"],
+      });
+    } else if (debouncedSearch.trim() === "" && filtersApplied) {
+      // Check if there are other filters applied
+      const hasOtherFilters =
+        filterForm.values.commodity ||
+        filterForm.values.city ||
+        filterForm.values.state ||
+        (statusFilter === "assigned" && filterForm.values.sales_person);
+      
+      // Save to store (with cleared search)
+      saveFiltersToStore();
+      
+      if (!hasOtherFilters) {
+        setFiltersApplied(false);
+        queryClient.invalidateQueries({
+          queryKey: ["potentialCustomers"],
+        });
+      } else {
+        // Still have other filters, just refetch filtered data
+        queryClient.invalidateQueries({
+          queryKey: ["filteredPotentialCustomers"],
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch]);
 
   // Fetch city data with search functionality - only when user searches
   const { data: citiesData = [] } = useQuery({
@@ -547,24 +674,31 @@ function PotentialCustomers() {
   // Function to apply filters manually
   const applyFilters = useCallback(async () => {
     try {
-      // Check if there are any actual filter values
+      // Check if there are any actual filter values (excluding search, which is handled separately)
       // Exclude sales_person when statusFilter is "unassigned"
       const hasFilterValues =
         filterForm.values.commodity ||
         filterForm.values.city ||
         filterForm.values.state ||
-        (statusFilter === "assigned" && filterForm.values.sales_person);
+        (statusFilter === "assigned" && filterForm.values.sales_person) ||
+        debouncedSearch.trim() !== "";
 
       if (!hasFilterValues) {
         // If no filter values, show unfiltered data
         setFiltersApplied(false);
         setCurrentPage(1); // Reset to first page
+        // Clear store when no filters
+        clearStoreFilters(LIST_KEY);
+        clearStoreSearch(LIST_KEY);
         return;
       }
 
       // Mark filters as applied and reset to first page
       setFiltersApplied(true);
       setCurrentPage(1);
+
+      // Save filters and search to store
+      saveFiltersToStore();
 
       // Invalidate and refetch the filtered query
       await queryClient.invalidateQueries({
@@ -579,7 +713,7 @@ function PotentialCustomers() {
       });
       setShowFilters(false);
     }
-  }, [filterForm.values, statusFilter, queryClient]);
+  }, [filterForm.values, statusFilter, queryClient, debouncedSearch, saveFiltersToStore, clearStoreFilters, clearStoreSearch]);
 
   // Function to clear all filters
   const clearAllFilters = useCallback(async () => {
@@ -587,8 +721,13 @@ function PotentialCustomers() {
       setShowFilters(false);
 
       filterForm.reset(); // Reset form to initial values
+      setSearchQuery(""); // Clear search
       setFiltersApplied(false); // Reset filters applied state
       setCurrentPage(1); // Reset to first page
+
+      // Clear filters and search from store
+      clearStoreFilters(LIST_KEY);
+      clearStoreSearch(LIST_KEY);
 
       // Invalidate queries and refetch unfiltered data
       await queryClient.invalidateQueries({ queryKey: ["potentialCustomers"] });
@@ -603,20 +742,20 @@ function PotentialCustomers() {
     } catch (error) {
       console.error("Error clearing filters:", error);
     }
-  }, [filterForm, queryClient]);
+  }, [filterForm, queryClient, clearStoreFilters, clearStoreSearch]);
 
   // Determine which data to display
   const displayData = useMemo(() => {
-    // Check if we have filtered data (filters were applied)
-    if (filtersApplied) {
+    // Check if we have filtered data (filters were applied or search exists)
+    if (filtersApplied || debouncedSearch.trim() !== "") {
       return filteredPotentialCustomersData;
     }
     return potentialCustomersData;
-  }, [potentialCustomersData, filteredPotentialCustomersData, filtersApplied]);
+  }, [potentialCustomersData, filteredPotentialCustomersData, filtersApplied, debouncedSearch]);
 
   // Loading state
   const isLoading = useMemo(() => {
-    if (filtersApplied) {
+    if (filtersApplied || debouncedSearch.trim() !== "") {
       return filteredPotentialCustomersLoading;
     }
     return potentialCustomersLoading;
@@ -624,14 +763,18 @@ function PotentialCustomers() {
     potentialCustomersLoading,
     filteredPotentialCustomersLoading,
     filtersApplied,
+    debouncedSearch,
   ]);
 
   const handleCreateCallEntry = useCallback(
     (customerData: PotentialCustomerData) => {
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
       // Navigate to call entry create page with customer data
       navigate("/call-entry-create", {
         state: {
+          returnTo:"/potential-customers",
           fromPotentialCustomer: true,
+          statusFilter: "assigned",
           customerCode: customerData.customer_code || customerData.potential_id,
           customerName: customerData.customer,
           customerData: customerData,
@@ -873,79 +1016,79 @@ function PotentialCustomers() {
       },
       {
         accessorKey: "customer",
-        header: "CUSTOMER",
+        header: "Customer",
         size: 250,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "email_id",
-        header: "EMAIL ID",
+        header: "Email Id",
         size: 200,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "commodity",
-        header: "COMMODITY",
+        header: "Commodity",
         size: 120,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "ice",
-        header: "ICE",
+        header: "Ice",
         size: 120,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "pin",
-        header: "PIN",
+        header: "Pin",
         size: 100,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "phone_no",
-        header: "PHONE NO.",
+        header: "Phone No.",
         size: 130,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "contact_person",
-        header: "CONTACT PERSON",
+        header: "Contact Person",
         size: 180,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "address",
-        header: "ADDRESS",
+        header: "Address",
         size: 200,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "city",
-        header: "CITY",
+        header: "City",
         size: 150,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "state",
-        header: "STATE",
+        header: "State",
         size: 120,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "total_value",
-        header: "TOTAL VALUE",
+        header: "Total Value",
         size: 120,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "total_quantity",
-        header: "TOTAL QUANTITY",
+        header: "Total Quantity",
         size: 130,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
       {
         accessorKey: "unit",
-        header: "UNIT",
+        header: "Unit",
         size: 80,
         Cell: ({ cell }): string => String(cell.getValue() || "-"),
       },
@@ -1048,36 +1191,84 @@ function PotentialCustomers() {
     },
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
       radius: "md",
-    },
-    mantineTableBodyCellProps: {
-      style: {
-        padding: "8px 12px",
-        fontSize: "13px",
-        backgroundColor: "#ffffff",
+      style: { 
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto", 
       },
     },
-    mantineTableHeadCellProps: {
-      style: {
-        padding: "6px 12px",
-        fontSize: "12px",
-        backgroundColor: "#ffffff",
-        top: 0,
-        zIndex: 3,
-        borderBottom: "1px solid #e9ecef",
-        fontWeight: 600,
-      },
+    mantineTableBodyCellProps: ({ column }) => {
+      let extraStyles: Record<string, any> = {};
+      switch (column.id) {
+        case "actions":
+          extraStyles = {
+            position: "sticky",
+            right: 0,
+            minWidth: "30px",
+            zIndex: 2,
+            borderLeft: "1px solid #F3F3F3",
+            boxShadow: "1px -2px 4px 0px #00000040",
+          };
+          break;
+        default:
+          extraStyles = {};
+      }
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontstyle: "regular",
+          fontFamily: "Inter",
+          color: "#333740",
+          backgroundColor: "#ffffff",
+          ...extraStyles,
+        },
+      };
+    },
+    mantineTableHeadCellProps: ({ column }) => {
+      let extraStyles: Record<string, any> = {};
+      switch (column.id) {
+        case "actions":
+          extraStyles = {
+            position: "sticky",
+            right: 0,
+            minWidth: "80px",
+            zIndex: 2,
+            backgroundColor: "#FBFBFB",
+            boxShadow: "0px -2px 4px 0px #00000040",
+          };
+          break;
+        default:
+          extraStyles = {};
+      }
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          fontstyle: "bold",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
+          top: 0,
+          zIndex: 3,
+          borderBottom: "1px solid #F3F3F3",
+          ...extraStyles,
+        },
+      };
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
   });
@@ -1122,11 +1313,31 @@ function PotentialCustomers() {
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c={"#105476"}>
-            Potential Customers
-          </Text>
+      <Card
+        shadow="sm"
+        pt="md"
+        pb="sm"
+        px="lg"
+        radius="md"
+        withBorder
+        style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            overflow: "hidden",
+            flex:1,
+        }}
+      >
+        <Box >
+          <Group justify="space-between" align="center" pb="sm">
+            <Text
+              size="md"
+              fw={600}
+              c={"#444955"}
+              style={{ fontFamily: "Inter", fontSize: "16px" }}
+            >
+              Potential Customers
+            </Text>
 
           <Drawer
             opened={uploadOpenFlag}
@@ -1359,16 +1570,66 @@ function PotentialCustomers() {
             </form>
           </Modal>
 
-          <Group gap="sm" wrap="nowrap">
-            <Button
-              variant="outline"
-              leftSection={<IconFilter size={16} />}
-              size="xs"
-              color="#105476"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              Filters
-            </Button>
+            <Group gap="xs" wrap="nowrap">
+              <TextInput
+                placeholder="Search..."
+                leftSection={<IconSearch size={16} />}
+                rightSection={
+                  searchQuery ? (
+                    <ActionIcon
+                      variant="transparent"
+                      size="sm"
+                      onClick={() => {
+                        setSearchQuery("");
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
+                w={248}
+                size="sm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                styles={{
+                  input: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontstyle: "regular",
+                    color: "#333740",
+                    minWidth: "24px",
+                    minHeight: "24px",
+                    width: "248px",
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    "&:focus": {
+                      border: "1px solid #105476",
+                    },
+                  },
+                }}
+              />
+              <ActionIcon
+                variant={showFilters ? "filled" : "outline"}
+                size={36}
+                color={showFilters ? "#E0F5FF" : "gray"}
+                onClick={() => setShowFilters(!showFilters)}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                    color: showFilters ? "#105476" : "#737780",
+                    "&:active": {
+                      border: "1px solid #105476",
+                      color: "#FFFFFF",
+                    },
+                  },
+                }}
+              >
+                <IconFilter size={18} />
+              </ActionIcon>
             {((user as UserWithManager)?.is_manager || user?.is_staff) && (
               <>
                 <SegmentedControl
@@ -1396,8 +1657,20 @@ function PotentialCustomers() {
                   <Button
                     variant="outline"
                     leftSection={<IconUserPlus size={16} />}
-                    size="xs"
-                    color="#105476"
+                    size="sm"
+                    styles={{
+                      root: {
+                        borderRadius: "4px",
+                        fontSize: "14px",
+                        fontFamily: "Inter",
+                        fontWeight: 600,
+                        border: "1px solid #105476",
+                        color: "#105476",
+                        "&:hover": {
+                          backgroundColor: "#E0F5FF",
+                        },
+                      },
+                    }}
                     onClick={open}
                   >
                     Assign to salesperson
@@ -1405,76 +1678,85 @@ function PotentialCustomers() {
                 )}
               </>
             )}
+            </Group>
           </Group>
-        </Group>
+        </Box>
 
         {/* Filter Section */}
         {showFilters && (
-          <Card
-            shadow="xs"
-            padding="md"
-            radius="md"
-            withBorder
-            mb="md"
-            bg="#f8f9fa"
+          <Box
+            tt="capitalize"
+            mb="xs"
+            style={{
+              borderRadius: "8px",
+              border: "1px solid #E0E0E0",
+              flexShrink: 0,
+              height: "fit-content",
+            }}
           >
-            <Group justify="space-between" align="center">
-              <Group align="center" gap="xs">
-                <IconFilter size={16} color="#105476" />
-                <Text size="sm" fw={500} c="#105476">
-                  Filters
-                </Text>
-              </Group>
+            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#FAFAFA", padding: "8px 8px", borderRadius: "8px" }}>
+              <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>
+                Filter
+              </Text>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={() => setShowFilters(false)}
+                aria-label="Close filters"
+                size="sm"
+              >
+                <IconX size={18} />
+              </ActionIcon>
             </Group>
 
-            <Grid>
-              <Grid.Col span={12}>
-                <Grid>
-                  {/* Sales Person Filter - Only show when statusFilter is "assigned" and should be first */}
-                  {statusFilter === "assigned" && (
-                    <Grid.Col span={2.4}>
-                      <Select
-                        key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
-                        label="Sales Person"
-                        placeholder={
-                          salespersonsLoading
-                            ? "Loading salespersons..."
+            <Grid gutter="md" px="md">
+              {/* Sales Person Filter - Only show when statusFilter is "assigned" and should be first */}
+              {statusFilter === "assigned" && (
+                <Grid.Col span={2.4}>
+                  <Select
+                    key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
+                    label="Sales Person"
+                    placeholder={
+                      salespersonsLoading
+                        ? "Loading salespersons..."
                             : "Select Sales Person"
-                        }
-                        searchable
-                        clearable
-                        size="xs"
-                        data={salespersonOptions}
-                        nothingFoundMessage={
-                          salespersonsLoading
-                            ? "Loading salespersons..."
-                            : "No salespersons found"
-                        }
-                        disabled={salespersonsLoading}
-                        value={filterForm.values.sales_person}
-                        onChange={(value) =>
-                          filterForm.setFieldValue(
-                            "sales_person",
-                            value || null
-                          )
-                        }
-                        onFocus={(event) => {
-                          const input = event.target as HTMLInputElement;
-                          if (input && input.value) {
-                            input.select();
-                          }
-                        }}
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                  )}
+                    }
+                    searchable
+                    clearable
+                    size="xs"
+                    data={salespersonOptions}
+                    nothingFoundMessage={
+                      salespersonsLoading
+                        ? "Loading salespersons..."
+                        : "No salespersons found"
+                    }
+                    disabled={salespersonsLoading}
+                    value={filterForm.values.sales_person}
+                    onChange={(value) =>
+                      filterForm.setFieldValue(
+                        "sales_person",
+                        value || null
+                      )
+                    }
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+              )}
 
                   {/* Customer Name Filter - Commented out */}
                   {/* <Grid.Col span={2.4}>
@@ -1496,121 +1778,143 @@ function PotentialCustomers() {
                     />
                   </Grid.Col> */}
 
-                  {/* City Filter */}
-                  <Grid.Col span={2.4}>
-                    <Select
-                      label="City"
-                      placeholder="Type to search city"
-                      size="xs"
-                      data={cityOptions}
-                      value={filterForm.values.city}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("city", value)
-                      }
-                      searchable
-                      clearable
-                      searchValue={citySearchValue}
-                      onSearchChange={setCitySearchValue}
-                      nothingFoundMessage={
-                        citySearchValue.trim().length === 0
-                          ? "Type to search cities"
-                          : "No cities found"
-                      }
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+              {/* City Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  label="City"
+                  placeholder="Type to search city"
+                  size="xs"
+                  data={cityOptions}
+                  value={filterForm.values.city}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("city", value)
+                  }
+                  searchable
+                  clearable
+                  searchValue={citySearchValue}
+                  onSearchChange={setCitySearchValue}
+                  nothingFoundMessage={
+                    citySearchValue.trim().length === 0
+                      ? "Type to search cities"
+                      : "No cities found"
+                  }
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* State Filter */}
-                  <Grid.Col span={2.4}>
-                    <Select
-                      label="State"
-                      placeholder="Select State"
-                      size="xs"
-                      data={stateOptions}
-                      value={filterForm.values.state}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("state", value)
-                      }
-                      searchable
-                      clearable
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+              {/* State Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  label="State"
+                  placeholder="Select State"
+                  size="xs"
+                  data={stateOptions}
+                  value={filterForm.values.state}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("state", value)
+                  }
+                  searchable
+                  clearable
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
 
-                  {/* Commodity Filter */}
-                  <Grid.Col span={2.4}>
-                    <TextInput
-                      label="Commodity"
-                      placeholder="Search Commodity"
-                      size="xs"
-                      value={filterForm.values.commodity || ""}
-                      onChange={(e) =>
-                        filterForm.setFieldValue(
-                          "commodity",
-                          e.currentTarget.value || null
-                        )
-                      }
-                      styles={{
-                        input: { fontSize: "12px" },
-                        label: {
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          color: "#495057",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                </Grid>
+              {/* Commodity Filter */}
+              <Grid.Col span={2.4}>
+                <TextInput
+                  label="Commodity"
+                  placeholder="Search Commodity"
+                  size="xs"
+                  value={filterForm.values.commodity || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "commodity",
+                      e.currentTarget.value || null
+                    )
+                  }
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
               </Grid.Col>
             </Grid>
 
-            <Group justify="end" mt="sm">
+            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
               <Button
-                size="xs"
-                variant="outline"
-                color="#105476"
-                leftSection={<IconFilterOff size={14} />}
+                size="sm"
+                variant="default"
                 onClick={clearAllFilters}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    color: "#444955",
+                  },
+                }}
               >
-                Clear Filters
+                Clear
               </Button>
               <Button
-                size="xs"
-                variant="filled"
-                color="#105476"
-                leftSection={
-                  isLoading ? <Loader size={14} /> : <IconFilter size={14} />
-                }
+                size="sm"
                 onClick={applyFilters}
-                loading={isLoading}
-                disabled={isLoading}
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    "&:hover": {
+                      backgroundColor: "#0d4261",
+                    },
+                  },
+                }}
               >
-                Apply Filters
+                Apply
               </Button>
             </Group>
-          </Card>
+          </Box>
         )}
 
         {isLoading ? (
-          <Center style={{ minHeight: "300px" }}>
-            <Loader size="lg" color="#105476" />
+          <Center py="xl" style={{flex:1}}>
+            <Stack align="center" gap="md">
+              <Loader size="lg" color="#105476" />
+              <Text c="dimmed">Loading potential customers data...</Text>
+            </Stack>
           </Center>
         ) : displayData.length === 0 ? (
-          <Center style={{ minHeight: "300px" }}>
+          <Center py="xl" style={{flex:1}}>
             <Text c="dimmed" size="lg">
               No data available
             </Text>
@@ -1624,14 +1928,15 @@ function PotentialCustomers() {
               w="100%"
               justify="space-between"
               align="center"
-              px="md"
-              py="xs"
-              style={{ borderTop: "1px solid #e9ecef" }}
+              pt="sm"
+              pl="sm"
+              pr="xl"
+              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
               wrap="nowrap"
-              mt="xs"
+              mt="sm"
             >
               {/* Rows per page and range */}
-              <Group gap="sm" align="center" wrap="nowrap" mt={10}>
+              <Group gap="sm" align="center" wrap="nowrap">
                 <Text size="sm" c="dimmed">
                   Rows per page
                 </Text>
@@ -1657,7 +1962,7 @@ function PotentialCustomers() {
               </Group>
 
               {/* Page controls */}
-              <Group gap="xs" align="center" wrap="nowrap" mt={10}>
+              <Group gap="xs" align="center" wrap="nowrap">
                 <ActionIcon
                   variant="default"
                   size="sm"

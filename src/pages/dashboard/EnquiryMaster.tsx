@@ -55,6 +55,10 @@ import { putAPICall } from "../../service/putApiCall";
 import useAuthStore from "../../store/authStore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateEnquiryPDF } from "./EnquiryPDFTemplate";
+import { useListFilterStore } from "../../store/listFilterStore";
+
+const LIST_KEY = "ENQUIRY_MASTER";
+const DETAILED_LIST_KEY = "ENQUIRY_MASTER_DETAILED";
 
 type FilterState = {
   customer_code: string | null;
@@ -83,6 +87,7 @@ type PreviewFilterState = {
   status: string | null;
   enquiry_id: string | null;
   reference_no: string | null;
+  // Optional fields for store compatibility (dates are already included above)
 };
 
 function EnquiryMaster() {
@@ -101,6 +106,14 @@ function EnquiryMaster() {
   const hasInitialFilters = Boolean(location.state?.initialFilters);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+
+  // Zustand store for filter and search preservation
+  const setStoreFilters = useListFilterStore((state) => state.setFilters);
+  const setStoreSearch = useListFilterStore((state) => state.setSearch);
+  const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
+  const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
+  const clearStoreAll = useListFilterStore((state) => state.clearAll);
+  const clearStoreAllExcept = useListFilterStore((state) => state.clearAllExcept);
 
   // Preview modal states
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -121,14 +134,10 @@ function EnquiryMaster() {
 
   const isMountedRef = useRef(false); // Start as false, will be set when mounted or initial filters processed
   const initialFiltersProcessed = useRef(false);
-  const restoreFiltersProcessed = useRef(false);
   const returnToDashboardRef = useRef<boolean>(
     Boolean(location.state?.returnToDashboard)
   ); // Persist returnToDashboard flag
   const dashboardStateRef = useRef<any>(location.state?.dashboardState); // Persist dashboard state
-  const [isRestoringFilters, setIsRestoringFilters] = useState(
-    Boolean(location.state?.restoreFilters)
-  );
 
   // Toggle state for preview table
   const [showPreviewTable, setShowPreviewTable] = useState(false);
@@ -208,74 +217,34 @@ function EnquiryMaster() {
       // Close the filters section when switching to detailed view
       setShowFilters(false);
 
-      const summaryHasFilters =
-        filtersApplied ||
-        Boolean(
-          (fromDate && toDate) ||
-            filters.customer_code ||
-            filters.sales_person ||
-            filters.origin_code ||
-            filters.destination_code ||
-            filters.service ||
-            filters.trade ||
-            filters.enquiry_id ||
-            filters.reference_no ||
-            (filters.status && filters.status !== "ALL")
-        );
-
-      // Check if summary view has applied filters or default filters are active
-      if (summaryHasFilters) {
-        // Map summary view filters to detailed view filters
-        const mappedPreviewFilters: PreviewFilterState = {
-          customer_name: filters.customer_code || null, // Map customer_code to customer_name
-          sales_person: filters.sales_person || null,
-          enquiry_received_date: fromDate && toDate ? new Date(fromDate) : null, // Map date range from summary view
-          enquiry_received_date_to:
-            fromDate && toDate ? new Date(toDate) : null, // Map date range from summary view
-          terms_of_shipment: null, // Not in summary view, leave as null
-          service: filters.service || null,
-          trade: filters.trade || null,
-          origin_name: filters.origin_code || null, // Map origin_code to origin_name
-          destination_name: filters.destination_code || null, // Map destination_code to destination_name
-          status: filters.status || "ACTIVE",
-          enquiry_id: filters.enquiry_id || null,
-          reference_no: filters.reference_no || null,
-        };
-
-        setPreviewFilters(mappedPreviewFilters);
-        // Mark filters as applied in detailed view
-        setPreviewFiltersApplied(true);
-
-        // Invalidate filtered preview queries to trigger refetch with new filter payload
-        await queryClient.invalidateQueries({
-          queryKey: ["filteredPreviewData"],
-        });
-
-        // Refetch filtered preview data with mapped filters
-        // Wait a bit for state and query key to update before refetching
-        setTimeout(async () => {
-          await refetchFilteredPreview();
-        }, 200);
-      } else {
-        // No filters applied in summary view, clear detailed view filters
-        setPreviewFiltersApplied(false);
-        setPreviewFilters({
-          customer_name: null,
-          sales_person: null,
-          enquiry_received_date: null,
-          enquiry_received_date_to: null,
-          terms_of_shipment: null,
-          service: null,
-          trade: null,
-          origin_name: null,
-          destination_name: null,
-          status: "ACTIVE",
-          enquiry_id: null,
-          reference_no: null,
-        });
-        // Fetch initial data without filters when opening detailed view
-        await refetchInitialPreview();
-      }
+      // Always start detailed view with initial payload (no filters from summary view)
+      // Clear detailed view filters and reset to initial state with default dates
+      setPreviewFiltersApplied(false);
+      const emptyPreviewFilters: PreviewFilterState = {
+        customer_name: null,
+        sales_person: null,
+        enquiry_received_date: getDefaultFromDate(), // Set default from date (first day of month)
+        enquiry_received_date_to: getDefaultToDate(), // Set default to date (today)
+        terms_of_shipment: null,
+        service: null,
+        trade: null,
+        origin_name: null,
+        destination_name: null,
+        status: "ACTIVE",
+        enquiry_id: null,
+        reference_no: null,
+      };
+      setPreviewFilters(emptyPreviewFilters);
+      
+      // Clear preview filters from store - detailed view always starts fresh
+      clearStoreFilters(DETAILED_LIST_KEY);
+      clearStoreSearch(DETAILED_LIST_KEY);
+      
+      // Wait a bit for state updates to flush before refetching
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      
+      // Fetch initial data with initial payload (status: "ACTIVE" + default dates) when opening detailed view
+      await refetchInitialPreview();
     } catch (error: any) {
       ToastNotification({
         type: "error",
@@ -318,10 +287,16 @@ function EnquiryMaster() {
 
         // Mark filters as applied in summary view
         setFiltersApplied(true);
+        
+        // Save summary filters to store
+        saveFiltersToStore();
       } else {
         // No filters applied in detailed view, preserve existing summary view filters
         // DO NOT clear filters or reset filtersApplied - preserve the summary view filters
         // The filters and filtersApplied state should remain as they were before switching to detailed view
+        
+        // Save current preview filters to store (even if empty) to maintain state
+        savePreviewFiltersToStore();
       }
     } catch (error: any) {
       console.error("Error closing preview:", error);
@@ -450,18 +425,59 @@ function EnquiryMaster() {
     },
     []
   );
-
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [debounced] = useDebouncedValue(searchQuery, 500);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
+
+  // Helper function to save filters with dates to store (ensures consistency)
+  // This function captures current filter/date/search values when called
+  const saveFiltersToStore = useCallback(() => {
+    // Access current values directly - React closure will have latest values
+    // since this callback is recreated when dependencies change
+    const filtersWithDates = {
+      ...filters,
+      enquiry_received_date: fromDate,
+      enquiry_received_date_to: toDate,
+    };
+    setStoreFilters(LIST_KEY, filtersWithDates);
+    setStoreSearch(LIST_KEY, searchQuery);
+    console.log("💾 Saved filters to store:", {
+      filters: filtersWithDates,
+      search: searchQuery,
+      timestamp: new Date().toISOString(),
+    });
+  }, [filters, fromDate, toDate, searchQuery, setStoreFilters, setStoreSearch]);
+
+  // Helper function to save preview filters to store (for Detailed view)
+  const savePreviewFiltersToStore = useCallback(() => {
+    // Preview filters already include dates, so we can save them directly
+    setStoreFilters(DETAILED_LIST_KEY, previewFilters);
+    setStoreSearch(DETAILED_LIST_KEY, searchQuery);
+    console.log("💾 [Detailed View] Saved filters to store:", {
+      filters: previewFilters,
+      search: searchQuery,
+      timestamp: new Date().toISOString(),
+    });
+  }, [previewFilters, searchQuery, setStoreFilters, setStoreSearch]);
+
   const [showFilters, setShowFilters] = useState(false);
+
+  // Debounced search effect (non-invasive)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   // Optimized filter toggle to prevent unnecessary re-renders
   const toggleFilters = useCallback(() => {
     setShowFilters((prev) => !prev);
   }, []);
 
-  const buildFilterPayload = useMemo(() => {
+  // Single payload builder function
+  const buildFilterPayload = useCallback(() => {
     const payload: any = {};
 
     // Add date range if both dates are selected
@@ -485,8 +501,16 @@ function EnquiryMaster() {
       payload.status = "";
     }
 
+    // Include search only if debouncedSearch is non-empty
+    if (debouncedSearch.trim()) {
+      payload.search = debouncedSearch.trim();
+    }else if (searchQuery.trim()) {
+      payload.search = searchQuery.trim();
+    }
+
+
     return payload;
-  }, [filters, fromDate, toDate]);
+  }, [filters, fromDate, toDate, debouncedSearch]);
 
   // Build preview filter payload function (for detailed view) - OPTIMIZED with useMemo
   const buildPreviewFilterPayload = useMemo(() => {
@@ -533,6 +557,7 @@ function EnquiryMaster() {
   const {
     data: enquiryData = [],
     isLoading: enquiryLoading,
+    isFetching: enquiryFetching,
     refetch: refetchEnquiries,
   } = useQuery({
     queryKey: ["enquiries", listCurrentPage, listPageSize, fromDate, toDate],
@@ -574,28 +599,39 @@ function EnquiryMaster() {
   });
 
   // Separate query for filtered data - with pagination
+  // Only triggers on explicit actions: Apply, Clear, Search changes, Initial load, Return from pages
   const {
     data: filteredEnquiryData = [],
     isLoading: filteredEnquiryLoading,
+    isFetching: filteredEnquiryFetching,
     refetch: refetchFilteredEnquiries,
   } = useQuery({
     queryKey: [
       "filteredEnquiries",
-      buildFilterPayload,
       listCurrentPage,
       listPageSize,
+      filtersApplied,
+      debouncedSearch, // Only include debounced search, not buildFilterPayload (prevents auto-refetch on filter changes)
     ],
     queryFn: async () => {
       try {
-        const filterPayload = buildFilterPayload;
-        // Don't return empty array - let the query be disabled instead
+        const filterPayload = buildFilterPayload();
+        // buildFilterPayload always includes existing filters + search (when present)
+        // This ensures filters and search are sent together in a single API call
         if (Object.keys(filterPayload).length === 0) {
           console.log("No filters applied, skipping API call");
           return [];
         }
 
         const requestBody = { filters: filterPayload };
-        console.log("Applying filters:", filterPayload);
+        console.log("📤 API Call - Applying filters + search:", {
+          payload: filterPayload,
+          filtersState: filters,
+          fromDateState: fromDate,
+          toDateState: toDate,
+          searchQueryState: searchQuery,
+          debouncedSearchState: debouncedSearch,
+        });
         const response = await apiCallProtected.post(
           `${URL.enquiryFilter}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
           requestBody
@@ -614,12 +650,16 @@ function EnquiryMaster() {
         return [];
       }
     },
-    enabled: false, // Don't run automatically
+    // Only enable when explicitly triggered (Apply, Clear, Search, Initial, Return from pages)
+    enabled: false, // Disabled by default - only refetch manually
     staleTime: 0,
     gcTime: 0,
+    // Keep previous data visible while fetching to prevent "No records to display" flicker
+    // Return previous data if available, otherwise undefined (which will show loader)
+    placeholderData: (previousData) => previousData,
   });
 
-  const { isLoading: previewLoading } = useQuery({
+  const { isLoading: previewLoading, isFetching: previewFetching } = useQuery({
     queryKey: [
       "enquiryPreview",
       previewCurrentPage,
@@ -659,13 +699,27 @@ function EnquiryMaster() {
   const {
     data: initialPreviewData,
     isLoading: initialPreviewLoading,
+    isFetching: initialPreviewFetching,
     refetch: refetchInitialPreview,
   } = useQuery({
-    queryKey: ["initialPreviewData", previewCurrentPage, previewPageSize],
+    queryKey: ["initialPreviewData", previewCurrentPage, previewPageSize, previewFilters.enquiry_received_date, previewFilters.enquiry_received_date_to],
     queryFn: async () => {
       try {
-        // No filters - just get all data
-        const requestBody = { filters: { status: "ACTIVE" } };
+        // Initial payload with status: "ACTIVE" and dates (like summary view)
+        let requestBody: { filters: any } = { filters: { status: "ACTIVE" } };
+
+        // Add date range if both dates are selected (like summary view initial load)
+        if (
+          previewFilters.enquiry_received_date &&
+          previewFilters.enquiry_received_date_to
+        ) {
+          requestBody.filters.enquiry_received_date_from = dayjs(
+            previewFilters.enquiry_received_date
+          ).format("YYYY-MM-DD");
+          requestBody.filters.enquiry_received_date_to = dayjs(
+            previewFilters.enquiry_received_date_to
+          ).format("YYYY-MM-DD");
+        }
 
         const res: any = await apiCallProtected.post(
           `${URL.enquiryPreviewExcel}?index=${(previewCurrentPage - 1) * previewPageSize}&limit=${previewPageSize}`,
@@ -694,6 +748,7 @@ function EnquiryMaster() {
   const {
     data: filteredPreviewData,
     isLoading: filteredPreviewLoading,
+    isFetching: filteredPreviewFetching,
     refetch: refetchFilteredPreview,
   } = useQuery({
     queryKey: [
@@ -799,40 +854,22 @@ function EnquiryMaster() {
     []
   );
 
-  // Search data with React Query - with pagination
-  const { data: searchData, isLoading: searchLoading } = useQuery({
+  // Search data with React Query - DISABLED (search handled via buildFilterPayload in filteredEnquiries query)
+  // Search is now merged with filters in buildFilterPayload, so this separate query is no longer needed
+  // Keeping the query structure for backward compatibility but disabled
+  const { data: searchData } = useQuery({
     queryKey: ["enquirySearch", debounced, listCurrentPage, listPageSize],
     queryFn: async () => {
-      if (!debounced.trim()) return null;
-      try {
-        // Use the filter API with search query and pagination
-        const searchPayload = { search: debounced };
-        const requestBody = { filters: searchPayload };
-        const response = await apiCallProtected.post(
-          `${URL.enquiryFilter}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
-          requestBody
-        );
-        const data = response as any;
-        if (data && Array.isArray(data.data)) {
-          setListTotalRecords(data.total || data.data.length);
-          return data.data;
-        }
-        setListTotalRecords(0);
-        return [];
-      } catch (error) {
-        console.error("Search API Error:", error);
-        setListTotalRecords(0);
-        return [];
-      }
+      return null; // Never called since enabled is false
     },
-    enabled: debounced.trim() !== "" && !showPreviewTable,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000, // 5 minutes
+    enabled: false, // Disabled - search handled via buildFilterPayload
+    staleTime: 0,
+    gcTime: 0,
     refetchOnWindowFocus: false,
   });
 
   // SEPARATE SEARCH FOR PREVIEW VIEW
-  const { data: previewSearchData, isLoading: previewSearchLoading } = useQuery(
+  const { data: previewSearchData, isLoading: previewSearchLoading, isFetching: previewSearchFetching } = useQuery(
     {
       queryKey: [
         "previewSearch",
@@ -874,20 +911,18 @@ function EnquiryMaster() {
   );
 
   // Determine which data to display
+  // Search is merged into filter payload - use filteredEnquiryData when filters are applied OR search is present
+  // Note: When tableLoading is true, a full loader is shown instead of the table, so we don't need
+  // to handle empty data states here - the loader prevents "No records to display" flicker
   const displayData = useMemo(() => {
-    // If there's a search query, show search results
-    if (debounced.trim() !== "" && searchData) {
-      return searchData;
-    }
-
-    // If filters were actually applied (clicked), show filtered results
-    if (filtersApplied) {
+    if ((filtersApplied || debouncedSearch.trim()) && filteredEnquiryData?.length) {
       return filteredEnquiryData;
+    } else if ((filtersApplied || debouncedSearch.trim()) && !filteredEnquiryData?.length) {
+      return [];
     }
+    return enquiryData || [];
+  }, [enquiryData, filteredEnquiryData, filtersApplied, debouncedSearch]);
 
-    // Otherwise, show the original enquiry data
-    return enquiryData;
-  }, [debounced, searchData, enquiryData, filteredEnquiryData, filtersApplied]);
 
   // Determine which preview data to display
   const displayPreviewData = useMemo(() => {
@@ -921,18 +956,34 @@ function EnquiryMaster() {
     return { start, end, total, totalPages };
   }, [displayPreviewData, previewCurrentPage, previewPageSize]);
 
-  // Loading state - include refreshing state
-  const isLoading =
-    enquiryLoading ||
-    filteredEnquiryLoading ||
-    searchLoading ||
-    isRefreshingData;
+  // Loading state - single source of truth for table loader
+  // Use isFetching states (not isLoading) as they remain true during refetch
+  // isRefreshingData is set manually before/after explicit refetch calls
+  const tableLoading =
+    isRefreshingData ||
+    enquiryFetching ||
+    filteredEnquiryFetching;
+  
+  // Keep isLoading for backward compatibility (used elsewhere)
+  // const isLoading =
+  //   enquiryLoading ||
+  //   filteredEnquiryLoading ||
+  //   isRefreshingData;
+
+  // // Use isFetching to show progress bars while keeping previous data visible
+  // const isFetching =
+  //   enquiryFetching ||
+  //   filteredEnquiryFetching ||
+  //   isRefreshingData;
+
+  // Use isFetching states for preview loading (they remain true during refetch)
+  // isRefreshingData is set manually before/after explicit refetch calls
   const isPreviewLoading =
-    previewLoading ||
-    previewSearchLoading ||
-    filteredPreviewLoading ||
-    initialPreviewLoading ||
-    isRefreshingData;
+    isRefreshingData ||
+    previewFetching ||
+    previewSearchFetching ||
+    filteredPreviewFetching ||
+    initialPreviewFetching;
 
   // Map status to badge props (label and color)
   const getStatusBadge = (statusRaw: string | undefined | null) => {
@@ -1133,17 +1184,19 @@ function EnquiryMaster() {
   const applyFilters = async () => {
     try {
       console.log("filters.status", filters.status);
+      const filterPayload = buildFilterPayload();
       const hasFilterValues =
-        buildFilterPayload.customer_code ||
-        buildFilterPayload.sales_person ||
-        buildFilterPayload.origin_code ||
-        buildFilterPayload.destination_code ||
-        buildFilterPayload.enquiry_received_date_from ||
-        buildFilterPayload.service ||
-        buildFilterPayload.trade ||
-        buildFilterPayload.enquiry_id ||
-        buildFilterPayload.reference_no ||
-        (filters.status !== "ALL" ? buildFilterPayload.status : true);
+        filterPayload.customer_code ||
+        filterPayload.sales_person ||
+        filterPayload.origin_code ||
+        filterPayload.destination_code ||
+        filterPayload.enquiry_received_date_from ||
+        filterPayload.service ||
+        filterPayload.trade ||
+        filterPayload.enquiry_id ||
+        filterPayload.reference_no ||
+        filterPayload.search ||
+        (filters.status !== "ALL" ? filterPayload.status : true);
 
       if (!hasFilterValues) {
         setFiltersApplied(false);
@@ -1154,25 +1207,68 @@ function EnquiryMaster() {
         return;
       }
 
-      setFiltersApplied(true); // Mark that filters were applied
+      // Save filters and search to store (include dates in filters)
+      saveFiltersToStore();
 
       if (showPreviewTable) {
+        // Save preview filters and search to store
+        savePreviewFiltersToStore();
+        
         setPreviewCurrentPage(1); // Reset to first page when applying filters
         setPreviewFiltersApplied(true); // Mark that filters were applied
-        await refetchFilteredPreview(); // Manually refetch filtered preview data
-        ToastNotification({
-          type: "success",
-          message: "Filters applied successfully",
-        });
+        setIsRefreshingData(true);
+        try {
+          await refetchFilteredPreview(); // Manually refetch filtered preview data
+          setIsRefreshingData(false);
+          ToastNotification({
+            type: "success",
+            message: "Filters applied successfully",
+          });
+        } catch (error) {
+          console.error("Error applying preview filters:", error);
+          setIsRefreshingData(false);
+          ToastNotification({
+            type: "error",
+            message: "Error applying filters",
+          });
+        }
       } else {
         setListCurrentPage(1);
+        // Set loading state FIRST before marking filters as applied
+        // This ensures loader shows and previous data remains visible
         setIsRefreshingData(true);
-        await refetchFilteredEnquiries(); // Manually refetch filtered data
-        setIsRefreshingData(false);
-        ToastNotification({
-          type: "success",
-          message: "Filters applied successfully",
-        });
+        try {
+          // Manually refetch filtered data - loader will show until response
+          // Note: When query is disabled, refetch() might not set isLoading=true,
+          // so we rely on isRefreshingData for the loader
+          const result = await refetchFilteredEnquiries();
+          if (result.data?.length) {
+            setFiltersApplied(true);
+          }
+          
+          // Check if data was returned successfully
+          if (result.data && Array.isArray(result.data)) {
+            // Data is now set in filteredEnquiryData via React Query
+            // displayData will automatically update to show filteredEnquiryData
+            // Small delay to ensure React Query has updated the data state
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          
+          // Hide loader after data is received and set
+          setIsRefreshingData(false);
+          
+          ToastNotification({
+            type: "success",
+            message: "Filters applied successfully",
+          });
+        } catch (error) {
+          console.error("Error applying filters:", error);
+          setIsRefreshingData(false);
+          ToastNotification({
+            type: "error",
+            message: "Error applying filters",
+          });
+        }
       }
       setShowFilters(false);
     } catch (error) {
@@ -1184,6 +1280,7 @@ function EnquiryMaster() {
   const clearAllFilters = async () => {
     setShowFilters(false);
 
+    // Reset summary view filters to initial state (status: "ACTIVE", dates to default)
     setFilters({
       customer_code: null,
       sales_person: null,
@@ -1193,25 +1290,36 @@ function EnquiryMaster() {
       enquiry_received_date_to: null,
       service: null,
       trade: null,
-      status: null,
+      status: "ACTIVE", // Reset to initial status
       enquiry_id: null,
       reference_no: null,
     });
+    
+    // Reset dates to default values (like first load)
+    setFromDate(getDefaultFromDate());
+    setToDate(getDefaultToDate());
+    
+    // Reset preview view filters to initial state (status: "ACTIVE" + default dates)
     setPreviewFilters({
       customer_name: null,
       sales_person: null,
-      enquiry_received_date: null,
-      enquiry_received_date_to: null,
+      enquiry_received_date: getDefaultFromDate(), // Reset to default from date (first day of month)
+      enquiry_received_date_to: getDefaultToDate(), // Reset to default to date (today)
       terms_of_shipment: null,
       service: null,
       trade: null,
       origin_name: null,
       destination_name: null,
-      status: null,
+      status: "ACTIVE", // Reset to initial status
       enquiry_id: null,
       reference_no: null,
     });
     setSearchQuery("");
+    // Clear filters and search in store (both summary and detailed views)
+    clearStoreFilters(LIST_KEY);
+    clearStoreSearch(LIST_KEY);
+    clearStoreFilters(DETAILED_LIST_KEY);
+    clearStoreSearch(DETAILED_LIST_KEY);
 
     // Clear display values
     setCustomerDisplayValue(null);
@@ -1227,20 +1335,28 @@ function EnquiryMaster() {
 
     if (showPreviewTable) {
       setPreviewCurrentPage(1); // Reset to first page
-      // Invalidate queries and refetch preview data
+      // Invalidate queries and refetch preview data with initial payload
       await queryClient.invalidateQueries({ queryKey: ["enquiryPreview"] });
       await queryClient.invalidateQueries({
         queryKey: ["filteredPreviewData"],
       });
       await queryClient.invalidateQueries({ queryKey: ["initialPreviewData"] });
       await queryClient.invalidateQueries({ queryKey: ["previewSearch"] });
-      await refetchInitialPreview();
+      // Wait a bit for state updates to flush before refetching
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      setIsRefreshingData(true);
+      await refetchInitialPreview(); // This uses { filters: { status: "ACTIVE" } } - initial payload
+      setIsRefreshingData(false);
     } else {
       setListCurrentPage(1); // Reset to first page
-      // Invalidate queries and refetch unfiltered data
+      // Invalidate queries and refetch with initial payload (status: "ACTIVE" + default dates)
       await queryClient.invalidateQueries({ queryKey: ["enquiries"] });
       await queryClient.invalidateQueries({ queryKey: ["filteredEnquiries"] });
-      await refetchEnquiries();
+      // Wait a bit for state updates (dates) to flush before refetching
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      setIsRefreshingData(true);
+      await refetchEnquiries(); // This uses { filters: { status: "ACTIVE" } } + dates - initial payload
+      setIsRefreshingData(false);
     }
 
     ToastNotification({
@@ -1298,9 +1414,16 @@ function EnquiryMaster() {
         });
         // Refetch data after cancellation
         if (filtersApplied) {
-          await refetchFilteredEnquiries();
+          setIsRefreshingData(true);
+          const result = await refetchFilteredEnquiries();
+          if (result.data?.length) {
+            setFiltersApplied(true);
+          }
+          setIsRefreshingData(false);
         } else {
+          setIsRefreshingData(true);
           await refetchEnquiries();
+          setIsRefreshingData(false);
         }
       }
     } catch (err: any) {
@@ -1341,6 +1464,119 @@ function EnquiryMaster() {
       dashboardStateRef.current = location.state.dashboardState;
     }
   }, [location.state?.returnToDashboard, location.state?.dashboardState]);
+
+  // Track if we've restored from store to prevent duplicate API calls
+  const hasRestoredFromStore = useRef(false);
+  const hasRestoredPreviewFromStore = useRef(false);
+
+  // Clear other keys in store on mount (keep only current LIST_KEY)
+  useEffect(() => {
+    clearStoreAllExcept(LIST_KEY);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Restore filters and search from store on mount and fetch data
+  // Skip if refreshData is present (let refreshData effect handle it)
+  useEffect(() => {
+    if (hasRestoredFromStore.current) return;
+    // Skip restoration if refreshData is present - let refreshData effect handle it
+    if (location.state?.refreshData) return;
+
+    const restoredState =
+      useListFilterStore.getState().getState(LIST_KEY);
+
+    const performRestore = async () => {
+      if (!restoredState) {
+        // No restored state, load default data if dates are set
+        if (fromDate && toDate && !hasInitialFilters) {
+          setIsRefreshingData(true);
+          await refetchEnquiries();
+          setIsRefreshingData(false);
+        }
+        return;
+      }
+
+      // 1️⃣ Restore filters (including dates)
+      let hasFilters = false;
+      const restoredFilters = restoredState.filters as FilterState;
+      if (restoredFilters && Object.keys(restoredFilters).length > 0) {
+        console.log("📥 Restoring filters from store:", restoredFilters);
+        setFilters(restoredFilters);
+        // Restore date range from filters
+        if (restoredFilters.enquiry_received_date) {
+          setFromDate(restoredFilters.enquiry_received_date);
+        }
+        if (restoredFilters.enquiry_received_date_to) {
+          setToDate(restoredFilters.enquiry_received_date_to);
+        }
+        // Check if any non-date filters exist
+        hasFilters = Boolean(
+          restoredFilters.customer_code ||
+          restoredFilters.sales_person ||
+          restoredFilters.origin_code ||
+          restoredFilters.destination_code ||
+          restoredFilters.service ||
+          restoredFilters.trade ||
+          restoredFilters.enquiry_id ||
+          restoredFilters.reference_no ||
+          (restoredFilters.status && restoredFilters.status !== "ALL") ||
+          (restoredFilters.enquiry_received_date && restoredFilters.enquiry_received_date_to)
+        );
+        console.log("📥 Filter restoration check:", {
+          hasFilters,
+          customer_code: restoredFilters.customer_code,
+          sales_person: restoredFilters.sales_person,
+          origin_code: restoredFilters.origin_code,
+          destination_code: restoredFilters.destination_code,
+          service: restoredFilters.service,
+          trade: restoredFilters.trade,
+          status: restoredFilters.status,
+          enquiry_id: restoredFilters.enquiry_id,
+          reference_no: restoredFilters.reference_no,
+          dates: {
+            from: restoredFilters.enquiry_received_date,
+            to: restoredFilters.enquiry_received_date_to,
+          },
+        });
+      }
+
+      // 2️⃣ Restore search
+      let hasSearch = false;
+      if (typeof restoredState.search === "string" && restoredState.search.trim()) {
+        console.log("📥 Restoring search from store:", restoredState.search);
+        setSearchQuery(restoredState.search);
+        hasSearch = true;
+      }
+
+      // Wait for state updates to flush
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // 4️⃣ Fetch data based on restored state
+      if (hasFilters || hasSearch) {
+        setIsRefreshingData(true);
+        setFiltersApplied(true);
+        const result = await refetchFilteredEnquiries();
+        if (result.data && Array.isArray(result.data)) {
+          // Data will be set via React Query
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        setIsRefreshingData(false);
+      } else if (fromDate && toDate) {
+        // No filters/search but dates exist - load default data
+        setIsRefreshingData(true);
+        await refetchEnquiries();
+        setIsRefreshingData(false);
+      }
+    };
+
+    if(restoredState?.shouldRestore){
+      performRestore();
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
+      hasRestoredFromStore.current = true;
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.refreshData]);
+
 
   // Handle initial filters from navigation
   useEffect(() => {
@@ -1429,9 +1665,6 @@ function EnquiryMaster() {
         enquiry_id: null,
         reference_no: null,
       });
-
-      // Mark filters as applied
-      setFiltersApplied(true);
       setIsRefreshingData(true);
 
       // Clear only initialFilters but preserve dashboard return state
@@ -1455,16 +1688,34 @@ function EnquiryMaster() {
 
       setShowFilters(false);
 
+      // Save filters to store
+      setStoreFilters(LIST_KEY, {
+        customer_code: initialFilters.customer_code || null,
+        sales_person: initialFilters.sales_person || null,
+        origin_code: null,
+        destination_code: null,
+        enquiry_received_date: enquiryReceivedDateFrom,
+        enquiry_received_date_to: enquiryReceivedDateTo,
+        service: null,
+        trade: null,
+        status: initialFilters.status || "ACTIVE",
+        enquiry_id: null,
+        reference_no: null,
+      });
+      
       // Call API after a small delay to ensure state is updated
       setTimeout(async () => {
-        setIsRefreshingData(true);
-        await refetchFilteredEnquiries();
+        const result = await refetchFilteredEnquiries();
+        if (result.data?.length) {
+          setFiltersApplied(true);
+        }
         setIsRefreshingData(false);
       }, 50);
     } else if (
       !isMountedRef.current &&
       !location.state?.refreshData &&
-      !initialFiltersProcessed.current
+      !initialFiltersProcessed.current &&
+      !hasRestoredFromStore.current
     ) {
       // Initial mount - load default data only if not navigating with refreshData flag
       // and if we haven't processed initial filters
@@ -1486,111 +1737,18 @@ function EnquiryMaster() {
 
   // Add effect to refresh data when returning from create/edit operations
   useEffect(() => {
-    // Check if we're returning from a create/edit operation with filter restoration
-    if (location.state?.restoreFilters && !restoreFiltersProcessed.current) {
-      restoreFiltersProcessed.current = true;
-      console.log(
-        "🔄 Restoring filters and refreshing data after create/edit operation"
-      );
-      setIsRestoringFilters(true);
-      setIsRefreshingData(true); // Start loading state
-
-      const restoreFiltersData = location.state.restoreFilters;
-
-      // Restore filter state - preserve original filters including status "ALL"
-      setFilters(
-        restoreFiltersData.filters || {
-          customer_code: null,
-          sales_person: null,
-          origin_code: null,
-          destination_code: null,
-          enquiry_received_date: null,
-          enquiry_received_date_to: null,
-          service: null,
-          trade: null,
-          status: null, // Don't default to "ACTIVE", preserve null or original value
-          enquiry_id: null,
-          reference_no: null,
-        }
-      );
-
-      // Restore date range
-      setFromDate(restoreFiltersData.fromDate || null);
-      setToDate(restoreFiltersData.toDate || null);
-
-      // Restore filters applied state
-      setFiltersApplied(restoreFiltersData.filtersApplied || false);
-
-      // Restore display values for SearchableSelect fields
-      if (restoreFiltersData.displayValues) {
-        setCustomerDisplayValue(
-          restoreFiltersData.displayValues.customer_code || null
-        );
-        setOriginDisplayValue(
-          restoreFiltersData.displayValues.origin_code || null
-        );
-        setDestinationDisplayValue(
-          restoreFiltersData.displayValues.destination_code || null
-        );
-      }
-
-      // Clear the restore filters flag but preserve dashboard return state
-      // Use refs to ensure persistence
-      navigate(location.pathname, {
-        replace: true,
-        state: {
-          returnToDashboard: returnToDashboardRef.current,
-          dashboardState: dashboardStateRef.current,
-        },
-      });
-
-      const performRestore = async () => {
-        try {
-          // Wait for state updates to flush before refetching
-          // Need enough time for React to update the buildFilterPayload useMemo
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          if (showPreviewTable) {
-            if (previewFiltersApplied) {
-              await refetchFilteredPreview();
-            } else {
-              await refetchInitialPreview();
-            }
-          } else if (restoreFiltersData.filtersApplied) {
-            // Actually refetch the filtered data with restored filters
-            console.log("🔄 Refetching filtered data with restored filters", {
-              filters: restoreFiltersData.filters,
-              filtersApplied: restoreFiltersData.filtersApplied,
-            });
-            await refetchFilteredEnquiries();
-            console.log("✅ Data refresh completed with restored filters");
-          } else {
-            // No filters applied, refetch all data
-            await refetchEnquiries();
-            console.log("✅ Data refresh completed");
-          }
-        } catch (error) {
-          console.error("Error refreshing data:", error);
-        } finally {
-          setIsRefreshingData(false);
-          setIsRestoringFilters(false);
-        }
-      };
-
-      performRestore();
-      return;
-    }
-
-    if (!location.state?.restoreFilters && restoreFiltersProcessed.current) {
-      restoreFiltersProcessed.current = false;
-    }
-
+    // Only handle refreshData flag - filters/search are now managed via store
     if (location.state?.refreshData) {
       console.log("🔄 Refreshing data after create/edit operation");
-      setIsRefreshingData(true); // Start loading state
+      
+      // Mark that we're handling refreshData so restoration effect doesn't interfere
+      if (!hasRestoredFromStore.current) {
+        hasRestoredFromStore.current = true;
+      }
+      
+      setIsRefreshingData(true);
 
       // Clear the refresh flag but preserve dashboard return state
-      // Use refs to ensure persistence
       navigate(location.pathname, {
         replace: true,
         state: {
@@ -1599,28 +1757,180 @@ function EnquiryMaster() {
         },
       });
 
-      // Refresh all enquiry data
+      // Refresh data based on current state (filters/search from store)
       const refreshData = async () => {
         try {
           if (showPreviewTable) {
-            if (previewFiltersApplied) {
+            // Check if we have filters or search from store for preview view
+            const restoredPreviewState = useListFilterStore.getState().getState(DETAILED_LIST_KEY);
+            const hasActivePreviewFilters = restoredPreviewState?.filters && Object.keys(restoredPreviewState.filters).length > 0;
+            const hasActivePreviewSearch = restoredPreviewState?.search && restoredPreviewState.search.trim() !== "";
+
+            // If we have filters/search in store, restore them first
+            if (restoredPreviewState && (hasActivePreviewFilters || hasActivePreviewSearch)) {
+              console.log("🔄 [Detailed View] Restoring filters/search from store:", {
+                hasActivePreviewFilters,
+                hasActivePreviewSearch,
+                filters: restoredPreviewState.filters,
+                search: restoredPreviewState.search,
+              });
+
+              // Restore preview filters from store if they exist
+              if (hasActivePreviewFilters) {
+                const restoredPreviewFilters = restoredPreviewState.filters as PreviewFilterState;
+                console.log("📥 [refreshData - Detailed] Restoring filters from store:", restoredPreviewFilters);
+                setPreviewFilters(restoredPreviewFilters);
+              }
+
+              // Restore search from store if it exists
+              if (hasActivePreviewSearch) {
+                console.log("📥 [refreshData - Detailed] Restoring search from store:", restoredPreviewState.search);
+                setSearchQuery(restoredPreviewState.search);
+              }
+
+              // Wait for state updates to flush before calling API
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+
+            // Determine if we should fetch filtered data
+            const finalPreviewState = useListFilterStore.getState().getState(DETAILED_LIST_KEY);
+            const finalHasActivePreviewFilters = finalPreviewState?.filters && Object.keys(finalPreviewState.filters).length > 0;
+            const finalHasActivePreviewSearch = finalPreviewState?.search && finalPreviewState.search.trim() !== "";
+
+            // Check if preview filters state has actual filter values
+            const currentPreviewFilters = previewFilters;
+            const hasPreviewFilterValues = Boolean(
+              currentPreviewFilters.customer_name ||
+              currentPreviewFilters.sales_person ||
+              currentPreviewFilters.origin_name ||
+              currentPreviewFilters.destination_name ||
+              currentPreviewFilters.service ||
+              currentPreviewFilters.trade ||
+              currentPreviewFilters.terms_of_shipment ||
+              (currentPreviewFilters.status && currentPreviewFilters.status !== "ALL") ||
+              currentPreviewFilters.enquiry_id ||
+              currentPreviewFilters.reference_no ||
+              (currentPreviewFilters.enquiry_received_date && currentPreviewFilters.enquiry_received_date_to)
+            );
+
+            if (previewFiltersApplied || finalHasActivePreviewFilters || finalHasActivePreviewSearch || hasPreviewFilterValues) {
+              console.log("✅ [refreshData - Detailed] Fetching filtered data");
+              setPreviewFiltersApplied(true);
               await refetchFilteredPreview();
+              setIsRefreshingData(false);
             } else {
+              console.log("🔄 [refreshData - Detailed] Fetching initial data");
               await refetchInitialPreview();
+              setIsRefreshingData(false);
             }
           } else {
-            if (filtersApplied) {
-              await refetchFilteredEnquiries();
-            } else {
+            // Check if we have filters or search from store
+            const restoredState = useListFilterStore.getState().getState(LIST_KEY);
+            const hasActiveFilters = restoredState?.filters && Object.keys(restoredState.filters).length > 0;
+            const hasActiveSearch = restoredState?.search && restoredState.search.trim() !== "";
+
+            // If we have filters/search in store, restore them first
+            if (restoredState && (hasActiveFilters || hasActiveSearch)) {
+              console.log("🔄 Restoring filters/search from store:", {
+                hasActiveFilters,
+                hasActiveSearch,
+                filters: restoredState.filters,
+                search: restoredState.search,
+              });
+
+              // Restore filters from store if they exist
+              if (hasActiveFilters) {
+                const restoredFilters = restoredState.filters as FilterState;
+                console.log("📥 [refreshData] Restoring filters from store:", restoredFilters);
+                setFilters(restoredFilters);
+                // Restore date range from filters
+                if (restoredFilters.enquiry_received_date) {
+                  setFromDate(restoredFilters.enquiry_received_date);
+                }
+                if (restoredFilters.enquiry_received_date_to) {
+                  setToDate(restoredFilters.enquiry_received_date_to);
+                }
+                console.log("📥 [refreshData] Restored filter values:", {
+                  customer_code: restoredFilters.customer_code,
+                  sales_person: restoredFilters.sales_person,
+                  origin_code: restoredFilters.origin_code,
+                  destination_code: restoredFilters.destination_code,
+                  service: restoredFilters.service,
+                  trade: restoredFilters.trade,
+                  status: restoredFilters.status,
+                  enquiry_id: restoredFilters.enquiry_id,
+                  reference_no: restoredFilters.reference_no,
+                  dates: {
+                    from: restoredFilters.enquiry_received_date,
+                    to: restoredFilters.enquiry_received_date_to,
+                  },
+                });
+              }
+
+              // Restore search from store if it exists
+              if (hasActiveSearch) {
+                console.log("📥 [refreshData] Restoring search from store:", restoredState.search);
+                setSearchQuery(restoredState.search);
+              }
+
+              // Wait for state updates to flush before calling API
+              // Use a longer delay to ensure React state updates are complete
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+
+            // Determine if we should fetch filtered data
+            // Check both store and current state to be safe
+            const finalState = useListFilterStore.getState().getState(LIST_KEY);
+            const finalHasActiveFilters = finalState?.filters && Object.keys(finalState.filters).length > 0;
+            const finalHasActiveSearch = finalState?.search && finalState.search.trim() !== "";
+
+            // Also check if filters state has actual filter values (not just dates)
+            // Use a function to get current filters state (captured after state update)
+            const getCurrentFilters = () => filters;
+            const currentFilters = getCurrentFilters();
+            const hasFilterValues = Boolean(
+              currentFilters.customer_code ||
+              currentFilters.sales_person ||
+              currentFilters.origin_code ||
+              currentFilters.destination_code ||
+              currentFilters.service ||
+              currentFilters.trade ||
+              currentFilters.enquiry_id ||
+              currentFilters.reference_no ||
+              (currentFilters.status && currentFilters.status !== "ALL")
+            );
+
+            // Build payload to verify what will be sent
+            const testPayload = buildFilterPayload();
+            console.log("🔍 [refreshData] Verification before API call:", {
+              filtersApplied,
+              finalHasActiveFilters,
+              finalHasActiveSearch,
+              hasFilterValues,
+              currentFiltersState: currentFilters,
+              searchQueryState: searchQuery,
+              fromDateState: fromDate,
+              toDateState: toDate,
+              payloadToBeSent: testPayload,
+            });
+
+            if (filtersApplied || finalHasActiveFilters || finalHasActiveSearch || hasFilterValues) {
+              console.log("✅ [refreshData] Fetching filtered data");
+              setFiltersApplied(true);
+              const result = await refetchFilteredEnquiries();
+              if (result.data && Array.isArray(result.data)) {
+                await new Promise((resolve) => setTimeout(resolve, 50));
+              }
+              setIsRefreshingData(false);
+            } else if (fromDate && toDate) {
+              console.log("🔄 [refreshData] Fetching default data with dates only");
               await refetchEnquiries();
+              setIsRefreshingData(false);
+            } else {
+              console.log("⚠️ [refreshData] No filters/search/dates - skipping API call");
+              setIsRefreshingData(false);
             }
           }
-
-          // Add a small delay to ensure data is updated in the UI
-          setTimeout(() => {
-            setIsRefreshingData(false);
-            console.log("✅ Data refresh completed");
-          }, 500);
         } catch (error) {
           console.error("Error refreshing data:", error);
           setIsRefreshingData(false);
@@ -1630,7 +1940,7 @@ function EnquiryMaster() {
       refreshData();
     }
   }, [
-    location.state,
+    location.state?.refreshData,
     showPreviewTable,
     previewFiltersApplied,
     filtersApplied,
@@ -1639,24 +1949,270 @@ function EnquiryMaster() {
     refetchEnquiries,
     refetchFilteredEnquiries,
     navigate,
+    fromDate,
+    toDate,
   ]);
 
-  // Handle pagination changes - refetch data when page or page size changes
+  // Track previous search value to detect changes (for summary view)
+  const prevSearchRef = useRef<string>("");
+  const searchInitializedRef = useRef(false);
+  
+  // Track previous search value for preview view
+  const prevPreviewSearchRef = useRef<string>("");
+  const previewSearchInitializedRef = useRef(false);
+  
+  // Handle search changes - trigger API when search value changes (including when cleared)
   useEffect(() => {
     if (showPreviewTable) {
       return;
     }
 
-    if (!isRestoringFilters) {
-      if (filtersApplied && !hasInitialFilters) {
-        refetchFilteredEnquiries();
-      } else if (fromDate && toDate && !hasInitialFilters) {
-        // Only call default query if we don't have initial filters
-        refetchEnquiries();
+    // Skip on initial mount if search hasn't changed
+    if (!searchInitializedRef.current) {
+      searchInitializedRef.current = true;
+      prevSearchRef.current = debouncedSearch;
+      return;
+    }
+
+    // Only trigger API if search actually changed (debounced)
+    if (prevSearchRef.current === debouncedSearch) {
+      return;
+    }
+
+    // Update ref for next comparison
+    prevSearchRef.current = debouncedSearch;
+    
+    // Save search to store immediately (use current searchQuery, not debouncedSearch)
+    // This ensures store always has the latest search value
+    setStoreSearch(LIST_KEY, searchQuery);
+    
+    // Trigger API with loading state - loader will show until API response
+    setIsRefreshingData(true);
+    
+    if (debouncedSearch.trim() !== "") {
+      // Search exists - trigger filtered API (search will be merged with filters in buildFilterPayload)
+      refetchFilteredEnquiries()
+        .then(()=>{
+          setFiltersApplied(true)
+        })
+        .then(() => {
+          // API completed - data is set, hide loader
+          setIsRefreshingData(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching filtered data:", error);
+          // Hide loader even on error
+          setIsRefreshingData(false);
+        });
+    } else {
+      // Search cleared
+      if (filtersApplied) {
+        // Filters still applied - refetch with filters only (no search)
+        refetchFilteredEnquiries()
+          .then(()=>{
+            setFiltersApplied(true)
+          })
+          .then(() => {
+            setIsRefreshingData(false);
+          })
+          .catch((error) => {
+            console.error("Error fetching filtered data:", error);
+            setIsRefreshingData(false);
+          });
+      } else if (fromDate && toDate) {
+        // No search, no filters - use default query
+        refetchEnquiries()
+          .then(() => {
+            setIsRefreshingData(false);
+          })
+          .catch((error) => {
+            console.error("Error fetching enquiry data:", error);
+            setIsRefreshingData(false);
+          });
+      } else {
+        // No search, no filters, no dates - no API call needed
+        setIsRefreshingData(false);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, showPreviewTable]);
+
+  // Handle search changes for preview view - trigger API when search value changes
+  useEffect(() => {
+    if (!showPreviewTable) {
+      return;
+    }
+
+    // Skip on initial mount if search hasn't changed
+    if (!previewSearchInitializedRef.current) {
+      previewSearchInitializedRef.current = true;
+      prevPreviewSearchRef.current = debouncedSearch;
+      return;
+    }
+
+    // Only trigger API if search actually changed (debounced)
+    if (prevPreviewSearchRef.current === debouncedSearch) {
+      return;
+    }
+
+    // Update ref for next comparison
+    prevPreviewSearchRef.current = debouncedSearch;
+    
+    // Save search to store immediately (use current searchQuery, not debouncedSearch)
+    // This ensures store always has the latest search value
+    setStoreSearch(DETAILED_LIST_KEY, searchQuery);
+    
+    if (debouncedSearch.trim() !== "") {
+      // Search exists - trigger preview search API
+      // The previewSearchData query will handle this automatically via enabled flag
+      // Invalidate to trigger refetch - the query's previewSearchLoading will handle loading state
+      queryClient.invalidateQueries({ queryKey: ["previewSearch"] });
+      // Note: isPreviewLoading includes previewSearchFetching, so loader will show automatically
+      // We don't set isRefreshingData here as the query manages its own loading state
+    } else {
+      // Search cleared - refetch based on filter state
+      setIsRefreshingData(true);
+      if (previewFiltersApplied) {
+        // Filters still applied - refetch with filters only (no search)
+        refetchFilteredPreview()
+          .then(() => {
+            setIsRefreshingData(false);
+          })
+          .catch((error) => {
+            console.error("Error fetching filtered preview data:", error);
+            setIsRefreshingData(false);
+          });
+      } else {
+        // No search, no filters - refetch initial preview data
+        refetchInitialPreview()
+          .then(() => {
+            setIsRefreshingData(false);
+          })
+          .catch((error) => {
+            console.error("Error fetching initial preview data:", error);
+            setIsRefreshingData(false);
+          });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, showPreviewTable, previewFiltersApplied]);
+
+  // Restore preview filters and search from store when detailed view is opened
+  useEffect(() => {
+    if (!showPreviewTable) {
+      // Reset restoration flag when switching back to summary view
+      hasRestoredPreviewFromStore.current = false;
+      return;
+    }
+    
+    // Skip if already restored or if refreshData is present (let refreshData effect handle it)
+    if (hasRestoredPreviewFromStore.current || location.state?.refreshData) {
+      return;
+    }
+
+    const restoredState = useListFilterStore.getState().getState(DETAILED_LIST_KEY);
+
+    const performPreviewRestore = async () => {
+      if (!restoredState) {
+        // No restored state, set default dates and load initial data
+        setPreviewFilters((prev) => ({
+          ...prev,
+          enquiry_received_date: getDefaultFromDate(),
+          enquiry_received_date_to: getDefaultToDate(),
+        }));
+        return;
+      }
+
+      // 1️⃣ Restore preview filters
+      let hasPreviewFilters = false;
+      const restoredPreviewFilters = restoredState.filters as PreviewFilterState;
+      if (restoredPreviewFilters && Object.keys(restoredPreviewFilters).length > 0) {
+        console.log("📥 [Detailed View] Restoring filters from store:", restoredPreviewFilters);
+        setPreviewFilters(restoredPreviewFilters);
+        
+        // Check if any filters exist
+        hasPreviewFilters = Boolean(
+          restoredPreviewFilters.customer_name ||
+          restoredPreviewFilters.sales_person ||
+          restoredPreviewFilters.origin_name ||
+          restoredPreviewFilters.destination_name ||
+          restoredPreviewFilters.service ||
+          restoredPreviewFilters.trade ||
+          restoredPreviewFilters.terms_of_shipment ||
+          (restoredPreviewFilters.status && restoredPreviewFilters.status !== "ALL") ||
+          restoredPreviewFilters.enquiry_id ||
+          restoredPreviewFilters.reference_no ||
+          (restoredPreviewFilters.enquiry_received_date && restoredPreviewFilters.enquiry_received_date_to)
+        );
+      }
+
+      // 2️⃣ Restore search
+      let hasPreviewSearch = false;
+      if (typeof restoredState.search === "string" && restoredState.search.trim()) {
+        console.log("📥 [Detailed View] Restoring search from store:", restoredState.search);
+        setSearchQuery(restoredState.search);
+        hasPreviewSearch = true;
+      }
+
+      // Wait for state updates to flush
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // 3️⃣ Fetch data based on restored state
+      if (hasPreviewFilters || hasPreviewSearch) {
+        setIsRefreshingData(true);
+        setPreviewFiltersApplied(true);
+        await refetchFilteredPreview();
+        setIsRefreshingData(false);
+      } else {
+        // No filters/search - load initial data
+        setIsRefreshingData(true);
+        await refetchInitialPreview();
+        setIsRefreshingData(false);
+      }
+    };
+    if(restoredState?.shouldRestore){
+      performPreviewRestore();
+      useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, false);
+      hasRestoredFromStore.current = true;
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPreviewTable, location.state?.refreshData]);
+
+  // Track if pagination has been initialized (to prevent initial mount trigger)
+  const paginationInitialized = useRef(false);
+  
+  // Handle pagination changes - ONLY trigger API if filters are applied or search exists
+  // API should NOT be called on pagination changes if no filters/search are active
+  useEffect(() => {
+    if (showPreviewTable) {
+      return;
+    }
+
+    // Skip on initial mount (initial load is handled separately)
+    if (!paginationInitialized.current) {
+      paginationInitialized.current = true;
+      return;
+    }
+
+    // ONLY trigger API if filters are applied or search exists
+    // This ensures API is only called when user changes page/size with active filters/search
+    if (filtersApplied || debouncedSearch.trim() !== "") {
+      setIsRefreshingData(true);
+      refetchFilteredEnquiries().then(()=>{
+          setFiltersApplied(true)
+        }).then(() => setIsRefreshingData(false));
+    } else if (fromDate && toDate) {
+      // No filters, no search, but dates exist - use default query for pagination
+      setIsRefreshingData(true);
+      refetchEnquiries().finally(() => setIsRefreshingData(false));
+    }
+    // If no filters, no search, no dates - don't call API (no data to paginate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listCurrentPage, listPageSize, showPreviewTable]);
+
+  // Track if preview pagination has been initialized (to prevent initial mount trigger)
+  const previewPaginationInitialized = useRef(false);
 
   // Handle preview pagination changes - refetch data when page or page size changes
   useEffect(() => {
@@ -1664,39 +2220,70 @@ function EnquiryMaster() {
       return;
     }
 
+    // Skip on initial mount (initial load is handled separately)
+    if (!previewPaginationInitialized.current) {
+      previewPaginationInitialized.current = true;
+      return;
+    }
+
+    // Check if search exists - if so, invalidate search query (it will auto-refetch with new pagination)
+    if (debouncedSearch.trim() !== "") {
+      // Search exists - invalidate search query, it will handle loading state via previewSearchFetching
+      queryClient.invalidateQueries({ queryKey: ["previewSearch"] });
+      return;
+    }
+    
+    // Set loading state during pagination changes (only for non-search queries)
+    setIsRefreshingData(true);
+    
+    // Check if filters are applied
     if (previewFiltersApplied) {
       // If filters are applied, refetch filtered preview data
-      refetchFilteredPreview();
+      refetchFilteredPreview()
+        .then(() => {
+          setIsRefreshingData(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching filtered preview data:", error);
+          setIsRefreshingData(false);
+        });
     } else {
       // If no filters, refetch initial preview data
-      refetchInitialPreview();
+      refetchInitialPreview()
+        .then(() => {
+          setIsRefreshingData(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching initial preview data:", error);
+          setIsRefreshingData(false);
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewCurrentPage, previewPageSize, showPreviewTable]);
 
-  useEffect(() => {
-    if (showPreviewTable) {
-      return;
-    }
+  // useEffect(() => {
+  //   if (showPreviewTable) {
+  //     return;
+  //   }
 
-    if (filtersApplied) {
-      const shouldRefresh = filteredEnquiryLoading;
-      if (shouldRefresh !== isRefreshingData) {
-        setIsRefreshingData(shouldRefresh);
-      }
-    } else if (!isRestoringFilters && !filtersApplied) {
-      if (!enquiryLoading && isRefreshingData) {
-        setIsRefreshingData(false);
-      }
-    }
-  }, [
-    showPreviewTable,
-    filtersApplied,
-    filteredEnquiryLoading,
-    enquiryLoading,
-    isRestoringFilters,
-    isRefreshingData,
-  ]);
+  //   if (filtersApplied) {
+  //     const shouldRefresh = filteredEnquiryLoading;
+  //     if (shouldRefresh !== isRefreshingData) {
+  //       setIsRefreshingData(shouldRefresh);
+  //     }
+  //   } else if (!isRestoringFilters && !filtersApplied) {
+  //     if (!enquiryLoading && isRefreshingData) {
+  //       setIsRefreshingData(false);
+  //     }
+  //   }
+  // }, [
+  //   showPreviewTable,
+  //   filtersApplied,
+  //   filteredEnquiryLoading,
+  //   enquiryLoading,
+  //   isRestoringFilters,
+  //   isRefreshingData,
+  // ]);
 
   const columns = useMemo<MRT_ColumnDef<any>[]>(
     () => [
@@ -1854,6 +2441,8 @@ function EnquiryMaster() {
                   <UnstyledButton
                     onClick={() => {
                       setMenuOpened(false);
+                      // Preserve filters and search in store before navigation
+                      saveFiltersToStore();
                       // Preserve current filter state when navigating to edit
                       const currentFilterState = {
                         filters,
@@ -1866,6 +2455,11 @@ function EnquiryMaster() {
                           destination_code: destinationDisplayValue,
                         },
                       };
+                      if(showPreviewTable){
+                        useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
+                      }else{
+                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                      } 
                       navigate("/enquiry-create", {
                         state: {
                           ...row.original,
@@ -1923,6 +2517,8 @@ function EnquiryMaster() {
                             ) {
                               // Get the first quotation (most recent)
                               const quotationData = data.data[0];
+                              // Preserve filters and search in store before navigation
+                              saveFiltersToStore();
                               // Preserve current filter state
                               const currentFilterState = {
                                 filters,
@@ -1935,6 +2531,11 @@ function EnquiryMaster() {
                                   destination_code: destinationDisplayValue,
                                 },
                               };
+                              if(showPreviewTable){
+                                useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
+                              }else{
+                                useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                              } 
                               // Navigate to quotation-create in edit mode
                               navigate("/quotation-create", {
                                 state: {
@@ -1971,6 +2572,8 @@ function EnquiryMaster() {
                   <UnstyledButton
                     onClick={() => {
                       setMenuOpened(false);
+                      // Preserve filters and search in store before navigation
+                      saveFiltersToStore();
                       // Preserve current filter state when navigating to get rate
                       const currentFilterState = {
                         filters,
@@ -1983,6 +2586,11 @@ function EnquiryMaster() {
                           destination_code: destinationDisplayValue,
                         },
                       };
+                      if(showPreviewTable){
+                        useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
+                      }else{
+                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                      } 
                       navigate("/get-rate", {
                         state: {
                           ...row.original,
@@ -2007,6 +2615,8 @@ function EnquiryMaster() {
                         <UnstyledButton
                           onClick={() => {
                             setMenuOpened(false);
+                            // Preserve filters and search in store before navigation
+                            saveFiltersToStore();
                             // Preserve current filter state when navigating to edit
                             const currentFilterState = {
                               filters,
@@ -2019,6 +2629,11 @@ function EnquiryMaster() {
                                 destination_code: destinationDisplayValue,
                               },
                             };
+                            if(showPreviewTable){
+                              useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
+                            }else{
+                              useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                            } 
                             navigate("/enquiry-create", {
                               state: {
                                 ...row.original,
@@ -2098,6 +2713,12 @@ function EnquiryMaster() {
     enableBottomToolbar: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
+    // Use table's built-in loading state - shows loader while keeping previous rows visible
+    // tableLoading is the single source of truth for loader state
+    // state: {
+    //   isLoading: tableLoading,
+    //   showProgressBars: tableLoading,
+    // },
     initialState: {
       pagination: { pageSize: 25, pageIndex: 0 },
       columnPinning: { right: ["actions"] },
@@ -2326,10 +2947,9 @@ function EnquiryMaster() {
           flex: 1,
         }}
       >
-        <Box mb="md">
+        <Box>
           {/* Breadcrumbs */}
-          <Breadcrumbs mb={8}>
-            {/* Title */}
+          {/* <Breadcrumbs mb={8}>
             <Text
               size="sm"
               style={{
@@ -2387,7 +3007,7 @@ function EnquiryMaster() {
             >
               Enquiry
             </Text>
-          </Breadcrumbs>
+          </Breadcrumbs> */}
 
           {/* Tabs and Actions */}
           <Group justify="space-between" align="center" mb="md">
@@ -2449,6 +3069,69 @@ function EnquiryMaster() {
               <TextInput
                 placeholder="Search..."
                 leftSection={<IconSearch size={16} />}
+                rightSection={
+                  searchQuery ? (
+                    <ActionIcon
+                      variant="transparent"
+                      size="sm"
+                      onClick={() => {
+                        // Clear search - this will trigger the search change useEffect
+                        // which will update store and trigger API
+                        setSearchQuery("");
+                        // Clear search from store immediately (use correct LIST_KEY based on view)
+                        const currentListKey = showPreviewTable ? DETAILED_LIST_KEY : LIST_KEY;
+                        clearStoreSearch(currentListKey);
+                        // Reset search ref to current debouncedSearch value
+                        // This ensures the useEffect will detect the change when debouncedSearch becomes ""
+                        if (showPreviewTable) {
+                          prevPreviewSearchRef.current = debouncedSearch;
+                        } else {
+                          prevSearchRef.current = debouncedSearch;
+                        }
+                        // Check if other filters exist to determine filtersApplied state
+                        if (showPreviewTable) {
+                          // For preview view, check preview filters
+                          const hasOtherPreviewFilters =
+                            previewFilters.customer_name ||
+                            previewFilters.sales_person ||
+                            previewFilters.origin_name ||
+                            previewFilters.destination_name ||
+                            previewFilters.service ||
+                            previewFilters.trade ||
+                            previewFilters.terms_of_shipment ||
+                            (previewFilters.status && previewFilters.status !== "ALL") ||
+                            previewFilters.enquiry_id ||
+                            previewFilters.reference_no ||
+                            (previewFilters.enquiry_received_date && previewFilters.enquiry_received_date_to);
+                          if (!hasOtherPreviewFilters) {
+                            setPreviewFiltersApplied(false);
+                          }
+                        } else {
+                          // For summary view, check summary filters
+                          const hasOtherFilters =
+                            filters.customer_code ||
+                            filters.sales_person ||
+                            filters.origin_code ||
+                            filters.destination_code ||
+                            filters.service ||
+                            filters.trade ||
+                            filters.enquiry_id ||
+                            filters.reference_no ||
+                            (filters.status && filters.status !== "ALL") ||
+                            (fromDate && toDate);
+                          if (!hasOtherFilters) {
+                            setFiltersApplied(false);
+                          }
+                        }
+                        // Note: The search change useEffect will handle API trigger after debounce
+                        // and will save the empty search to store
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
                 w={248}
                 size="sm"
                 value={searchQuery}
@@ -2539,6 +3222,8 @@ function EnquiryMaster() {
                   },
                 }}
                 onClick={() => {
+                  // Preserve filters and search in store before navigation
+                  saveFiltersToStore();
                   const currentFilterState = {
                     filters,
                     filtersApplied,
@@ -2550,6 +3235,11 @@ function EnquiryMaster() {
                       destination_code: destinationDisplayValue,
                     },
                   };
+                  if(showPreviewTable){
+                    useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
+                  }else{
+                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                  } 
                   navigate("/enquiry-create", {
                     state: {
                       preserveFilters: currentFilterState,
@@ -3212,8 +3902,8 @@ function EnquiryMaster() {
                   <Button
                     size="sm"
                     onClick={applyFilters}
-                    loading={isLoading}
-                    disabled={isLoading}
+                    loading={tableLoading}
+                    disabled={tableLoading}
                     styles={{
                       root: {
                         backgroundColor: "#105476",
@@ -3236,7 +3926,7 @@ function EnquiryMaster() {
           </Box>
         )}
 
-        {isLoading || isPreviewLoading ? (
+        {isPreviewLoading ? (
           <Center
             p="md"
             style={{
@@ -3445,7 +4135,20 @@ function EnquiryMaster() {
           </>
         ) : (
           <>
-            <MantineReactTable table={table} />
+            {tableLoading ? (
+              <Center py="xl">
+                <Stack align="center" gap="md">
+                  <Loader size="lg" color="#105476" />
+                  <Text c="dimmed">
+                    {isRefreshingData
+                      ? "Fetching data..."
+                      : "Loading data..."}
+                  </Text>
+                </Stack>
+              </Center>
+            ) : (
+              <MantineReactTable table={table} />
+            )}
 
             {/* Custom Pagination Bar */}
             <Group

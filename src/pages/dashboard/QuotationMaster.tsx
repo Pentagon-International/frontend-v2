@@ -55,11 +55,11 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { DateInput } from "@mantine/dates";
 import dayjs from "dayjs";
-import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
-import { searchAPI } from "../../service/searchApi";
+import { useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
+import { useListFilterStore } from "../../store/listFilterStore";
 import { generateNewQuotationPDF } from "./QuotationPDFTemplate";
 import { postAPICall } from "../../service/postApiCall";
 import { API_HEADER } from "../../store/storeKeys";
@@ -140,6 +140,8 @@ type FilterState = {
   status: string | null;
   remark: string | null;
   revision: string | null;
+  enquiry_received_date?: Date | null;
+  enquiry_received_date_to?: Date | null;
 };
 
 type QuotationMasterMode = "master" | "approval";
@@ -148,7 +150,12 @@ interface QuotationMasterProps {
   mode?: QuotationMasterMode;
 }
 
+const LIST_KEY = "QUOTATION_MASTER";
+const APPROVAL_LIST_KEY = "QUOTATION_APPROVAL_MASTER";
+
 function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
+  // Use separate LIST_KEY for approval mode to maintain separate filter/search state
+  const currentListKey = mode === "approval" ? APPROVAL_LIST_KEY : LIST_KEY;
   // Get first day of current month and today's date
   const getDefaultFromDate = (): Date => {
     const now = new Date();
@@ -199,6 +206,13 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     ? "Quotation Approval List"
     : "Quotation Lists";
 
+  // Zustand store for filter and search preservation
+  const setStoreFilters = useListFilterStore((state) => state.setFilters);
+  const setStoreSearch = useListFilterStore((state) => state.setSearch);
+  const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
+  const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
+  const clearStoreAllExcept = useListFilterStore((state) => state.clearAllExcept);
+
   // Check if we have initialFilters to determine initial date state
   const hasInitialFilters = location.state?.initialFilters;
 
@@ -234,11 +248,186 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
-  const [debounced] = useDebouncedValue(searchQuery, 500);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Build filter payload function
-  const buildFilterPayload = () => {
+  // Debounced search effect
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Helper function to save filters with dates to store (ensures consistency)
+  const saveFiltersToStore = useCallback(() => {
+    const filtersWithDates = {
+      ...filters,
+      enquiry_received_date: fromDate,
+      enquiry_received_date_to: toDate,
+    };
+    setStoreFilters(currentListKey, filtersWithDates);
+    setStoreSearch(currentListKey, searchQuery);
+    console.log(`💾 [Quotation${isApprovalMode ? ' Approval' : ''}] Saved filters to store:`, {
+      filters: filtersWithDates,
+      search: searchQuery,
+      timestamp: new Date().toISOString(),
+    });
+  }, [filters, fromDate, toDate, searchQuery, setStoreFilters, setStoreSearch, currentListKey, isApprovalMode]);
+
+  // Track if we've restored from store to prevent duplicate API calls
+  const hasRestoredFromStore = useRef(false);
+
+  // Clear other keys in store on mount (keep only current LIST_KEY)
+  useEffect(() => {
+    clearStoreAllExcept(currentListKey);
+  }, [currentListKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  console.log("filters------------------",filters)
+  // Restore filters and search from store on mount and fetch data
+  // Prioritize store-based restoration over location.state restoration
+  useEffect(() => {
+    console.log("restore state",hasRestoredFromStore.current, useListFilterStore.getState().getState(currentListKey))
+    if (hasRestoredFromStore.current) return;
+    
+    const restoredState =
+      useListFilterStore.getState().getState(currentListKey);
+    
+    const performRestore = async () => {
+      if (!restoredState) {
+        // No restored state, load default data if dates are set or approval mode
+        if (isApprovalMode) {
+          setIsInitialLoading(true);
+          await refetchFilteredQuotations();
+          setIsInitialLoading(false);
+          // Reset pagination after restore refetch completes
+          if (tableRef.current) {
+            tableRef.current.setPageIndex(0);
+          }
+        } else if (fromDate && toDate && !hasInitialFilters) {
+          setIsInitialLoading(true);
+          await loadAllQuotations();
+          setIsInitialLoading(false);
+          // Reset pagination after restore refetch completes
+          if (tableRef.current) {
+            tableRef.current.setPageIndex(0);
+          }
+        }
+        return;
+      }
+
+      // 1️⃣ Restore filters (including dates)
+      let hasFilters = false;
+      const restoredFilters = restoredState.filters as FilterState;
+      if (restoredFilters && Object.keys(restoredFilters).length > 0) {
+        console.log(`📥 [Quotation${isApprovalMode ? ' Approval' : ''}] Restoring filters from store:`, restoredFilters);
+        setFilters(restoredFilters);
+        // Restore date range from filters
+        if (restoredFilters.enquiry_received_date) {
+          setFromDate(restoredFilters.enquiry_received_date);
+        }
+        if (restoredFilters.enquiry_received_date_to) {
+          setToDate(restoredFilters.enquiry_received_date_to);
+        }
+        // Check if any non-date filters exist
+        hasFilters = Boolean(
+          restoredFilters.customer_code ||
+          restoredFilters.sales_person ||
+          restoredFilters.origin_code ||
+          restoredFilters.destination_code ||
+          restoredFilters.valid_upto ||
+          (restoredFilters.quote_type && restoredFilters.quote_type !== "all") ||
+          (restoredFilters.status && restoredFilters.status !== "all") ||
+          restoredFilters.remark ||
+          restoredFilters.revision ||
+          (restoredFilters.enquiry_received_date && restoredFilters.enquiry_received_date_to)
+        );
+        console.log("📥 [Quotation] Filter restoration check:", {
+          hasFilters,
+          customer_code: restoredFilters.customer_code,
+          sales_person: restoredFilters.sales_person,
+          origin_code: restoredFilters.origin_code,
+          destination_code: restoredFilters.destination_code,
+          quote_type: restoredFilters.quote_type,
+          status: restoredFilters.status,
+          dates: {
+            from: restoredFilters.enquiry_received_date,
+            to: restoredFilters.enquiry_received_date_to,
+          },
+        });
+      }
+
+      // 2️⃣ Restore search
+      let hasSearch = false;
+      if (typeof restoredState.search === "string" && restoredState.search.trim()) {
+        console.log(`📥 [Quotation${isApprovalMode ? ' Approval' : ''}] Restoring search from store:`, restoredState.search);
+        setSearchQuery(restoredState.search);
+        hasSearch = true;
+      }
+
+      // 3️⃣ Restore display values if available in location.state (for SearchableSelect fields)
+      const displayValues = location.state?.preserveFilters?.displayValues || location.state?.restoreFilters?.displayValues;
+      if (displayValues) {
+        if (displayValues.customer_code) {
+          setCustomerDisplayValue(displayValues.customer_code);
+        }
+        if (displayValues.origin_code) {
+          setOriginDisplayValue(displayValues.origin_code);
+        }
+        if (displayValues.destination_code) {
+          setDestinationDisplayValue(displayValues.destination_code);
+        }
+      }
+
+      // Set filtersApplied FIRST to ensure query is enabled before refetch
+      if (hasFilters || hasSearch || isApprovalMode) {
+        setFiltersApplied(true);
+      }
+
+      // Wait for state updates to flush and debounced search to update
+      // Increased delay to ensure:
+      // 1. debounced search value is updated (debounce is 500ms, so 600ms should be enough)
+      // 2. filters state triggers useMemo recalculation
+      // 3. memoizedFilterPayload reads updated values from filters and debouncedSearch
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // 4️⃣ Fetch data based on restored state
+      if (hasFilters || hasSearch || isApprovalMode) {
+        setIsInitialLoading(true);
+        const result = await refetchFilteredQuotations();
+        if (result.data && Array.isArray(result.data)) {
+          // Wait a bit to ensure React Query has updated the data state
+          // Similar to EnquiryMaster pattern - just wait for data to be set
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        setIsInitialLoading(false);
+        // Reset pagination after restore refetch completes
+        if (tableRef.current) {
+          tableRef.current.setPageIndex(0);
+        }
+      } else if (fromDate && toDate) {
+        // No filters/search but dates exist - load default data
+        setIsInitialLoading(true);
+        await loadAllQuotations();
+        setIsInitialLoading(false);
+        // Reset pagination after restore refetch completes
+        if (tableRef.current) {
+          tableRef.current.setPageIndex(0);
+        }
+      }
+    };
+    
+    if(restoredState?.shouldRestore){
+      performRestore();
+      useListFilterStore.getState().setShouldRestore(currentListKey, false);
+      hasRestoredFromStore.current = true;
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.refreshData, isApprovalMode, currentListKey]);
+
+  // Memoized filter payload - prevents stale closures in queryFn
+  const memoizedFilterPayload = useMemo(() => {
     const payload: any = {};
 
     // Add date range if both dates are selected
@@ -261,8 +450,25 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     if (filters.remark) payload.remark = filters.remark;
     if (filters.revision) payload.revision = filters.revision;
 
+    // Append search value to existing payload (never replaces filters)
+    if (debouncedSearch.trim()) {
+      payload.search = debouncedSearch.trim();
+    } else if (searchQuery.trim()) {
+      payload.search = searchQuery.trim();
+    }
+
     return payload;
-  };
+  }, [filters, fromDate, toDate, debouncedSearch, searchQuery]);
+
+  // Build filter payload function - merges filters + search into single payload
+  // Kept for backward compatibility with other parts of the code
+  const buildFilterPayload = useCallback(
+    (overridePayload?: any) => {
+      if (overridePayload) return overridePayload;
+      return memoizedFilterPayload;
+    },
+    [memoizedFilterPayload]
+  );
 
   async function fetchRevision(service_id: number) {
     if (!service_id) {
@@ -355,22 +561,65 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     refetchOnMount: false,
   });
 
-  // Separate query for filtered data - only runs when filters are applied
+  // Derived flag: hasActiveFiltersOrSearch - determines if we should use filtered data
+  // This replaces filtersApplied for data source decisions (filtersApplied is UI-only)
+  const hasActiveFiltersOrSearch = useMemo(() => {
+    return Boolean(
+      filters.customer_code ||
+      filters.sales_person ||
+      filters.origin_code ||
+      filters.destination_code ||
+      filters.valid_upto ||
+      (filters.quote_type && filters.quote_type !== "all") ||
+      (filters.status && filters.status !== "all") ||
+      filters.remark ||
+      filters.revision ||
+      (fromDate && toDate) ||
+      debouncedSearch.trim() ||
+      isApprovalMode
+    );
+  }, [filters, fromDate, toDate, debouncedSearch, isApprovalMode]);
+
+  // Single-flight protection for refetchFilteredQuotations
+  const isRefetchingRef = useRef(false);
+  
+  // Table ref for pagination reset
+  const tableRef = useRef<any>(null);
+
+  // Separate query for filtered data - only triggers on explicit actions
   const {
     data: filteredQuotationData = [],
     isLoading: filteredQuotationLoading,
-    refetch: refetchFilteredQuotations,
+    isFetching: filteredQuotationFetching,
+    refetch: refetchFilteredQuotationsRaw,
   } = useQuery({
-    queryKey: ["filteredQuotations"],
+    queryKey: [
+      "filteredQuotations",
+      fromDate,
+      toDate,
+      debouncedSearch,
+      isApprovalMode,
+    ],
     queryFn: async () => {
       try {
-        const filterPayload = buildFilterPayload();
+        // Use memoized payload to prevent stale closures
+        const filterPayload = memoizedFilterPayload;
 
-        // if (Object.keys(filterPayload).length === 0) {
-        //   return [];
-        // }
+        // Skip if no filters/search
+        if (Object.keys(filterPayload).length === 0) {
+          console.log("No filters applied, skipping API call");
+          return [];
+        }
 
         const requestBody = { filters: filterPayload };
+        console.log("📤 [Quotation] API Call - Applying filters + search:", {
+          payload: filterPayload,
+          filtersState: filters,
+          fromDateState: fromDate,
+          toDateState: toDate,
+          searchQueryState: searchQuery,
+          debouncedSearchState: debouncedSearch,
+        });
         const endpoint = isApprovalMode
           ? URL.quotationFilterApproval
           : URL.quotationFilter;
@@ -378,18 +627,41 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         const data = response as any;
 
         if (data && Array.isArray(data.data)) {
+          console.log("Filtered data received:", data.data.length, "records");
           return data.data;
         }
         return [];
       } catch (error) {
         console.error("Error fetching filtered quotation data:", error);
         return [];
+      } finally {
+        isRefetchingRef.current = false;
       }
     },
-    enabled: false, // Don't run automatically
-    staleTime: 0, // 5 minutes
-    gcTime: 0, // 10 minutes
+    enabled: filtersApplied || hasActiveFiltersOrSearch, // Enable when filters are applied or active filters/search exist
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    // Keep previous data visible while fetching to prevent "No records to display" flicker
+    placeholderData: (previousData) => previousData,
   });
+
+  // Wrapped refetch with single-flight protection
+  const refetchFilteredQuotations = useCallback(async () => {
+    if (isRefetchingRef.current) {
+      console.log("⏸️ [Quotation] Refetch already in progress, skipping duplicate call");
+      return { data: filteredQuotationData, status: "skipped" } as any;
+    }
+    isRefetchingRef.current = true;
+    try {
+      return await refetchFilteredQuotationsRaw();
+    } finally {
+      // Reset flag after a delay to allow for async completion
+      setTimeout(() => {
+        isRefetchingRef.current = false;
+      }, 100);
+    }
+  }, [refetchFilteredQuotationsRaw, filteredQuotationData]);
 
   // Fetch salespersons data
   const { data: salespersonsData = [], isLoading: salespersonsLoading } =
@@ -436,49 +708,48 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   // Remove raw API calls - using SearchableSelect instead
 
-  // Search data with React Query
-  const { data: searchData, isLoading: searchLoading } = useQuery({
-    queryKey: ["quotationSearch", debounced],
-    queryFn: async () => {
-      if (!debounced.trim()) return null;
-      try {
-        const result = await searchAPI(debounced, new AbortController().signal);
-        return result;
-      } catch (error) {
-        console.error("Search API Error:", error);
-        return null;
-      }
-    },
-    enabled: debounced.trim() !== "",
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-  });
+  // Search data query - DISABLED: search is now handled via buildFilterPayload in filteredQuotations query
+  // This prevents double API calls (one with filters+search, one with search-only)
+  // Search is merged into buildFilterPayload and sent together with existing filters
 
   // Determine which data to display
+  // Determine which data to display based on hasActiveFiltersOrSearch (not filtersApplied)
+  // filtersApplied is UI-only and should not control data source
+  // Similar to EnquiryMaster: check if filtered data exists and has length
+  // Determine which data to display - similar to EnquiryMaster pattern
+  // Note: When tableLoading is true, a full loader is shown instead of the table, so we don't need
+  // to handle empty data states here - the loader prevents "No records to display" flicker
   const displayData = useMemo(() => {
-    if (debounced.trim() !== "" && searchData) {
-      return searchData;
+    // If filters were applied OR search is present OR hasActiveFiltersOrSearch, show filtered results
+    // Check if filteredQuotationData exists and has data (similar to EnquiryMaster pattern)
+    // Use hasActiveFiltersOrSearch to determine if we should show filtered data
+    if (hasActiveFiltersOrSearch || filtersApplied) {
+      // Show filtered data if it exists, otherwise show empty array (will show "No records" message)
+      return filteredQuotationData || [];
     }
-    // Check if filters have been applied and we have filtered data
-    if (filtersApplied) {
-      return filteredQuotationData;
-    }
-    return quotationData;
+    // Otherwise, show the original quotation data
+    return quotationData || [];
   }, [
-    debounced,
-    searchData,
     quotationData,
     filteredQuotationData,
     filtersApplied,
+    hasActiveFiltersOrSearch,
   ]);
-
-  // Loading state
+  // Loading state - single source of truth for table loader
+  // Use isFetching states (not isLoading) as they remain true during refetch
+  // isInitialLoading is set manually before/after explicit refetch calls
+  const tableLoading =
+    isInitialLoading ||
+    quotationFetching ||
+    filteredQuotationFetching;
+  
+  // Keep isLoading for backward compatibility (used elsewhere)
   const isLoading =
     isInitialLoading ||
     quotationFetching ||
-    (filtersApplied && filteredQuotationLoading) ||
-    searchLoading;
+    filteredQuotationLoading;
+  // Use isFetching to show progress bars while keeping previous data visible
+  const isFetching = filteredQuotationFetching || quotationFetching;
 
   const loadAllQuotations = useCallback(async () => {
     try {
@@ -554,7 +825,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       }
 
       // Set filters
-      setFilters({
+      const initialFilterState = {
         customer_code: initialFilters.customer_code || null,
         sales_person: initialFilters.sales_person || null,
         origin_code: null,
@@ -564,7 +835,17 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         status: initialFilters.status || null,
         remark: null,
         revision: null,
-      });
+      };
+      setFilters(initialFilterState);
+
+      // Save filters and search to store
+      const filtersWithDates = {
+        ...initialFilterState,
+        enquiry_received_date: parsedFromDate,
+        enquiry_received_date_to: parsedToDate,
+      };
+      setStoreFilters(currentListKey, filtersWithDates);
+      setStoreSearch(currentListKey, "");
 
       setFiltersApplied(true);
 
@@ -580,8 +861,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       // Call API after a small delay to ensure state is updated
       setTimeout(async () => {
         setIsInitialLoading(true);
-        await refetchFilteredQuotations();
+        const result = await refetchFilteredQuotations();
+        if (result.data && Array.isArray(result.data)) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
         setIsInitialLoading(false);
+        // Reset pagination after initial filters refetch completes
+        if (tableRef.current) {
+          tableRef.current.setPageIndex(0);
+        }
       }, 50);
     } else if (!isMountedRef.current && !location.state?.refreshData) {
       // Initial mount - load default data only if not navigating with refreshData flag
@@ -598,116 +886,372 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, location.pathname, loadAllQuotations]);
 
-  // Add effect to refresh data when returning from create/edit operations
+  // Track previous search value to detect changes
+  const prevSearchRef = useRef<string>("");
+  const searchInitializedRef = useRef(false);
+  const restoreFiltersProcessed = useRef(false);
+
+  // Handle search changes - trigger API when search value changes (including when cleared)
   useEffect(() => {
-    // Check if we're returning from a create/edit operation with filter restoration
-    if (location.state?.restoreFilters) {
-      const restoreFiltersData = location.state.restoreFilters;
+    // Skip on initial mount if search hasn't changed
+    if (!searchInitializedRef.current) {
+      searchInitializedRef.current = true;
+      prevSearchRef.current = debouncedSearch;
+      return;
+    }
 
-      // Restore filter state
-      setFilters(
-        restoreFiltersData.filters || {
-          customer_code: null,
-          sales_person: null,
-          origin_code: null,
-          destination_code: null,
-          valid_upto: null,
-          quote_type: null,
-          status: null,
-          remark: null,
-          revision: null,
-        }
-      );
+    // Only trigger API if search actually changed (debounced)
+    if (prevSearchRef.current === debouncedSearch) {
+      return;
+    }
 
-      // Restore date range
-      setFromDate(restoreFiltersData.fromDate || null);
-      setToDate(restoreFiltersData.toDate || null);
+    // Update ref for next comparison
+    prevSearchRef.current = debouncedSearch;
 
-      // Restore filters applied state
-      setFiltersApplied(restoreFiltersData.filtersApplied || false);
+    // Save search to store immediately (use current searchQuery, not debouncedSearch)
+    // This ensures store always has the latest search value
+    setStoreSearch(currentListKey, searchQuery);
 
-      // Restore display values for SearchableSelect fields
-      if (restoreFiltersData.displayValues) {
-        setCustomerDisplayValue(
-          restoreFiltersData.displayValues.customer_code || null
-        );
-        setOriginDisplayValue(
-          restoreFiltersData.displayValues.origin_code || null
-        );
-        setDestinationDisplayValue(
-          restoreFiltersData.displayValues.destination_code || null
-        );
-      }
+    // Trigger API with loading state - loader will show until API response
+    setIsInitialLoading(true);
 
-      // Clear the restore filters flag
-      navigate(location.pathname, { replace: true, state: {} });
+    // Reset pagination to prevent empty table rendering when search changes
+    if (tableRef.current) {
+      tableRef.current.setPageIndex(0);
+    }
 
-      // Refresh all quotation data based on restored filter state
-      const refreshData = async () => {
-        try {
-          // Use restored filtersApplied state to determine which query to refetch
-          if (restoreFiltersData.filtersApplied) {
-            // Invalidate the filtered queries to trigger refetch with new filter payload
-            await queryClient.invalidateQueries({
-              queryKey: ["filteredQuotations"],
-            });
-            // Wait a bit for filter state and query key to update before refetching
-            setTimeout(async () => {
-              await refetchFilteredQuotations();
-            }, 200);
-          } else {
-            await queryClient.invalidateQueries({ queryKey: ["quotations"] });
-            await refetchQuotations();
+    if (debouncedSearch.trim() !== "") {
+      // Search exists - trigger filtered API (search will be merged with filters in memoizedFilterPayload)
+      // Do NOT mutate filtersApplied - it's UI-only
+      refetchFilteredQuotations()
+        .then((result) => {
+          if (result.data && Array.isArray(result.data)) {
+            // Wait a bit to ensure React Query has updated the data state
+            return new Promise((resolve) => setTimeout(resolve, 50));
           }
-        } catch (error) {
-          console.error("Error refreshing data:", error);
-        }
-      };
-
-      refreshData();
-    } else if (location.state?.refreshData && isMountedRef.current) {
-      // Check if we're returning from a create/edit operation (only if already mounted)
-      // Clear the refresh flag
-      navigate(location.pathname, { replace: true, state: {} });
-
-      // Refresh all quotation data
-      if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
-        setIsInitialLoading(true);
-        refetchFilteredQuotations().finally(() => setIsInitialLoading(false));
-      } else {
+        })
+        .then(() => {
+          // API completed - data is set, hide loader
+          setIsInitialLoading(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching filtered data:", error);
+          // Hide loader even on error
+          setIsInitialLoading(false);
+        });
+    } else {
+      // Search cleared
+      if (hasActiveFiltersOrSearch) {
+        // Filters still active or approval mode - refetch with filters only (no search)
+        refetchFilteredQuotations()
+          .then((result) => {
+            if (result.data && Array.isArray(result.data)) {
+              return new Promise((resolve) => setTimeout(resolve, 50));
+            }
+          })
+          .then(() => {
+            setIsInitialLoading(false);
+          })
+          .catch((error) => {
+            console.error("Error fetching filtered data:", error);
+            setIsInitialLoading(false);
+          });
+      } else if (fromDate && toDate) {
+        // No search, no filters - use default query
         loadAllQuotations();
-      }
-    } else if (location.state?.refreshData && !isMountedRef.current) {
-      // Fresh mount with refreshData - mark as mounted and load data
-      isMountedRef.current = true;
-      navigate(location.pathname, { replace: true, state: {} });
-
-      // For approval mode, load filtered data with "QUOTE CREATED" status
-      if (isApprovalMode) {
-        setIsInitialLoading(true);
-        refetchFilteredQuotations().finally(() => setIsInitialLoading(false));
       } else {
-        loadAllQuotations();
+        // No search, no filters, no dates - no API call needed
+        setIsInitialLoading(false);
       }
     }
-  }, [
-    location.state,
-    refetchFilteredQuotations,
-    navigate,
-    filtersApplied,
-    loadAllQuotations,
-    queryClient,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, isApprovalMode, currentListKey]);
+
+  // Add effect to refresh data when returning from create/edit operations
+  // useEffect(() => {
+  //   // Legacy shouldRestoreFilters pattern - now handled via store + refreshData
+  //   // Keep for backward compatibility but prioritize store-based restoration
+  //   if (location.state?.shouldRestoreFilters && location.state?.restoreFilterValues && !restoreFiltersProcessed.current) {
+  //     restoreFiltersProcessed.current = true;
+  //     const restoreFilterValues = location.state.restoreFilterValues;
+
+  //     // Save to store for consistency
+  //     if (restoreFilterValues.filters) {
+  //       const filtersWithDates = {
+  //         ...restoreFilterValues.filters,
+  //         enquiry_received_date: restoreFilterValues.fromDate,
+  //         enquiry_received_date_to: restoreFilterValues.toDate,
+  //       };
+  //       setStoreFilters(currentListKey, filtersWithDates);
+  //       if (restoreFilterValues.searchQuery) {
+  //         setStoreSearch(currentListKey, restoreFilterValues.searchQuery);
+  //       }
+  //     }
+
+  //     // Restore filter state
+  //     if (restoreFilterValues.filters) {
+  //       setFilters(restoreFilterValues.filters);
+  //     }
+
+  //     // Restore date range
+  //     if (restoreFilterValues.fromDate !== undefined) {
+  //       setFromDate(restoreFilterValues.fromDate);
+  //     }
+  //     if (restoreFilterValues.toDate !== undefined) {
+  //       setToDate(restoreFilterValues.toDate);
+  //     }
+
+  //     // Restore search value
+  //     if (restoreFilterValues.searchQuery !== undefined) {
+  //       setSearchQuery(restoreFilterValues.searchQuery || "");
+  //     }
+
+  //     // Restore filters applied state - set to true if filters were applied OR search is present
+  //     setFiltersApplied(
+  //       restoreFilterValues.filtersApplied ||
+  //       Boolean(restoreFilterValues.searchQuery?.trim()) ||
+  //       isApprovalMode
+  //     );
+
+  //     // Restore display values for SearchableSelect fields
+  //     if (restoreFilterValues.displayValues) {
+  //       setCustomerDisplayValue(
+  //         restoreFilterValues.displayValues.customer_code || null
+  //       );
+  //       setOriginDisplayValue(
+  //         restoreFilterValues.displayValues.origin_code || null
+  //       );
+  //       setDestinationDisplayValue(
+  //         restoreFilterValues.displayValues.destination_code || null
+  //       );
+  //     }
+
+  //     // Clear the restore filters flag
+  //     navigate(location.pathname, { replace: true, state: {} });
+
+  //     // Manually trigger API after state is restored
+  //     const performRestore = async () => {
+  //       try {
+  //         // Wait for all state updates to flush and buildFilterPayload to update
+  //         await new Promise((resolve) => setTimeout(resolve, 300));
+
+  //         if (restoreFilterValues.filtersApplied || Boolean(restoreFilterValues.searchQuery?.trim()) || isApprovalMode) {
+  //           setIsInitialLoading(true);
+  //           const result = await refetchFilteredQuotations();
+  //           if (result.data && Array.isArray(result.data)) {
+  //             // Wait a bit to ensure React Query has updated the data state
+  //             await new Promise((resolve) => setTimeout(resolve, 50));
+  //           }
+  //           setIsInitialLoading(false);
+  //         } else if (fromDate && toDate) {
+  //           setIsInitialLoading(true);
+  //           await loadAllQuotations();
+  //           setIsInitialLoading(false);
+  //         }
+  //       } catch (error) {
+  //         console.error("Error during restore:", error);
+  //         setIsInitialLoading(false);
+  //       }
+  //     };
+
+  //     performRestore();
+  //     return;
+  //   }
+
+  //   // Legacy restoreFilters pattern (for backward compatibility)
+  //   if (location.state?.restoreFilters && !restoreFiltersProcessed.current) {
+  //     restoreFiltersProcessed.current = true;
+  //     const restoreFiltersData = location.state.restoreFilters;
+
+  //     // Restore filter state
+  //     setFilters(
+  //       restoreFiltersData.filters || {
+  //         customer_code: null,
+  //         sales_person: null,
+  //         origin_code: null,
+  //         destination_code: null,
+  //         valid_upto: null,
+  //         quote_type: null,
+  //         status: null,
+  //         remark: null,
+  //         revision: null,
+  //       }
+  //     );
+
+  //     // Restore date range
+  //     setFromDate(restoreFiltersData.fromDate || null);
+  //     setToDate(restoreFiltersData.toDate || null);
+
+  //     // Restore filters applied state
+  //     setFiltersApplied(restoreFiltersData.filtersApplied || false);
+
+  //     // Restore display values for SearchableSelect fields
+  //     if (restoreFiltersData.displayValues) {
+  //       setCustomerDisplayValue(
+  //         restoreFiltersData.displayValues.customer_code || null
+  //       );
+  //       setOriginDisplayValue(
+  //         restoreFiltersData.displayValues.origin_code || null
+  //       );
+  //       setDestinationDisplayValue(
+  //         restoreFiltersData.displayValues.destination_code || null
+  //       );
+  //     }
+
+  //     // Clear the restore filters flag
+  //     navigate(location.pathname, { replace: true, state: {} });
+
+  //     // Refresh all quotation data based on restored filter state
+  //     const refreshData = async () => {
+  //       try {
+  //         // Use restored filtersApplied state to determine which query to refetch
+  //         if (restoreFiltersData.filtersApplied) {
+  //           // Wait a bit for filter state and query key to update before refetching
+  //           setTimeout(async () => {
+  //             setIsInitialLoading(true);
+  //             const result = await refetchFilteredQuotations();
+  //             if (result.data && Array.isArray(result.data)) {
+  //               // Wait a bit to ensure React Query has updated the data state
+  //               await new Promise((resolve) => setTimeout(resolve, 50));
+  //             }
+  //             setIsInitialLoading(false);
+  //             // Reset pagination after restore refetch completes
+  //             if (tableRef.current) {
+  //               tableRef.current.setPageIndex(0);
+  //             }
+  //           }, 200);
+  //         } else {
+  //           setIsInitialLoading(true);
+  //           await loadAllQuotations();
+  //           setIsInitialLoading(false);
+  //           // Reset pagination after restore refetch completes
+  //           if (tableRef.current) {
+  //             tableRef.current.setPageIndex(0);
+  //           }
+  //         }
+  //       } catch (error) {
+  //         console.error("Error refreshing data:", error);
+  //         setIsInitialLoading(false);
+  //       }
+  //     };
+
+  //     refreshData();
+  //     return;
+  //   }
+
+  //   if (!location.state?.restoreFilters && !location.state?.shouldRestoreFilters && restoreFiltersProcessed.current) {
+  //     restoreFiltersProcessed.current = false;
+  //   } else if (location.state?.refreshData && !hasRestoredFromStore.current) {
+  //     // Handle refreshData flag - but only if store restoration hasn't already run
+  //     // Store restoration effect will handle filters/search restoration
+  //     // This effect only clears the refreshData flag and triggers data refresh if needed
+  //     console.log("🔄 [Quotation] Refreshing data after create/edit operation");
+      
+  //     // Clear the refresh flag but preserve dashboard return state
+  //     navigate(location.pathname, {
+  //       replace: true,
+  //       state: {
+  //         returnToDashboard: location.state?.returnToDashboard,
+  //         dashboardState: location.state?.dashboardState,
+  //       },
+  //     });
+
+  //     // If store restoration didn't run (no shouldRestore flag and no store data),
+  //     // then just refresh with current state or load default data
+  //     const restoredState = useListFilterStore.getState().getState(currentListKey);
+  //     const hasStoreData = restoredState && (Object.keys(restoredState.filters || {}).length > 0 || (restoredState.search || "").trim() !== "");
+      
+  //     // If store has data, restoration effect will handle it
+  //     // Otherwise, just refresh with current filters/search state
+  //     if (!hasStoreData) {
+  //       const refreshData = async () => {
+  //         try {
+  //           setIsInitialLoading(true);
+            
+  //           // Check current state to determine which query to use
+  //           const hasActiveFiltersOrSearch = Boolean(
+  //             filters.customer_code ||
+  //             filters.sales_person ||
+  //             filters.origin_code ||
+  //             filters.destination_code ||
+  //             filters.valid_upto ||
+  //             (filters.quote_type && filters.quote_type !== "all") ||
+  //             (filters.status && filters.status !== "all") ||
+  //             filters.remark ||
+  //             filters.revision ||
+  //             (fromDate && toDate) ||
+  //             debouncedSearch.trim() ||
+  //             isApprovalMode
+  //           );
+
+  //           if (hasActiveFiltersOrSearch || filtersApplied) {
+  //             await refetchFilteredQuotations();
+  //           } else if (fromDate && toDate) {
+  //             await loadAllQuotations();
+  //           }
+            
+  //           setIsInitialLoading(false);
+  //           if (tableRef.current) {
+  //             tableRef.current.setPageIndex(0);
+  //           }
+  //         } catch (error) {
+  //           console.error("Error refreshing data:", error);
+  //           setIsInitialLoading(false);
+  //         }
+  //       };
+
+  //       refreshData();
+  //     }
+  //   }
+  // }, [
+  //   location.state,
+  //   refetchFilteredQuotations,
+  //   navigate,
+  //   filtersApplied,
+  //   loadAllQuotations,
+  //   queryClient,
+  // ]);
 
   const applyFilters = async () => {
     try {
-      const filterPayload = buildFilterPayload();
+      const filterPayload = memoizedFilterPayload;
+      const hasFilterValues =
+        filterPayload.customer_code ||
+        filterPayload.sales_person ||
+        filterPayload.origin_code ||
+        filterPayload.destination_code ||
+        filterPayload.valid_upto ||
+        filterPayload.quote_type ||
+        (filterPayload.status && filterPayload.status !== "all") ||
+        filterPayload.remark ||
+        filterPayload.revision ||
+        filterPayload.enquiry_received_date_from ||
+        filterPayload.search;
 
-      // If no filters are selected, show unfiltered data
+      if (!hasFilterValues) {
+        setFiltersApplied(false);
+        ToastNotification({
+          type: "info",
+          message: "No filters selected, showing all data",
+        });
+        return;
+      }
+
+      // Save filters and search to store (include dates in filters)
+      saveFiltersToStore();
+
+      // Reset pagination to prevent empty table rendering
+      if (tableRef.current) {
+        tableRef.current.setPageIndex(0);
+      }
 
       setFiltersApplied(true);
       setIsInitialLoading(true);
-      await refetchFilteredQuotations();
+      const result = await refetchFilteredQuotations(); // Manually refetch with applied filters
+      if (result.data && Array.isArray(result.data)) {
+        // Wait a bit to ensure React Query has updated the data state
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
       setIsInitialLoading(false);
 
       ToastNotification({
@@ -717,6 +1261,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       setShowFilters(false);
     } catch (error) {
       console.error("Error applying filters:", error);
+      setIsInitialLoading(false);
       ToastNotification({
         type: "error",
         message: "Error applying filters",
@@ -734,22 +1279,30 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       destination_code: null,
       valid_upto: null,
       quote_type: null,
-      status: null,
+      status: isApprovalMode ? "QUOTE CREATED" : null,
       remark: null,
       revision: null,
     });
     setSearchQuery("");
-    setFiltersApplied(false);
+    setFiltersApplied(isApprovalMode); // Keep true for approval mode
 
     // Clear display values
     setCustomerDisplayValue(null);
     setOriginDisplayValue(null);
     setDestinationDisplayValue(null);
 
-    // Invalidate queries and refetch unfiltered data
-    await queryClient.invalidateQueries({ queryKey: ["quotations"] });
-    await queryClient.invalidateQueries({ queryKey: ["filteredQuotations"] });
-    await loadAllQuotations();
+    // Clear filters and search in store
+    clearStoreFilters(currentListKey);
+    clearStoreSearch(currentListKey);
+
+    // Manually trigger API with cleared filters (default query)
+    setIsInitialLoading(true);
+    if (isApprovalMode) {
+      await refetchFilteredQuotations();
+    } else {
+      await loadAllQuotations();
+    }
+    setIsInitialLoading(false);
     ToastNotification({
       type: "success",
       message: "All filters cleared successfully",
@@ -760,8 +1313,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const fetchDownloadData = async () => {
     try {
       // Always use current filter state (even if empty, it will fetch all data)
-      const filterPayload = buildFilterPayload();
-      const requestBody = { filters: filterPayload };
+      const requestBody = { filters: buildFilterPayload() };
       const endpoint = isApprovalMode
         ? URL.quotationFilterApproval
         : URL.quotationFilter;
@@ -1459,12 +2011,16 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   };
 
   const handleEditQuotation = (rowData: any) => {
-    // Preserve current filter state when navigating to edit
+    // Preserve filters and search in store before navigation
+    saveFiltersToStore();
+    
+    // Preserve current filter state when navigating to edit (includes search and pagination)
     const currentFilterState = {
       filters,
       filtersApplied,
       fromDate,
       toDate,
+      searchQuery: searchQuery,
       displayValues: {
         customer_code: customerDisplayValue,
         origin_code: originDisplayValue,
@@ -1472,11 +2028,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       },
     };
     const returnToPath = isApprovalMode ? "/quotation-approval" : "/quotation";
+    useListFilterStore.getState().setShouldRestore(currentListKey, true);
     navigate("/quotation-create", {
       state: {
         ...rowData,
         actionType: "edit",
         preserveFilters: currentFilterState,
+        restoreFilterValues: buildFilterPayload(),
+        shouldRestoreFilters: true, // Keep for backward compatibility
+        refreshData: true, // Use refreshData for store-based restoration
         returnToPath,
       },
     });
@@ -1867,6 +2427,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       PrimaryActionIcon,
       isApprovalMode,
       location,
+      buildFilterPayload,
+      filteredQuotationData
     ]
   );
 
@@ -1881,6 +2443,11 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     enableBottomToolbar: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
+    // Use table's built-in loading state - shows loader while keeping previous rows visible
+    state: {
+      isLoading: isLoading || isFetching,
+      showProgressBars: isFetching,
+    },
     initialState: {
       pagination: { pageSize: 25, pageIndex: 0 },
       columnPinning: { right: ["actions"] },
@@ -1971,6 +2538,18 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     // pagination will be controlled by a custom bar below the table
   });
 
+  // Store table instance in ref for pagination reset
+  useEffect(() => {
+    tableRef.current = table;
+  }, [table]);
+
+  // Reset pagination when filters or search change to prevent empty table rendering
+  useEffect(() => {
+    if (tableRef.current && hasActiveFiltersOrSearch) {
+      tableRef.current.setPageIndex(0);
+    }
+  }, [hasActiveFiltersOrSearch, memoizedFilterPayload]);
+
   if (isApprovalMode && !isManagerOrAdmin) {
     return (
       <Center h="70vh">
@@ -2018,6 +2597,46 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               <TextInput
                 placeholder="Search..."
                 leftSection={<IconSearch size={16} />}
+                rightSection={
+                  searchQuery ? (
+                    <ActionIcon
+                      variant="transparent"
+                      size="sm"
+                      onClick={() => {
+                        // Clear search and update filtersApplied if no other filters exist
+                        // Clear search - this will trigger the search change useEffect
+                        // which will update store and trigger API
+                        setSearchQuery("");
+                        // Clear search from store immediately
+                        clearStoreSearch(currentListKey);
+                        // Reset search ref to current debouncedSearch value
+                        // This ensures the useEffect will detect the change when debouncedSearch becomes ""
+                        prevSearchRef.current = debouncedSearch;
+                        // Check if other filters exist to determine filtersApplied state
+                        const hasOtherFilters =
+                          filters.customer_code ||
+                          filters.sales_person ||
+                          filters.origin_code ||
+                          filters.destination_code ||
+                          filters.valid_upto ||
+                          (filters.quote_type && filters.quote_type !== "all") ||
+                          (filters.status && filters.status !== "all") ||
+                          filters.remark ||
+                          filters.revision ||
+                          (fromDate && toDate) ||
+                          isApprovalMode;
+                        if (!hasOtherFilters) {
+                          setFiltersApplied(false);
+                        }
+                        // Note: The search change useEffect will handle API trigger after debounce
+                        // and will save the empty search to store
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
                 w={248}
                 size="sm"
                 value={searchQuery}
@@ -2521,11 +3140,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           </Box>
         )}
 
-        {isLoading ? (
+        {tableLoading || isFetching ? (
           <Center py="xl">
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading quotations...</Text>
+              <Text c="dimmed">
+                {isInitialLoading
+                  ? "Fetching data..."
+                  : "Loading data..."}
+              </Text>
             </Stack>
           </Center>
         ) : (
