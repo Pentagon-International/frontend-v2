@@ -403,7 +403,17 @@ const Dashboard = () => {
     drillLevel?: 0 | 1 | 2;
     selectedSalesperson?: string | null;
     selectedCustomer?: string | null;
+    selectedCustomerCode?: string | null;
     selectedColumnType?: string | null;
+    productDrillLevel?: 0 | 1 | 2;
+    sectorDrillLevel?: 0 | 1 | 2;
+    selectedService?: string | null;
+    selectedServiceType?: string | null;
+    selectedSector?: string | null;
+    activeTab?: string;
+    fromDate?: Date | null;
+    toDate?: Date | null;
+    period?: string;
   } | null>(null);
 
   // Refresh key for Pipeline and Booking tabs - changes when profile is updated
@@ -439,8 +449,16 @@ const Dashboard = () => {
   // Handle location state for pipeline report restoration
   useEffect(() => {
     if (location.state?.returnToPipelineReport) {
+      const restoredState = location.state.pipelineReportState || null;
       // Set the pipeline report state and switch to pipeline report tab
-      setPipelineReportState(location.state.pipelineReportState || null);
+      setPipelineReportState(restoredState);
+      // Restore date filters if they exist in the restored state
+      if (restoredState?.fromDate) {
+        setCustomerInteractionFromDate(restoredState.fromDate);
+      }
+      if (restoredState?.toDate) {
+        setCustomerInteractionToDate(restoredState.toDate);
+      }
       setActiveTab("pipeline-Report");
       // Clear the location state to prevent re-triggering on re-render
       window.history.replaceState({}, document.title);

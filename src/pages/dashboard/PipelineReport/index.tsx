@@ -35,7 +35,17 @@ interface PipelineReportProps {
     drillLevel?: 0 | 1 | 2;
     selectedSalesperson?: string | null;
     selectedCustomer?: string | null;
+    selectedCustomerCode?: string | null;
     selectedColumnType?: string | null;
+    productDrillLevel?: 0 | 1 | 2;
+    sectorDrillLevel?: 0 | 1 | 2;
+    selectedService?: string | null;
+    selectedServiceType?: string | null;
+    selectedSector?: string | null;
+    activeTab?: string;
+    fromDate?: Date | null;
+    toDate?: Date | null;
+    period?: string;
   };
   globalSearch?: string;
   fromDate?: Date | null;
@@ -63,10 +73,15 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(
     initialState?.selectedCustomer ?? null
   );
+  const [selectedCustomerCode, setSelectedCustomerCode] = useState<
+    string | null
+  >(initialState?.selectedCustomerCode ?? null);
   const [selectedColumnType, setSelectedColumnType] = useState<string | null>(
     initialState?.selectedColumnType ?? null
   );
-  const [selectedSector, setSelectedSector] = useState<string | null>(null);
+  const [selectedSector, setSelectedSector] = useState<string | null>(
+    initialState?.selectedSector ?? null
+  );
   type PipelineSalespersonRow = {
     salesperson: string;
     potential: number;
@@ -232,17 +247,27 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const [productSalespersonLoading, setProductSalespersonLoading] =
     useState(false);
   const [cellEditLoading, setCellEditLoading] = useState(false);
-  const [period, setPeriod] = useState<string>("current-month");
+  const [period, setPeriod] = useState<string>(
+    initialState?.period ?? "current-month"
+  );
   const [calculation, setCalculation] = useState<"volume" | "no_of_shipments">(
     "volume"
   );
-  const [sectorDrillLevel, setSectorDrillLevel] = useState<0 | 1 | 2>(0);
-  const [productDrillLevel, setProductDrillLevel] = useState<0 | 1 | 2>(0);
-  const [selectedService, setSelectedService] = useState<string | null>(null);
-  const [selectedServiceType, setSelectedServiceType] = useState<string | null>(
-    null
+  const [sectorDrillLevel, setSectorDrillLevel] = useState<0 | 1 | 2>(
+    initialState?.sectorDrillLevel ?? 0
   );
-  const [activeTab, setActiveTab] = useState<string>("salesperson");
+  const [productDrillLevel, setProductDrillLevel] = useState<0 | 1 | 2>(
+    initialState?.productDrillLevel ?? 0
+  );
+  const [selectedService, setSelectedService] = useState<string | null>(
+    initialState?.selectedService ?? null
+  );
+  const [selectedServiceType, setSelectedServiceType] = useState<string | null>(
+    initialState?.selectedServiceType ?? null
+  );
+  const [activeTab, setActiveTab] = useState<string>(
+    initialState?.activeTab ?? "salesperson"
+  );
 
   // Helper function to convert service_type to title case (e.g., "IMPORT" -> "Import")
   const toTitleCase = (str: string): string => {
@@ -298,7 +323,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
   // Load initial data or restore state
   useEffect(() => {
-    if (initialState && initialState.drillLevel !== undefined) {
+    if (
+      initialState &&
+      (initialState.drillLevel !== undefined ||
+        initialState.productDrillLevel !== undefined ||
+        initialState.sectorDrillLevel !== undefined)
+    ) {
       // Restore state when coming back from navigation
       restorePipelineState(initialState);
     } else {
@@ -351,7 +381,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             globalSearch.trim() && { search: globalSearch.trim() }),
         };
 
-        if (selectedCustomer) filters.customer_code = selectedCustomer;
+        if (selectedCustomerCode) filters.customer_code = selectedCustomerCode;
         if (selectedSector) filters.region = selectedSector;
         if (selectedService) filters.service = selectedService;
         if (selectedServiceType)
@@ -388,29 +418,230 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     drillLevel?: 0 | 1 | 2;
     selectedSalesperson?: string | null;
     selectedCustomer?: string | null;
+    selectedCustomerCode?: string | null;
     selectedColumnType?: string | null;
+    productDrillLevel?: 0 | 1 | 2;
+    sectorDrillLevel?: 0 | 1 | 2;
+    selectedService?: string | null;
+    selectedServiceType?: string | null;
+    selectedSector?: string | null;
+    activeTab?: string;
+    period?: string;
   }) => {
     try {
+      // Restore period if provided
+      if (state.period) {
+        setPeriod(state.period);
+      }
+
+      // Restore active tab if provided
+      if (state.activeTab) {
+        setActiveTab(state.activeTab);
+      }
+
+      // Handle product drill level restoration
+      if (
+        state.productDrillLevel !== undefined &&
+        state.productDrillLevel > 0
+      ) {
+        if (state.selectedService && state.selectedServiceType) {
+          // Set state variables first
+          setProductDrillLevel(state.productDrillLevel);
+          setSelectedService(state.selectedService);
+          setSelectedServiceType(state.selectedServiceType);
+          if (state.selectedColumnType) {
+            setSelectedColumnType(state.selectedColumnType);
+          }
+          if (state.selectedSalesperson) {
+            setSelectedSalesperson(state.selectedSalesperson);
+          }
+
+          if (state.productDrillLevel === 1) {
+            await loadProductData(
+              state.period || period,
+              state.selectedService,
+              state.selectedServiceType,
+              state.selectedColumnType || undefined
+            );
+          } else if (state.productDrillLevel === 2) {
+            // Load product salesperson data first
+            await loadProductData(
+              state.period || period,
+              state.selectedService,
+              state.selectedServiceType,
+              state.selectedColumnType || undefined
+            );
+
+            if (state.selectedColumnType) {
+              // If selectedColumnType is set, we're viewing customer financial details
+              // Set drillLevel to 2 and load potentialCustomersData
+              setDrillLevel(2);
+              if (state.selectedSalesperson) {
+                setSelectedSalesperson(state.selectedSalesperson);
+              }
+              if (state.selectedCustomer) {
+                setSelectedCustomer(state.selectedCustomer);
+              }
+              if (state.selectedCustomerCode) {
+                setSelectedCustomerCode(state.selectedCustomerCode);
+              }
+              setDrilldownLoading(true);
+
+              try {
+                const companyName = user?.company?.company_name || "";
+                const filters: PipelineReportFilters = {
+                  company: companyName,
+                  service: state.selectedService || "",
+                  service_type: state.selectedServiceType
+                    ? toTitleCase(state.selectedServiceType)
+                    : "",
+                  salesperson: state.selectedSalesperson || "",
+                  customer_code: state.selectedCustomerCode || undefined,
+                  type: state.selectedColumnType,
+                  ...buildDateFilters(),
+                  ...(user?.pulse_id === "P2CCI" && { calculation }),
+                  ...(globalSearch &&
+                    globalSearch.trim() && { search: globalSearch.trim() }),
+                };
+
+                const response =
+                  await getPotentialCustomersDataForProduct(filters);
+                setPotentialCustomersData(
+                  transformNullValues(response.data || [])
+                );
+              } catch (error) {
+                console.error(
+                  "Error loading product customer financial column data:",
+                  error
+                );
+                setPotentialCustomersData([]);
+              } finally {
+                setDrilldownLoading(false);
+              }
+            } else if (state.selectedSalesperson) {
+              // Regular customer list view (without financial column filter)
+              await loadProductCustomerData(
+                state.selectedSalesperson,
+                state.period || period
+              );
+            }
+          }
+        }
+        return; // Exit early if restoring product drill level
+      }
+
+      // Handle sector drill level restoration
+      if (state.sectorDrillLevel !== undefined && state.sectorDrillLevel > 0) {
+        if (state.selectedSector) {
+          // Set state variables first
+          setSectorDrillLevel(state.sectorDrillLevel);
+          setSelectedSector(state.selectedSector);
+          if (state.selectedColumnType) {
+            setSelectedColumnType(state.selectedColumnType);
+          }
+          if (state.selectedSalesperson) {
+            setSelectedSalesperson(state.selectedSalesperson);
+          }
+          if (state.selectedCustomer) {
+            setSelectedCustomer(state.selectedCustomer);
+          }
+
+          if (state.sectorDrillLevel === 1) {
+            await loadSectorData(
+              state.period || period,
+              state.selectedSector,
+              state.selectedColumnType || undefined
+            );
+          } else if (state.sectorDrillLevel === 2) {
+            // Load sector salesperson data first
+            await loadSectorData(
+              state.period || period,
+              state.selectedSector,
+              state.selectedColumnType || undefined
+            );
+
+            if (state.selectedColumnType) {
+              // If selectedColumnType is set, we're viewing customer financial details
+              // Set drillLevel to 2 and load potentialCustomersData
+              setDrillLevel(2);
+              if (state.selectedSalesperson) {
+                setSelectedSalesperson(state.selectedSalesperson);
+              }
+              if (state.selectedCustomer) {
+                setSelectedCustomer(state.selectedCustomer);
+              }
+              if (state.selectedCustomerCode) {
+                setSelectedCustomerCode(state.selectedCustomerCode);
+              }
+              setDrilldownLoading(true);
+
+              try {
+                const companyName = user?.company?.company_name || "";
+                const filters: PipelineReportFilters = {
+                  company: companyName,
+                  region: state.selectedSector || "",
+                  salesperson: state.selectedSalesperson || "",
+                  customer_code: state.selectedCustomerCode || undefined,
+                  type: state.selectedColumnType,
+                  ...buildDateFilters(),
+                  ...(user?.pulse_id === "P2CCI" && { calculation }),
+                  ...(globalSearch &&
+                    globalSearch.trim() && { search: globalSearch.trim() }),
+                };
+
+                const response =
+                  await getPotentialCustomersDataForRegional(filters);
+                setPotentialCustomersData(
+                  transformNullValues(response.data || [])
+                );
+              } catch (error) {
+                console.error(
+                  "Error loading sector customer financial column data:",
+                  error
+                );
+                setPotentialCustomersData([]);
+              } finally {
+                setDrilldownLoading(false);
+              }
+            } else if (state.selectedSalesperson) {
+              // Regular customer list view (without financial column filter)
+              await loadSectorCustomerData(
+                state.selectedSalesperson,
+                state.period || period
+              );
+            }
+          }
+        }
+        return; // Exit early if restoring sector drill level
+      }
+
+      // Handle salesperson drill level restoration
       if (state.drillLevel === 0) {
-        loadPipelineData();
+        await loadPipelineData(undefined, state.period || period);
       } else if (state.drillLevel === 1 && state.selectedSalesperson) {
         setDrillLevel(1);
         setSelectedSalesperson(state.selectedSalesperson);
-        loadPipelineData(state.selectedSalesperson);
+        await loadPipelineData(
+          state.selectedSalesperson,
+          state.period || period
+        );
       } else if (
         state.drillLevel === 2 &&
         state.selectedSalesperson &&
-        state.selectedColumnType &&
-        state.selectedCustomer
+        state.selectedColumnType
       ) {
         // Restore level 2 - need to load both level 1 and level 2 data
         setDrillLevel(1);
         setSelectedSalesperson(state.selectedSalesperson);
-        await loadPipelineData(state.selectedSalesperson);
+        await loadPipelineData(
+          state.selectedSalesperson,
+          state.period || period
+        );
 
         // Then load level 2 data
         setDrillLevel(2);
-        setSelectedCustomer(state.selectedCustomer);
+        setSelectedCustomer(state.selectedCustomer || null);
+        setSelectedCustomerCode(state.selectedCustomerCode || null);
         setSelectedColumnType(state.selectedColumnType);
         setDrilldownLoading(true);
 
@@ -1022,6 +1253,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       ) {
         const customerData = additionalData as PipelineCustomerRow;
         setSelectedCustomer(customerData.customer_name || "Customer");
+        setSelectedCustomerCode(customerData.customer_code || null);
         // Normalize "quote" to "quoted_created" for API
         const normalizedColumnType =
           columnType === "quote" ? "quoted_created" : columnType;
@@ -1063,7 +1295,17 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             drillLevel,
             selectedSalesperson,
             selectedCustomer,
+            selectedCustomerCode,
             selectedColumnType,
+            productDrillLevel,
+            sectorDrillLevel,
+            selectedService,
+            selectedServiceType,
+            selectedSector,
+            activeTab,
+            fromDate,
+            toDate,
+            period,
           },
           viewMode: true,
         },
@@ -1320,6 +1562,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const customerName = customerData.customer_name;
 
       setSelectedCustomer(customerName || "Customer");
+      setSelectedCustomerCode(customerCode || null);
       // Normalize "quote" to "quoted_created" for API
       const normalizedColumnType =
         columnType === "quote" ? "quoted_created" : columnType;
@@ -1362,7 +1605,17 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             drillLevel,
             selectedSalesperson,
             selectedCustomer,
+            selectedCustomerCode,
             selectedColumnType,
+            productDrillLevel,
+            sectorDrillLevel,
+            selectedService,
+            selectedServiceType,
+            selectedSector,
+            activeTab,
+            fromDate,
+            toDate,
+            period,
           },
           viewMode: true,
         },
@@ -1426,6 +1679,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     // Clear all selections
     setSelectedSalesperson(null);
     setSelectedCustomer(null);
+    setSelectedCustomerCode(null);
     setSelectedColumnType(null);
     setSelectedSector(null);
     setSelectedService(null);
@@ -1598,6 +1852,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         // Restore sector drill level 2 (customer level)
         setDrillLevel(0); // Reset main drill level
         setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
         setSelectedColumnType(null);
         setPotentialCustomersData([]);
         // sectorDrillLevel remains 2, so it will show sector customer data
@@ -1605,6 +1860,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         // Restore product drill level 2 (customer level)
         setDrillLevel(0); // Reset main drill level
         setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
         setSelectedColumnType(null);
         setPotentialCustomersData([]);
         // productDrillLevel remains 2, so it will show product customer data
@@ -1621,6 +1877,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         // Came from salesperson drilldown (level 1 -> 2)
         setDrillLevel(1);
         setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
         setSelectedColumnType(null);
         setPotentialCustomersData([]);
       }
@@ -1648,6 +1905,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         setDrillLevel(0);
         setSelectedSalesperson(null);
         setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
         setSelectedColumnType(null);
         setPotentialCustomersData([]);
         // Keep sectorDrillLevel at 1 and reload salesperson data without type filter
@@ -1667,6 +1925,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         setSectorDrillLevel(0);
         setSelectedSector(null);
         setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
         setSelectedColumnType(null);
         setPotentialCustomersData([]);
         // Reload initial sector data
@@ -1682,6 +1941,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         // Coming back from detailed view accessed from sector level 2 (customer badge click)
         setDrillLevel(0);
         setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
         setSelectedColumnType(null);
         setPotentialCustomersData([]);
         // Keep sectorDrillLevel at 2 and reload customer data without type filter
@@ -1920,6 +2180,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const customerName = customerData.customer_name;
 
       setSelectedCustomer(customerName || "Customer");
+      setSelectedCustomerCode(customerCode || null);
       // Normalize "quote" to "quoted_created" for API
       const normalizedColumnType =
         columnType === "quote" ? "quoted_created" : columnType;
@@ -1965,7 +2226,17 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             drillLevel,
             selectedSalesperson,
             selectedCustomer,
+            selectedCustomerCode,
             selectedColumnType,
+            productDrillLevel,
+            sectorDrillLevel,
+            selectedService,
+            selectedServiceType,
+            selectedSector,
+            activeTab,
+            fromDate,
+            toDate,
+            period,
           },
           viewMode: true,
         },
@@ -2000,6 +2271,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         // Coming back from detailed view accessed from product level 2 (customer badge click)
         setDrillLevel(0);
         setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
         setSelectedColumnType(null);
         setPotentialCustomersData([]);
         // Keep productDrillLevel at 2 and reload customer data without type filter
