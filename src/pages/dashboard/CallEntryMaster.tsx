@@ -62,6 +62,7 @@ import { searchAPI } from "../../service/searchApi";
 import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
+import { useListFilterStore } from "../../store/listFilterStore";
 
 type CompanyData = {
   id: number;
@@ -86,7 +87,10 @@ type FilterState = {
   area: string | null;
   date_from: string | null;
   date_to: string | null;
+  search?: string | null; // Optional search field for appliedFilters
 };
+
+const LIST_KEY = "CALL_ENTRY_MASTER";
 
 function CallEntry() {
   // Get first day of current month and today's date
@@ -149,8 +153,11 @@ function CallEntry() {
   //Search Debounce
   const [searchQuery, setSearchQuery] = useState("");
   const [debounced] = useDebouncedValue(searchQuery, 500);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
+  const [isRefreshingData, setIsRefreshingData] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
+  const prevSearchRef = useRef<string>(searchQuery);
   const [isClosingCallEntry, setIsClosingCallEntry] = useState(false);
   const [closeModalOpened, { open: openCloseModal, close: closeCloseModal }] =
     useDisclosure(false);
@@ -159,11 +166,30 @@ function CallEntry() {
   >(null);
   const [remark, setRemark] = useState<string>("");
   const [openedMenuRowId, setOpenedMenuRowId] = useState<number | null>(null);
+  const hasRestoredFromStore = useRef(false);
+
+  // Zustand store for filter and search preservation
+  const setStoreFilters = useListFilterStore((state) => state.setFilters);
+  const setStoreSearch = useListFilterStore((state) => state.setSearch);
+  const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
+  const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
+  const clearStoreAll = useListFilterStore((state) => state.clearAll);
+  const clearStoreAllExcept = useListFilterStore(
+    (state) => state.clearAllExcept
+  );
 
   // Store display values (labels) for SearchableSelect fields
   const [customerDisplayValue, setCustomerDisplayValue] = useState<
     string | null
   >(null);
+
+  // Debounced search effect
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   // Remove old state variables since React Query handles this now
 
@@ -181,17 +207,11 @@ function CallEntry() {
         // Only Apply Filters button will use the new dates via appliedFilters
         const requestBody: { filters: any } = { filters: {} };
 
-        // Check for dates from Dashboard navigation (restoreFilters or initialFilters)
+        // Use default date range for initial load
         let dateFrom: string | null = null;
         let dateTo: string | null = null;
 
-        if (location.state?.restoreFilters?.fromDate && location.state?.restoreFilters?.toDate) {
-          dateFrom = dayjs(location.state.restoreFilters.fromDate).format("YYYY-MM-DD");
-          dateTo = dayjs(location.state.restoreFilters.toDate).format("YYYY-MM-DD");
-        } else if (location.state?.initialFilters?.date_from && location.state?.initialFilters?.date_to) {
-          dateFrom = location.state.initialFilters.date_from;
-          dateTo = location.state.initialFilters.date_to;
-        } else if (initialFromDateRef.current && initialToDateRef.current) {
+        if (initialFromDateRef.current && initialToDateRef.current) {
           dateFrom = dayjs(initialFromDateRef.current).format("YYYY-MM-DD");
           dateTo = dayjs(initialToDateRef.current).format("YYYY-MM-DD");
         }
@@ -243,65 +263,37 @@ function CallEntry() {
     date_to: null,
   });
 
-  // Separate query for filtered data - only runs when filters are applied
+  // Separate query for filtered data - triggers on Apply Filters, Clear Filters, Search changes, Navigation back
   const {
     data: filteredCallEntryData = [],
     isLoading: filteredCallEntryLoading,
+    isFetching: filteredCallEntryFetching,
     refetch: refetchFilteredCallEntries,
   } = useQuery({
-    queryKey: ["filteredCallEntries", filtersApplied, appliedFilters],
+    queryKey: [
+      "filteredCallEntries",
+      filtersApplied,
+      appliedFilters,
+      debouncedSearch, // Include debouncedSearch in queryKey to trigger on search changes
+    ],
     queryFn: async () => {
       try {
-        if (!filtersApplied) return [];
-
-        const payload: any = {};
-
-        // Add date range if both dates are selected (use appliedFilters dates, not current state)
-        if (appliedFilters.date_from && appliedFilters.date_to) {
-          payload.date_from = appliedFilters.date_from;
-          payload.date_to = appliedFilters.date_to;
+        const filterPayload = buildFilterPayload();
+        
+        // If no filters and no search, return empty (will use unfiltered data)
+        if (Object.keys(filterPayload).length === 0) {
+          console.log("No filters or search, skipping API call");
+          return [];
         }
 
-        if (appliedFilters.customer)
-          payload.customer_code = appliedFilters.customer;
-        if (appliedFilters.call_date)
-          payload.call_date = dayjs(appliedFilters.call_date).format(
-            "YYYY-MM-DD"
-          );
-        if (appliedFilters.call_mode)
-          payload.call_mode_id = appliedFilters.call_mode;
-        if (appliedFilters.followup_date)
-          payload.followup_date = dayjs(appliedFilters.followup_date).format(
-            "YYYY-MM-DD"
-          );
-        if (appliedFilters.status) {
-          // Check if status is from dashboard (status values like OVERDUE, TODAY, UPCOMING, CLOSED)
-          // Dashboard sends status directly, not followup action ID
-          const dashboardStatuses = ["OVERDUE", "TODAY", "UPCOMING", "CLOSED"];
-          const isDashboardStatus = dashboardStatuses.includes(
-            String(appliedFilters.status).toUpperCase()
-          );
+        const requestBody = { filters: filterPayload };
+        console.log("📤 API Call - Applying filters + search:", {
+          payload: filterPayload,
+          filtersApplied,
+          searchQuery,
+          debouncedSearch,
+        });
 
-          if (isDashboardStatus) {
-            // From dashboard - send status directly
-            payload.status = appliedFilters.status;
-          } else {
-            // From filter form - find the followup action name by ID
-            const selectedFollowUp = followUpActionOptionsData.find(
-              (option: any) => option.value === appliedFilters.status
-            );
-            payload.followup_action_name =
-              selectedFollowUp?.label || appliedFilters.status;
-          }
-        }
-        if (appliedFilters.sales_person)
-          payload.created_by = appliedFilters.sales_person;
-        if (appliedFilters.city) payload.city = appliedFilters.city;
-        if (appliedFilters.area) payload.area = appliedFilters.area;
-
-        if (Object.keys(payload)?.length === 0) return [];
-
-        const requestBody = { filters: payload };
         const response = await apiCallProtected.post(
           URL.filter_call_entries,
           requestBody
@@ -321,10 +313,124 @@ function CallEntry() {
         return [];
       }
     },
-    enabled: false, // Don't run automatically - only when Apply Filters is clicked
+    // Disable query during refreshData to prevent auto-trigger from queryKey changes
+    // Only manually refetch after state is fully restored
+    enabled: (filtersApplied || Boolean(debouncedSearch.trim())) && !isRefreshingData,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
   });
+
+  // Clear all store entries except this page's key on mount
+  useEffect(() => {
+    clearStoreAllExcept(LIST_KEY);
+  }, []);
+
+  // Restore filters and search from store on mount (before API calls)
+  useEffect(() => {
+    if (hasRestoredFromStore.current) return;
+
+    const restoredState = useListFilterStore.getState().getState(LIST_KEY);
+    
+
+    const performRestore = async () => {
+      if (!restoredState) {
+        return; // No stored state, use defaults
+      }
+
+      // Restore filters
+      let hasFilters = false;
+      const restoredFilters = restoredState.filters as FilterState;
+      if (restoredFilters && Object.keys(restoredFilters).length > 0) {
+        // Restore filter form values
+        filterForm.setValues({
+          customer: restoredFilters.customer || null,
+          call_date: restoredFilters.call_date
+            ? (typeof restoredFilters.call_date === 'string'
+                ? dayjs(restoredFilters.call_date, "YYYY-MM-DD", true).toDate()
+                : restoredFilters.call_date)
+            : null,
+          call_mode: restoredFilters.call_mode || null,
+          followup_date: restoredFilters.followup_date
+            ? (typeof restoredFilters.followup_date === 'string'
+                ? dayjs(restoredFilters.followup_date, "YYYY-MM-DD", true).toDate()
+                : restoredFilters.followup_date)
+            : null,
+          status: restoredFilters.status || null,
+          sales_person: restoredFilters.sales_person || null,
+          city: restoredFilters.city || null,
+          area: restoredFilters.area || null,
+          date_from: restoredFilters.date_from || null,
+          date_to: restoredFilters.date_to || null,
+        });
+
+        // Restore date range if available
+        if (restoredFilters.date_from && restoredFilters.date_to) {
+          const parsedFrom = dayjs(restoredFilters.date_from, "YYYY-MM-DD", true);
+          const parsedTo = dayjs(restoredFilters.date_to, "YYYY-MM-DD", true);
+          if (parsedFrom.isValid()) setFromDate(parsedFrom.toDate());
+          if (parsedTo.isValid()) setToDate(parsedTo.toDate());
+        }
+
+        hasFilters = Boolean(
+          restoredFilters.customer ||
+          restoredFilters.call_date ||
+          restoredFilters.call_mode ||
+          restoredFilters.followup_date ||
+          restoredFilters.status ||
+          restoredFilters.sales_person ||
+          restoredFilters.city ||
+          restoredFilters.area ||
+          (restoredFilters.date_from && restoredFilters.date_to)
+        );
+      }
+
+      // Restore search
+      let hasSearch = false;
+      if (
+        typeof restoredState.search === "string" &&
+        restoredState.search.trim()
+      ) {
+        setSearchQuery(restoredState.search);
+        hasSearch = true;
+      }
+
+      // Wait for state updates to flush (including debounced search)
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // Set applied filters and filtersApplied if we have filters or search
+      if (hasFilters || hasSearch) {
+        const restoredDateFrom = restoredFilters?.date_from || null;
+        const restoredDateTo = restoredFilters?.date_to || null;
+
+        setAppliedFilters({
+          customer: restoredFilters?.customer || null,
+          call_date: restoredFilters?.call_date || null,
+          call_mode: restoredFilters?.call_mode || null,
+          followup_date: restoredFilters?.followup_date || null,
+          status: restoredFilters?.status || null,
+          sales_person: restoredFilters?.sales_person || null,
+          city: restoredFilters?.city || null,
+          area: restoredFilters?.area || null,
+          date_from: restoredDateFrom,
+          date_to: restoredDateTo,
+          search: restoredState.search || null,
+        });
+
+        setFiltersApplied(true);
+        // Invalidate query to trigger refetch with restored filters/search
+        queryClient.invalidateQueries({
+          queryKey: ["filteredCallEntries"],
+        });
+      }
+    };
+
+    if(restoredState?.shouldRestore){
+      performRestore();
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
+      hasRestoredFromStore.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync refs with location.state when it changes
   useEffect(() => {
@@ -343,248 +449,106 @@ function CallEntry() {
     location.state?.fromDashboard,
   ]);
 
-  // Handle initial filters from dashboard navigation
+  // Note: Filter and search restoration is now handled via listFilterStore, not location.state
+
+  // Load data on mount with default dates - API only hits on Apply Filters button
+  // Date changes don't trigger API automatically - only Apply Filters button does
+
+  // Ref to prevent search change effect from triggering during refreshData restoration
+  const isRefreshingDataRef = useRef(false);
+
+  // Handle search changes - trigger API when search value changes (debounced)
   useEffect(() => {
-    if (location.state?.initialFilters && !initialFiltersProcessed.current) {
-      isProcessingInitialFilters.current = true; // Mark that we're processing initial filters
-      initialFiltersProcessed.current = true;
-      isMountedRef.current = true;
+    // Skip if component is not ready
+    if (!hasRestoredFromStore.current) {
+      prevSearchRef.current = debouncedSearch;
+      return;
+    }
 
-      // Persist returnToDashboard, dashboardState, and fromDashboard in refs
-      if (location.state?.returnToDashboard !== undefined) {
-        returnToDashboardRef.current = Boolean(
-          location.state.returnToDashboard
-        );
-      }
-      if (location.state?.dashboardState !== undefined) {
-        dashboardStateRef.current = location.state.dashboardState;
-      }
-      if (location.state?.fromDashboard !== undefined) {
-        fromDashboardRef.current = Boolean(location.state.fromDashboard);
-      }
+    // Skip if we're currently refreshing data (prevent multiple API calls during refreshData)
+    if (isRefreshingDataRef.current) {
+      prevSearchRef.current = debouncedSearch;
+      return;
+    }
 
-      const initialFilters = location.state.initialFilters;
+    // Only trigger API if search actually changed (debounced)
+    if (prevSearchRef.current === debouncedSearch) {
+      return;
+    }
 
-      // Parse date filters if provided
-      let callDateFrom: Date | null = null;
-      let callDateTo: Date | null = null;
-
-      if (initialFilters.date_from) {
-        const parsedFrom = dayjs(initialFilters.date_from, "YYYY-MM-DD", true);
-        if (parsedFrom.isValid()) {
-          callDateFrom = parsedFrom.toDate();
-        }
-      }
-
-      if (initialFilters.date_to) {
-        const parsedTo = dayjs(initialFilters.date_to, "YYYY-MM-DD", true);
-        if (parsedTo.isValid()) {
-          callDateTo = parsedTo.toDate();
-        }
-      }
-
-      // Set applied filters first
-      setAppliedFilters({
-        customer: initialFilters.customer || null,
-        sales_person: initialFilters.sales_person || null,
-        status: initialFilters.status || null,
-        call_date: initialFilters.call_date
-          ? dayjs(initialFilters.call_date, "YYYY-MM-DD", true).toDate()
-          : null,
-        followup_date: initialFilters.followup_date
-          ? dayjs(initialFilters.followup_date, "YYYY-MM-DD", true).toDate()
-          : null,
-        call_mode: null,
-        city: null,
-        area: null,
-        date_from: initialFilters.date_from || null,
-        date_to: initialFilters.date_to || null,
-      });
-
-      setFiltersApplied(true);
-
-      // Update filter form with initial values
-      filterForm.setValues({
-        customer: initialFilters.customer || null,
-        sales_person: initialFilters.sales_person || null,
-        status: initialFilters.status || null,
-        call_date: initialFilters.call_date
-          ? dayjs(initialFilters.call_date, "YYYY-MM-DD", true).toDate()
-          : null,
-        followup_date: initialFilters.followup_date
-          ? dayjs(initialFilters.followup_date, "YYYY-MM-DD", true).toDate()
-          : null,
-        call_mode: null,
-        city: null,
-        area: null,
-      });
-
-      // Clear only initialFilters but preserve dashboard return state
-      navigate(location.pathname, {
-        replace: true,
-        state: {
-          returnToDashboard: returnToDashboardRef.current,
-          dashboardState: dashboardStateRef.current,
-          fromDashboard: fromDashboardRef.current,
-        },
-      });
-
-      setShowFilters(false);
-
-      // Set dates and call API in one batch
-      // Set dates first, then call API after a delay to ensure state is updated
-      if (callDateFrom && callDateTo) {
-        setFromDate(callDateFrom);
-        setToDate(callDateTo);
-      }
-
-      // Call filtered API only once after all state is set
-      setTimeout(() => {
-        refetchFilteredCallEntries().finally(() => {
-          // Mark that initial filter processing is complete
-          isProcessingInitialFilters.current = false;
+    // Update ref for next comparison
+    prevSearchRef.current = debouncedSearch;
+    
+    // Save search to store immediately
+    setStoreSearch(LIST_KEY, searchQuery);
+    
+    // Trigger API with loading state
+    setIsRefreshingData(true);
+    
+    if (debouncedSearch.trim() !== "") {
+      // Search exists - trigger filtered API (search will be merged with filters in buildFilterPayload)
+      refetchFilteredCallEntries()
+        .then(() => {
+          setFiltersApplied(true);
+        })
+        .then(() => {
+          setIsRefreshingData(false);
+        })
+        .catch(() => {
+          setIsRefreshingData(false);
         });
-      }, 100);
+    } else {
+      // Search cleared - check if we have other filters
+      const hasOtherFilters =
+        appliedFilters.customer ||
+        appliedFilters.call_date ||
+        appliedFilters.call_mode ||
+        appliedFilters.followup_date ||
+        appliedFilters.status ||
+        appliedFilters.sales_person ||
+        appliedFilters.city ||
+        appliedFilters.area ||
+        (fromDate && toDate);
+
+      if (hasOtherFilters) {
+        // Still have filters - refetch filtered data
+        refetchFilteredCallEntries()
+          .then(() => {
+            setIsRefreshingData(false);
+          })
+          .catch(() => {
+            setIsRefreshingData(false);
+          });
+      } else {
+        // No filters - show unfiltered data
+        setFiltersApplied(false);
+        refetchCallEntries()
+          .then(() => {
+            setIsRefreshingData(false);
+          })
+          .catch(() => {
+            setIsRefreshingData(false);
+          });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state, location.pathname, refetchFilteredCallEntries]);
+  }, [debouncedSearch]);
 
-  // Load data on mount with default dates and when date range changes
-  useEffect(() => {
-    // Skip if we're currently processing initial filters from dashboard
-    if (isProcessingInitialFilters.current) {
-      return;
-    }
-
-    // Skip if we have initialFilters that haven't been processed yet
-    if (location.state?.initialFilters && !initialFiltersProcessed.current) {
-      return;
-    }
-
-    if (!isMountedRef.current) {
-      isMountedRef.current = true;
-      // Skip initial load if we have initialFilters (they will be processed separately)
-      if (location.state?.initialFilters) {
-        return;
-      }
-    }
-
-    // Only trigger API call when both dates are selected or both are cleared
-    // But skip if filters are applied (filtered query handles it)
-    if (filtersApplied) {
-      return;
-    }
-
-    if (fromDate && toDate) {
-      // Both dates selected - refetch with date range
-      refetchCallEntries();
-    } else if (!fromDate && !toDate && isMountedRef.current) {
-      // Both dates cleared - refetch with empty filters
-      refetchCallEntries();
-    }
-    // If only one date is selected, don't make API call
-  }, [
-    fromDate,
-    toDate,
-    refetchCallEntries,
-    filtersApplied,
-    location.state?.initialFilters,
-  ]);
-
-  // Handle refresh when navigating from CallEntryNew
+  // Handle refresh when navigating from create/edit operations
   useEffect(() => {
     if (location.state?.refreshData) {
-      // Refetch all call entry related data
-      refetchCallEntries();
-      refetchFilteredCallEntries();
-
-      // Clear the refresh state but preserve dashboard return state
-      navigate(location.pathname, {
-        replace: true,
-        state: {
-          returnToDashboard: returnToDashboardRef.current,
-          dashboardState: dashboardStateRef.current,
-          fromDashboard: fromDashboardRef.current,
-        },
-      });
-    }
-  }, [
-    location.state?.refreshData,
-    refetchCallEntries,
-    refetchFilteredCallEntries,
-    navigate,
-    location.pathname,
-  ]);
-
-  // Track if we're restoring filters to trigger refetch after state updates
-  const [isRestoringFilters, setIsRestoringFilters] = useState(false);
-
-  // Add effect to restore filters when returning from create/edit operations
-  useEffect(() => {
-    // Check if we're returning from a create/edit operation with filter restoration
-    if (location.state?.restoreFilters) {
-      // console.log(
-      //   "🔄 Restoring filters and refreshing data after create/edit operation"
-      // );
-
-      const restoreFiltersData = location.state.restoreFilters;
-
-      // Restore filter form state
-      filterForm.setValues({
-        customer: restoreFiltersData.filters?.customer || null,
-        call_date: restoreFiltersData.filters?.call_date || null,
-        call_mode: restoreFiltersData.filters?.call_mode || null,
-        followup_date: restoreFiltersData.filters?.followup_date || null,
-        status: restoreFiltersData.filters?.status || null,
-        sales_person: restoreFiltersData.filters?.sales_person || null,
-        city: restoreFiltersData.filters?.city || null,
-        area: restoreFiltersData.filters?.area || null,
-      });
-
-      // Restore display values for SearchableSelect fields
-      setCustomerDisplayValue(
-        restoreFiltersData.displayValues?.customer || null
-      );
-
-      // Restore date range
-      setFromDate(restoreFiltersData.fromDate || null);
-      setToDate(restoreFiltersData.toDate || null);
-
-      // Restore applied filters state
-      // Use dates from restoreFiltersData.fromDate/toDate (from Dashboard) or from filters.date_from/date_to
-      const restoredDateFrom = restoreFiltersData.fromDate 
-        ? dayjs(restoreFiltersData.fromDate).format("YYYY-MM-DD")
-        : restoreFiltersData.filters?.date_from || null;
-      const restoredDateTo = restoreFiltersData.toDate
-        ? dayjs(restoreFiltersData.toDate).format("YYYY-MM-DD")
-        : restoreFiltersData.filters?.date_to || null;
-
-      setAppliedFilters({
-        customer: restoreFiltersData.filters?.customer || null,
-        call_date: restoreFiltersData.filters?.call_date || null,
-        call_mode: restoreFiltersData.filters?.call_mode || null,
-        followup_date: restoreFiltersData.filters?.followup_date || null,
-        status: restoreFiltersData.filters?.status || null,
-        sales_person: restoreFiltersData.filters?.sales_person || null,
-        city: restoreFiltersData.filters?.city || null,
-        area: restoreFiltersData.filters?.area || null,
-        date_from: restoredDateFrom,
-        date_to: restoredDateTo,
-      });
-
-      // Restore filters applied state
-      const shouldApplyFilters = restoreFiltersData.filtersApplied || false;
-      setFiltersApplied(shouldApplyFilters);
-
-      // Restore fromDashboard flag if present
-      if (restoreFiltersData.fromDashboard !== undefined) {
-        fromDashboardRef.current = Boolean(restoreFiltersData.fromDashboard);
+      console.log("🔄 Refreshing data after create/edit operation");
+      
+      // Mark that we're handling refreshData so search change effect doesn't interfere
+      if (!hasRestoredFromStore.current) {
+        hasRestoredFromStore.current = true;
       }
+      
+      // Set flag to prevent search change effect from triggering
+      isRefreshingDataRef.current = true;
+      setIsRefreshingData(true);
 
-      // Set flag to trigger refetch after state updates
-      setIsRestoringFilters(true);
-
-      // Clear the restore filters flag but preserve dashboard return state
+      // Clear the refresh flag but preserve dashboard return state
       navigate(location.pathname, {
         replace: true,
         state: {
@@ -593,31 +557,124 @@ function CallEntry() {
           fromDashboard: fromDashboardRef.current,
         },
       });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state?.restoreFilters, navigate, location.pathname]);
 
-  // Effect to refetch data after filters are restored and state is updated
-  useEffect(() => {
-    if (isRestoringFilters) {
+      // Restore from store and refresh data - SINGLE API CALL ONLY
       const refreshData = async () => {
-        if (filtersApplied) {
-          // If filters were applied, invalidate and refetch filtered data
-          await queryClient.invalidateQueries({
-            queryKey: ["filteredCallEntries"],
-          });
-          await refetchFilteredCallEntries();
-        } else {
-          // Otherwise, refetch unfiltered data
-          await refetchCallEntries();
+        try {
+          // Check if we have filters or search from store
+          const restoredState = useListFilterStore.getState().getState(LIST_KEY);
+          const hasActiveFilters = restoredState?.filters && Object.keys(restoredState.filters).length > 0;
+          const hasActiveSearch = restoredState?.search && restoredState.search.trim() !== "";
+
+          // If we have filters/search in store but not in state, restore them first
+          if (restoredState && (hasActiveFilters || hasActiveSearch)) {
+            // Restore filters from store if they exist
+            if (hasActiveFilters) {
+              const restoredFilters = restoredState.filters as FilterState;
+              filterForm.setValues({
+                customer: restoredFilters.customer || null,
+                call_date: restoredFilters.call_date
+                  ? (typeof restoredFilters.call_date === 'string'
+                      ? dayjs(restoredFilters.call_date, "YYYY-MM-DD", true).toDate()
+                      : restoredFilters.call_date)
+                  : null,
+                call_mode: restoredFilters.call_mode || null,
+                followup_date: restoredFilters.followup_date
+                  ? (typeof restoredFilters.followup_date === 'string'
+                      ? dayjs(restoredFilters.followup_date, "YYYY-MM-DD", true).toDate()
+                      : restoredFilters.followup_date)
+                  : null,
+                status: restoredFilters.status || null,
+                sales_person: restoredFilters.sales_person || null,
+                city: restoredFilters.city || null,
+                area: restoredFilters.area || null,
+              });
+
+              // Restore date range
+              if (restoredFilters.date_from && restoredFilters.date_to) {
+                const parsedFrom = dayjs(restoredFilters.date_from, "YYYY-MM-DD", true);
+                const parsedTo = dayjs(restoredFilters.date_to, "YYYY-MM-DD", true);
+                if (parsedFrom.isValid()) setFromDate(parsedFrom.toDate());
+                if (parsedTo.isValid()) setToDate(parsedTo.toDate());
+              }
+
+              setAppliedFilters({
+                customer: restoredFilters.customer || null,
+                call_date: restoredFilters.call_date || null,
+                call_mode: restoredFilters.call_mode || null,
+                followup_date: restoredFilters.followup_date || null,
+                status: restoredFilters.status || null,
+                sales_person: restoredFilters.sales_person || null,
+                city: restoredFilters.city || null,
+                area: restoredFilters.area || null,
+                date_from: restoredFilters.date_from || null,
+                date_to: restoredFilters.date_to || null,
+                search: restoredState.search || null,
+              });
+            }
+
+            // Restore search from store if it exists (update prevSearchRef to prevent search effect trigger)
+            if (hasActiveSearch) {
+              setSearchQuery(restoredState.search);
+              prevSearchRef.current = restoredState.search; // Update to prevent search effect from triggering
+            }
+
+            // Wait for state updates to flush before calling API
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+
+          // Determine if we should fetch filtered data - SINGLE API CALL
+          const finalState = useListFilterStore.getState().getState(LIST_KEY);
+          const finalHasActiveFilters = finalState?.filters && Object.keys(finalState.filters).length > 0;
+          const finalHasActiveSearch = finalState?.search && finalState.search.trim() !== "";
+
+          // Wait a bit more to ensure all state updates are flushed and query is disabled
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          if (finalHasActiveFilters || finalHasActiveSearch) {
+            console.log("✅ [refreshData] Fetching filtered data with preserved filters");
+            // Set filtersApplied - query is disabled so won't auto-trigger
+            setFiltersApplied(true);
+            // Wait for state updates to flush (query remains disabled during this time)
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            // Now enable query and manually refetch in one atomic operation
+            // This ensures only ONE API call - query won't auto-trigger because we refetch immediately
+            isRefreshingDataRef.current = false;
+            setIsRefreshingData(false);
+            // Use refetch directly - query is now enabled, but refetch ensures single call
+            await refetchFilteredCallEntries();
+          } else {
+            console.log("🔄 [refreshData] Fetching unfiltered data");
+            // Set filtersApplied - query is disabled so won't auto-trigger
+            setFiltersApplied(false);
+            // Wait for state to update (query remains disabled)
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            // Release flag and refetch unfiltered data
+            isRefreshingDataRef.current = false;
+            setIsRefreshingData(false);
+            await refetchCallEntries();
+          }
+        } catch (error) {
+          console.error("Error refreshing data:", error);
+          // Always release flag on error
+          isRefreshingDataRef.current = false;
+          setIsRefreshingData(false);
+        } finally {
+          // Ensure flag is cleared even if there's an error
+          setIsRefreshingData(false);
         }
-        setIsRestoringFilters(false);
       };
 
       refreshData();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRestoringFilters, filtersApplied]);
+  }, [
+    location.state?.refreshData,
+    navigate,
+    location.pathname,
+    filterForm,
+  ]);
+
+  // Note: Filter and search restoration from location.state removed - now handled via listFilterStore
 
   // Removed raw customer API call - using SearchableSelect for dynamic loading
 
@@ -707,6 +764,55 @@ function CallEntry() {
   }, [rawFollowUpActionData]);
   console.log("followUpActionOptionsData---", followUpActionOptionsData);
 
+  // Helper function to build filter payload (includes search in filters:{})
+  // Moved here to ensure followUpActionOptionsData is available
+  const buildFilterPayload = useCallback(() => {
+    const payload: any = {};
+
+    // Add date range if both dates are selected
+    if (fromDate && toDate) {
+      payload.date_from = dayjs(fromDate).format("YYYY-MM-DD");
+      payload.date_to = dayjs(toDate).format("YYYY-MM-DD");
+    }
+
+    if (appliedFilters.customer) payload.customer_code = appliedFilters.customer;
+    if (appliedFilters.call_date)
+      payload.call_date = dayjs(appliedFilters.call_date).format("YYYY-MM-DD");
+    if (appliedFilters.call_mode) payload.call_mode_id = appliedFilters.call_mode;
+    if (appliedFilters.followup_date)
+      payload.followup_date = dayjs(appliedFilters.followup_date).format("YYYY-MM-DD");
+    if (appliedFilters.status) {
+      // Check if status is from dashboard
+      const dashboardStatuses = ["OVERDUE", "TODAY", "UPCOMING", "CLOSED"];
+      const isDashboardStatus = dashboardStatuses.includes(
+        String(appliedFilters.status).toUpperCase()
+      );
+
+      if (isDashboardStatus) {
+        payload.status = appliedFilters.status;
+      } else {
+        // From filter form - find the followup action name by ID
+        const selectedFollowUp = followUpActionOptionsData.find(
+          (option: any) => option.value === appliedFilters.status
+        );
+        payload.followup_action_name =
+          selectedFollowUp?.label || appliedFilters.status;
+      }
+    }
+    if (appliedFilters.sales_person) payload.created_by = appliedFilters.sales_person;
+    if (appliedFilters.city) payload.city = appliedFilters.city;
+    if (appliedFilters.area) payload.area = appliedFilters.area;
+
+    // Include search in filters:{} payload
+    if (debouncedSearch.trim()) {
+      payload.search = debouncedSearch.trim();
+    } else if (searchQuery.trim()) {
+      payload.search = searchQuery.trim();
+    }
+
+    return payload;
+  }, [appliedFilters, fromDate, toDate, debouncedSearch, searchQuery, followUpActionOptionsData]);
+
   // Fetch salespersons data
   const { data: salespersonsData = [], isLoading: salespersonsLoading } =
     useQuery({
@@ -737,8 +843,9 @@ function CallEntry() {
       }));
   }, [salespersonsData]);
 
-  // Search data with React Query
-  const { data: searchData, isLoading: searchLoading } = useQuery({
+  // Search data with React Query - DISABLED: search is now handled via filter API
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { data: _searchData, isLoading: _searchLoading } = useQuery({
     queryKey: ["callEntrySearch", debounced],
     queryFn: async () => {
       if (!debounced.trim()) return null;
@@ -750,7 +857,7 @@ function CallEntry() {
         return [];
       }
     },
-    enabled: debounced.trim() !== "",
+    enabled: false, // Disabled - search is now handled via filter API
     staleTime: 2 * 60 * 1000, // 2 minutes
     gcTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
@@ -758,39 +865,36 @@ function CallEntry() {
 
   // Determine which data to display
   const displayData = useMemo(() => {
-    if (debounced.trim() !== "" && searchData) {
-      console.log("Displaying search data:", searchData);
-      return searchData;
-    }
-    // Check if we have filtered data (filters were applied)
-    if (filtersApplied) {
-      console.log("Displaying filtered data:", filteredCallEntryData);
-      console.log("Filters applied:", filtersApplied);
+    // Use filtered data if filters are applied OR search is present
+    if ((filtersApplied || debouncedSearch.trim()) && filteredCallEntryData?.length)  {
       return filteredCallEntryData;
+    } else if ((filtersApplied || debouncedSearch.trim()) && !filteredCallEntryData?.length){
+      return []
     }
     console.log("Displaying unfiltered data:", callEntryData);
-    return callEntryData;
+    return callEntryData || [];
   }, [
-    debounced,
-    searchData,
     callEntryData,
     filteredCallEntryData,
     filtersApplied,
+    debouncedSearch,
   ]);
 
-  // Loading state
+  // Loading state - show loader until API response is received
   const isLoading = useMemo(() => {
-    if (isClosingCallEntry) return true;
-    if (filtersApplied) {
-      return filteredCallEntryLoading || searchLoading;
+    if (isClosingCallEntry || isRefreshingData) return true;
+    if (filtersApplied || debouncedSearch.trim()) {
+      return filteredCallEntryLoading || filteredCallEntryFetching;
     }
-    return callEntryLoading || searchLoading;
+    return callEntryLoading;
   }, [
     callEntryLoading,
     filteredCallEntryLoading,
-    searchLoading,
+    filteredCallEntryFetching,
     filtersApplied,
     isClosingCallEntry,
+    isRefreshingData,
+    debouncedSearch,
   ]);
 
   const applyFilters = async () => {
@@ -840,8 +944,8 @@ function CallEntry() {
       setPageIndex(0); // Reset to first page when applying filters
       setFiltersApplied(true); // Mark filters as applied
 
-      // Store the current filter form values as applied filters
-      setAppliedFilters({
+      // Prepare filters object for storage (without search, as it's stored separately)
+      const filtersToStore: FilterState = {
         customer: filterForm.values.customer,
         call_date: filterForm.values.call_date,
         call_mode: filterForm.values.call_mode,
@@ -854,15 +958,24 @@ function CallEntry() {
         date_from:
           fromDate && toDate ? dayjs(fromDate).format("YYYY-MM-DD") : null,
         date_to: fromDate && toDate ? dayjs(toDate).format("YYYY-MM-DD") : null,
+      };
+
+      // Store the current filter form values as applied filters (include search)
+      setAppliedFilters({
+        ...filtersToStore,
+        search: debouncedSearch.trim() || null,
       });
 
-      // Enable the filtered query and refetch
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredCallEntries"],
-      });
+      // Store filters and search in the list store
+      setStoreFilters(LIST_KEY, filtersToStore);
+      setStoreSearch(LIST_KEY, searchQuery.trim() || "");
+
       setShowFilters(false);
 
+      // Trigger API refetch
+      setIsRefreshingData(true);
       await refetchFilteredCallEntries();
+      setIsRefreshingData(false);
 
       console.log("Filters applied successfully");
     } catch (error) {
@@ -889,16 +1002,27 @@ function CallEntry() {
       area: null,
       date_from: null,
       date_to: null,
+      search: null,
     });
+
+    // Reset to initial date range (first day of month to today)
+    setFromDate(getDefaultFromDate());
+    setToDate(getDefaultToDate());
 
     // Clear display values
     setCustomerDisplayValue(null);
 
-    // Invalidate queries and refetch unfiltered data
+    // Clear filters and search from store
+    clearStoreFilters(LIST_KEY);
+    clearStoreSearch(LIST_KEY);
+
+    // Trigger API with initial payload (date range only)
+    setIsRefreshingData(true);
     await queryClient.invalidateQueries({ queryKey: ["callEntries"] });
     await queryClient.invalidateQueries({ queryKey: ["filteredCallEntries"] });
     await queryClient.removeQueries({ queryKey: ["filteredCallEntries"] }); // Remove filtered data from cache
     await refetchCallEntries();
+    setIsRefreshingData(false);
 
     ToastNotification({
       type: "success",
@@ -1130,6 +1254,7 @@ function CallEntry() {
                       toDate,
                       fromDashboard: fromDashboardRef.current,
                     };
+                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
                     navigate("/enquiry-create", {
                       state: {
                         actionType: "createEnquiry",
@@ -1188,6 +1313,7 @@ function CallEntry() {
                           toDate,
                           fromDashboard: fromDashboardRef.current,
                         };
+                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
                         navigate(`/call-entry-create/${row.original.id}`, {
                           state: {
                             ...row.original,
@@ -1404,6 +1530,22 @@ function CallEntry() {
               <TextInput
                 placeholder="Search..."
                 leftSection={<IconSearch size={16} />}
+                rightSection={
+                  searchQuery ? (
+                    <ActionIcon
+                      variant="transparent"
+                      size="sm"
+                      onClick={() => {
+                        setSearchQuery("");
+                        // Clear search will trigger API via debouncedSearch useEffect
+                        // Store will be updated when debouncedSearch changes
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
                 w={248}
                 size="sm"
                 value={searchQuery}
@@ -1469,6 +1611,7 @@ function CallEntry() {
                     toDate,
                     fromDashboard: fromDashboardRef.current,
                   };
+                  useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
                   navigate("/call-entry-calendar", {
                     state: {
                       preserveFilters: currentFilterState,
@@ -1521,6 +1664,7 @@ function CallEntry() {
                     toDate,
                     fromDashboard: fromDashboardRef.current,
                   };
+                  useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
                   navigate("/call-entry-create", {
                     state: {
                       preserveFilters: currentFilterState,

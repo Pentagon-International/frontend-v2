@@ -72,7 +72,6 @@ const quotationFormSchema = (isRemarkRequired: boolean) =>
     multi_carrier: Yup.string().required("Carrier type is required"),
     quote_type: Yup.string().required("Quote type is required"),
     carrier_code: Yup.string(),
-    icd: Yup.string(),
     remark: Yup.string().when([], {
       is: () => isRemarkRequired,
       then: (schema) => schema.required("Remark is required"),
@@ -263,7 +262,6 @@ type CarrierComparisonData = {
   origin: string;
   destination: string;
   service: string;
-  icd: string;
   container_details: Array<{
     container_type: string;
     quantity: number;
@@ -315,7 +313,6 @@ function QuotationCreate({
     },
     [user?.country?.country_code]
   );
-  const [icdData, setIcdData] = useState<any[]>([]);
   const [carrierComparisonData, setCarrierComparisonData] =
     useState<CarrierComparisonData | null>(null);
   const [isLoadingCarriers, setIsLoadingCarriers] = useState(false);
@@ -601,7 +598,6 @@ function QuotationCreate({
       multi_carrier: "false",
       quote_type: "Standard",
       carrier_code: "",
-      icd: "",
       status: "QUOTE CREATED",
       remark: "",
     },
@@ -665,7 +661,6 @@ function QuotationCreate({
         multi_carrier: quotationData.multi_carrier ? "true" : "false",
         quote_type: quotationData.quote_type || "Standard",
         carrier_code: carrierCode,
-        icd: quotationData.icd || "",
         status: "QUOTE CREATED", // Always set to default for consistency
         remark: quotationData.remark || "",
       });
@@ -707,7 +702,6 @@ function QuotationCreate({
       multi_carrier: "false",
       quote_type: "Standard",
       carrier_code: "",
-      icd: "",
       status: "QUOTE CREATED",
       remark: "",
     });
@@ -915,7 +909,6 @@ function QuotationCreate({
           multi_carrier: "false",
           quote_type: "Standard",
           carrier_code: "",
-          icd: "",
           status: "QUOTE CREATED",
           remark: "",
         });
@@ -939,19 +932,6 @@ function QuotationCreate({
     }
   }, [selectedServiceIndex, selectedService?.id]);
 
-  useEffect(() => {
-    const fetchIcdData = async () => {
-      // const response = await getAPICall(URL.ICD_MASTER);
-      const response = [
-        {
-          label: "Tumb",
-          value: "Tumb",
-        },
-      ];
-      setIcdData(response);
-    };
-    fetchIcdData();
-  }, []);
 
   // Fetch quotation details when quotationId is provided from URL
   useEffect(() => {
@@ -997,7 +977,6 @@ function QuotationCreate({
                 multi_carrier: quotation.multi_carrier ? "true" : "false",
                 quote_type: quotation.quote_type || "Standard",
                 carrier_code: quotation.carrier_code || "",
-                icd: quotation.icd || "",
                 status: quotationData.status || "QUOTE CREATED",
                 remark: quotation.remark || "",
               };
@@ -2203,10 +2182,11 @@ function QuotationCreate({
     );
 
     // Create service data for current service
+    // ICD is now retrieved from enquiry service details, not from quotation form
     const serviceData = {
       service_id: serviceId,
       carrier_code: quotationForm.values.carrier_code,
-      icd: quotationForm.values.icd,
+      icd: selectedService?.icd || "", // Get ICD from enquiry service details
       remark: quotationForm.values.remark,
       valid_upto: quotationForm.values.valid_upto,
       multi_carrier: quotationForm.values.multi_carrier === "true",
@@ -2289,7 +2269,7 @@ function QuotationCreate({
         return {
           service_id: finalServiceId,
           carrier_code: data.quotationForm.carrier_code,
-          icd: data.quotationForm.icd,
+          icd: selectedService?.icd || "", // Get ICD from enquiry service details
           remark: data.quotationForm.remark,
           valid_upto: data.quotationForm.valid_upto,
           multi_carrier: data.quotationForm.multi_carrier === "true",
@@ -2748,7 +2728,6 @@ function QuotationCreate({
             multi_carrier: quotationForService.multi_carrier ? "true" : "false",
             quote_type: quotationForService.quote_type || "Standard",
             carrier_code: carrierCode,
-            icd: quotationForService.icd || "",
             status: "QUOTE CREATED", // Always set to default for consistency
             remark: quotationForService.remark || "",
           };
@@ -2836,7 +2815,7 @@ function QuotationCreate({
   }, [
     actualEnquiryData?.enquiry_id,
     actualEnquiryData?.service,
-    quotationForm.values.icd,
+    selectedService?.icd,
   ]);
 
   // Sync selected carrier with form value
@@ -2852,16 +2831,17 @@ function QuotationCreate({
     enquiryID: any,
     carrierVal: any,
     service: any,
-    Icd: any,
     serviceId: any
   ) {
     try {
+      // Get ICD from selected service details (from enquiry)
+      const icdValue = selectedService?.icd || "";
       const payload = {
         enquiry_id: enquiryID,
         service: service,
         carrier_code: service === "LCL" ? "" : carrierVal, // For LCL, carrier is not required
         name: destinationOption,
-        icd: Icd,
+        icd: icdValue,
         service_id: serviceId, // Add service_id to payload
       };
       console.log("payload-----------", payload);
@@ -2881,10 +2861,12 @@ function QuotationCreate({
   async function fetchCarrierComparison() {
     setIsLoadingCarriers(true);
     try {
+      // Get ICD from selected service details (from enquiry)
+      const icdValue = selectedService?.icd || "";
       const payload = {
         enquiry_id: actualEnquiryData.enquiry_id,
         service: selectedService?.service,
-        icd: quotationForm.values.icd || "",
+        icd: icdValue,
         service_id: currentServiceId, // Add service_id to payload
       };
 
@@ -3652,7 +3634,8 @@ function QuotationCreate({
 
   const tariffSubmit = async () => {
     console.log("Enquiry data----", actualEnquiryData);
-    const icdVal = quotationForm.values.icd;
+    // Get ICD from selected service details (from enquiry)
+    const icdVal = selectedService?.icd || "";
 
     // Use the temporary selected carrier if available, otherwise use form value
     const carrierVal =
@@ -4464,33 +4447,6 @@ function QuotationCreate({
                             },
                           }}
                           {...quotationForm.getInputProps("carrier_code")}
-                        />
-                      </Grid.Col>
-                    )}
-                    {selectedService?.service !== "LCL" && (
-                      <Grid.Col span={1}>
-                        <Dropdown
-                          label="ICD"
-                          placeholder="ICD"
-                          searchable
-                          // withAsterisk
-                          data={icdData}
-                          styles={{
-                            input: {
-                              fontSize: "14px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                            label: {
-                              fontSize: "14px",
-                              fontWeight: 500,
-                              color: "#424242",
-                              marginBottom: "4px",
-                              fontFamily: "Inter",
-                              fontStyle: "medium",
-                            },
-                          }}
-                          {...quotationForm.getInputProps("icd")}
                         />
                       </Grid.Col>
                     )}
@@ -5740,32 +5696,6 @@ function QuotationCreate({
                           },
                         }}
                         {...quotationForm.getInputProps("carrier_code")}
-                      />
-                    </Grid.Col>
-                  )}
-                  {selectedService?.service !== "LCL" && (
-                    <Grid.Col span={1}>
-                      <Dropdown
-                        label="ICD"
-                        placeholder="ICD"
-                        searchable
-                        data={icdData}
-                        styles={{
-                          input: {
-                            fontSize: "14px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                          label: {
-                            fontSize: "14px",
-                            fontWeight: 500,
-                            color: "#424242",
-                            marginBottom: "4px",
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                        }}
-                        {...quotationForm.getInputProps("icd")}
                       />
                     </Grid.Col>
                   )}

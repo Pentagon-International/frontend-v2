@@ -4828,7 +4828,12 @@ function CallEntryNew() {
                             },
                           });
                         } else {
-                          navigate(returnTo);
+                          console.log("return to =------------",returnTo, routerLocation.state)
+                          navigate(returnTo, {
+                            state: {
+                              statusFilter:routerLocation.state?.statusFilter
+                            },
+                          });
                         }
                       } else {
                         // Restore filter state if preserved when going back to call-entry
