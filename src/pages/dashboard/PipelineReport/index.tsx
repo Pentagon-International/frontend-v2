@@ -2277,12 +2277,19 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
         const response = await getPotentialCustomersDataForProduct(filters);
         setPotentialCustomersData(transformNullValues(response.data || []));
+        // Store summary if available
+        if ((response as any).summary) {
+          setPotentialCustomersSummary((response as any).summary);
+        } else {
+          setPotentialCustomersSummary(null);
+        }
       } catch (error) {
         console.error(
           "Error loading product customer financial column data:",
           error
         );
         setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
       } finally {
         setDrilldownLoading(false);
       }
@@ -2557,9 +2564,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           response = await getPotentialCustomersData(filters);
         }
         setPotentialCustomersData(transformNullValues(response.data || []));
+        // Store summary if available
+        if ((response as any).summary) {
+          setPotentialCustomersSummary((response as any).summary);
+        } else {
+          setPotentialCustomersSummary(null);
+        }
       } catch (error) {
         console.error("Error reloading detailed data:", error);
         setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
       } finally {
         setDrilldownLoading(false);
       }
@@ -2872,8 +2886,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       _isTotalRow: true, // Flag to identify total row
     };
 
-    // For potential type, use potential_profit field; for others, use profit field
-    if (selectedColumnType === "potential") {
+    // For potential type, check if data has potential_profit field, otherwise use profit field
+    // (salesperson tab has potential_profit, product/region tabs have profit)
+    if (
+      selectedColumnType === "potential" &&
+      firstRow.potential_profit !== undefined
+    ) {
       totalRow.potential_profit = totalProfit;
     } else {
       totalRow.profit = totalProfit;
@@ -3054,17 +3072,15 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     }
 
     // Add total row to potentialCustomersData if summary is available
-    // Only for salesperson tab (when neither selectedSector nor selectedService is set)
+    // For all tabs (salesperson, product, region) when at customer drill level (drillLevel === 2)
     let displayPotentialCustomersData = potentialCustomersData;
-    // Check if this is salesperson tab: no selectedSector, no selectedService, but we have selectedColumnType
-    if (!selectedSector && !selectedService) {
-      displayPotentialCustomersData = addTotalRowForDrillLevel2(
-        potentialCustomersData,
-        potentialCustomersSummary,
-        selectedColumnType,
-        "customer_name"
-      );
-    }
+    // Add total row for all tabs at customer drill level
+    displayPotentialCustomersData = addTotalRowForDrillLevel2(
+      potentialCustomersData,
+      potentialCustomersSummary,
+      selectedColumnType,
+      "customer_name"
+    );
 
     return (
       <DetailedViewTable
