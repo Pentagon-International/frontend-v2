@@ -394,6 +394,11 @@ function QuotationCreate({
 
   console.log("Whole enquiry data---", actualEnquiryData);
 
+  // Check if this is view mode (read-only) from dashboard
+  const isViewMode = Boolean(
+    location.state?.viewMode || quotationData?.viewMode
+  );
+
   // Check if this is edit mode (standalone route with quotation data)
   // Include quotationId check to handle navigation from dashboard
   const isStandaloneEdit =
@@ -401,11 +406,12 @@ function QuotationCreate({
     (quotationData || fetchedQuotationData || !!quotationId) &&
     (quotationData?.actionType === "edit" ||
       !!fetchedQuotationData ||
-      !!quotationId);
+      !!quotationId) &&
+    !isViewMode; // Not edit mode if in view mode
   const isEmbeddedEditMode = Boolean(
     enquiryData && enquiryData.actionType === "editQuotation"
   );
-  const isEditMode = isStandaloneEdit || isEmbeddedEditMode;
+  const isEditMode = (isStandaloneEdit || isEmbeddedEditMode) && !isViewMode;
   const quotationIdForEdit =
     actualEnquiryData?.actionType === "edit"
       ? actualEnquiryData?.id
@@ -3900,7 +3906,8 @@ function QuotationCreate({
         {/* Only render left pane when standalone (no goToStep prop) */}
         {/* Always show layout with fixed footer for edit mode or when embedded in EnquiryCreate (goToStep exists) */}
         {(() => {
-          const shouldShowLayout = isEditMode || goToStep;
+          // Show the main two-pane layout for edit mode, embedded-in-enquiry mode, **and** view mode
+          const shouldShowLayout = isEditMode || goToStep || isViewMode;
           console.log("QuotationCreate Layout Debug:", {
             isEditMode,
             goToStep: !!goToStep,
@@ -4318,6 +4325,8 @@ function QuotationCreate({
                         {...quotationForm.getInputProps(
                           "quote_currency_country_code"
                         )}
+                        readOnly={isViewMode}
+                        disabled={isViewMode}
                       />
                     </Grid.Col>
                     <Grid.Col span={1.75}>
@@ -4332,19 +4341,23 @@ function QuotationCreate({
                               : null
                           }
                           onChange={(date) => {
-                            const formatted = date
-                              ? dayjs(date).format("YYYY-MM-DD")
-                              : "";
-                            quotationForm.setFieldValue(
-                              "valid_upto",
-                              formatted
-                            );
+                            if (!isViewMode) {
+                              const formatted = date
+                                ? dayjs(date).format("YYYY-MM-DD")
+                                : "";
+                              quotationForm.setFieldValue(
+                                "valid_upto",
+                                formatted
+                              );
+                            }
                           }}
                           valueFormat="YYYY-MM-DD"
                           leftSection={<IconCalendar size={18} />}
                           leftSectionPointerEvents="none"
                           radius="sm"
                           size="sm"
+                          readOnly={isViewMode}
+                          disabled={isViewMode}
                           // dropdownType="popover"
                           styles={{
                             input: {
@@ -4395,11 +4408,14 @@ function QuotationCreate({
                         label="Multi Carrier"
                         checked={quotationForm.values.multi_carrier === "true"}
                         onChange={(event) => {
-                          quotationForm.setFieldValue(
-                            "multi_carrier",
-                            event.currentTarget.checked ? "true" : "false"
-                          );
+                          if (!isViewMode) {
+                            quotationForm.setFieldValue(
+                              "multi_carrier",
+                              event.currentTarget.checked ? "true" : "false"
+                            );
+                          }
                         }}
+                        disabled={isViewMode}
                         styles={{
                           label: {
                             fontSize: "14px",
@@ -4438,6 +4454,8 @@ function QuotationCreate({
                           },
                         }}
                         {...quotationForm.getInputProps("quote_type")}
+                        readOnly={isViewMode}
+                        disabled={isViewMode}
                       />
                     </Grid.Col>
                     {selectedService?.service !== "LCL" && (
@@ -4464,6 +4482,8 @@ function QuotationCreate({
                             },
                           }}
                           {...quotationForm.getInputProps("carrier_code")}
+                          readOnly={isViewMode}
+                          disabled={isViewMode}
                         />
                       </Grid.Col>
                     )}
@@ -4491,6 +4511,8 @@ function QuotationCreate({
                             },
                           }}
                           {...quotationForm.getInputProps("icd")}
+                          readOnly={isViewMode}
+                          disabled={isViewMode}
                         />
                       </Grid.Col>
                     )}
@@ -4520,6 +4542,8 @@ function QuotationCreate({
                           },
                         }}
                         {...quotationForm.getInputProps("status")}
+                        readOnly={isViewMode}
+                        disabled={isViewMode}
                       />
                     </Grid.Col>
                     <Grid.Col span={2}>
@@ -4531,14 +4555,18 @@ function QuotationCreate({
                             placeholder="Enter remark"
                             value={quotationForm.values.remark}
                             onChange={(e) => {
-                              const formattedValue = toTitleCase(
-                                e.target.value
-                              );
-                              quotationForm.setFieldValue(
-                                "remark",
-                                formattedValue
-                              );
+                              if (!isViewMode) {
+                                const formattedValue = toTitleCase(
+                                  e.target.value
+                                );
+                                quotationForm.setFieldValue(
+                                  "remark",
+                                  formattedValue
+                                );
+                              }
                             }}
+                            readOnly={isViewMode}
+                            disabled={isViewMode}
                             styles={{
                               input: {
                                 fontSize: "14px",
@@ -4557,164 +4585,121 @@ function QuotationCreate({
                             error={quotationForm.errors.remark}
                           />
                         </div>
-                        <Menu shadow="md" width={220} position="bottom-end">
-                          <Menu.Target>
-                            <ActionIcon
-                              variant="subtle"
-                              color="#105476"
-                              size="lg"
+                        {!isViewMode && (
+                          <Menu shadow="md" width={220} position="bottom-end">
+                            <Menu.Target>
+                              <ActionIcon
+                                variant="subtle"
+                                color="#105476"
+                                size="lg"
+                                styles={{
+                                  root: {
+                                    fontFamily: "Inter",
+                                    fontSize: "13px",
+                                    border: "1px solid #E9ECEF",
+                                    borderRadius: "8px",
+                                    "&:hover": {
+                                      backgroundColor: "#F8F9FA",
+                                    },
+                                  },
+                                }}
+                              >
+                                <IconDotsVertical size={18} />
+                              </ActionIcon>
+                            </Menu.Target>
+                            <Menu.Dropdown
                               styles={{
-                                root: {
-                                  fontFamily: "Inter",
-                                  fontSize: "13px",
+                                dropdown: {
                                   border: "1px solid #E9ECEF",
                                   borderRadius: "8px",
-                                  "&:hover": {
-                                    backgroundColor: "#F8F9FA",
-                                  },
+                                  padding: "8px",
+                                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
                                 },
                               }}
                             >
-                              <IconDotsVertical size={18} />
-                            </ActionIcon>
-                          </Menu.Target>
-                          <Menu.Dropdown
-                            styles={{
-                              dropdown: {
-                                border: "1px solid #E9ECEF",
-                                borderRadius: "8px",
-                                padding: "8px",
-                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                              },
-                            }}
-                          >
-                            <Menu.Item
-                              leftSection={
-                                <Box
-                                  style={{
-                                    backgroundColor: "#E7F5FF",
-                                    borderRadius: "6px",
-                                    padding: "6px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <IconNotes size={16} color="#105476" />
-                                </Box>
-                              }
-                              styles={{
-                                item: {
-                                  fontFamily: "Inter",
-                                  fontSize: "14px",
-                                  fontWeight: 500,
-                                  borderRadius: "6px",
-                                  padding: "10px 12px",
-                                  marginBottom: "4px",
-                                  "&:hover": {
-                                    backgroundColor: "#F8F9FA",
-                                  },
-                                },
-                                itemLabel: {
-                                  fontFamily: "Inter",
-                                  fontSize: "14px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                },
-                              }}
-                              onClick={handleOpenNotesConditionsModal}
-                            >
-                              Notes & Conditions
-                            </Menu.Item>
-                            <Menu.Item
-                              leftSection={
-                                <Box
-                                  style={{
-                                    backgroundColor: "#E7F5FF",
-                                    borderRadius: "6px",
-                                    padding: "6px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <IconChartBar size={16} color="#105476" />
-                                </Box>
-                              }
-                              disabled={selectedService?.service === "LCL"}
-                              styles={{
-                                item: {
-                                  fontFamily: "Inter",
-                                  fontSize: "14px",
-                                  fontWeight: 500,
-                                  borderRadius: "6px",
-                                  padding: "10px 12px",
-                                  marginBottom: "4px",
-                                  "&:hover": {
-                                    backgroundColor: "#F8F9FA",
-                                  },
-                                },
-                                itemLabel: {
-                                  fontFamily: "Inter",
-                                  fontSize: "14px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                },
-                              }}
-                              onClick={() => {
-                                if (!carrierComparisonData) {
-                                  fetchCarrierComparison();
+                              <Menu.Item
+                                leftSection={
+                                  <Box
+                                    style={{
+                                      backgroundColor: "#E7F5FF",
+                                      borderRadius: "6px",
+                                      padding: "6px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <IconNotes size={16} color="#105476" />
+                                  </Box>
                                 }
-                                openCarrierModal();
-                              }}
-                            >
-                              Check carrier comparison
-                            </Menu.Item>
-                            <Menu.Item
-                              leftSection={
-                                <Box
-                                  style={{
-                                    backgroundColor: "#E7F5FF",
+                                styles={{
+                                  item: {
+                                    fontFamily: "Inter",
+                                    fontSize: "14px",
+                                    fontWeight: 500,
                                     borderRadius: "6px",
-                                    padding: "6px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <IconDatabase size={16} color="#105476" />
-                                </Box>
-                              }
-                              disabled={
-                                selectedService?.service === "FCL" &&
-                                !quotationForm.values.carrier_code
-                              }
-                              styles={{
-                                item: {
-                                  fontFamily: "Inter",
-                                  fontSize: "14px",
-                                  fontWeight: 500,
-                                  borderRadius: "6px",
-                                  padding: "10px 12px",
-                                  marginBottom: "4px",
-                                  "&:hover": {
-                                    backgroundColor: "#F8F9FA",
+                                    padding: "10px 12px",
+                                    marginBottom: "4px",
+                                    "&:hover": {
+                                      backgroundColor: "#F8F9FA",
+                                    },
                                   },
-                                },
-                                itemLabel: {
-                                  fontFamily: "Inter",
-                                  fontSize: "14px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                },
-                              }}
-                              onClick={() => open()}
-                            >
-                              Get tariff data
-                            </Menu.Item>
-                            {isStandaloneEdit && (
-                              <>
-                                <Menu.Divider />
+                                  itemLabel: {
+                                    fontFamily: "Inter",
+                                    fontSize: "14px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                  },
+                                }}
+                                onClick={handleOpenNotesConditionsModal}
+                              >
+                                Notes & Conditions
+                              </Menu.Item>
+                              <Menu.Item
+                                leftSection={
+                                  <Box
+                                    style={{
+                                      backgroundColor: "#E7F5FF",
+                                      borderRadius: "6px",
+                                      padding: "6px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <IconChartBar size={16} color="#105476" />
+                                  </Box>
+                                }
+                                disabled={selectedService?.service === "LCL"}
+                                styles={{
+                                  item: {
+                                    fontFamily: "Inter",
+                                    fontSize: "14px",
+                                    fontWeight: 500,
+                                    borderRadius: "6px",
+                                    padding: "10px 12px",
+                                    marginBottom: "4px",
+                                    "&:hover": {
+                                      backgroundColor: "#F8F9FA",
+                                    },
+                                  },
+                                  itemLabel: {
+                                    fontFamily: "Inter",
+                                    fontSize: "14px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                  },
+                                }}
+                                onClick={() => {
+                                  if (!carrierComparisonData) {
+                                    fetchCarrierComparison();
+                                  }
+                                  openCarrierModal();
+                                }}
+                              >
+                                Check carrier comparison
+                              </Menu.Item>
+                              {!isViewMode && (
                                 <Menu.Item
                                   leftSection={
                                     <Box
@@ -4727,8 +4712,12 @@ function QuotationCreate({
                                         justifyContent: "center",
                                       }}
                                     >
-                                      <IconBook size={16} color="#105476" />
+                                      <IconDatabase size={16} color="#105476" />
                                     </Box>
+                                  }
+                                  disabled={
+                                    selectedService?.service === "FCL" &&
+                                    !quotationForm.values.carrier_code
                                   }
                                   styles={{
                                     item: {
@@ -4744,59 +4733,105 @@ function QuotationCreate({
                                     },
                                     itemLabel: {
                                       fontFamily: "Inter",
-                                      fontSize: "13px",
-                                      fontWeight: 500,
-                                      color: "#424242",
-                                    },
-                                  }}
-                                  onClick={() => {
-                                    handleCreateBooking();
-                                  }}
-                                >
-                                  Create Booking
-                                </Menu.Item>
-                                <Menu.Item
-                                  leftSection={
-                                    <Box
-                                      style={{
-                                        backgroundColor: "#E7F5FF",
-                                        borderRadius: "6px",
-                                        padding: "6px",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <IconHistory size={16} color="#105476" />
-                                    </Box>
-                                  }
-                                  styles={{
-                                    item: {
-                                      fontFamily: "Inter",
                                       fontSize: "14px",
                                       fontWeight: 500,
-                                      borderRadius: "6px",
-                                      padding: "10px 12px",
-                                      marginBottom: "4px",
-                                      "&:hover": {
-                                        backgroundColor: "#F8F9FA",
-                                      },
-                                    },
-                                    itemLabel: {
-                                      fontFamily: "Inter",
-                                      fontSize: "13px",
-                                      fontWeight: 500,
                                       color: "#424242",
                                     },
                                   }}
-                                  onClick={fetchChargeHistory}
+                                  onClick={() => open()}
                                 >
-                                  Check charge history
+                                  Get tariff data
                                 </Menu.Item>
-                              </>
-                            )}
-                          </Menu.Dropdown>
-                        </Menu>
+                              )}
+                              {isStandaloneEdit && (
+                                <>
+                                  <Menu.Divider />
+                                  <Menu.Item
+                                    leftSection={
+                                      <Box
+                                        style={{
+                                          backgroundColor: "#E7F5FF",
+                                          borderRadius: "6px",
+                                          padding: "6px",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        <IconBook size={16} color="#105476" />
+                                      </Box>
+                                    }
+                                    styles={{
+                                      item: {
+                                        fontFamily: "Inter",
+                                        fontSize: "14px",
+                                        fontWeight: 500,
+                                        borderRadius: "6px",
+                                        padding: "10px 12px",
+                                        marginBottom: "4px",
+                                        "&:hover": {
+                                          backgroundColor: "#F8F9FA",
+                                        },
+                                      },
+                                      itemLabel: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                      },
+                                    }}
+                                    onClick={() => {
+                                      handleCreateBooking();
+                                    }}
+                                  >
+                                    Create Booking
+                                  </Menu.Item>
+                                  <Menu.Item
+                                    leftSection={
+                                      <Box
+                                        style={{
+                                          backgroundColor: "#E7F5FF",
+                                          borderRadius: "6px",
+                                          padding: "6px",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        <IconHistory
+                                          size={16}
+                                          color="#105476"
+                                        />
+                                      </Box>
+                                    }
+                                    styles={{
+                                      item: {
+                                        fontFamily: "Inter",
+                                        fontSize: "14px",
+                                        fontWeight: 500,
+                                        borderRadius: "6px",
+                                        padding: "10px 12px",
+                                        marginBottom: "4px",
+                                        "&:hover": {
+                                          backgroundColor: "#F8F9FA",
+                                        },
+                                      },
+                                      itemLabel: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                      },
+                                    }}
+                                    onClick={fetchChargeHistory}
+                                  >
+                                    Check charge history
+                                  </Menu.Item>
+                                </>
+                              )}
+                            </Menu.Dropdown>
+                          </Menu>
+                        )}
                       </Flex>
                     </Grid.Col>
                   </Grid>
@@ -4979,6 +5014,8 @@ function QuotationCreate({
                               {...dynamicForm.getInputProps(
                                 `charges.${index}.charge_name`
                               )}
+                              readOnly={isViewMode}
+                              disabled={isViewMode}
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
@@ -5001,20 +5038,24 @@ function QuotationCreate({
                                 `charges.${index}.currency_country_code`
                               )}
                               onChange={(value) => {
-                                // Set currency value
-                                dynamicForm.setFieldValue(
-                                  `charges.${index}.currency_country_code`,
-                                  value || ""
-                                );
-                                // Automatically set ROE based on currency and user's country
-                                if (value) {
-                                  const calculatedRoe = getRoeValue(value);
+                                if (!isViewMode) {
+                                  // Set currency value
                                   dynamicForm.setFieldValue(
-                                    `charges.${index}.roe`,
-                                    calculatedRoe
+                                    `charges.${index}.currency_country_code`,
+                                    value || ""
                                   );
+                                  // Automatically set ROE based on currency and user's country
+                                  if (value) {
+                                    const calculatedRoe = getRoeValue(value);
+                                    dynamicForm.setFieldValue(
+                                      `charges.${index}.roe`,
+                                      calculatedRoe
+                                    );
+                                  }
                                 }
                               }}
+                              readOnly={isViewMode}
+                              disabled={isViewMode}
                             />
                           </Grid.Col>
                           <Grid.Col span={0.75}>
@@ -5035,6 +5076,8 @@ function QuotationCreate({
                               {...dynamicForm.getInputProps(
                                 `charges.${index}.roe`
                               )}
+                              readOnly={isViewMode}
+                              disabled={isViewMode}
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
@@ -5057,29 +5100,32 @@ function QuotationCreate({
                                 `charges.${index}.unit`
                               )}
                               onChange={(value) => {
-                                // Set unit value
-                                dynamicForm.setFieldValue(
-                                  `charges.${index}.unit`,
-                                  value || ""
-                                );
+                                if (!isViewMode) {
+                                  // Set unit value
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.unit`,
+                                    value || ""
+                                  );
 
-                                // Auto-calculate and set no_of_units based on service and unit
-                                if (value && selectedService) {
-                                  const calculatedNoOfUnits =
-                                    calculateNoOfUnits(
-                                      selectedService.service,
-                                      value,
-                                      selectedService.id
-                                    );
-                                  if (calculatedNoOfUnits) {
-                                    dynamicForm.setFieldValue(
-                                      `charges.${index}.no_of_units`,
-                                      calculatedNoOfUnits
-                                    );
+                                  // Auto-calculate and set no_of_units based on service and unit
+                                  if (value && selectedService) {
+                                    const calculatedNoOfUnits =
+                                      calculateNoOfUnits(
+                                        selectedService.service,
+                                        value,
+                                        selectedService.id
+                                      );
+                                    if (calculatedNoOfUnits) {
+                                      dynamicForm.setFieldValue(
+                                        `charges.${index}.no_of_units`,
+                                        calculatedNoOfUnits
+                                      );
+                                    }
                                   }
                                 }
                               }}
-                              disabled={isLoadingUnitData}
+                              disabled={isViewMode || isLoadingUnitData}
+                              readOnly={isViewMode}
                             />
                           </Grid.Col>
                           <Grid.Col span={0.75}>
@@ -5097,7 +5143,9 @@ function QuotationCreate({
                               {...dynamicForm.getInputProps(
                                 `charges.${index}.no_of_units`
                               )}
+                              readOnly={isViewMode}
                               disabled={
+                                isViewMode ||
                                 dynamicForm.values.charges[index]?.toBeDisabled
                               }
                             />
@@ -5120,6 +5168,8 @@ function QuotationCreate({
                               {...dynamicForm.getInputProps(
                                 `charges.${index}.sell_per_unit`
                               )}
+                              readOnly={isViewMode}
+                              disabled={isViewMode}
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
@@ -5129,8 +5179,10 @@ function QuotationCreate({
                                 `unit-${index}-min_sell`
                               }
                               disabled={
+                                isViewMode ||
                                 dynamicForm.values.charges[index]?.toBeDisabled
                               }
+                              readOnly={isViewMode}
                               min={0}
                               //placeholder={"100"}
                               styles={{
@@ -5152,8 +5204,10 @@ function QuotationCreate({
                                 `unit-${index}-cost_per_unit`
                               }
                               disabled={
+                                isViewMode ||
                                 dynamicForm.values.charges[index]?.toBeDisabled
                               }
+                              readOnly={isViewMode}
                               //placeholder={"100"}
                               min={0}
                               styles={{
@@ -5174,7 +5228,10 @@ function QuotationCreate({
                     dynamicForm.values.charges[index]?.min_cost ||
                     `unit-${index}-min_cost`
                   }
-                  disabled={dynamicForm.values.charges[index]?.toBeDisabled}
+                  disabled={
+                    isViewMode || dynamicForm.values.charges[index]?.toBeDisabled
+                  }
+                  readOnly={isViewMode}
                   //placeholder={"100"}
                   min={1}
                   {...dynamicForm.getInputProps(`charges.${index}.min_cost`)}
@@ -5191,6 +5248,8 @@ function QuotationCreate({
                         {...dynamicForm.getInputProps(
                           `charges.${index}.total_cost`
                         )}
+                        readOnly={isViewMode}
+                        disabled={isViewMode}
                         styles={{
                           input: {
                             // Remove number arrows (spinner)
@@ -5210,6 +5269,8 @@ function QuotationCreate({
                         {...dynamicForm.getInputProps(
                           `charges.${index}.total_sell`
                         )}
+                        readOnly={isViewMode}
+                        disabled={isViewMode}
                         styles={{
                           input: {
                             MozAppearance: "textfield",
@@ -5263,45 +5324,48 @@ function QuotationCreate({
                           {/* </>
                 )} */}
 
-                          {dynamicForm.values.charges.length - 1 === index && (
+                          {dynamicForm.values.charges.length - 1 === index &&
+                            !isViewMode && (
+                              <Grid.Col span={0.75}>
+                                <Button
+                                  radius={"sm"}
+                                  variant="light"
+                                  color="#105476"
+                                  onClick={() =>
+                                    dynamicForm.insertListItem("charges", {
+                                      charge_name: "",
+                                      currency_country_code: "",
+                                      roe: 1,
+                                      unit: "",
+                                      no_of_units: "",
+                                      sell_per_unit: "",
+                                      min_sell: "",
+                                      cost_per_unit: "",
+                                      // min_cost: "",
+                                    })
+                                  }
+                                >
+                                  <IconPlus size={16} />
+                                </Button>
+                              </Grid.Col>
+                            )}
+                          {!isViewMode && (
                             <Grid.Col span={0.75}>
-                              <Button
-                                radius={"sm"}
-                                variant="light"
-                                color="#105476"
-                                onClick={() =>
-                                  dynamicForm.insertListItem("charges", {
-                                    charge_name: "",
-                                    currency_country_code: "",
-                                    roe: 1,
-                                    unit: "",
-                                    no_of_units: "",
-                                    sell_per_unit: "",
-                                    min_sell: "",
-                                    cost_per_unit: "",
-                                    // min_cost: "",
-                                  })
-                                }
-                              >
-                                <IconPlus size={16} />
-                              </Button>
+                              {dynamicForm.values.charges.length > 1 ? (
+                                <Button
+                                  variant="light"
+                                  color="red"
+                                  onClick={() =>
+                                    dynamicForm.removeListItem("charges", index)
+                                  }
+                                >
+                                  <IconTrash size={16} />
+                                </Button>
+                              ) : (
+                                ""
+                              )}
                             </Grid.Col>
                           )}
-                          <Grid.Col span={0.75}>
-                            {dynamicForm.values.charges.length > 1 ? (
-                              <Button
-                                variant="light"
-                                color="red"
-                                onClick={() =>
-                                  dynamicForm.removeListItem("charges", index)
-                                }
-                              >
-                                <IconTrash size={16} />
-                              </Button>
-                            ) : (
-                              ""
-                            )}
-                          </Grid.Col>
                         </Grid>
                       </Box>
                     ))}
@@ -5442,10 +5506,22 @@ function QuotationCreate({
                         } else if (
                           location.state?.returnTo === "dashboard-pipeline"
                         ) {
-                          // Navigate back to quotation list when from pipeline report
-                          navigateToPreferredList(
-                            location.state?.preserveFilters
-                          );
+                          // Navigate back to dashboard (Pipeline Report tab) when from pipeline report
+                          navigate("/", {
+                            state: {
+                              returnToPipelineReport: true,
+                              pipelineReportState:
+                                location.state?.pipelineReportState,
+                            },
+                          });
+                        } else if (location.state?.returnTo === "dashboard") {
+                          // Navigate back to dashboard (Enquiry detailed view) when from enquiry conversion
+                          navigate("/", {
+                            state: {
+                              returnToEnquiryDetailedView: true,
+                              dashboardState: location.state?.returnToState,
+                            },
+                          });
                         } else if (
                           isStandaloneEdit &&
                           (actualEnquiryData?.enquiry_id ||
@@ -5483,31 +5559,33 @@ function QuotationCreate({
                         }
                       }}
                     >
-                      Back
+                      {isViewMode ? "Back to Dashboard" : "Back"}
                     </Button>
                   </Group>
-                  <Group>
-                    <Button
-                      rightSection={
-                        isSubmittingQuotation ? (
-                          <Loader size={16} color="white" />
-                        ) : (
-                          <IconCheck size={16} />
-                        )
-                      }
-                      onClick={() => quotationSubmit()}
-                      color="teal"
-                      disabled={isSubmittingQuotation}
-                    >
-                      {isSubmittingQuotation
-                        ? isStandaloneEdit
-                          ? "Updating..."
-                          : "Submitting..."
-                        : isStandaloneEdit
-                          ? "Update"
-                          : "Submit"}
-                    </Button>
-                  </Group>
+                  {!isViewMode && (
+                    <Group>
+                      <Button
+                        rightSection={
+                          isSubmittingQuotation ? (
+                            <Loader size={16} color="white" />
+                          ) : (
+                            <IconCheck size={16} />
+                          )
+                        }
+                        onClick={() => quotationSubmit()}
+                        color="teal"
+                        disabled={isSubmittingQuotation}
+                      >
+                        {isSubmittingQuotation
+                          ? isStandaloneEdit
+                            ? "Updating..."
+                            : "Submitting..."
+                          : isStandaloneEdit
+                            ? "Update"
+                            : "Submit"}
+                      </Button>
+                    </Group>
+                  )}
                 </Group>
               </Box>
             </Box>
@@ -6522,10 +6600,22 @@ function QuotationCreate({
                       } else if (
                         location.state?.returnTo === "dashboard-pipeline"
                       ) {
-                        // Navigate back to quotation list when from pipeline report
-                        navigateToPreferredList(
-                          location.state?.preserveFilters
-                        );
+                        // Navigate back to dashboard (Pipeline Report tab) when from pipeline report
+                        navigate("/", {
+                          state: {
+                            returnToPipelineReport: true,
+                            pipelineReportState:
+                              location.state?.pipelineReportState,
+                          },
+                        });
+                      } else if (location.state?.returnTo === "dashboard") {
+                        // Navigate back to dashboard (Enquiry detailed view) when from enquiry conversion
+                        navigate("/", {
+                          state: {
+                            returnToEnquiryDetailedView: true,
+                            dashboardState: location.state?.returnToState,
+                          },
+                        });
                       } else if (
                         isStandaloneEdit &&
                         (actualEnquiryData?.enquiry_id ||
@@ -6678,31 +6768,33 @@ function QuotationCreate({
                       }
                     }}
                   >
-                    Back
+                    {isViewMode ? "Back to Dashboard" : "Back"}
                   </Button>
                 </Group>
-                <Group>
-                  <Button
-                    rightSection={
-                      isSubmittingQuotation ? (
-                        <Loader size={16} color="white" />
-                      ) : (
-                        <IconCheck size={16} />
-                      )
-                    }
-                    onClick={() => quotationSubmit()}
-                    color="teal"
-                    disabled={isSubmittingQuotation}
-                  >
-                    {isSubmittingQuotation
-                      ? isStandaloneEdit
-                        ? "Updating..."
-                        : "Submitting..."
-                      : isStandaloneEdit
-                        ? "Update"
-                        : "Submit"}
-                  </Button>
-                </Group>
+                {!isViewMode && (
+                  <Group>
+                    <Button
+                      rightSection={
+                        isSubmittingQuotation ? (
+                          <Loader size={16} color="white" />
+                        ) : (
+                          <IconCheck size={16} />
+                        )
+                      }
+                      onClick={() => quotationSubmit()}
+                      color="teal"
+                      disabled={isSubmittingQuotation}
+                    >
+                      {isSubmittingQuotation
+                        ? isStandaloneEdit
+                          ? "Updating..."
+                          : "Submitting..."
+                        : isStandaloneEdit
+                          ? "Update"
+                          : "Submit"}
+                    </Button>
+                  </Group>
+                )}
               </Group>
             </Box>
           </Box>

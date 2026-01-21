@@ -1055,7 +1055,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         }
       }
     } else if (columnType === "quotation_id") {
-      // Handle quotation ID click - navigate to quotation edit page
+      // Handle quotation ID click - navigate to quotation page in view mode
       navigate(`/quotation-create/${value}`, {
         state: {
           returnTo: "dashboard-pipeline",
@@ -1065,6 +1065,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             selectedCustomer,
             selectedColumnType,
           },
+          viewMode: true,
         },
       });
     } else if (columnType === "call_entry_id") {
@@ -1353,7 +1354,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         setDrilldownLoading(false);
       }
     } else if (columnType === "quotation_id") {
-      // Handle quotation ID click - navigate to quotation edit page
+      // Handle quotation ID click - navigate to quotation page in view mode
       navigate(`/quotation-create/${value}`, {
         state: {
           returnTo: "dashboard-pipeline",
@@ -1363,6 +1364,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             selectedCustomer,
             selectedColumnType,
           },
+          viewMode: true,
         },
       });
     } else if (columnType === "call_entry_id") {
@@ -1955,7 +1957,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         setDrilldownLoading(false);
       }
     } else if (columnType === "quotation_id") {
-      // Handle quotation ID click - navigate to quotation edit page
+      // Handle quotation ID click - navigate to quotation page in view mode
       navigate(`/quotation-create/${value}`, {
         state: {
           returnTo: "dashboard-pipeline",
@@ -1965,6 +1967,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             selectedCustomer,
             selectedColumnType,
           },
+          viewMode: true,
         },
       });
     } else if (columnType === "call_entry_id") {
@@ -2869,7 +2872,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   if (drillLevel === 0) {
     return (
       <Box>
-        <Group justify="space-between" align="center" >
+        <Group justify="space-between" align="center">
           <Text size="lg" fw={600} c="#105476">
             {/* Pipeline Report */}
           </Text>

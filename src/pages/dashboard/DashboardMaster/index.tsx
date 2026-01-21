@@ -4606,6 +4606,45 @@ const Dashboard = () => {
           return;
         }
 
+        // Handle quotation_id click - navigate to quotation-create in view mode
+        if (columnType === "quotation_id") {
+          const quotationId =
+            additionalData?.quotation_id ||
+            additionalData?.QUOTATION_ID ||
+            value;
+          if (quotationId != null && quotationId !== "") {
+            const id = String(quotationId);
+            navigate(`/quotation-create/${id}`, {
+              state: {
+                returnTo: "dashboard",
+                returnToState: {
+                  detailedViewType: "enquiry",
+                  detailedViewDrillLevel: detailedViewDrillLevel,
+                  detailedViewSelectedCompany: detailedViewSelectedCompany,
+                  detailedViewSelectedSalesperson:
+                    detailedViewSelectedSalesperson,
+                  enquiryFilterType: enquiryFilterType,
+                  initialEnquiryFilterType: initialEnquiryFilterType,
+                  selectedCompany: selectedCompany,
+                  selectedLocation: selectedLocation,
+                  searchSalesman: searchSalesman,
+                  selectedYear: selectedYear,
+                  selectedDate: selectedDate,
+                  enquiryPeriod: enquiryPeriod,
+                  customerInteractionFromDate: customerInteractionFromDate,
+                  customerInteractionToDate: customerInteractionToDate,
+                  globalSearch: globalSearch,
+                },
+                viewMode: true, // Flag to indicate view-only mode
+              },
+            });
+            setIsLoadingDetailedView(false);
+            return;
+          }
+          setIsLoadingDetailedView(false);
+          return;
+        }
+
         // Use selected dates from universal date selector
         if (!customerInteractionFromDate || !customerInteractionToDate) {
           toast.error("Please select date range");
@@ -4655,16 +4694,13 @@ const Dashboard = () => {
 
           setDetailedViewData(tableData);
         } else if (columnType === "salesperson") {
-          // Salesperson requires company - use previously selected company
+          // Salesperson requires company - use previously selected company with fallback to user's company
           const company =
             detailedViewSelectedCompany ||
             additionalData?.company_name ||
-            additionalData?.company;
-          if (!company) {
-            toast.error("Company is required to filter by salesperson");
-            setIsLoadingDetailedView(false);
-            return;
-          }
+            additionalData?.company ||
+            user?.company?.company_name ||
+            "PENTAGON INDIA";
           filterData = addSearchToDetailedViewFilters({
             company,
             salesman: value,
@@ -5070,11 +5106,13 @@ const Dashboard = () => {
 
             const status = statusMap[columnType] || "ACTIVE";
 
-            // Get company from state
+            // Get company from state with fallback to user's company
             const company =
               detailedViewSelectedCompany ||
               additionalData?.company_name ||
-              additionalData?.company;
+              additionalData?.company ||
+              user?.company?.company_name ||
+              "PENTAGON INDIA";
 
             // Use selected dates from universal date selector
             if (!customerInteractionFromDate || !customerInteractionToDate) {
@@ -7257,85 +7295,87 @@ const Dashboard = () => {
         wrap="nowrap"
         style={{ alignItems: "center" }}
       >
-        {/* Tabs with Segmented Control Style */}
-        <Group
-          gap={0}
-          style={{
-            backgroundColor: "#f1f3f5",
-            borderRadius: "6px",
-            padding: "2px",
-            height: "32px",
-            display: "flex",
-            alignItems: "center",
-          }}
-        >
-          <Button
-            variant={activeTab === "overall" ? "filled" : "subtle"}
-            onClick={() => setActiveTab("overall")}
-            size="xs"
+        {/* Tabs with Segmented Control Style - only when common filters are visible */}
+        {!showDetailedView && (
+          <Group
+            gap={0}
             style={{
-              backgroundColor:
-                activeTab === "overall" ? "#ffffff" : "transparent",
-              color: activeTab === "overall" ? "#000000" : "#666",
-              fontWeight: activeTab === "overall" ? 600 : 400,
-              border: "none",
-              borderRadius: "4px",
-              boxShadow:
-                activeTab === "overall"
-                  ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                  : "none",
-              transition: "all 0.2s ease",
-              fontSize: "12px",
-              padding: "4px 12px",
+              backgroundColor: "#f1f3f5",
+              borderRadius: "6px",
+              padding: "2px",
+              height: "32px",
+              display: "flex",
+              alignItems: "center",
             }}
           >
-            Overall
-          </Button>
-          <Button
-            variant={activeTab === "pipeline-Report" ? "filled" : "subtle"}
-            onClick={() => setActiveTab("pipeline-Report")}
-            size="xs"
-            style={{
-              backgroundColor:
-                activeTab === "pipeline-Report" ? "#ffffff" : "transparent",
-              color: activeTab === "pipeline-Report" ? "#000000" : "#666",
-              fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
-              border: "none",
-              borderRadius: "4px",
-              boxShadow:
-                activeTab === "pipeline-Report"
-                  ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                  : "none",
-              transition: "all 0.2s ease",
-              fontSize: "12px",
-              padding: "4px 12px",
-            }}
-          >
-            Pipeline Report
-          </Button>
-          <Button
-            variant={activeTab === "booking" ? "filled" : "subtle"}
-            onClick={() => setActiveTab("booking")}
-            size="xs"
-            style={{
-              backgroundColor:
-                activeTab === "booking" ? "#ffffff" : "transparent",
-              color: activeTab === "booking" ? "#000000" : "#666",
-              fontWeight: activeTab === "booking" ? 600 : 400,
-              border: "none",
-              borderRadius: "4px",
-              boxShadow:
-                activeTab === "booking"
-                  ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                  : "none",
-              transition: "all 0.2s ease",
-              fontSize: "12px",
-              padding: "4px 12px",
-            }}
-          >
-            Booking
-          </Button>
-        </Group>
+            <Button
+              variant={activeTab === "overall" ? "filled" : "subtle"}
+              onClick={() => setActiveTab("overall")}
+              size="xs"
+              style={{
+                backgroundColor:
+                  activeTab === "overall" ? "#ffffff" : "transparent",
+                color: activeTab === "overall" ? "#000000" : "#666",
+                fontWeight: activeTab === "overall" ? 600 : 400,
+                border: "none",
+                borderRadius: "4px",
+                boxShadow:
+                  activeTab === "overall"
+                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    : "none",
+                transition: "all 0.2s ease",
+                fontSize: "12px",
+                padding: "4px 12px",
+              }}
+            >
+              Overall
+            </Button>
+            <Button
+              variant={activeTab === "pipeline-Report" ? "filled" : "subtle"}
+              onClick={() => setActiveTab("pipeline-Report")}
+              size="xs"
+              style={{
+                backgroundColor:
+                  activeTab === "pipeline-Report" ? "#ffffff" : "transparent",
+                color: activeTab === "pipeline-Report" ? "#000000" : "#666",
+                fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
+                border: "none",
+                borderRadius: "4px",
+                boxShadow:
+                  activeTab === "pipeline-Report"
+                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    : "none",
+                transition: "all 0.2s ease",
+                fontSize: "12px",
+                padding: "4px 12px",
+              }}
+            >
+              Pipeline Report
+            </Button>
+            <Button
+              variant={activeTab === "booking" ? "filled" : "subtle"}
+              onClick={() => setActiveTab("booking")}
+              size="xs"
+              style={{
+                backgroundColor:
+                  activeTab === "booking" ? "#ffffff" : "transparent",
+                color: activeTab === "booking" ? "#000000" : "#666",
+                fontWeight: activeTab === "booking" ? 600 : 400,
+                border: "none",
+                borderRadius: "4px",
+                boxShadow:
+                  activeTab === "booking"
+                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    : "none",
+                transition: "all 0.2s ease",
+                fontSize: "12px",
+                padding: "4px 12px",
+              }}
+            >
+              Booking
+            </Button>
+          </Group>
+        )}
 
         {/* Global Search Input and Date Filter - Always visible at dashboard base level (only hidden in detailed view) */}
         {!showDetailedView && (
