@@ -283,7 +283,20 @@ const serviceFormSchema = yup.object({
                 then: (schema) =>
                   schema
                     .required("Number of packages is required")
-                    .min(1, "Must be at least 1"),
+                    .min(1, "Must be at least 1")
+                    .integer("No decimals allowed")
+                    .typeError("Must be a whole number")
+                    .test(
+                      "max-digits",
+                      "Maximum 10 digits allowed",
+                      (value) => {
+                        if (value === undefined || value === null) return true;
+                        const integerPart = Math.floor(
+                          Math.abs(value)
+                        ).toString();
+                        return integerPart.length <= 10;
+                      }
+                    ),
                 otherwise: (schema) => schema.nullable(),
               }),
               gross_weight: yup.number().when("$service", {
@@ -292,7 +305,36 @@ const serviceFormSchema = yup.object({
                 then: (schema) =>
                   schema
                     .required("Gross weight is required")
-                    .min(0.01, "Must be greater than 0"),
+                    .min(0.01, "Must be greater than 0")
+                    .test(
+                      "decimal-places",
+                      "Maximum 2 decimal places allowed",
+                      (value) => {
+                        if (value === undefined || value === null) return true;
+                        const decimalPart = String(value).split(".")[1];
+                        return !decimalPart || decimalPart.length <= 2;
+                      }
+                    )
+                    .test(
+                      "max-digits",
+                      "Maximum 8 integer digits allowed",
+                      (value) => {
+                        if (value === undefined || value === null) return true;
+                        const integerPart = Math.floor(
+                          Math.abs(value)
+                        ).toString();
+                        return integerPart.length <= 8;
+                      }
+                    )
+                    .test(
+                      "max-total-digits",
+                      "Maximum 10 digits allowed",
+                      (value) => {
+                        if (value === undefined || value === null) return true;
+                        const valueStr = String(value).replace(/[^0-9]/g, "");
+                        return valueStr.length <= 10;
+                      }
+                    ),
                 otherwise: (schema) => schema.nullable(),
               }),
               volume_weight: yup.number().when("$service", {
@@ -300,19 +342,74 @@ const serviceFormSchema = yup.object({
                 then: (schema) =>
                   schema
                     .required("Volume weight is required")
-                    .min(0.01, "Must be greater than 0"),
+                    .min(0.01, "Must be greater than 0")
+                    .test(
+                      "decimal-places",
+                      "Maximum 2 decimal places allowed",
+                      (value) => {
+                        if (value === undefined || value === null) return true;
+                        const decimalPart = String(value).split(".")[1];
+                        return !decimalPart || decimalPart.length <= 2;
+                      }
+                    )
+                    .test(
+                      "max-digits",
+                      "Maximum 8 integer digits allowed",
+                      (value) => {
+                        if (value === undefined || value === null) return true;
+                        const integerPart = Math.floor(
+                          Math.abs(value)
+                        ).toString();
+                        return integerPart.length <= 8;
+                      }
+                    )
+                    .test(
+                      "max-total-digits",
+                      "Maximum 10 digits allowed",
+                      (value) => {
+                        if (value === undefined || value === null) return true;
+                        const valueStr = String(value).replace(/[^0-9]/g, "");
+                        return valueStr.length <= 10;
+                      }
+                    ),
                 otherwise: (schema) => schema.nullable(),
               }),
-              chargable_weight: yup.number().nullable(),
+              chargable_weight: yup
+                .number()
+                .nullable()
+                // No validation needed - this is auto-calculated from gross_weight and volume_weight
+                // Validation errors will appear in the source fields instead
+                .optional(),
               volume: yup.number().when("$service", {
                 is: (service: string) => service === "LCL",
                 then: (schema) =>
                   schema
                     .required("Volume is required")
-                    .min(0.01, "Must be greater than 0"),
+                    .min(0.01, "Must be greater than 0")
+                    .test(
+                      "decimal-places",
+                      "Maximum 2 decimal places allowed",
+                      (value) => {
+                        if (value === undefined || value === null) return true;
+                        const decimalPart = String(value).split(".")[1];
+                        return !decimalPart || decimalPart.length <= 2;
+                      }
+                    )
+                    .test("max-digits", "Maximum 7 digits allowed", (value) => {
+                      if (value === undefined || value === null) return true;
+                      const integerPart = Math.floor(
+                        Math.abs(value)
+                      ).toString();
+                      return integerPart.length <= 7;
+                    }),
                 otherwise: (schema) => schema.nullable(),
               }),
-              chargable_volume: yup.number().nullable(),
+              chargable_volume: yup
+                .number()
+                .nullable()
+                // No validation needed - this is auto-calculated from gross_weight and volume
+                // Validation errors will appear in the source fields instead
+                .optional(),
               container_type_code: yup.string().when("$service", {
                 is: (service: string) => service === "FCL",
                 then: (schema) => schema.required("Container type is required"),
@@ -323,7 +420,20 @@ const serviceFormSchema = yup.object({
                 then: (schema) =>
                   schema
                     .required("Number of containers is required")
-                    .min(1, "Must be at least 1"),
+                    .min(1, "Must be at least 1")
+                    // .integer("No decimals allowed")
+                    .typeError("Must be a whole number"),
+                // .test(
+                //   "max-digits",
+                //   "Maximum 10 digits allowed",
+                //   (value) => {
+                //     if (value === undefined || value === null) return true;
+                //     const integerPart = Math.floor(
+                //       Math.abs(value)
+                //     ).toString();
+                //     return integerPart.length <= 10;
+                //   }
+                // ),
                 otherwise: (schema) => schema.nullable(),
               }),
               hazardous_cargo: yup
@@ -1074,7 +1184,7 @@ function EnquiryCreate() {
           if (preserveFilters) {
             navigate("/quotation", {
               state: {
-              refreshData: true,
+                refreshData: true,
               },
             });
           } else {
@@ -1140,9 +1250,30 @@ function EnquiryCreate() {
             );
             hasCargoErrors = true;
           } else {
-            serviceForm.clearFieldError(
-              `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
-            );
+            // Check if it's an integer
+            if (!Number.isInteger(cargo.no_of_packages)) {
+              serviceForm.setFieldError(
+                `service_details.${serviceIndex}.cargo_details.0.no_of_packages`,
+                "No decimals allowed"
+              );
+              hasCargoErrors = true;
+            } else {
+              // Check digit limit (10 max)
+              const integerPart = Math.floor(
+                Math.abs(cargo.no_of_packages)
+              ).toString();
+              if (integerPart.length > 10) {
+                serviceForm.setFieldError(
+                  `service_details.${serviceIndex}.cargo_details.0.no_of_packages`,
+                  "Maximum 10 digits allowed"
+                );
+                hasCargoErrors = true;
+              } else {
+                serviceForm.clearFieldError(
+                  `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
+                );
+              }
+            }
           }
         }
 
@@ -1158,9 +1289,44 @@ function EnquiryCreate() {
             );
             hasCargoErrors = true;
           } else {
-            serviceForm.clearFieldError(
-              `service_details.${serviceIndex}.cargo_details.0.gross_weight`
+            // Check digit limits for Gross Weight
+            const grossWeightStr = String(cargo.gross_weight).replace(
+              /[^0-9]/g,
+              ""
             );
+            if (grossWeightStr.length > 10) {
+              serviceForm.setFieldError(
+                `service_details.${serviceIndex}.cargo_details.0.gross_weight`,
+                "Maximum 10 digits allowed"
+              );
+              hasCargoErrors = true;
+            } else {
+              // Check decimal places
+              const decimalPart = String(cargo.gross_weight).split(".")[1];
+              if (decimalPart && decimalPart.length > 2) {
+                serviceForm.setFieldError(
+                  `service_details.${serviceIndex}.cargo_details.0.gross_weight`,
+                  "Maximum 2 decimal places allowed"
+                );
+                hasCargoErrors = true;
+              } else {
+                // Check integer digits (8 max)
+                const integerPart = Math.floor(
+                  Math.abs(cargo.gross_weight)
+                ).toString();
+                if (integerPart.length > 8) {
+                  serviceForm.setFieldError(
+                    `service_details.${serviceIndex}.cargo_details.0.gross_weight`,
+                    "Maximum 8 integer digits allowed"
+                  );
+                  hasCargoErrors = true;
+                } else {
+                  serviceForm.clearFieldError(
+                    `service_details.${serviceIndex}.cargo_details.0.gross_weight`
+                  );
+                }
+              }
+            }
           }
         }
 
@@ -1172,9 +1338,44 @@ function EnquiryCreate() {
             );
             hasCargoErrors = true;
           } else {
-            serviceForm.clearFieldError(
-              `service_details.${serviceIndex}.cargo_details.0.volume_weight`
+            // Check digit limits for Volume Weight
+            const volumeWeightStr = String(cargo.volume_weight).replace(
+              /[^0-9]/g,
+              ""
             );
+            if (volumeWeightStr.length > 10) {
+              serviceForm.setFieldError(
+                `service_details.${serviceIndex}.cargo_details.0.volume_weight`,
+                "Maximum 10 digits allowed"
+              );
+              hasCargoErrors = true;
+            } else {
+              // Check decimal places
+              const decimalPart = String(cargo.volume_weight).split(".")[1];
+              if (decimalPart && decimalPart.length > 2) {
+                serviceForm.setFieldError(
+                  `service_details.${serviceIndex}.cargo_details.0.volume_weight`,
+                  "Maximum 2 decimal places allowed"
+                );
+                hasCargoErrors = true;
+              } else {
+                // Check integer digits (8 max)
+                const integerPart = Math.floor(
+                  Math.abs(cargo.volume_weight)
+                ).toString();
+                if (integerPart.length > 8) {
+                  serviceForm.setFieldError(
+                    `service_details.${serviceIndex}.cargo_details.0.volume_weight`,
+                    "Maximum 8 integer digits allowed"
+                  );
+                  hasCargoErrors = true;
+                } else {
+                  serviceForm.clearFieldError(
+                    `service_details.${serviceIndex}.cargo_details.0.volume_weight`
+                  );
+                }
+              }
+            }
           }
         }
 
@@ -1186,9 +1387,29 @@ function EnquiryCreate() {
             );
             hasCargoErrors = true;
           } else {
-            serviceForm.clearFieldError(
-              `service_details.${serviceIndex}.cargo_details.0.volume`
-            );
+            // Check digit limits for Volume
+            const decimalPart = String(cargo.volume).split(".")[1];
+            if (decimalPart && decimalPart.length > 2) {
+              serviceForm.setFieldError(
+                `service_details.${serviceIndex}.cargo_details.0.volume`,
+                "Maximum 2 decimal places allowed"
+              );
+              hasCargoErrors = true;
+            } else {
+              // Check integer digits (7 max for LCL volume)
+              const integerPart = Math.floor(Math.abs(cargo.volume)).toString();
+              if (integerPart.length > 7) {
+                serviceForm.setFieldError(
+                  `service_details.${serviceIndex}.cargo_details.0.volume`,
+                  "Maximum 7 digits allowed"
+                );
+                hasCargoErrors = true;
+              } else {
+                serviceForm.clearFieldError(
+                  `service_details.${serviceIndex}.cargo_details.0.volume`
+                );
+              }
+            }
           }
         }
 
@@ -1222,9 +1443,30 @@ function EnquiryCreate() {
                 );
                 hasCargoErrors = true;
               } else {
-                serviceForm.clearFieldError(
-                  `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
-                );
+                // Check if it's an integer
+                if (!Number.isInteger(fclCargo.no_of_containers)) {
+                  serviceForm.setFieldError(
+                    `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`,
+                    "No decimals allowed"
+                  );
+                  hasCargoErrors = true;
+                } else {
+                  // Check digit limit (10 max)
+                  const integerPart = Math.floor(
+                    Math.abs(fclCargo.no_of_containers)
+                  ).toString();
+                  if (integerPart.length > 10) {
+                    serviceForm.setFieldError(
+                      `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`,
+                      "Maximum 10 digits allowed"
+                    );
+                    hasCargoErrors = true;
+                  } else {
+                    serviceForm.clearFieldError(
+                      `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
+                    );
+                  }
+                }
               }
               if (!fclCargo?.gross_weight || fclCargo.gross_weight < 0.01) {
                 serviceForm.setFieldError(
@@ -1233,54 +1475,46 @@ function EnquiryCreate() {
                 );
                 hasCargoErrors = true;
               } else {
-                serviceForm.clearFieldError(
-                  `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
+                // Check digit limits for Gross Weight
+                const grossWeightStr = String(fclCargo.gross_weight).replace(
+                  /[^0-9]/g,
+                  ""
                 );
-              }
-            }
-          );
-          serviceDetail.cargo_details.forEach(
-            (fclCargo: any, cargoIndex: number) => {
-              const containerTypeCode = fclCargo?.container_type_code;
-              if (
-                !containerTypeCode ||
-                (typeof containerTypeCode === "string" &&
-                  !containerTypeCode.trim())
-              ) {
-                serviceForm.setFieldError(
-                  `service_details.${serviceIndex}.cargo_details.${cargoIndex}.container_type_code`,
-                  "Container type is required"
-                );
-                hasCargoErrors = true;
-              } else {
-                serviceForm.clearFieldError(
-                  `service_details.${serviceIndex}.cargo_details.${cargoIndex}.container_type_code`
-                );
-              }
-              if (
-                !fclCargo?.no_of_containers ||
-                fclCargo.no_of_containers < 1
-              ) {
-                serviceForm.setFieldError(
-                  `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`,
-                  "Number of containers is required"
-                );
-                hasCargoErrors = true;
-              } else {
-                serviceForm.clearFieldError(
-                  `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
-                );
-              }
-              if (!fclCargo?.gross_weight || fclCargo.gross_weight < 0.01) {
-                serviceForm.setFieldError(
-                  `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`,
-                  "Gross weight is required"
-                );
-                hasCargoErrors = true;
-              } else {
-                serviceForm.clearFieldError(
-                  `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
-                );
+                if (grossWeightStr.length > 10) {
+                  serviceForm.setFieldError(
+                    `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`,
+                    "Maximum 10 digits allowed"
+                  );
+                  hasCargoErrors = true;
+                } else {
+                  // Check decimal places
+                  const decimalPart = String(fclCargo.gross_weight).split(
+                    "."
+                  )[1];
+                  if (decimalPart && decimalPart.length > 2) {
+                    serviceForm.setFieldError(
+                      `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`,
+                      "Maximum 2 decimal places allowed"
+                    );
+                    hasCargoErrors = true;
+                  } else {
+                    // Check integer digits (8 max)
+                    const integerPart = Math.floor(
+                      Math.abs(fclCargo.gross_weight)
+                    ).toString();
+                    if (integerPart.length > 8) {
+                      serviceForm.setFieldError(
+                        `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`,
+                        "Maximum 8 integer digits allowed"
+                      );
+                      hasCargoErrors = true;
+                    } else {
+                      serviceForm.clearFieldError(
+                        `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
+                      );
+                    }
+                  }
+                }
               }
             }
           );
@@ -1308,10 +1542,29 @@ function EnquiryCreate() {
       return;
     }
 
+    // Validate forms using yup schema
     const cusFormResult = customerForm.validate();
     const serviceFormResult = serviceForm.validate();
 
-    if (!cusFormResult.hasErrors && !serviceFormResult.hasErrors) {
+    // Check if there are any validation errors (from yup or manually set)
+    const hasServiceFormErrors =
+      serviceFormResult.hasErrors || Object.keys(serviceForm.errors).length > 0;
+    const hasCustomerFormErrors =
+      cusFormResult.hasErrors || Object.keys(customerForm.errors).length > 0;
+
+    if (hasCustomerFormErrors || hasServiceFormErrors) {
+      // Navigate to the appropriate step if there are errors
+      if (hasServiceFormErrors) {
+        setActive(1); // Navigate to service details step
+      }
+      // ToastNotification({
+      //   type: "error",
+      //   message: "Please fix validation errors before submitting",
+      // });
+      return;
+    }
+
+    if (!hasCustomerFormErrors && !hasServiceFormErrors) {
       const isEditMode =
         enq?.actionType === "edit" || (enq?.id && enq?.quoteType !== "CHATBOT");
       // Exclude supporting_documents from baseData as it will be sent separately as files
@@ -4740,7 +4993,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/call-entry", {
                                   state: {
-              refreshData: true,
+                                    refreshData: true,
                                   },
                                 });
                               } else {
@@ -4753,7 +5006,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/enquiry", {
                                   state: {
-              refreshData: true,
+                                    refreshData: true,
                                   },
                                 });
                               } else {
@@ -4766,7 +5019,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/quotation", {
                                   state: {
-              refreshData: true,
+                                    refreshData: true,
                                   },
                                 });
                               } else {
@@ -4832,7 +5085,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/quotation", {
                                   state: {
-              refreshData: true,
+                                    refreshData: true,
                                   },
                                 });
                               } else {
@@ -6461,6 +6714,8 @@ function EnquiryCreate() {
                                           label="No of Packages"
                                           withAsterisk
                                           min={1}
+                                          allowDecimal={false}
+                                          decimalScale={0}
                                           disabled={hasValidDimensions(
                                             serviceForm.values.service_details[
                                               serviceIndex
@@ -6533,8 +6788,9 @@ function EnquiryCreate() {
                                             `service_details.${serviceIndex}.cargo_details.0.gross_weight`
                                           )}
                                           label="Gross Weight (kg)"
-                                          min={1}
+                                          min={0.01}
                                           withAsterisk
+                                          decimalScale={2}
                                           {...serviceForm.getInputProps(
                                             `service_details.${serviceIndex}.cargo_details.0.gross_weight`
                                           )}
@@ -6547,8 +6803,9 @@ function EnquiryCreate() {
                                             `service_details.${serviceIndex}.cargo_details.0.volume_weight`
                                           )}
                                           label="Volume Weight (kg)"
-                                          min={1}
+                                          min={0.01}
                                           withAsterisk
+                                          decimalScale={2}
                                           disabled={hasValidDimensions(
                                             serviceForm.values.service_details[
                                               serviceIndex
@@ -6608,6 +6865,13 @@ function EnquiryCreate() {
                                           withAsterisk
                                           min={0}
                                           readOnly
+                                          decimalScale={2}
+                                          value={
+                                            serviceForm.values.service_details[
+                                              serviceIndex
+                                            ]?.cargo_details?.[0]
+                                              ?.chargable_weight
+                                          }
                                           styles={{
                                             input: {
                                               cursor: "not-allowed",
@@ -6625,9 +6889,6 @@ function EnquiryCreate() {
                                               fontStyle: "medium",
                                             },
                                           }}
-                                          {...serviceForm.getInputProps(
-                                            `service_details.${serviceIndex}.cargo_details.0.chargable_weight`
-                                          )}
                                         />
                                         <Text
                                           size="xs"
@@ -6696,6 +6957,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={1.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -6770,6 +7033,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={1.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         value={
                                                           row?.length ?? null
                                                         }
@@ -6844,6 +7109,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={1.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -6918,6 +7185,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={1.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -6992,6 +7261,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={2}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -7001,7 +7272,6 @@ function EnquiryCreate() {
                                                               "#f8f9fa",
                                                           },
                                                         }}
-                                                        decimalScale={4}
                                                         value={
                                                           row?.value ?? null
                                                         }
@@ -7011,6 +7281,7 @@ function EnquiryCreate() {
                                                     <Grid.Col span={2.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        decimalScale={2}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -7020,7 +7291,6 @@ function EnquiryCreate() {
                                                               "#f8f9fa",
                                                           },
                                                         }}
-                                                        decimalScale={4}
                                                         value={
                                                           row?.vol_weight ??
                                                           null
@@ -7112,6 +7382,8 @@ function EnquiryCreate() {
                                           label="No of Packages"
                                           min={1}
                                           withAsterisk
+                                          allowDecimal={false}
+                                          decimalScale={0}
                                           disabled={hasValidDimensions(
                                             serviceForm.values.service_details[
                                               serviceIndex
@@ -7183,8 +7455,9 @@ function EnquiryCreate() {
                                             },
                                           }}
                                           label="Gross Weight (kg)"
-                                          min={1}
+                                          min={0.01}
                                           withAsterisk
+                                          decimalScale={2}
                                           {...serviceForm.getInputProps(
                                             `service_details.${serviceIndex}.cargo_details.0.gross_weight`
                                           )}
@@ -7197,8 +7470,9 @@ function EnquiryCreate() {
                                             `service_details.${serviceIndex}.cargo_details.0.volume`
                                           )}
                                           label="Volume (cbm)"
-                                          min={1}
+                                          min={0.01}
                                           withAsterisk
+                                          decimalScale={2}
                                           disabled={hasValidDimensions(
                                             serviceForm.values.service_details[
                                               serviceIndex
@@ -7257,6 +7531,13 @@ function EnquiryCreate() {
                                           label="Chargeable Volume (cbm)"
                                           min={0}
                                           readOnly
+                                          decimalScale={2}
+                                          value={
+                                            serviceForm.values.service_details[
+                                              serviceIndex
+                                            ]?.cargo_details?.[0]
+                                              ?.chargable_volume
+                                          }
                                           styles={{
                                             input: {
                                               cursor: "not-allowed",
@@ -7274,9 +7555,6 @@ function EnquiryCreate() {
                                               fontStyle: "medium",
                                             },
                                           }}
-                                          {...serviceForm.getInputProps(
-                                            `service_details.${serviceIndex}.cargo_details.0.chargable_volume`
-                                          )}
                                         />
                                         <Text
                                           size="xs"
@@ -7345,6 +7623,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={1.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -7427,6 +7707,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={1.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         value={
                                                           row?.length ?? null
                                                         }
@@ -7509,6 +7791,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={1.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         value={
                                                           row?.width ?? null
                                                         }
@@ -7591,6 +7875,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={1.5}>
                                                       <NumberInput
                                                         hideControls
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         value={
                                                           row?.height ?? null
                                                         }
@@ -7673,7 +7959,8 @@ function EnquiryCreate() {
                                                     <Grid.Col span={2}>
                                                       <NumberInput
                                                         hideControls
-                                                        decimalScale={4}
+                                                        allowDecimal={false}
+                                                        decimalScale={0}
                                                         value={
                                                           row?.value ?? null
                                                         }
@@ -7700,7 +7987,7 @@ function EnquiryCreate() {
                                                     <Grid.Col span={2.5}>
                                                       <NumberInput
                                                         hideControls
-                                                        decimalScale={4}
+                                                        decimalScale={2}
                                                         value={
                                                           row?.vol_weight ??
                                                           null
@@ -7864,6 +8151,8 @@ function EnquiryCreate() {
                                                   placeholder="Enter number of containers"
                                                   min={1}
                                                   withAsterisk
+                                                  allowDecimal={false}
+                                                  decimalScale={0}
                                                   {...serviceForm.getInputProps(
                                                     `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
                                                   )}
@@ -7893,7 +8182,8 @@ function EnquiryCreate() {
                                                   label="Gross Weight (kg)"
                                                   withAsterisk
                                                   placeholder="Enter gross weight"
-                                                  min={0}
+                                                  min={0.01}
+                                                  decimalScale={2}
                                                   {...serviceForm.getInputProps(
                                                     `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
                                                   )}
@@ -8077,7 +8367,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/call-entry", {
                                   state: {
-              refreshData: true,
+                                    refreshData: true,
                                   },
                                 });
                               } else {
@@ -8090,7 +8380,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/enquiry", {
                                   state: {
-              refreshData: true,
+                                    refreshData: true,
                                   },
                                 });
                               } else {
@@ -8103,7 +8393,7 @@ function EnquiryCreate() {
                               if (preserveFilters) {
                                 navigate("/quotation", {
                                   state: {
-              refreshData: true,
+                                    refreshData: true,
                                   },
                                 });
                               } else {

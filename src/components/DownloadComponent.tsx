@@ -8,7 +8,7 @@ import ToastNotification from "./ToastNotification";
 interface ColumnConfig {
   key: string;
   header: string;
-  transform?: (value: any, item: any) => string;
+  transform?: (value: any, item: any) => string | number;
 }
 
 interface DownloadComponentProps {
@@ -155,13 +155,19 @@ export const DownloadComponent = ({
 
         columns.forEach((column) => {
           if (column.transform) {
-            processedItem[column.header] = column.transform(
+            const transformedValue = column.transform(
               getNestedValue(item, column.key),
               item
             );
+            processedItem[column.header] = transformedValue;
           } else {
-            processedItem[column.header] =
-              getNestedValue(item, column.key) || "N/A";
+            const rawValue = getNestedValue(item, column.key);
+            // Preserve numeric types when no transform is applied
+            if (rawValue === null || rawValue === undefined || rawValue === "") {
+              processedItem[column.header] = "N/A";
+            } else {
+              processedItem[column.header] = rawValue;
+            }
           }
         });
 

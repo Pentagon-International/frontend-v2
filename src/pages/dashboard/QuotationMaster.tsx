@@ -480,8 +480,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
     // Add date range if both dates are selected
     if (fromDate && toDate) {
-      payload.enquiry_received_date_from = dayjs(fromDate).format("YYYY-MM-DD");
-      payload.enquiry_received_date_to = dayjs(toDate).format("YYYY-MM-DD");
+      payload.date_from = dayjs(fromDate).format("YYYY-MM-DD");
+      payload.date_to = dayjs(toDate).format("YYYY-MM-DD");
     }
 
     if (filters.customer_code) payload.customer_code = filters.customer_code;
@@ -582,10 +582,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
         // Only add date filters if both dates are selected
         if (fromDate && toDate) {
-          requestBody.filters.enquiry_received_date_from =
-            dayjs(fromDate).format("YYYY-MM-DD");
-          requestBody.filters.enquiry_received_date_to =
-            dayjs(toDate).format("YYYY-MM-DD");
+          requestBody.filters.date_from = dayjs(fromDate).format("YYYY-MM-DD");
+          requestBody.filters.date_to = dayjs(toDate).format("YYYY-MM-DD");
         }
 
         const endpoint = isApprovalMode
@@ -1271,7 +1269,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         (filterPayload.status && filterPayload.status !== "all") ||
         filterPayload.remark ||
         filterPayload.revision ||
-        filterPayload.enquiry_received_date_from ||
+        filterPayload.date_from ||
         filterPayload.search;
 
       if (!hasFilterValues) {
@@ -1402,6 +1400,18 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       console.error("Error getting user currency:", error);
       return null;
     }
+  };
+
+  // Helper function to format numbers preserving decimals when converting to string
+  const formatNumberWithDecimals = (num: number): string => {
+    // Check if number has decimal places
+    if (num % 1 !== 0) {
+      // Has decimal places, preserve them with proper formatting
+      return num.toString();
+    }
+    // For integers, preserve as decimal format (e.g., 336.0)
+    // This ensures decimal values from API are preserved in Excel
+    return num.toFixed(1);
   };
 
   // Column configuration for download - using original comprehensive headers
@@ -1569,18 +1579,20 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             Array.isArray(item.quotation) &&
             item.quotation.length > 0
           ) {
-            return item.quotation
-              .map((q: any) => {
-                if (q.service_type === "FCL" && q.cargo_details) {
-                  const total = q.cargo_details.reduce(
-                    (sum: number, cd: any) => sum + (cd.no_of_containers || 0),
-                    0
-                  );
-                  return total || "N/A";
-                }
-                return "N/A";
-              })
-              .join("\n");
+            const counts = item.quotation.map((q: any) => {
+              if (q.service_type === "FCL" && q.cargo_details) {
+                const total = q.cargo_details.reduce(
+                  (sum: number, cd: any) => sum + (cd.no_of_containers || 0),
+                  0
+                );
+                return total || 0;
+              }
+              return 0;
+            });
+            // If single value, return as number; otherwise format and join as string
+            return counts.length === 1
+              ? counts[0]
+              : counts.map(formatNumberWithDecimals).join("\n");
           }
           return "N/A";
         },
@@ -1595,17 +1607,18 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             Array.isArray(item.quotation) &&
             item.quotation.length > 0
           ) {
-            return item.quotation
-              .map((q: any) => {
-                const total =
-                  q.charges?.reduce(
-                    (sum: number, charge: any) =>
-                      sum + (charge.total_cost || 0),
-                    0
-                  ) || 0;
-                return total;
-              })
-              .join("\n");
+            const totals = item.quotation.map((q: any) => {
+              const total =
+                q.charges?.reduce(
+                  (sum: number, charge: any) => sum + (charge.total_cost || 0),
+                  0
+                ) || 0;
+              return total;
+            });
+            // If single value, return as number; otherwise format and join as string
+            return totals.length === 1
+              ? totals[0]
+              : totals.map(formatNumberWithDecimals).join("\n");
           }
           return "N/A";
         },
@@ -1620,17 +1633,18 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             Array.isArray(item.quotation) &&
             item.quotation.length > 0
           ) {
-            return item.quotation
-              .map((q: any) => {
-                const total =
-                  q.charges?.reduce(
-                    (sum: number, charge: any) =>
-                      sum + (charge.total_sell || 0),
-                    0
-                  ) || 0;
-                return total;
-              })
-              .join("\n");
+            const totals = item.quotation.map((q: any) => {
+              const total =
+                q.charges?.reduce(
+                  (sum: number, charge: any) => sum + (charge.total_sell || 0),
+                  0
+                ) || 0;
+              return total;
+            });
+            // If single value, return as number; otherwise format and join as string
+            return totals.length === 1
+              ? totals[0]
+              : totals.map(formatNumberWithDecimals).join("\n");
           }
           return "N/A";
         },
@@ -1645,7 +1659,11 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             Array.isArray(item.quotation) &&
             item.quotation.length > 0
           ) {
-            return item.quotation.map((q: any) => q.profit || 0).join("\n");
+            const profits = item.quotation.map((q: any) => q.profit || 0);
+            // If single value, return as number; otherwise format and join as string
+            return profits.length === 1
+              ? profits[0]
+              : profits.map(formatNumberWithDecimals).join("\n");
           }
           return "N/A";
         },
@@ -1672,9 +1690,37 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             Array.isArray(item.quotation) &&
             item.quotation.length > 0
           ) {
-            return item.quotation.map((q: any) => q.revision || 0).join("\n");
+            const revisions = item.quotation.map((q: any) => q.revision || 0);
+            // If single value, return as number; otherwise format and join as string
+            return revisions.length === 1
+              ? revisions[0]
+              : revisions.map(formatNumberWithDecimals).join("\n");
           }
           return "N/A";
+        },
+      },
+      {
+        key: "quote_approved_date",
+        header: "Quote Approved Date",
+        transform: (_value: any, item: any) => {
+          // Show updated_at if status is "QUOTE APPROVED" or "Quote Approved", otherwise "-"
+          const status = item.status;
+          if (status === "QUOTE APPROVED" || status === "Quote Approved") {
+            return item.updated_at || "-";
+          }
+          return "-";
+        },
+      },
+      {
+        key: "quote_rejected_date",
+        header: "Quote Rejected Date",
+        transform: (_value: any, item: any) => {
+          // Show updated_at if status is "LOST", otherwise "-"
+          const status = item.status;
+          if (status === "LOST") {
+            return item.updated_at || "-";
+          }
+          return "-";
         },
       },
     ],
