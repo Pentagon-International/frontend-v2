@@ -140,6 +140,7 @@ type FilterState = {
   status: string | null;
   remark: string | null;
   revision: string | null;
+  enquiry_id: string | null;
   enquiry_received_date?: Date | null;
   enquiry_received_date_to?: Date | null;
 };
@@ -249,6 +250,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     status: isApprovalMode ? "QUOTE CREATED" : null,
     remark: null,
     revision: null,
+    enquiry_id: null,
   });
 
   // Track if filters are applied - default true for approval mode
@@ -369,6 +371,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             (restoredFilters.status && restoredFilters.status !== "all") ||
             restoredFilters.remark ||
             restoredFilters.revision ||
+            restoredFilters.enquiry_id ||
             (restoredFilters.enquiry_received_date &&
               restoredFilters.enquiry_received_date_to)
         );
@@ -497,6 +500,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       payload.status = filters.status;
     if (filters.remark) payload.remark = filters.remark;
     if (filters.revision) payload.revision = filters.revision;
+    if (filters.enquiry_id) payload.enquiry_id = filters.enquiry_id;
 
     // Append search value to existing payload (never replaces filters)
     if (debouncedSearch.trim()) {
@@ -620,6 +624,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         (filters.status && filters.status !== "all") ||
         filters.remark ||
         filters.revision ||
+        filters.enquiry_id ||
         (fromDate && toDate) ||
         debouncedSearch.trim() ||
         isApprovalMode
@@ -879,6 +884,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         status: initialFilters.status || null,
         remark: null,
         revision: null,
+        enquiry_id: initialFilters.enquiry_id || null,
       };
       setFilters(initialFilterState);
 
@@ -1269,6 +1275,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         (filterPayload.status && filterPayload.status !== "all") ||
         filterPayload.remark ||
         filterPayload.revision ||
+        filterPayload.enquiry_id ||
         filterPayload.date_from ||
         filterPayload.search;
 
@@ -1326,6 +1333,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       status: isApprovalMode ? "QUOTE CREATED" : null,
       remark: null,
       revision: null,
+      enquiry_id: null,
     });
     setSearchQuery("");
     setFiltersApplied(isApprovalMode); // Keep true for approval mode
@@ -1700,27 +1708,23 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         },
       },
       {
-        key: "quote_approved_date",
-        header: "Quote Approved Date",
+        key: "quote_approved_rejected_date",
+        header: "Quote Approved/Rejected Date",
         transform: (_value: any, item: any) => {
-          // Show updated_at if status is "QUOTE APPROVED" or "Quote Approved", otherwise "-"
+          // Show updated_at if status is "GAINED" or "LOST", otherwise "-"
           const status = item.status;
-          if (status === "QUOTE APPROVED" || status === "Quote Approved") {
+          if (status === "GAINED" || status === "LOST") {
             return item.updated_at || "-";
           }
           return "-";
         },
       },
       {
-        key: "quote_rejected_date",
-        header: "Quote Rejected Date",
+        key: "quote_created_date",
+        header: "Quote Created Date",
         transform: (_value: any, item: any) => {
-          // Show updated_at if status is "LOST", otherwise "-"
-          const status = item.status;
-          if (status === "LOST") {
-            return item.updated_at || "-";
-          }
-          return "-";
+          // Show created_at from the response
+          return item.created_at || "-";
         },
       },
     ],
@@ -2674,7 +2678,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           flex: 1,
         }}
       >
-        <Box mb="md">
+        <Box>
           <Group justify="space-between" align="center" mb="md">
             <Text
               size="md"
@@ -2716,6 +2720,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                           (filters.status && filters.status !== "all") ||
                           filters.remark ||
                           filters.revision ||
+                          filters.enquiry_id ||
                           (fromDate && toDate) ||
                           isApprovalMode;
                         if (!hasOtherFilters) {
@@ -2800,7 +2805,6 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             <Group
               justify="space-between"
               align="center"
-              mb="lg"
               style={{
                 backgroundColor: "#FAFAFA",
                 padding: "8px 8px",
@@ -3127,6 +3131,32 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                 />
               </Grid.Col>
 
+              {/* Enquiry ID Filter */}
+              <Grid.Col span={2.4}>
+                <TextInput
+                  label="Enquiry ID"
+                  placeholder="Enter Enquiry ID"
+                  size="xs"
+                  value={filters.enquiry_id || ""}
+                  onChange={(e) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      enquiry_id: e.currentTarget.value || null,
+                    }))
+                  }
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
+
               {/* Remark Filter */}
               <Grid.Col span={2.4}>
                 <TextInput
@@ -3181,7 +3211,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               </Grid.Col>
             </Grid>
 
-            <Group justify="end" mt="md" p="md" pb="md">
+            <Group justify="end" mt="sm" p="sm" pb="md">
               <Button
                 size="sm"
                 variant="outline"
