@@ -8,6 +8,7 @@ interface SearchableSelectProps {
   placeholder?: string;
   label?: string;
   value?: string | null;
+  dropdownZIndex: number | null;
   displayValue?: string | null; // Optional: what to show in input (different from value)
   onChange: (
     value: string | null,
@@ -37,6 +38,7 @@ export default function SearchableSelect({
   label,
   value,
   displayValue,
+  dropdownZIndex = 5,
   onChange,
   searchFields = ["id", "name"],
   displayFormat,
@@ -326,7 +328,7 @@ export default function SearchableSelect({
       <Select
         label={label}
         comboboxProps={{
-          zIndex: 5,
+          zIndex: dropdownZIndex,
         }}
         styles={{
           input: { fontSize: "13px", height: "36px", fontFamily: "Inter", ...styles?.input },

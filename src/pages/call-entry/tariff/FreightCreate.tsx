@@ -28,11 +28,13 @@ import {
   IconSparkles,
   IconCheck,
   IconDotsVertical,
+  IconChevronRight,
+  IconChevronLeft,
 } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ToastNotification, SearchableSelect } from "../../../components";
+import { ToastNotification, SearchableSelect, Dropdown } from "../../../components";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -71,6 +73,9 @@ const gridFormSchema = yup.object({
       rate: yup
         .number()
         .required("Rate is required")
+        .transform((value, originalValue) =>
+          originalValue === "" ? null : value
+        )
         .positive("Rate must be positive"),
       minimum: yup.number().nullable().min(0, "Minimum must be positive"),
     })
@@ -442,7 +447,10 @@ function FreightCreate() {
       charge_name: charge.charge_name || "",
       unit: charge.unit || "",
       rate: String(charge.rate || ""),
-      minimum: charge.minimum ? String(charge.minimum) : null,
+      minimum:
+        charge.minimum !== null && charge.minimum !== undefined
+          ? String(charge.minimum)
+          : null,
     }));
 
     const values = {
@@ -704,15 +712,28 @@ function FreightCreate() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const RequiredLabel = ({ label, required }: { label: string, required: boolean }) => (
+    <Group gap={4}>
+      <Text size="xs" fw={500} style={{fontSize: "13px", fontFamily: "Inter", marginBottom:"4px",}}>
+        {label}
+      </Text>
+      {!isViewMode && required && (
+        <Text c="red" fw={700} size="xs">*</Text>
+      )}
+    </Group>
+  );
+
+
   return (
     <>
       <Box
         component="form"
         style={{
-          backgroundColor: "#F8F8F8",
-          position: "relative",
-          borderRadius: "8px",
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
           overflow: "hidden",
+          flex: 1,
         }}
         onSubmit={(e) => {
           e.preventDefault();
@@ -734,285 +755,257 @@ function FreightCreate() {
           </Center>
         )}
 
-        <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
+        <Box mx="auto" h={"100%"}>
           <Flex
             gap="md"
             align="flex-start"
-            style={{ height: "calc(100vh - 112px)", width: "100%" }}
+            style={{ height: "100%", width: "100%" }}
           >
-            {/* Vertical Stepper Sidebar */}
-            <Box
-              style={{
-                minWidth: 180,
-                width: "100%",
-                maxWidth: 220,
-                height: "100%",
-                alignSelf: "stretch",
-                borderRadius: "8px",
-                backgroundColor: "#FFFFFF",
-                position: "sticky",
-                top: 0,
-              }}
-            >
-              <Box
-                style={{
-                  padding: "20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text
-                  size="md"
-                  fw={600}
-                  c="#105476"
-                  style={{
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                    fontSize: "16px",
-                    color: "#105476",
-                    textAlign: "center",
-                  }}
-                >
-                  {isViewMode
-                    ? "Freight Entry Details (View Only)"
-                    : isEditMode
-                      ? "Edit Freight Entry"
-                      : "Create Freight Entry"}
-                </Text>
-              </Box>
-            </Box>
-
             {/* Main Content Area */}
             <Box
               style={{
                 flex: 1,
                 width: "100%",
-                borderRadius: "8px",
                 display: "flex",
                 flexDirection: "column",
                 height: "100%",
                 overflow: "hidden",
                 gap: "8px",
               }}
-            >
+              >
               <Box
                 style={{
                   flex: 1,
-                  overflowY: "auto",
-                  borderRadius: "8px",
+                  borderRadius:"4px",
+                  border:"1px solid #dadada",
+                  overflow: "auto",
+                  position:"relative",
                   backgroundColor: "#FFFFFF",
                 }}
               >
-                <Grid style={{ padding: "24px" }}>
+                <Grid px={"md"}>
                   {/* Action Menu - Only show in view or edit mode */}
-                  {(isViewMode || isEditMode) && (
-                    <Grid.Col span={12}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          justifyContent: "flex-end",
-                          marginBottom: "16px",
-                        }}
-                      >
-                        <Menu shadow="md" width={220} position="bottom-end">
-                          <Menu.Target>
-                            <ActionIcon
-                              variant="subtle"
-                              color="#105476"
-                              size="lg"
-                              styles={{
-                                root: {
-                                  fontFamily: "Inter",
-                                  fontSize: "13px",
-                                  border: "1px solid #E9ECEF",
-                                  borderRadius: "8px",
-                                  "&:hover": {
-                                    backgroundColor: "#F8F9FA",
-                                  },
-                                },
-                              }}
-                            >
-                              <IconDotsVertical size={18} />
-                            </ActionIcon>
-                          </Menu.Target>
-                          <Menu.Dropdown
-                            styles={{
-                              dropdown: {
-                                border: "1px solid #E9ECEF",
-                                borderRadius: "8px",
-                                padding: "8px",
-                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                              },
-                            }}
-                          >
-                            <Menu.Item
-                              leftSection={
-                                <Box
-                                  style={{
-                                    backgroundColor: "#E7F5FF",
-                                    borderRadius: "6px",
-                                    padding: "6px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <IconSparkles size={16} color="#105476" />
-                                </Box>
-                              }
-                              styles={{
-                                item: {
-                                  fontFamily: "Inter",
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  borderRadius: "6px",
-                                  padding: "10px 12px",
-                                  marginBottom: "4px",
-                                  "&:hover": {
-                                    backgroundColor: "#F8F9FA",
-                                  },
-                                },
-                                itemLabel: {
-                                  fontFamily: "Inter",
-                                  fontSize: "13px",
-                                  fontWeight: 500,
-                                  color: "#424242",
-                                },
-                              }}
-                              onClick={handleOpenQuoteModal}
-                            >
-                              Create Quotation
-                            </Menu.Item>
-                          </Menu.Dropdown>
-                        </Menu>
-                      </Box>
-                    </Grid.Col>
-                  )}
-
-                  {/* Origin Selection */}
-                  <Grid.Col span={4}>
-                    <Box maw={400}>
-                      <Flex gap="sm" align="flex-end">
-                        <div
+                  <Grid.Col span={12} style={{position: "sticky", top:0, zIndex:50, backgroundColor:"white", padding:"10px 0"}}>
+                    <Grid style={{borderRadius:"4px", padding:"5px 10px",backgroundColor:"#fafafa"}} align={"center"}>
+                      <Grid.Col span={isViewMode || isEditMode ? 6 : 12}>
+                        <Text
+                          size="md"
+                          fw={600}
+                          c="#105476"
                           style={{
-                            flex: mainForm.values.origin_code ? 0.75 : 1,
-                            transition: "flex 0.3s ease",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                            fontSize: "16px",
+                            color: "#105476",
+                            textAlign: "Left",
                           }}
                         >
-                          <SearchableSelect
-                            apiEndpoint={URL.portMaster}
-                            label="Origin"
-                            placeholder="Search by port code or name"
-                            value={mainForm.values.origin_code || null}
-                            displayValue={originDisplayValue || null}
-                            onChange={(value, selectedData) => {
-                              mainForm.setFieldValue(
-                                "origin_code",
-                                value || ""
-                              );
-                              setOriginDisplayValue(selectedData?.label || "");
+                          {isViewMode
+                            ? "Freight Entry Details (View Only)"
+                            : isEditMode
+                              ? "Edit Freight Entry"
+                              : "Create Freight Entry"}
+                        </Text>
+                      </Grid.Col>
+                      {(isViewMode || isEditMode) && (
+                        <Grid.Col span={6}>
+                          <Box
+                            style={{
+                              display: "flex",
+                              justifyContent: "flex-end",
                             }}
-                            searchFields={["port_code", "port_name"]}
-                            displayFormat={(item) => ({
-                              value: String(item.port_code),
-                              label: `${item.port_name} (${item.port_code})`,
-                            })}
-                            required={!isViewMode}
-                            disabled={isViewMode}
-                            styles={{
-                              input: {
-                                fontSize: "13px",
-                                fontFamily: "Inter",
-                                height: "36px",
-                              },
-                              label: {
-                                fontSize: "13px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
-                        </div>
+                          >
+                            <Menu shadow="md" width={220} position="bottom-end">
+                              <Menu.Target>
+                                <ActionIcon
+                                  variant="subtle"
+                                  color="#105476"
+                                  size="md"
+                                  styles={{
+                                    root: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      border: "2px solid #E9ECEF",
+                                      borderRadius: "4px",
+                                      backgroundColor: "white",
+                                      "&:hover": {
+                                        backgroundColor: "#f8f8f8",
+                                      },
+                                    },
+                                  }}
+                                >
+                                  <IconDotsVertical size={18} />
+                                </ActionIcon>
+                              </Menu.Target>
+                              <Menu.Dropdown
+                                styles={{
+                                  dropdown: {
+                                    border: "1px solid #E9ECEF",
+                                    borderRadius: "8px",
+                                    padding: "4px",
+                                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                                  },
+                                }}
+                              >
+                                <Menu.Item
+                                  leftSection={
+                                    <Box
+                                      style={{
+                                        backgroundColor: "#E7F5FF",
+                                        borderRadius: "6px",
+                                        padding: "6px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <IconSparkles size={16} color="#105476" />
+                                    </Box>
+                                  }
+                                  styles={{
+                                    item: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      borderRadius: "6px",
+                                      padding: "4px 8px",
+                                      "&:hover": {
+                                        backgroundColor: "#F8F9FA",
+                                      },
+                                    },
+                                    itemLabel: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                    },
+                                  }}
+                                  onClick={handleOpenQuoteModal}
+                                >
+                                  Create Quotation
+                                </Menu.Item>
+                              </Menu.Dropdown>
+                            </Menu>
+                          </Box>
+                        </Grid.Col>
+                      )}
+                    </Grid>
+                  </Grid.Col>
 
-                        {mainForm.values.origin_code && (
-                          <div style={{ flex: 0.25 }}>
-                            <Button
-                              size="sm"
-                              color="#105476"
-                              onClick={() => openOrigin()}
-                            >
-                              <IconInfoCircle size={16} />
-                            </Button>
-                          </div>
-                        )}
-                      </Flex>
-                    </Box>
+                  {/* Origin Selection */}
+                  <Grid.Col span={{base: 12, sm: 6,md: 4, lg:3}}>
+                    <Grid gutter="xs">
+                      <Grid.Col span={mainForm.values.origin_code ? 10.5 : 12} >
+                        <SearchableSelect
+                          apiEndpoint={URL.portMaster}
+                          label="Origin"
+                          placeholder="Search by port code or name"
+                          value={mainForm.values.origin_code || null}
+                          displayValue={originDisplayValue || null}
+                          onChange={(value, selectedData) => {
+                            mainForm.setFieldValue(
+                              "origin_code",
+                              value || ""
+                            );
+                            setOriginDisplayValue(selectedData?.label || "");
+                          }}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          required={!isViewMode}
+                          disabled={isViewMode}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              marginBottom:"4px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+
+                      {mainForm.values.origin_code && (
+                        <Grid.Col span={1.5} mt={28}>
+                          <Button
+                            size="sm"
+                            px={0}
+                            w={"100%"}
+                            color="#105476"
+                            onClick={() => openOrigin()}
+                          >
+                            <IconInfoCircle size={16} />
+                          </Button>
+                        </Grid.Col>
+                      )}
+                    </Grid>
                   </Grid.Col>
 
                   {/* Destination Selection */}
-                  <Grid.Col span={4}>
-                    <Box maw={400}>
-                      <Flex gap="sm" align="flex-end">
-                        <div
-                          style={{
-                            flex: mainForm.values.destination_code ? 0.75 : 1,
-                            transition: "flex 0.3s ease",
+                  <Grid.Col span={{base: 12, sm: 6,md: 4, lg:3}}>
+                    <Grid gutter="xs">
+                      <Grid.Col span={mainForm.values.destination_code ? 10.5 : 12}>
+                        <SearchableSelect
+                          apiEndpoint={URL.portMaster}
+                          label="Destination"
+                          placeholder="Search by port code or name"
+                          value={mainForm.values.destination_code || null}
+                          displayValue={destinationDisplayValue || null}
+                          onChange={(value, selectedData) => {
+                            mainForm.setFieldValue(
+                              "destination_code",
+                              value || ""
+                            );
+                            setDestinationDisplayValue(
+                              selectedData?.label || ""
+                            );
                           }}
-                        >
-                          <SearchableSelect
-                            apiEndpoint={URL.portMaster}
-                            label="Destination"
-                            placeholder="Search by port code or name"
-                            value={mainForm.values.destination_code || null}
-                            displayValue={destinationDisplayValue || null}
-                            onChange={(value, selectedData) => {
-                              mainForm.setFieldValue(
-                                "destination_code",
-                                value || ""
-                              );
-                              setDestinationDisplayValue(
-                                selectedData?.label || ""
-                              );
-                            }}
-                            searchFields={["port_code", "port_name"]}
-                            displayFormat={(item) => ({
-                              value: String(item.port_code),
-                              label: `${item.port_name} (${item.port_code})`,
-                            })}
-                            required={!isViewMode}
-                            disabled={isViewMode}
-                            styles={{
-                              input: {
-                                fontSize: "13px",
-                                fontFamily: "Inter",
-                                height: "36px",
-                              },
-                              label: {
-                                fontSize: "13px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
-                        </div>
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          required={!isViewMode}
+                          disabled={isViewMode}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              marginBottom:"4px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
 
-                        {mainForm.values.destination_code && (
-                          <div style={{ flex: 0.25 }}>
-                            <Button
-                              size="sm"
-                              color="#105476"
-                              onClick={() => openDestination()}
-                            >
-                              <IconInfoCircle size={16} />
-                            </Button>
-                          </div>
-                        )}
-                      </Flex>
-                    </Box>
+                      {mainForm.values.destination_code && (
+                        <Grid.Col span={1.5} mt={28}>
+                          <Button
+                            size="sm"
+                            px={0}
+                            w={"100%"}
+                            color="#105476"
+                            onClick={() => openDestination()}
+                          >
+                            <IconInfoCircle size={16} />
+                          </Button>
+                        </Grid.Col>
+                      )}
+                    </Grid>
                   </Grid.Col>
 
                   {/* Service Selection */}
-                  <Grid.Col span={4}>
-                    <Box maw={400}>
+                  <Grid.Col span={{base: 12, sm: 6,md: 4, lg:3}}>
                       <Select
                         searchable
                         key={mainForm.key("service")}
@@ -1038,99 +1031,14 @@ function FreightCreate() {
                           label: {
                             fontSize: "13px",
                             fontFamily: "Inter",
+                            marginBottom:"4px",
                           },
                         }}
                       />
-                    </Box>
-                  </Grid.Col>
-
-                  {/* Valid From Date */}
-                  <Grid.Col span={4}>
-                    <Box maw={400}>
-                      <DateInput
-                        label="Valid From"
-                        withAsterisk={!isViewMode}
-                        key={mainForm.key("valid_from")}
-                        placeholder="YYYY-MM-DD"
-                        disabled={isViewMode}
-                        value={
-                          mainForm.values.valid_from
-                            ? dayjs(mainForm.values.valid_from).toDate()
-                            : null
-                        }
-                        onChange={(date) => {
-                          const formatted = date
-                            ? dayjs(date).format("YYYY-MM-DD")
-                            : "";
-                          mainForm.setFieldValue("valid_from", formatted);
-                        }}
-                        valueFormat="YYYY-MM-DD"
-                        leftSection={<IconCalendar size={18} />}
-                        leftSectionPointerEvents="none"
-                        radius="md"
-                        size="sm"
-                        styles={
-                          {
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                            label: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                            },
-                          } as any
-                        }
-                      />
-                    </Box>
-                  </Grid.Col>
-
-                  {/* Valid To Date */}
-                  <Grid.Col span={4}>
-                    <Box maw={400}>
-                      <DateInput
-                        label="Valid To"
-                        withAsterisk={!isViewMode}
-                        key={mainForm.key("valid_to")}
-                        placeholder="YYYY-MM-DD"
-                        disabled={isViewMode}
-                        value={
-                          mainForm.values.valid_to
-                            ? dayjs(mainForm.values.valid_to).toDate()
-                            : null
-                        }
-                        onChange={(date) => {
-                          const formatted = date
-                            ? dayjs(date).format("YYYY-MM-DD")
-                            : "";
-                          mainForm.setFieldValue("valid_to", formatted);
-                        }}
-                        valueFormat="YYYY-MM-DD"
-                        leftSection={<IconCalendar size={18} />}
-                        leftSectionPointerEvents="none"
-                        radius="md"
-                        size="sm"
-                        styles={
-                          {
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                            label: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                            },
-                          } as any
-                        }
-                      />
-                    </Box>
                   </Grid.Col>
 
                   {/* No of Containers */}
-                  <Grid.Col span={4}>
-                    <Box maw={400}>
+                  <Grid.Col span={{base: 12, sm: 6,md: 4, lg:3}}>
                       <NumberInput
                         label="No of Containers"
                         min={1}
@@ -1148,21 +1056,172 @@ function FreightCreate() {
                           label: {
                             fontSize: "13px",
                             fontFamily: "Inter",
+                            marginBottom:"4px",
                           },
                         }}
                       />
-                    </Box>
+                  </Grid.Col>
+
+                  {/* Valid From Date */}
+                  <Grid.Col span={{base: 12, sm: 6,md: 4, lg:3}}>
+                    <DateInput
+                      label="Valid From"
+                      withAsterisk={!isViewMode}
+                      key={mainForm.key("valid_from")}
+                      placeholder="YYYY-MM-DD"
+                      disabled={isViewMode}
+                      value={
+                        mainForm.values.valid_from
+                          ? dayjs(mainForm.values.valid_from).toDate()
+                          : null
+                      }
+                      onChange={(date) => {
+                        const formatted = date
+                          ? dayjs(date).format("YYYY-MM-DD")
+                          : "";
+                        mainForm.setFieldValue("valid_from", formatted);
+                      }}
+                      valueFormat="YYYY-MM-DD"
+                      leftSection={<IconCalendar size={18} />}
+                      leftSectionPointerEvents="none"
+                      radius="sm"
+                      size="sm"
+                      nextIcon={<IconChevronRight size={16} />}
+                      previousIcon={<IconChevronLeft size={16} />}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                        day: {
+                          width: "2.25rem",
+                          height: "2.25rem",
+                          fontSize: "0.9rem",
+                          fontFamily: "Inter, sans-serif",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+
+                  {/* Valid To Date */}
+                  <Grid.Col span={{base: 12, sm: 6,md: 4, lg:3}}>
+                    <DateInput
+                      label="Valid To"
+                      withAsterisk={!isViewMode}
+                      key={mainForm.key("valid_to")}
+                      placeholder="YYYY-MM-DD"
+                      disabled={isViewMode}
+                      value={
+                        mainForm.values.valid_to
+                          ? dayjs(mainForm.values.valid_to).toDate()
+                          : null
+                      }
+                      onChange={(date) => {
+                        const formatted = date
+                          ? dayjs(date).format("YYYY-MM-DD")
+                          : "";
+                        mainForm.setFieldValue("valid_to", formatted);
+                      }}
+                      valueFormat="YYYY-MM-DD"
+                      leftSection={<IconCalendar size={18} />}
+                      leftSectionPointerEvents="none"
+                      radius="sm"
+                      size="sm"
+                      nextIcon={<IconChevronRight size={16} />}
+                      previousIcon={<IconChevronLeft size={16} />}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                        day: {
+                          width: "2.25rem",
+                          height: "2.25rem",
+                          fontSize: "0.9rem",
+                          fontFamily: "Inter, sans-serif",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+
+                  <Grid.Col span={12} mt="md" style={{position: "sticky", top:38, zIndex:100, backgroundColor:"white", padding:"8px 0 0"}}>
+                    <Grid style={{borderRadius:"4px", padding:"5px 10px",backgroundColor:"#fafafa"}}>
+                      <Grid.Col span={12}>
+                        <Text
+                          size="md"
+                          fw={600}
+                          c="#105476"
+                          style={{
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                            fontSize: "16px",
+                            color: "#105476",
+                            textAlign: "Left",
+                          }}
+                        >
+                          Tariff Charges
+                        </Text>
+                      </Grid.Col>
+                    </Grid>
                   </Grid.Col>
 
                   {/* Tariff Charges Grid */}
                   <Grid.Col span={12}>
-                    <Stack gap="md">
+                    <Stack gap={0}>
+                      <Grid w="100%" gutter="sm" py="sm" style={{position:"sticky",zIndex:100, top: 76, backgroundColor:"white"}}>
+                        <Grid.Col span={2}>
+                          <RequiredLabel label="Customer Name" required={false}/>
+                        </Grid.Col>
+                        <Grid.Col span={2}>
+                          <RequiredLabel label="Charge Name" required />
+                        </Grid.Col>
+                        <Grid.Col span={2}>
+                          <RequiredLabel label="Carrier" required />
+                        </Grid.Col>
+                        <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
+                          <RequiredLabel label="Currency" required />
+                        </Grid.Col>
+                        <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
+                          <RequiredLabel label="Unit" required />
+                        </Grid.Col>
+                        <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
+                          <RequiredLabel label="Rate" required />
+                        </Grid.Col>
+                        <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
+                          <RequiredLabel label="Minimum" required={false}/>
+                        </Grid.Col>
+                        {!isViewMode && (
+                          <Grid.Col span={1}>
+                            <Text size="xs" fw={600}>
+                              Actions
+                            </Text>
+                          </Grid.Col>
+                        )}
+                      </Grid>
+
                       {gridForm.values.tariff_charges.map((_, index) => (
-                        <Grid key={index} w="100%" gutter="sm">
-                          <Grid.Col span={isViewMode ? 2.5 : 2.5}>
+                        <Grid key={index} w="100%" gutter="sm" mt={index!==0 ? "sm" : 0}>
+                          <Grid.Col span={2}>
                             <SearchableSelect
                               apiEndpoint={URL.customer}
-                              label={index === 0 ? "Customer Name" : ""}
                               placeholder="Search by customer code or name"
                               value={
                                 gridForm.values.tariff_charges[index]
@@ -1205,15 +1264,15 @@ function FreightCreate() {
                                   height: "36px",
                                 },
                                 label: {
+                                  paddingBottom:"5px",
                                   fontSize: "13px",
                                   fontFamily: "Inter",
                                 },
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={isViewMode ? 2 : 2}>
+                          <Grid.Col span={2}>
                             <TextInput
-                              label={index === 0 ? "Charge Name" : ""}
                               withAsterisk={!isViewMode}
                               placeholder="Enter Charge Name"
                               key={`charge-name-${index}`}
@@ -1229,16 +1288,16 @@ function FreightCreate() {
                                   height: "36px",
                                 },
                                 label: {
+                                  paddingBottom:"5px",
                                   fontSize: "13px",
                                   fontFamily: "Inter",
                                 },
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={isViewMode ? 2.5 : 1.5}>
+                          <Grid.Col span={2}>
                             <SearchableSelect
                               apiEndpoint={URL.carrier}
-                              label={index === 0 ? "Carrier" : ""}
                               placeholder="Search by carrier code or name"
                               value={
                                 gridForm.values.tariff_charges[index]
@@ -1280,62 +1339,17 @@ function FreightCreate() {
                                   height: "36px",
                                 },
                                 label: {
+                                  paddingBottom:"5px",
                                   fontSize: "13px",
                                   fontFamily: "Inter",
                                 },
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={isViewMode ? 1 : 1}>
-                            <Select
-                              searchable
-                              label={index === 0 ? "Unit" : ""}
-                              withAsterisk={!isViewMode}
-                              placeholder={
-                                isLoadingUnitData
-                                  ? "Loading units..."
-                                  : unitData.length === 0
-                                    ? "Select service first"
-                                    : "Select Unit"
-                              }
-                              data={unitData}
-                              key={
-                                gridForm.values.tariff_charges[index].unit ||
-                                `unit-${index}-unit`
-                              }
-                              disabled={
-                                isViewMode ||
-                                isLoadingUnitData ||
-                                unitData.length === 0
-                              }
-                              {...gridForm.getInputProps(
-                                `tariff_charges.${index}.unit`
-                              )}
-                              onFocus={(event) => {
-                                // Auto-select all text when input is focused
-                                const input = event.target as HTMLInputElement;
-                                if (input && input.value) {
-                                  input.select();
-                                }
-                              }}
-                              styles={{
-                                input: {
-                                  fontSize: "13px",
-                                  fontFamily: "Inter",
-                                  height: "36px",
-                                },
-                                label: {
-                                  fontSize: "13px",
-                                  fontFamily: "Inter",
-                                },
-                              }}
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={isViewMode ? 1 : 1}>
+                          <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
                             <SearchableSelect
                               apiEndpoint={URL.currencyMaster}
-                              label={index === 0 ? "Currency" : ""}
-                              placeholder="Search by currency code"
+                              placeholder="Search currency code"
                               value={
                                 gridForm.values.tariff_charges[index]
                                   .currency_code || null
@@ -1375,17 +1389,58 @@ function FreightCreate() {
                                   height: "36px",
                                 },
                                 label: {
+                                  paddingBottom:"5px",
                                   fontSize: "13px",
                                   fontFamily: "Inter",
                                 },
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={isViewMode ? 1.25 : 1.25}>
+                          <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
+                            <Dropdown
+                              searchable
+                              withAsterisk={!isViewMode}
+                              placeholder={
+                                isLoadingUnitData
+                                  ? "Loading units..."
+                                  : unitData.length === 0
+                                    ? "Select service first"
+                                    : "Select Unit"
+                              }
+                              data={unitData}
+                              disabled={
+                                isViewMode ||
+                                isLoadingUnitData ||
+                                unitData.length === 0
+                              }
+                              {...gridForm.getInputProps(
+                                `tariff_charges.${index}.unit`
+                              )}
+                              onFocus={(event) => {
+                                // Auto-select all text when input is focused
+                                const input = event.target as HTMLInputElement;
+                                if (input && input.value) {
+                                  input.select();
+                                }
+                              }}
+                              styles={{
+                                input: {
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                                label: {
+                                  paddingBottom:"5px",
+                                  fontSize: "13px",
+                                  fontFamily: "Inter",
+                                },
+                              }}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
                             <NumberInput
                               key={`rate-name-${index}`}
                               min={1}
-                              label={index === 0 ? "Rate" : ""}
                               withAsterisk={!isViewMode}
                               disabled={isViewMode}
                               {...gridForm.getInputProps(
@@ -1398,17 +1453,17 @@ function FreightCreate() {
                                   height: "36px",
                                 },
                                 label: {
+                                  paddingBottom:"5px",
                                   fontSize: "13px",
                                   fontFamily: "Inter",
                                 },
                               }}
                             />
                           </Grid.Col>
-                          <Grid.Col span={isViewMode ? 1.25 : 1.25}>
+                          <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
                             <TextInput
                               key={`minimum-name-${index}`}
                               type="number"
-                              label={index === 0 ? "Minimum" : ""}
                               placeholder="Enter value"
                               disabled={isViewMode}
                               {...gridForm.getInputProps(
@@ -1421,6 +1476,7 @@ function FreightCreate() {
                                   height: "36px",
                                 },
                                 label: {
+                                  paddingBottom:"5px",
                                   fontSize: "13px",
                                   fontFamily: "Inter",
                                 },
@@ -1429,44 +1485,49 @@ function FreightCreate() {
                           </Grid.Col>
                           {!isViewMode && (
                             <>
-                              <Grid.Col span={0.75}>
-                                <Button
-                                  radius={"sm"}
-                                  mt={index === 0 ? 25 : 0}
-                                  variant="light"
-                                  color="#105476"
-                                  size="sm"
-                                  onClick={() =>
-                                    gridForm.insertListItem("tariff_charges", {
-                                      customer_code: "",
-                                      charge_name: "",
-                                      carrier_code: "",
-                                      unit: "",
-                                      currency_code: "",
-                                      rate: "",
-                                      minimum: null,
-                                    })
-                                  }
-                                >
-                                  <IconPlus size={16} />
-                                </Button>
-                              </Grid.Col>
                               <Grid.Col span={0.5}>
                                 <Button
-                                  mt={index === 0 ? 25 : 0}
                                   variant="light"
                                   color="red"
                                   size="sm"
-                                  onClick={() =>
-                                    gridForm.removeListItem(
-                                      "tariff_charges",
-                                      index
-                                    )
+                                  px={12}
+                                  onClick={() =>{
+                                      if(gridForm.values.tariff_charges.length - 1 > 0){
+                                        gridForm.removeListItem(
+                                          "tariff_charges",
+                                          index
+                                        )
+                                      }
+                                    }
                                   }
                                 >
                                   <IconTrash size={16} />
                                 </Button>
                               </Grid.Col>
+                              {index === gridForm.values.tariff_charges.length - 1 && (
+                                <Grid.Col span={0.5}>
+                                  <Button
+                                    radius={"sm"}
+                                    px={12}
+                                    size="sm"
+                                    variant="light"
+                                    color="#105476"
+                                    onClick={() =>
+                                      gridForm.insertListItem("tariff_charges", {
+                                        customer_code: "",
+                                        charge_name: "",
+                                        carrier_code: "",
+                                        unit: "",
+                                        currency_code: "",
+                                        rate: "",
+                                        minimum: null,
+                                      })
+                                    }
+                                  >
+                                    <IconPlus size={16} />
+                                  </Button>
+                                </Grid.Col>
+                              )}
                             </>
                           )}
                         </Grid>
@@ -1475,55 +1536,77 @@ function FreightCreate() {
                   </Grid.Col>
 
                   {/* Total Rate Display for All Modes */}
-                  <Grid.Col span={12}>
-                    <Paper
-                      mt="lg"
-                      maw={600}
-                      style={{ marginLeft: "auto", marginRight: 0 }}
-                    >
-                      <Text size="lg" fw={600} c="#105476" mb="md">
-                        Total Calculations
-                      </Text>
-
-                      {/* Unit Type Totals */}
-                      {Object.keys(unitTotals).length > 0 && (
-                        <Stack gap="xs" mb="md">
-                          {Object.entries(unitTotals)
-                            .filter(([unit]) => unit !== "shipment") // Hide shipment from display
-                            .map(([unit, total]) => {
-                              return (
-                                <div key={unit}>
-                                  <Group justify="space-between">
-                                    <Text size="sm" fw={500}>
-                                      Total {unit}:
-                                    </Text>
-                                    <Text size="sm" fw={600} c="#105476">
-                                      {total.toLocaleString("en-US", {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })}
-                                    </Text>
-                                  </Group>
-                                  <Text size="xs" c="dimmed" ml="md">
-                                    Per Container :{" "}
-                                    {(total / numberOfContainers).toFixed(2)}
-                                  </Text>
-                                </div>
-                              );
-                            })}
-                        </Stack>
-                      )}
-                    </Paper>
+                  <Grid.Col span={12} style={{position: "sticky", bottom:0, zIndex:100, backgroundColor:"white", padding:"5px 0 10px"}}>
+                    <Grid style={{borderRadius:"4px", padding:"4px 10px",backgroundColor:"#fafafa"}}>
+                      <Grid.Col span={5}>
+                        <Text 
+                        size="md"
+                          fw={600}
+                          c="#105476"
+                          pt={4}
+                          style={{
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                            fontSize: "16px",
+                            color: "#105476",
+                            textAlign: "Left",
+                          }}
+                        >
+                          Total Calculations
+                        </Text>
+                      </Grid.Col>
+                      <Grid.Col span={7}>
+                        {/* Unit Type Totals */}
+                        {Object.keys(unitTotals).length > 0 && (
+                          <Stack gap="xs" my="xs">
+                            {Object.entries(unitTotals)
+                              .filter(([unit]) => unit !== "shipment")
+                              .map(([unit, total]) => {
+                                return (
+                                  <Grid key={unit} columns={7} align="baseline">
+                                    <Grid.Col span={!isViewMode ? 2.25 : 2.5}>
+                                      <Group gap={"sm"} >
+                                        <Text size="xs" c="dimmed">
+                                          Per Container{" : "}
+                                        </Text>
+                                        <Text size="sm" fw={600} c="dimmed">
+                                          {(total / numberOfContainers).toFixed(2)}
+                                        </Text>
+                                      </Group>
+                                    </Grid.Col>
+                                    <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
+                                      <Text size="md" fw={500}>
+                                        Total {unit}
+                                      </Text>
+                                    </Grid.Col>
+                                    <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
+                                      <Text size="md" pl="sm" fw={600} c="#105476">
+                                        {total.toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
+                                      </Text>
+                                    </Grid.Col>
+                                    
+                                  </Grid>
+                                );
+                              })}
+                          </Stack>
+                        )}
+                       </Grid.Col>
+                    </Grid>
                   </Grid.Col>
                 </Grid>
               </Box>
 
               {/* Footer Buttons */}
               <Box
+                p={"sm"}
                 style={{
-                  padding: "20px 32px",
+                  border:"1px solid #dadada",
+                  padding: "10px 24px",
                   backgroundColor: "#ffffff",
-                  borderRadius: "8px",
+                  borderRadius: "4px",
                 }}
               >
                 <Group justify="space-between">
