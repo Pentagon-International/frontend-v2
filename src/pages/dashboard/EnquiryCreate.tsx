@@ -388,25 +388,49 @@ const serviceFormSchema = yup.object({
                     .min(0.01, "Must be greater than 0")
                     .test(
                       "decimal-places",
-                      "Maximum 2 decimal places allowed",
+                      "Maximum 3 decimal places allowed",
                       (value) => {
                         if (value === undefined || value === null) return true;
                         const decimalPart = String(value).split(".")[1];
-                        return !decimalPart || decimalPart.length <= 2;
+                        return !decimalPart || decimalPart.length <= 3;
                       }
                     )
-                    .test("max-digits", "Maximum 7 digits allowed", (value) => {
+                    .test("max-integer-digits", "Maximum 7 integer digits allowed", (value) => {
                       if (value === undefined || value === null) return true;
                       const integerPart = Math.floor(
                         Math.abs(value)
                       ).toString();
                       return integerPart.length <= 7;
+                    })
+                    .test("max-total-digits", "Maximum 10 digits in total allowed", (value) => {
+                      if (value === undefined || value === null) return true;
+                      const valueStr = String(value).replace(".", "");
+                      return valueStr.length <= 10;
                     }),
                 otherwise: (schema) => schema.nullable(),
               }),
               chargable_volume: yup
                 .number()
                 .nullable()
+                .test(
+                  "decimal-places",
+                  "Maximum 3 decimal places allowed",
+                  (value) => {
+                    if (value === undefined || value === null) return true;
+                    const decimalPart = String(value).split(".")[1];
+                    return !decimalPart || decimalPart.length <= 3;
+                  }
+                )
+                .test("max-integer-digits", "Maximum 7 integer digits allowed", (value) => {
+                  if (value === undefined || value === null) return true;
+                  const integerPart = Math.floor(Math.abs(value)).toString();
+                  return integerPart.length <= 7;
+                })
+                .test("max-total-digits", "Maximum 10 digits in total allowed", (value) => {
+                  if (value === undefined || value === null) return true;
+                  const valueStr = String(value).replace(".", "");
+                  return valueStr.length <= 10;
+                })
                 // No validation needed - this is auto-calculated from gross_weight and volume
                 // Validation errors will appear in the source fields instead
                 .optional(),
@@ -1388,26 +1412,39 @@ function EnquiryCreate() {
             hasCargoErrors = true;
           } else {
             // Check digit limits for Volume
-            const decimalPart = String(cargo.volume).split(".")[1];
-            if (decimalPart && decimalPart.length > 2) {
+            const volumeStr = String(cargo.volume);
+            const decimalPart = volumeStr.split(".")[1];
+            
+            // Check decimal places (max 3)
+            if (decimalPart && decimalPart.length > 3) {
               serviceForm.setFieldError(
                 `service_details.${serviceIndex}.cargo_details.0.volume`,
-                "Maximum 2 decimal places allowed"
+                "Maximum 3 decimal places allowed"
               );
               hasCargoErrors = true;
             } else {
-              // Check integer digits (7 max for LCL volume)
+              // Check integer digits (max 7)
               const integerPart = Math.floor(Math.abs(cargo.volume)).toString();
               if (integerPart.length > 7) {
                 serviceForm.setFieldError(
                   `service_details.${serviceIndex}.cargo_details.0.volume`,
-                  "Maximum 7 digits allowed"
+                  "Maximum 7 integer digits allowed"
                 );
                 hasCargoErrors = true;
               } else {
-                serviceForm.clearFieldError(
-                  `service_details.${serviceIndex}.cargo_details.0.volume`
-                );
+                // Check total digits (max 10, excluding decimal point)
+                const totalDigits = volumeStr.replace(".", "").length;
+                if (totalDigits > 10) {
+                  serviceForm.setFieldError(
+                    `service_details.${serviceIndex}.cargo_details.0.volume`,
+                    "Maximum 10 digits in total allowed"
+                  );
+                  hasCargoErrors = true;
+                } else {
+                  serviceForm.clearFieldError(
+                    `service_details.${serviceIndex}.cargo_details.0.volume`
+                  );
+                }
               }
             }
           }
@@ -1700,11 +1737,11 @@ function EnquiryCreate() {
               ? Number(cargo.gross_weight).toFixed(2)
               : "0.00";
             servicePayload.volume = cargo.volume
-              ? Number(cargo.volume).toFixed(1)
-              : "0.0";
+              ? Number(cargo.volume).toFixed(3)
+              : "0.000";
             servicePayload.chargeable_volume = cargo.chargable_volume
-              ? Number(cargo.chargable_volume).toFixed(1)
-              : "0.0";
+              ? Number(cargo.chargable_volume).toFixed(3)
+              : "0.000";
             // Include dimension_details directly in service payload if present
             const dimUnit = serviceDetail.dimension_unit || "";
             const dimRows = Array.isArray(serviceDetail.diemensions)
@@ -7472,7 +7509,7 @@ function EnquiryCreate() {
                                           label="Volume (cbm)"
                                           min={0.01}
                                           withAsterisk
-                                          decimalScale={2}
+                                          decimalScale={3}
                                           disabled={hasValidDimensions(
                                             serviceForm.values.service_details[
                                               serviceIndex
@@ -7531,7 +7568,7 @@ function EnquiryCreate() {
                                           label="Chargeable Volume (cbm)"
                                           min={0}
                                           readOnly
-                                          decimalScale={2}
+                                          decimalScale={3}
                                           value={
                                             serviceForm.values.service_details[
                                               serviceIndex
