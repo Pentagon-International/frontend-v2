@@ -37,7 +37,8 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { ToastNotification, SearchableSelect } from "../../../components";
+import { ToastNotification, SearchableSelect, SingleDateInput } from "../../../components";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { deleteApiCall } from "../../../service/deleteApiCall";
@@ -163,7 +164,7 @@ export default function DestinationMaster() {
     isLoading: isDestinationLoading,
     refetch: refetchDestination,
   } = useQuery({
-    queryKey: ["destination", currentDestinationCode],
+    queryKey: ["destination", currentDestinationCode, pageSize],
     queryFn: async () => {
       try {
         const requestBody: { filters: any } = { filters: {} };
@@ -174,23 +175,28 @@ export default function DestinationMaster() {
         }
 
         const response = await apiCallProtected.post(
-          URL.filter_destination,
+          `${URL.filter_destination}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
         console.log("Initial load API response:", data);
 
-        // Handle response - API returns { results: [...] } or { result: [...] }
-        if (data && Array.isArray(data.results)) {
-          return data.results;
-        } else if (data && Array.isArray(data.result)) {
-          return data.result;
-        } else if (data && Array.isArray(data.data)) {
+        // Handle response with total count
+        if (data && Array.isArray(data.data)) {
+          setTotalRecords(data.total || data.data.length);
           return data.data;
+        } else if (data && Array.isArray(data.result)) {
+          setTotalRecords(data.total || data.result.length);
+          return data.result;
+        } else if (data && Array.isArray(data.results)) {
+          setTotalRecords(data.total || data.results.length);
+          return data.results;
         }
+        setTotalRecords(0);
         return [];
       } catch (error) {
         console.error("Error fetching destination data:", error);
+        setTotalRecords(0);
         return [];
       }
     },
@@ -206,7 +212,7 @@ export default function DestinationMaster() {
     isLoading: filteredDestinationLoading,
     refetch: refetchFilteredDestination,
   } = useQuery({
-    queryKey: ["filteredDestination", filtersApplied, appliedFilters, currentDestinationCode],
+    queryKey: ["filteredDestination", filtersApplied, appliedFilters, currentDestinationCode, pageSize],
     queryFn: async () => {
       try {
         if (!filtersApplied) return [];
@@ -231,23 +237,28 @@ export default function DestinationMaster() {
 
         const requestBody = { filters: payload };
         const response = await apiCallProtected.post(
-          URL.filter_destination,
+          `${URL.filter_destination}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
         console.log("Filter API response:", data);
 
-        // Handle both 'result' and 'results' properties
-        if (data && Array.isArray(data.result)) {
+        // Handle response with total count
+        if (data && Array.isArray(data.data)) {
+          setTotalRecords(data.total || data.data.length);
+          return data.data;
+        } else if (data && Array.isArray(data.result)) {
+          setTotalRecords(data.total || data.result.length);
           return data.result;
         } else if (data && Array.isArray(data.results)) {
+          setTotalRecords(data.total || data.results.length);
           return data.results;
-        } else if (data && Array.isArray(data.data)) {
-          return data.data;
         }
+        setTotalRecords(0);
         return [];
       } catch (error) {
         console.error("Error fetching filtered destination data:", error);
+        setTotalRecords(0);
         return [];
       }
     },
@@ -537,7 +548,6 @@ export default function DestinationMaster() {
         accessorKey: "tariff_charges",
         header: "Carrier Name",
         size: 200,
-        maxSize:350,
         Cell: ({ row }) => {
           const charges = row.original.tariff_charges || [];
           if (charges.length === 0) return "—";
@@ -635,7 +645,7 @@ export default function DestinationMaster() {
     enableColumnPinning: true,
     enableStickyHeader: true,
     initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
+      pagination: { pageSize: pageSize, pageIndex: currentPage - 1 },
       columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
@@ -740,6 +750,16 @@ export default function DestinationMaster() {
     setPageSize(newPageSize);
     setCurrentPage(1); // Reset to first page when changing page size
   };
+
+  // Refetch data when pagination changes
+  useEffect(() => {
+    if (filtersApplied) {
+      refetchFilteredDestination();
+    } else {
+      refetchDestination();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize]);
 
   return (
     <>
@@ -850,7 +870,7 @@ export default function DestinationMaster() {
         shadow="sm"
         pt="md"
         pb="sm"
-        px="lg"
+        px="md"
         radius="md"
         withBorder
         style={{
@@ -1006,7 +1026,7 @@ export default function DestinationMaster() {
         {showFilters && hasSearched && (
           <Box
             tt="capitalize"
-            mb="xs"
+            mb="sm"
             style={{
               borderRadius: "8px",
               border: "1px solid #E0E0E0",
@@ -1021,8 +1041,8 @@ export default function DestinationMaster() {
               px="md"
               style={{
                 backgroundColor: "#FAFAFA",
-                padding: "8px 8px",
-                borderRadius: "8px",
+                padding: "4px 8px",
+                borderRadius: "8px 8px 0 0",
               }}
             >
               <Text
@@ -1044,9 +1064,9 @@ export default function DestinationMaster() {
               </ActionIcon>
             </Group>
 
-            <Grid gutter="md" px="md">
+            <Grid gutter="sm" px="md" pt="xs" pb="sm">
               {/* Carrier Name Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={3}>
                 <SearchableSelect
                   size="xs"
                   label="Carrier Name"
@@ -1069,7 +1089,7 @@ export default function DestinationMaster() {
               </Grid.Col>
 
               {/* Service Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={3}>
                 <Select
                   key={`service-${filterForm.values.service}`}
                   label="Service"
@@ -1099,80 +1119,24 @@ export default function DestinationMaster() {
               </Grid.Col>
 
               {/* Valid From Date Filter */}
-              <Grid.Col span={2.4}>
-                <DateInput
+              <Grid.Col span={3}>
+                <SingleDateInput
                   key={`valid-from-${filterForm.values.valid_from}`}
                   label="Valid From"
                   placeholder="YYYY-MM-DD"
                   size="xs"
                   {...filterForm.getInputProps("valid_from")}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  clearable
-                  styles={{
-                    input: {
-                      fontSize: "13px",
-                      height: "36px",
-                      fontFamily: "Inter",
-                    },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                      fontStyle: "medium",
-                    },
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                      fontFamily: "Inter, sans-serif",
-                    },
-                  } as any}
                 />
               </Grid.Col>
 
               {/* Valid To Date Filter */}
-              <Grid.Col span={2.4}>
-                <DateInput
+              <Grid.Col span={3}>
+                <SingleDateInput
                   key={`valid-to-${filterForm.values.valid_to}`}
                   label="Valid To"
                   placeholder="YYYY-MM-DD"
                   size="xs"
                   {...filterForm.getInputProps("valid_to")}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  clearable
-                  styles={{
-                    input: {
-                      fontSize: "13px",
-                      height: "36px",
-                      fontFamily: "Inter",
-                    },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                      fontStyle: "medium",
-                    },
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                      fontFamily: "Inter, sans-serif",
-                    },
-                  } as any}
                 />
               </Grid.Col>
             </Grid>
@@ -1182,6 +1146,7 @@ export default function DestinationMaster() {
                 size="sm"
                 variant="default"
                 onClick={clearAllFilters}
+                leftSection={<IconX size={16} />}
                 styles={{
                   root: {
                     borderRadius: "4px",
@@ -1194,13 +1159,14 @@ export default function DestinationMaster() {
                   },
                 }}
               >
-                Clear
+                Clear Filters
               </Button>
               <Button
                 size="sm"
                 onClick={applyFilters}
                 loading={isLoading}
                 disabled={isLoading}
+                leftSection={<IconFilter size={16} />}
                 styles={{
                   root: {
                     backgroundColor: "#105476",
@@ -1215,7 +1181,7 @@ export default function DestinationMaster() {
                   },
                 }}
               >
-                Apply
+                Apply Filters
               </Button>
             </Group>
           </Box>
@@ -1258,99 +1224,14 @@ export default function DestinationMaster() {
                 )} */}
                 <MantineReactTable table={table} />
 
-                {/* Custom Pagination Bar */}
-                <Group
-                  w="100%"
-                  justify="space-between"
-                  align="center"
-                  pt="sm"
-                  pl="sm"
-                  pr="xl"
-                  style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
-                  wrap="nowrap"
-                  mt="sm"
-                >
-                  {/* Rows per page and range */}
-                  <Group gap="sm" align="center" wrap="nowrap">
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(pageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        handlePageSizeChange(Number(val));
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } }}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
-                        const total =
-                          totalRecords || filteredDestinationDataForDisplay.length || 0;
-                        if (total === 0) return "0–0 of 0";
-                        const start = (currentPage - 1) * pageSize + 1;
-                        const end = Math.min(currentPage * pageSize, total);
-                        return `${start}–${end} of ${total}`;
-                      })()}
-                    </Text>
-                  </Group>
-
-                  {/* Page controls */}
-                  <Group gap="xs" align="center" wrap="nowrap">
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={() =>
-                        handlePageChange(Math.max(1, currentPage - 1))
-                      }
-                      disabled={currentPage === 1}
-                    >
-                      <IconChevronLeft size={16} />
-                    </ActionIcon>
-                    <Text size="sm" ta="center" style={{ width: 26 }}>
-                      {currentPage}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      of{" "}
-                      {Math.max(
-                        1,
-                        Math.ceil(
-                          (totalRecords || filteredDestinationDataForDisplay.length || 0) /
-                            pageSize
-                        )
-                      )}
-                    </Text>
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={() => {
-                        const totalPages = Math.max(
-                          1,
-                          Math.ceil(
-                            (totalRecords || filteredDestinationDataForDisplay.length || 0) /
-                              pageSize
-                          )
-                        );
-                        handlePageChange(Math.min(totalPages, currentPage + 1));
-                      }}
-                      disabled={(() => {
-                        const totalPages = Math.max(
-                          1,
-                          Math.ceil(
-                            (totalRecords || filteredDestinationDataForDisplay.length || 0) /
-                              pageSize
-                          )
-                        );
-                        return currentPage >= totalPages;
-                      })()}
-                    >
-                      <IconChevronRight size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Group>
+                <PaginationBar
+                  pageSize={pageSize}
+                  currentPage={currentPage}
+                  totalRecords={totalRecords}
+                  onPageSizeChange={handlePageSizeChange}
+                  onPageChange={handlePageChange}
+                  pageSizeOptions={["10", "25", "50"]}
+                />
               </>
             )}
           </>

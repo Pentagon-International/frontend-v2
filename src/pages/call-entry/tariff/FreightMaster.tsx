@@ -31,7 +31,7 @@ import {
   IconEye,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { ToastNotification, SearchableSelect } from "../../../components";
+import { ToastNotification, SearchableSelect, SingleDateInput } from "../../../components";
 import { URL } from "../../../api/serverUrls";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../../store/authStore";
@@ -39,6 +39,7 @@ import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../api/axios";
 import { DateInput } from "@mantine/dates";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 
 type Freight = {
   id: number;
@@ -609,7 +610,7 @@ export default function Freight() {
         shadow="sm"
         pt="md"
         pb="sm"
-        px="lg"
+        px="md"
         radius="md"
         withBorder
         style={{
@@ -628,7 +629,7 @@ export default function Freight() {
               c={"#444955"}
               style={{ fontFamily: "Inter", fontSize: "16px" }}
             >
-              List of Freight
+              List of Freights
             </Text>
 
             <Group gap="xs" wrap="nowrap">
@@ -685,7 +686,7 @@ export default function Freight() {
         {showFilters && (
           <Box
             tt="capitalize"
-            mb="xs"
+            mb="sm"
             style={{
               borderRadius: "8px",
               border: "1px solid #E0E0E0",
@@ -700,8 +701,8 @@ export default function Freight() {
               px="md"
               style={{
                 backgroundColor: "#FAFAFA",
-                padding: "8px 8px",
-                borderRadius: "8px",
+                padding: "4px 8px",
+                borderRadius: "8px 8px 0 0",
               }}
             >
               <Text
@@ -723,7 +724,7 @@ export default function Freight() {
               </ActionIcon>
             </Group>
 
-            <Grid gutter="md" px="md">
+            <Grid gutter="sm" px="md" pt="xs" pb="sm">
               {/* Origin Filter */}
               <Grid.Col span={2.4}>
                 <SearchableSelect
@@ -805,61 +806,23 @@ export default function Freight() {
 
               {/* Valid From Date Filter */}
               <Grid.Col span={2.4}>
-                <DateInput
+                <SingleDateInput
                   key={`valid-from-${filterForm.values.valid_from}`}
                   label="Valid From"
                   placeholder="YYYY-MM-DD"
                   size="xs"
                   {...filterForm.getInputProps("valid_from")}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={14} />}
-                  leftSectionPointerEvents="none"
-                  radius="md"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  clearable
-                  styles={
-                    {
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    } as any
-                  }
                 />
               </Grid.Col>
 
               {/* Valid To Date Filter */}
               <Grid.Col span={2.4}>
-                <DateInput
+                <SingleDateInput
                   key={`valid-to-${filterForm.values.valid_to}`}
                   label="Valid To"
                   placeholder="YYYY-MM-DD"
                   size="xs"
                   {...filterForm.getInputProps("valid_to")}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={14} />}
-                  leftSectionPointerEvents="none"
-                  radius="md"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  clearable
-                  styles={
-                    {
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    } as any
-                  }
                 />
               </Grid.Col>
             </Grid>
@@ -869,6 +832,7 @@ export default function Freight() {
                 size="sm"
                 variant="default"
                 onClick={clearAllFilters}
+                leftSection={<IconX size={16} />}
                 styles={{
                   root: {
                     borderRadius: "4px",
@@ -881,13 +845,14 @@ export default function Freight() {
                   },
                 }}
               >
-                Clear
+                Clear Filters
               </Button>
               <Button
                 size="sm"
                 onClick={applyFilters}
                 loading={isLoading}
                 disabled={isLoading}
+                leftSection={<IconFilter size={16} />}
                 styles={{
                   root: {
                     backgroundColor: "#105476",
@@ -902,7 +867,7 @@ export default function Freight() {
                   },
                 }}
               >
-                Apply
+                Apply Filters
               </Button>
             </Group>
           </Box>
@@ -921,9 +886,17 @@ export default function Freight() {
               key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${filteredFreightDataForDisplay.length}`}
               table={table}
             />
-
+            {/* Pagination Bar */}
+            <PaginationBar
+              pageSize={pageSize}
+              currentPage={currentPage}
+              totalRecords={totalRecords}
+              onPageSizeChange={handlePageSizeChange}
+              onPageChange={handlePageChange}
+              pageSizeOptions={["10", "25", "50"]}
+            />
             {/* Custom Pagination Bar */}
-            <Group
+            {/* <Group
               w="100%"
               justify="space-between"
               align="center"
@@ -934,7 +907,6 @@ export default function Freight() {
               wrap="nowrap"
               mt="sm"
             >
-              {/* Rows per page and range */}
               <Group gap="sm" align="center" wrap="nowrap">
                 <Text size="sm" c="dimmed">
                   Rows per page
@@ -961,7 +933,6 @@ export default function Freight() {
                 </Text>
               </Group>
 
-              {/* Page controls */}
               <Group gap="xs" align="center" wrap="nowrap">
                 <ActionIcon
                   variant="default"
@@ -992,7 +963,7 @@ export default function Freight() {
                   <IconChevronRight size={16} />
                 </ActionIcon>
               </Group>
-            </Group>
+            </Group> */}
           </>
         )}
 

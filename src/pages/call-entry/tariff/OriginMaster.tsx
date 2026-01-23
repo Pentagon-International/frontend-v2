@@ -42,7 +42,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ToastNotification, SearchableSelect, DateRangeInput } from "../../../components";
+import { ToastNotification, SearchableSelect, DateRangeInput, SingleDateInput } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { deleteApiCall } from "../../../service/deleteApiCall";
@@ -53,6 +53,7 @@ import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../api/axios";
 import { DateInput } from "@mantine/dates";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 
 type Origin = {
   id: number;
@@ -168,7 +169,7 @@ export default function OriginMaster() {
     isLoading: isOriginLoading,
     refetch: refetchOrigin,
   } = useQuery({
-    queryKey: ["origin", currentOriginCode],
+    queryKey: ["origin", currentOriginCode, pageSize],
     queryFn: async () => {
       try {
         const requestBody: { filters: any } = { filters: {} };
@@ -179,23 +180,29 @@ export default function OriginMaster() {
         }
 
         const response = await apiCallProtected.post(
-          URL.filter_origin,
+          `${URL.filter_origin}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
         console.log("Initial load API response:", data);
 
         // Handle response - API returns { results: [...] } or { result: [...] }
-        if (data && Array.isArray(data.results)) {
+        // Handle response - API returns { data: [...], total: ... } or { results: [...], total: ... }
+        if (data && Array.isArray(data.data)) {
+          setTotalRecords(data.total || data.data.length);
+          return data.data;
+        } else if (data && Array.isArray(data.results)) {
+          setTotalRecords(data.total || data.results.length);
           return data.results;
         } else if (data && Array.isArray(data.result)) {
+          setTotalRecords(data.total || data.result.length);
           return data.result;
-        } else if (data && Array.isArray(data.data)) {
-          return data.data;
         }
+        setTotalRecords(0);
         return [];
       } catch (error) {
         console.error("Error fetching origin data:", error);
+        setTotalRecords(0);
         return [];
       }
     },
@@ -211,7 +218,7 @@ export default function OriginMaster() {
     isLoading: filteredOriginLoading,
     refetch: refetchFilteredOrigin,
   } = useQuery({
-    queryKey: ["filteredOrigin", filtersApplied, appliedFilters, currentOriginCode],
+    queryKey: ["filteredOrigin", filtersApplied, appliedFilters, currentOriginCode, pageSize],
     queryFn: async () => {
       try {
         if (!filtersApplied) return [];
@@ -236,23 +243,28 @@ export default function OriginMaster() {
 
         const requestBody = { filters: payload };
         const response = await apiCallProtected.post(
-          URL.filter_origin,
+          `${URL.filter_origin}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
         console.log("Filter API response:", data);
 
-        // Handle both 'result' and 'results' properties
-        if (data && Array.isArray(data.result)) {
+        // Handle response with total count
+        if (data && Array.isArray(data.data)) {
+          setTotalRecords(data.total || data.data.length);
+          return data.data;
+        } else if (data && Array.isArray(data.result)) {
+          setTotalRecords(data.total || data.result.length);
           return data.result;
         } else if (data && Array.isArray(data.results)) {
+          setTotalRecords(data.total || data.results.length);
           return data.results;
-        } else if (data && Array.isArray(data.data)) {
-          return data.data;
         }
+        setTotalRecords(0);
         return [];
       } catch (error) {
         console.error("Error fetching filtered origin data:", error);
+        setTotalRecords(0);
         return [];
       }
     },
@@ -629,7 +641,7 @@ export default function OriginMaster() {
     enableColumnPinning: true,
     enableStickyHeader: true,
     initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
+      pagination: { pageSize: pageSize, pageIndex: currentPage - 1 },
       columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
@@ -735,6 +747,15 @@ export default function OriginMaster() {
     setCurrentPage(1); // Reset to first page when changing page size
   };
 
+  // Refetch data when pagination changes
+    useEffect(() => {
+      if (filtersApplied) {
+        refetchFilteredOrigin();
+      } else {
+        refetchOrigin();
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, pageSize]);
   return (
     <>
       {/* Origin Name Modal */}
@@ -841,7 +862,7 @@ export default function OriginMaster() {
         shadow="sm"
         pt="md"
         pb="sm"
-        px="lg"
+        px="md"
         radius="md"
         withBorder
         style={{
@@ -997,7 +1018,7 @@ export default function OriginMaster() {
         {showFilters && hasSearched && (
           <Box
             tt="capitalize"
-            mb="xs"
+            mb="sm"
             style={{
               borderRadius: "8px",
               border: "1px solid #E0E0E0",
@@ -1012,8 +1033,8 @@ export default function OriginMaster() {
               px="md"
               style={{
                 backgroundColor: "#FAFAFA",
-                padding: "8px 8px",
-                borderRadius: "8px",
+                padding: "4px 8px",
+                borderRadius: "8px 8px 0 0",
               }}
             >
               <Text
@@ -1035,9 +1056,9 @@ export default function OriginMaster() {
               </ActionIcon>
             </Group>
 
-            <Grid gutter="md" px="md">
+            <Grid gutter="sm" px="md" pt="xs" pb="sm">
               {/* Carrier Name Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={3}>
                 <SearchableSelect
                   size="xs"
                   label="Carrier Name"
@@ -1060,7 +1081,7 @@ export default function OriginMaster() {
               </Grid.Col>
 
               {/* Service Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={3}>
                 <Select
                   key={`service-${filterForm.values.service}`}
                   label="Service"
@@ -1090,80 +1111,24 @@ export default function OriginMaster() {
               </Grid.Col>
 
               {/* Valid From Date Filter */}
-              <Grid.Col span={2.4}>
-                <DateInput
+              <Grid.Col span={3}>
+                <SingleDateInput
                   key={`valid-from-${filterForm.values.valid_from}`}
                   label="Valid From"
                   placeholder="YYYY-MM-DD"
                   size="xs"
                   {...filterForm.getInputProps("valid_from")}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  clearable
-                  styles={{
-                    input: {
-                      fontSize: "13px",
-                      height: "36px",
-                      fontFamily: "Inter",
-                    },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                      fontStyle: "medium",
-                    },
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                      fontFamily: "Inter, sans-serif",
-                    },
-                  } as any}
                 />
               </Grid.Col>
 
               {/* Valid To Date Filter */}
-              <Grid.Col span={2.4}>
-                <DateInput
+              <Grid.Col span={3}>
+                <SingleDateInput
                   key={`valid-to-${filterForm.values.valid_to}`}
                   label="Valid To"
                   placeholder="YYYY-MM-DD"
                   size="xs"
                   {...filterForm.getInputProps("valid_to")}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  clearable
-                  styles={{
-                    input: {
-                      fontSize: "13px",
-                      height: "36px",
-                      fontFamily: "Inter",
-                    },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                      fontStyle: "medium",
-                    },
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                      fontFamily: "Inter, sans-serif",
-                    },
-                  } as any}
                 />
               </Grid.Col>
             </Grid>
@@ -1173,6 +1138,7 @@ export default function OriginMaster() {
                 size="sm"
                 variant="default"
                 onClick={clearAllFilters}
+                leftSection={<IconX size={16} />}
                 styles={{
                   root: {
                     borderRadius: "4px",
@@ -1185,13 +1151,14 @@ export default function OriginMaster() {
                   },
                 }}
               >
-                Clear
+                Clear Filters
               </Button>
               <Button
                 size="sm"
                 onClick={applyFilters}
                 loading={isLoading}
                 disabled={isLoading}
+                leftSection={<IconFilter size={16} />}
                 styles={{
                   root: {
                     backgroundColor: "#105476",
@@ -1206,7 +1173,7 @@ export default function OriginMaster() {
                   },
                 }}
               >
-                Apply
+                Apply Filters
               </Button>
             </Group>
           </Box>
@@ -1249,8 +1216,17 @@ export default function OriginMaster() {
                 )} */}
                 <MantineReactTable table={table} />
 
+                <PaginationBar
+                  pageSize={pageSize}
+                  currentPage={currentPage}
+                  totalRecords={totalRecords}
+                  onPageSizeChange={handlePageSizeChange}
+                  onPageChange={handlePageChange}
+                  pageSizeOptions={["10", "25", "50"]}
+                />
+
                 {/* Custom Pagination Bar */}
-                <Group
+                {/* <Group
                   w="100%"
                   justify="space-between"
                   align="center"
@@ -1261,7 +1237,6 @@ export default function OriginMaster() {
                   wrap="nowrap"
                   mt="sm"
                 >
-                  {/* Rows per page and range */}
                   <Group gap="sm" align="center" wrap="nowrap">
                     <Text size="sm" c="dimmed">
                       Rows per page
@@ -1289,7 +1264,6 @@ export default function OriginMaster() {
                     </Text>
                   </Group>
 
-                  {/* Page controls */}
                   <Group gap="xs" align="center" wrap="nowrap">
                     <ActionIcon
                       variant="default"
@@ -1341,7 +1315,7 @@ export default function OriginMaster() {
                       <IconChevronRight size={16} />
                     </ActionIcon>
                   </Group>
-                </Group>
+                </Group> */}
               </>
             )}
           </>

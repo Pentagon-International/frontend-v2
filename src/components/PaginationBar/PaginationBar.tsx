@@ -35,7 +35,7 @@ export default function PaginationBar({
       align="center"
       p="xs"
       wrap="nowrap"
-      pt="md"
+      pt="sm"
     >
       {/* Rows per page + range */}
       <Group gap="sm" align="center" wrap="nowrap">
