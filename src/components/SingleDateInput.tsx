@@ -67,6 +67,19 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
   // Function to get styles for calendar days
   const getDateStyles = () => {
     return {
+      input: {
+        fontSize: "13px",
+        fontFamily: "Inter",
+        height: "36px",
+      },
+      label: {
+        fontSize: "13px",
+        fontWeight: 500,
+        color: "#424242",
+        marginBottom: "4px",
+        fontFamily: "Inter",
+        fontStyle: "medium",
+      },
       day: {
         width: "2.25rem",
         height: "2.25rem",
@@ -98,6 +111,12 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
         pointerEvents: "none" as const,
         visibility: "hidden" as const,
       },
+      yearsList: {
+        width: "100%",
+      },
+      monthsList: {
+        width: "100%",
+      },
       calendarHeaderLevel: {
         fontSize: "1rem",
         fontWeight: 500,
@@ -106,7 +125,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
         textAlign: "center" as const,
       },
       calendarHeaderControl: {
-        width: "2rem",
+        // width: "2rem",
         height: "2rem",
         margin: "0 0.5rem",
       },
@@ -128,7 +147,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       valueFormat="YYYY-MM-DD"
       leftSection={<IconCalendar size={18} />}
       leftSectionPointerEvents="none"
-      radius="md"
+      radius="sm"
       size={size}
       nextIcon={<IconChevronRight size={16} />}
       previousIcon={<IconChevronLeft size={16} />}
@@ -171,6 +190,82 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
             alignItems: "center",
             justifyContent: "center",
             textAlign: "center",
+          },
+        };
+      }}
+      getYearControlProps={(year) => {
+        const isSelected = isDateSelected(year, value);
+        return {
+          onMouseEnter: (e: React.MouseEvent) => {
+            const target = e.currentTarget as HTMLElement;
+            if (!isSelected) {
+              target.style.backgroundColor = "#e9ecef";
+              target.style.borderRadius = "6px";
+            } else {
+              target.style.backgroundColor = "#1c7ed6";
+            }
+          },
+          onMouseLeave: (e: React.MouseEvent) => {
+            const target = e.currentTarget as HTMLElement;
+            if (!isSelected) {
+              target.style.backgroundColor = "";
+              target.style.borderRadius = "";
+            } else {
+              target.style.backgroundColor = "#228be6";
+            }
+          },
+          style: {
+            backgroundColor: isSelected ? "#228be6" : undefined,
+            color: isSelected ? "#fff" : undefined,
+            fontWeight: isSelected ? 600 : undefined,
+            borderRadius: isSelected ? "6px" : "6px",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            width: "100%",
+            height: "2.25rem",
+            fontSize: "0.9rem",
+          },
+        };
+      }}
+      getMonthControlProps={(month) => {
+        const isSelected = isDateSelected(month, value);
+        return {
+          onMouseEnter: (e: React.MouseEvent) => {
+            const target = e.currentTarget as HTMLElement;
+            if (!isSelected) {
+              target.style.backgroundColor = "#e9ecef";
+              target.style.borderRadius = "6px";
+            } else {
+              target.style.backgroundColor = "#1c7ed6";
+            }
+          },
+          onMouseLeave: (e: React.MouseEvent) => {
+            const target = e.currentTarget as HTMLElement;
+            if (!isSelected) {
+              target.style.backgroundColor = "";
+              target.style.borderRadius = "";
+            } else {
+              target.style.backgroundColor = "#228be6";
+            }
+          },
+          style: {
+            backgroundColor: isSelected ? "#228be6" : undefined,
+            color: isSelected ? "#fff" : undefined,
+            fontWeight: isSelected ? 600 : undefined,
+            borderRadius: isSelected ? "6px" : "6px",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            width: "3rem",
+            height: "2.25rem",
+            fontSize: "0.9rem",
           },
         };
       }}

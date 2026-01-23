@@ -34,7 +34,7 @@ import {
 import dayjs from "dayjs";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ToastNotification, SearchableSelect, Dropdown } from "../../../components";
+import { ToastNotification, SearchableSelect, Dropdown, SingleDateInput } from "../../../components";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -713,14 +713,20 @@ function FreightCreate() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const RequiredLabel = ({ label, required }: { label: string, required: boolean }) => (
-    <Group gap={4}>
-      <Text size="xs" fw={500} style={{fontSize: "13px", fontFamily: "Inter", marginBottom:"4px",}}>
-        {label}
-      </Text>
+    <Text
+      size="xs"
+      fw={500}
+      style={{
+        fontSize: "13px",
+        fontFamily: "Inter",
+        marginBottom: "4px",
+      }}
+    >
+      {label}
       {!isViewMode && required && (
-        <Text c="red" fw={700} size="xs">*</Text>
+        <span style={{ color: "red", fontWeight: 700 }}> *</span>
       )}
-    </Group>
+    </Text>
   );
 
 
@@ -1064,7 +1070,7 @@ function FreightCreate() {
 
                   {/* Valid From Date */}
                   <Grid.Col span={{base: 12, sm: 6,md: 4, lg:3}}>
-                    <DateInput
+                    <SingleDateInput
                       label="Valid From"
                       withAsterisk={!isViewMode}
                       key={mainForm.key("valid_from")}
@@ -1081,40 +1087,12 @@ function FreightCreate() {
                           : "";
                         mainForm.setFieldValue("valid_from", formatted);
                       }}
-                      valueFormat="YYYY-MM-DD"
-                      leftSection={<IconCalendar size={18} />}
-                      leftSectionPointerEvents="none"
-                      radius="sm"
-                      size="sm"
-                      nextIcon={<IconChevronRight size={16} />}
-                      previousIcon={<IconChevronLeft size={16} />}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                        day: {
-                          width: "2.25rem",
-                          height: "2.25rem",
-                          fontSize: "0.9rem",
-                          fontFamily: "Inter, sans-serif",
-                        },
-                      }}
                     />
                   </Grid.Col>
 
                   {/* Valid To Date */}
                   <Grid.Col span={{base: 12, sm: 6,md: 4, lg:3}}>
-                    <DateInput
+                    <SingleDateInput
                       label="Valid To"
                       withAsterisk={!isViewMode}
                       key={mainForm.key("valid_to")}
@@ -1131,38 +1109,10 @@ function FreightCreate() {
                           : "";
                         mainForm.setFieldValue("valid_to", formatted);
                       }}
-                      valueFormat="YYYY-MM-DD"
-                      leftSection={<IconCalendar size={18} />}
-                      leftSectionPointerEvents="none"
-                      radius="sm"
-                      size="sm"
-                      nextIcon={<IconChevronRight size={16} />}
-                      previousIcon={<IconChevronLeft size={16} />}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                        day: {
-                          width: "2.25rem",
-                          height: "2.25rem",
-                          fontSize: "0.9rem",
-                          fontFamily: "Inter, sans-serif",
-                        },
-                      }}
                     />
                   </Grid.Col>
 
-                  <Grid.Col span={12} mt="md" style={{position: "sticky", top:38, zIndex:100, backgroundColor:"white", padding:"8px 0 0"}}>
+                  <Grid.Col span={12} mt="md" style={{position: "sticky", top:45, zIndex:100, backgroundColor:"white", padding:"8px 0"}}>
                     <Grid style={{borderRadius:"4px", padding:"5px 10px",backgroundColor:"#fafafa"}}>
                       <Grid.Col span={12}>
                         <Text
@@ -1186,7 +1136,7 @@ function FreightCreate() {
                   {/* Tariff Charges Grid */}
                   <Grid.Col span={12}>
                     <Stack gap={0}>
-                      <Grid w="100%" gutter="sm" py="sm" style={{position:"sticky",zIndex:100, top: 76, backgroundColor:"white"}}>
+                      <Grid w="100%" gutter="sm" py="sm" style={{position:"sticky",zIndex:100, top: 88, backgroundColor:"white"}}>
                         <Grid.Col span={2}>
                           <RequiredLabel label="Customer Name" required={false}/>
                         </Grid.Col>
