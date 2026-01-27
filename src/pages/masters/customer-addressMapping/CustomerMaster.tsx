@@ -222,6 +222,7 @@ type CustomerDataResponse = {
     last_visited: string | null;
     overall_total_revenue?: number | null;
     overall_total_gp?: number | null;
+    currency?: string;
   };
   quotations: {
     count: number;
@@ -571,6 +572,7 @@ function CustomerMaster() {
   >(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [totalProfit, setTotalProfit] = useState<number | null>(null);
+  const [customerCurrency, setCustomerCurrency] = useState<string>("");
   const [selectedMonth, setSelectedMonth] = useState<number>(
     new Date().getMonth() + 1
   );
@@ -920,6 +922,7 @@ function CustomerMaster() {
                 customerData.customer_info.total_net_balance
               );
             }
+            setCustomerCurrency(customerData.customer_info.currency || "");
           }
 
           // Set quotations data
@@ -1682,7 +1685,7 @@ function CustomerMaster() {
                                 Credit Amount
                               </Text>
                               <Text size="sm" fw={500} c="#333">
-                                ₹
+                                {customerCurrency}{" "}
                                 {customerTotalCreditAmount.toLocaleString(
                                   "en-IN"
                                 )}
@@ -1707,7 +1710,7 @@ function CustomerMaster() {
                                       : undefined,
                               }}
                             >
-                              ₹{totalOutstandingAmount.toLocaleString("en-IN")}
+                              {customerCurrency} {totalOutstandingAmount.toLocaleString("en-IN")}
                             </Text>
                           </Box>
                         </Grid.Col>
@@ -1839,7 +1842,7 @@ function CustomerMaster() {
                                 Total Revenue
                               </Text>
                               <Text size="sm" fw={500} c="#FF9800">
-                                ₹{totalRevenue.toLocaleString("en-IN")}
+                                {customerCurrency} {totalRevenue.toLocaleString("en-IN")}
                               </Text>
                             </Box>
                           )}
@@ -1849,7 +1852,7 @@ function CustomerMaster() {
                                 Total Profit
                               </Text>
                               <Text size="sm" fw={500} c="#105476">
-                                ₹{totalProfit.toLocaleString("en-IN")}
+                                {customerCurrency} {totalProfit.toLocaleString("en-IN")}
                               </Text>
                             </Box>
                           )}
@@ -2318,7 +2321,7 @@ function CustomerMaster() {
                               </Text>
                               <Text size="sm" fw={500} c="#28a745">
                                 {profile.potential_profit
-                                  ? `₹${profile.potential_profit.toLocaleString("en-IN")}`
+                                  ? `${customerCurrency} ${profile.potential_profit.toLocaleString("en-IN")}`
                                   : "-"}
                               </Text>
                             </Box>

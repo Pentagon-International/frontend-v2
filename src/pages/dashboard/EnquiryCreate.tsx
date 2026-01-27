@@ -165,6 +165,7 @@ type CustomerDataResponse = {
     last_visited: string | null;
     overall_total_revenue?: number | null;
     overall_total_gp?: number | null;
+    currency?: string;
   };
   quotations: {
     count: number;
@@ -2087,6 +2088,7 @@ function EnquiryCreate() {
   >(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [totalProfit, setTotalProfit] = useState<number | null>(null);
+  const [customerCurrency, setCustomerCurrency] = useState<string>("");
   // Date range for customer data - default to previous month
   const getPreviousMonthRange = () => {
     const now = new Date();
@@ -3362,6 +3364,7 @@ function EnquiryCreate() {
               customerData.customer_info.total_net_balance
             );
           }
+          setCustomerCurrency(customerData.customer_info.currency || "");
         }
 
         // Set quotations data
@@ -4099,7 +4102,7 @@ function EnquiryCreate() {
                                                   fw={500}
                                                   c="#333"
                                                 >
-                                                  ₹
+                                                  {customerCurrency}{" "}
                                                   {customerTotalCreditAmount.toLocaleString(
                                                     "en-IN"
                                                   )}
@@ -4130,7 +4133,7 @@ function EnquiryCreate() {
                                                         : undefined,
                                                 }}
                                               >
-                                                ₹
+                                                {customerCurrency}{" "}
                                                 {totalOutstandingAmount.toLocaleString(
                                                   "en-IN"
                                                 )}
@@ -4199,7 +4202,7 @@ function EnquiryCreate() {
                                                     fw={500}
                                                     c="#FF9800"
                                                   >
-                                                    ₹
+                                                    {customerCurrency}{" "}
                                                     {totalRevenue.toLocaleString(
                                                       "en-IN"
                                                     )}
@@ -4225,7 +4228,7 @@ function EnquiryCreate() {
                                                     fw={500}
                                                     c="#105476"
                                                   >
-                                                    ₹
+                                                    {customerCurrency}{" "}
                                                     {totalProfit.toLocaleString(
                                                       "en-IN"
                                                     )}
@@ -4712,7 +4715,7 @@ function EnquiryCreate() {
                                                   fw={500}
                                                   c="#105476"
                                                 >
-                                                  ₹
+                                                  {customerCurrency}{" "}
                                                   {profile.potential_profit?.toLocaleString(
                                                     "en-IN"
                                                   ) || "-"}
