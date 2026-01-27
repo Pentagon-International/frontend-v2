@@ -159,7 +159,7 @@ export default function MastersPage() {
   // }
 
   return (
-    <Box py="md" px={"lg"}>
+    <Box h={"100%"}>
       {isBasePath ? (
         <Stack
           gap="lg"

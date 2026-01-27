@@ -95,6 +95,7 @@ export const URL = {
   accountsSendEmail: "accounts/send-email/",
   leadFilter: "lead/lead-filter/",
   lead: "lead/",
+  chargeMaster: "charge-master/",
   chargeMasterFilter: "filter/charge-master/",
   chartOfAccounts: "chart-of-accounts/",
   chartOfAccountsFilter: "filter/chart-of-accounts/",

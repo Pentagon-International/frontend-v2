@@ -49,6 +49,7 @@ const schema = yup.object().shape({
   subgroup_name: yup.string().required("Subgroup Name is required"),
   account_name: yup.string().required("Account Name is required"),
   gl_account_code: yup.string().required("GL Account Code is required"),
+  sl_code: yup.string().required("SL Code is required"),
 });
 
 function ChartOfAccountsCreate() {
@@ -149,9 +150,9 @@ function ChartOfAccountsCreate() {
           {/* Vertical Sidebar */}
           <Box
             style={{
-              minWidth: 240,
+              minWidth: 180,
               width: "100%",
-              maxWidth: 250,
+              maxWidth: 220,
               height: "100%",
               alignSelf: "stretch",
               borderRadius: "8px",
@@ -321,7 +322,7 @@ function ChartOfAccountsCreate() {
                 </Grid.Col>
 
                 {/* Group Information Section */}
-                <Grid.Col span={12}>
+                <Grid.Col span={12} py={0}>
                   <Box mb="md">
                     {/* <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Group Information
@@ -374,7 +375,7 @@ function ChartOfAccountsCreate() {
                 </Grid.Col>
 
                 {/* Subgroup Information Section */}
-                <Grid.Col span={12}>
+                <Grid.Col span={12} py={0}>
                   <Box mb="md">
                     {/* <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Subgroup Information
@@ -463,13 +464,14 @@ function ChartOfAccountsCreate() {
                     type="submit"
                     size="sm"
                     disabled={isSubmitting}
+                    loading={isSubmitting}
                     style={{
                       backgroundColor: isSubmitting ? "#105476BB" : "#105476",
                       fontSize: "13px",
                       fontFamily: "Inter",
                       fontStyle: "medium",
                     }}
-                    leftSection={<IconCheck size={16} />}
+                    rightSection={<IconCheck size={16} />}
                   >
                     {isEditMode ? "Update" : "Create"}
                   </Button>
