@@ -15,6 +15,11 @@ import {
   IconSquareRotated,
   IconExchange,
   IconUserCheck,
+  IconCurrencyDollar,
+  IconChartBar,
+  IconLink,
+  IconReceiptTax,
+  IconPercentage,
 } from "@tabler/icons-react";
 import MasterCard from "../../components/MasterCard";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -114,6 +119,35 @@ export default function MastersPage() {
             label: "Call Mode",
           },
           { icon: <IconFileStack size={28} color="#105476" />, label: "GSTN" },
+        ],
+      },
+      {
+        title: "Accounts",
+        items: [
+          {
+            icon: <IconCurrencyDollar size={28} color="#105476" />,
+            label: "Charge",
+          },
+          {
+            icon: <IconChartBar size={28} color="#105476" />,
+            label: "Chart of Accounts",
+          },
+          {
+            icon: <IconLink size={28} color="#105476" />,
+            label: "GL Charge Mapping",
+          },
+          {
+            icon: <IconReceiptTax size={28} color="#105476" />,
+            label: "GST SAC",
+          },
+          {
+            icon: <IconPercentage size={28} color="#105476" />,
+            label: "GST Rate",
+          },
+          {
+            icon: <IconLink size={28} color="#105476" />,
+            label: "GST Charge Mapping",
+          },
         ],
       },
     ],

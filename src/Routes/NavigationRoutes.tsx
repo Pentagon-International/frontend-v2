@@ -68,6 +68,12 @@ import {
   CoordinatorReassignationCreate,
   CustomerRelationshipMappingMaster,
   CustomerRelationshipMappingCreate,
+  ChargeMaster,
+  ChartOfAccountsMaster,
+  GLChargeMappingMaster,
+  GSTSACMaster,
+  GSTRateMaster,
+  GSTChargeMappingMaster,
   ExportShipmentMaster,
   ExportShipmentCreate,
   ExportShipmentEdit,
@@ -365,6 +371,42 @@ const NavigationRoutes = () => {
           <Route path="port-new" element={<NewPortMaster />} />
           <Route path="/master/port-edit" element={<PortMasterEdit />} />
           <Route path="/master/port-view" element={<PortMasterView />} />
+
+          <Route path="charge">
+            <Route index element={<ChargeMaster />} />
+            <Route path="create" element={<ChargeMaster />} />
+            <Route path="edit" element={<ChargeMaster />} />
+          </Route>
+
+          <Route path="chart-of-accounts">
+            <Route index element={<ChartOfAccountsMaster />} />
+            <Route path="create" element={<ChartOfAccountsMaster />} />
+            <Route path="edit" element={<ChartOfAccountsMaster />} />
+          </Route>
+
+          <Route path="gl-charge-mapping">
+            <Route index element={<GLChargeMappingMaster />} />
+            <Route path="create" element={<GLChargeMappingMaster />} />
+            <Route path="edit" element={<GLChargeMappingMaster />} />
+          </Route>
+
+          <Route path="gst-sac">
+            <Route index element={<GSTSACMaster />} />
+            <Route path="create" element={<GSTSACMaster />} />
+            <Route path="edit" element={<GSTSACMaster />} />
+          </Route>
+
+          <Route path="gst-rate">
+            <Route index element={<GSTRateMaster />} />
+            <Route path="create" element={<GSTRateMaster />} />
+            <Route path="edit" element={<GSTRateMaster />} />
+          </Route>
+
+          <Route path="gst-charge-mapping">
+            <Route index element={<GSTChargeMappingMaster />} />
+            <Route path="create" element={<GSTChargeMappingMaster />} />
+            <Route path="edit" element={<GSTChargeMappingMaster />} />
+          </Route>
         </Route>
       </Route>
     </Routes>

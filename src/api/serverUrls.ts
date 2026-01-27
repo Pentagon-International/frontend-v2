@@ -95,6 +95,12 @@ export const URL = {
   accountsSendEmail: "accounts/send-email/",
   leadFilter: "lead/lead-filter/",
   lead: "lead/",
+  chargeMasterFilter: "filter/charge-master/",
+  chartOfAccountsFilter: "filter/chart-of-accounts/",
+  glChargeMappingFilter: "filter/gl-charge-mapping/",
+  gstChargeMappingFilter: "filter/gst-charge-mapping/",
+  gstRateMasterFilter: "filter/gst-rate-master/",
+  gstSacMasterFilter: "filter/gst-sac-master/",
 
   // Dashboard APIs
   dashboard: {

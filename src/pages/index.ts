@@ -134,6 +134,14 @@ import ServiceMasterNew from "../pages/masters/service-master/ServiceMasterNew";
 import ServiceMasterEdit from "../pages/masters/service-master/ServiceMasterEdit";
 import ServiceMasterView from "../pages/masters/service-master/ServiceMasterView";
 
+// Accounts Masters
+import ChargeMaster from "./masters/charge/ChargeMaster";
+import ChartOfAccountsMaster from "./masters/chart-of-accounts/ChartOfAccountsMaster";
+import GLChargeMappingMaster from "./masters/gl-charge-mapping/GLChargeMappingMaster";
+import GSTSACMaster from "./masters/gst-sac/GSTSACMaster";
+import GSTRateMaster from "./masters/gst-rate/GSTRateMaster";
+import GSTChargeMappingMaster from "./masters/gst-charge-mapping/GSTChargeMappingMaster";
+
 import Freight from "./call-entry/tariff/FreightMaster";
 import DestinationMaster from "./call-entry/tariff/DestinationMaster";
 import Origin from "./call-entry/tariff/OriginMaster";
@@ -204,6 +212,12 @@ export {
   ServiceMasterNew,
   ServiceMasterEdit,
   ServiceMasterView,
+  ChargeMaster,
+  ChartOfAccountsMaster,
+  GLChargeMappingMaster,
+  GSTSACMaster,
+  GSTRateMaster,
+  GSTChargeMappingMaster,
   QuotationCreate,
   QuotationApprovalPublic,
   GetRate,
