@@ -137,6 +137,7 @@ import ServiceMasterView from "../pages/masters/service-master/ServiceMasterView
 // Accounts Masters
 import ChargeMaster from "./masters/charge/ChargeMaster";
 import ChartOfAccountsMaster from "./masters/chart-of-accounts/ChartOfAccountsMaster";
+import ChartOfAccountsCreate from "./masters/chart-of-accounts/ChartOfAccountsCreate";
 import GLChargeMappingMaster from "./masters/gl-charge-mapping/GLChargeMappingMaster";
 import GSTSACMaster from "./masters/gst-sac/GSTSACMaster";
 import GSTRateMaster from "./masters/gst-rate/GSTRateMaster";
@@ -214,6 +215,7 @@ export {
   ServiceMasterView,
   ChargeMaster,
   ChartOfAccountsMaster,
+  ChartOfAccountsCreate,
   GLChargeMappingMaster,
   GSTSACMaster,
   GSTRateMaster,

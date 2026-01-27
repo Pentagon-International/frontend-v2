@@ -96,6 +96,7 @@ export const URL = {
   leadFilter: "lead/lead-filter/",
   lead: "lead/",
   chargeMasterFilter: "filter/charge-master/",
+  chartOfAccounts: "chart-of-accounts/",
   chartOfAccountsFilter: "filter/chart-of-accounts/",
   glChargeMappingFilter: "filter/gl-charge-mapping/",
   gstChargeMappingFilter: "filter/gst-charge-mapping/",
