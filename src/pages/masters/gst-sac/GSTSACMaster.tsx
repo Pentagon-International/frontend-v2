@@ -94,7 +94,7 @@ export default function GSTSACMasterList() {
         throw error;
       }
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     refetchOnWindowFocus: false,
     refetchOnMount: true,
   });
