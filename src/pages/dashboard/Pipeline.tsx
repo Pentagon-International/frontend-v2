@@ -117,47 +117,6 @@ function Pipeline() {
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
 
-  // Fetch pipeline data with React Query
-  const {
-    data: pipelineData = [],
-    isLoading: pipelineLoading,
-    refetch: refetchPipeline,
-  } = useQuery({
-    queryKey: ["pipeline", pageIndex, pageSize],
-    queryFn: async () => {
-      try {
-        const requestBody = {}; // Empty payload to get all data
-        const response = await apiCallProtected.post(
-          URL.pipelineFilter,
-          requestBody
-        );
-        const responseData =
-          (response as any)?.data ||
-          (response as unknown as {
-            results: CustomerPipelineData[];
-            total_count: number;
-            page: number;
-            page_size: number;
-            total_pages: number;
-            filters_applied: Record<string, unknown>;
-            ordering: string[];
-          });
-
-        if (responseData.results && Array.isArray(responseData.results)) {
-          return responseData.results;
-        }
-        return [];
-      } catch (error) {
-        console.error("Error fetching pipeline data:", error);
-        return [];
-      }
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
-    refetchOnWindowFocus: false,
-    refetchOnMount: !!location.state?.refreshData, // Refetch on mount if we have refresh flag
-  });
-
   // State to store the actual applied filter values
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({
     customer: null,
@@ -169,19 +128,17 @@ function Pipeline() {
     search: null,
   });
 
-  // Separate query for filtered data - only runs when filters/search are applied
+  // Single query using filter endpoint - always enabled, sends empty payload when no filters, filter payload when filters applied
   const {
-    data: filteredPipelineData = [],
-    isLoading: filteredPipelineLoading,
-    isFetching: filteredPipelineFetching,
-    refetch: refetchFilteredPipeline,
+    data: pipelineData = [],
+    isLoading: pipelineLoading,
+    isFetching: pipelineFetching,
+    refetch: refetchPipeline,
   } = useQuery({
-    // Note: filtersApplied is intentionally NOT part of queryKey.
-    // It only controls "enabled" state to avoid multiple refetches
-    // when toggling filtersApplied and updating appliedFilters/search.
-    queryKey: ["filteredPipeline", appliedFilters, debouncedSearch],
+    queryKey: ["pipeline", appliedFilters, debouncedSearch],
     queryFn: async () => {
       try {
+        // Build payload based on applied filters and search
         const payload: Record<string, unknown> = {};
 
         if (appliedFilters.customer)
@@ -207,11 +164,13 @@ function Pipeline() {
           payload.search = searchValue;
         }
 
-        if (Object.keys(payload)?.length === 0) return [];
+        // If payload has filters, wrap in filters object, otherwise send empty object
+        const requestBody = Object.keys(payload).length > 0 
+          ? { filters: payload } 
+          : {};
 
-        const requestBody = { filters: payload };
         const response = await apiCallProtected.post(
-          URL.pipelineFilter, // Use pipeline filter endpoint for filtering
+          URL.pipelineFilter,
           requestBody
         );
         const responseData =
@@ -225,20 +184,20 @@ function Pipeline() {
             filters_applied: Record<string, unknown>;
             ordering: string[];
           });
-        console.log("Filter API response:", responseData);
 
         if (responseData.results && Array.isArray(responseData.results)) {
           return responseData.results;
         }
         return [];
       } catch (error) {
-        console.error("Error fetching filtered pipeline data:", error);
+        console.error("Error fetching pipeline data:", error);
         return [];
       }
     },
-    enabled: filtersApplied || debouncedSearch.trim() !== "",
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0, // Always fetch fresh data on mount to show loader
     gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: true, // Always refetch on mount to ensure fresh data and show loader
   });
 
   // Clear other keys in store on mount (keep only current LIST_KEY)
@@ -322,9 +281,9 @@ function Pipeline() {
   // Handle refresh when navigating from PipelineCreate
   useEffect(() => {
     if (location.state?.refreshData) {
-      // Refetch all pipeline related data
+      // Invalidate and refetch pipeline data to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ["pipeline"] });
       refetchPipeline();
-      refetchFilteredPipeline();
 
       // Clear the refresh state to prevent unnecessary refetches
       navigate(location.pathname, { replace: true, state: {} });
@@ -332,9 +291,9 @@ function Pipeline() {
   }, [
     location.state?.refreshData,
     refetchPipeline,
-    refetchFilteredPipeline,
     navigate,
     location.pathname,
+    queryClient,
   ]);
 
   // Optimized frequency data query with memoization
@@ -408,30 +367,15 @@ function Pipeline() {
       }));
   }, [salespersonsData]);
 
-  // Determine which data to display
+  // Display data - single source from pipeline query
   const displayData = useMemo(() => {
-    // Check if we have filtered data (filters were applied)
-    if (filtersApplied) {
-      console.log("Displaying filtered data:", filteredPipelineData);
-      console.log("Filters applied:", filtersApplied);
-      return filteredPipelineData;
-    }
-    console.log("Displaying unfiltered data:", pipelineData);
     return pipelineData;
-  }, [
-    debouncedSearch,
-    pipelineData,
-    filteredPipelineData,
-    filtersApplied,
-  ]);
+  }, [pipelineData]);
 
-  // Loading state
+  // Loading state - show loader when initial load, fetching, or when navigating from create/edit
   const isLoading = useMemo(() => {
-    if (filtersApplied) {
-      return filteredPipelineLoading;
-    }
-    return pipelineLoading;
-  }, [pipelineLoading, filteredPipelineLoading, filtersApplied]);
+    return pipelineLoading || pipelineFetching;
+  }, [pipelineLoading, pipelineFetching]);
 
   // Helper function to save filters and search to store
   const saveFiltersToStore = useCallback(() => {
@@ -479,9 +423,8 @@ function Pipeline() {
           search: null,
         });
 
-        // Invalidate and refetch unfiltered data
+        // Query will automatically refetch when appliedFilters changes (it's in the query key)
         await queryClient.invalidateQueries({ queryKey: ["pipeline"] });
-        await refetchPipeline();
 
         // Clear filters and search from store
         clearStoreFilters(LIST_KEY);
@@ -536,10 +479,8 @@ function Pipeline() {
       search: null,
     });
 
-    // Invalidate queries and refetch unfiltered data
+    // Invalidate queries and refetch pipeline data
     await queryClient.invalidateQueries({ queryKey: ["pipeline"] });
-    await queryClient.invalidateQueries({ queryKey: ["filteredPipeline"] });
-    await queryClient.removeQueries({ queryKey: ["filteredPipeline"] }); // Remove filtered data from cache
     await refetchPipeline();
 
     // Clear filters and search from store
@@ -595,8 +536,7 @@ function Pipeline() {
             saveFiltersToStore();
           } else {
             setFiltersApplied(false);
-            await queryClient.invalidateQueries({ queryKey: ["pipeline"] });
-            await refetchPipeline();
+            // Query will automatically refetch when appliedFilters changes
             
             // Clear filters and search from store
             clearStoreFilters(LIST_KEY);
@@ -1196,7 +1136,7 @@ function Pipeline() {
           </Box>
         )}
 
-        {isLoading || filteredPipelineFetching ? (
+        {isLoading ? (
           <Center py="xl" style={{flex:1}}>
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
@@ -1206,7 +1146,7 @@ function Pipeline() {
         ) : (
           <>
             <MantineReactTable
-              key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
+              key={`table-${displayData.length}`}
               table={table}
             />
 
