@@ -115,6 +115,7 @@ type HAWBDetail = {
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
+  shipper_state_id?: number | null;
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
@@ -542,6 +543,10 @@ function AirImportJobCreate() {
               shipper_email: house.shipper_email
                 ? String(house.shipper_email)
                 : "",
+              shipper_state_id:
+                house.shipper_state_id != null
+                  ? Number(house.shipper_state_id)
+                  : null,
               consignee_name: house.consignee_name
                 ? String(house.consignee_name)
                 : "",

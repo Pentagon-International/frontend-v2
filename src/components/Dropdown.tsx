@@ -375,6 +375,9 @@ export default function Dropdown({
     }
   };
 
+  // When value is cleared (null/empty), show empty so placeholder appears instead of stale label
+  const displaySearch = value ? search : "";
+
   return (
     <Select
       {...props}
@@ -385,7 +388,7 @@ export default function Dropdown({
       onFocus={handleFocus}
       onBlur={handleBlur}
       searchable={searchable}
-      searchValue={search}
+      searchValue={displaySearch}
       onSearchChange={handleSearchChange}
     />
   );

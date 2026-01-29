@@ -103,6 +103,7 @@ export const URL = {
   gstChargeMappingFilter: "filter/gst-charge-mapping/",
   gstRateMasterFilter: "filter/gst-rate-master/",
   gstSacMasterFilter: "filter/gst-sac-master/",
+  invoice: "invoice/",
 
   // Dashboard APIs
   dashboard: {

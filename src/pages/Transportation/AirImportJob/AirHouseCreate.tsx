@@ -62,6 +62,7 @@ type HAWBDetailsForm = {
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
+  shipper_state_id: string;
   consignee_code: string;
   consignee_name: string;
   consignee_address: string;
@@ -308,6 +309,7 @@ function HouseCreate() {
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
+      shipper_state_id: editData?.shipper_state_id != null ? String(editData.shipper_state_id) : "",
       consignee_code: "", // Will be set when user selects from SearchableSelect
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
@@ -384,6 +386,7 @@ function HouseCreate() {
         shipper_name: editData.shipper_name || "",
         shipper_address: editData.shipper_address || "",
         shipper_email: editData.shipper_email || "",
+        shipper_state_id: editData.shipper_state_id != null ? String(editData.shipper_state_id) : "",
         consignee_code: "", // Will be set when user selects from SearchableSelect
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
@@ -1035,6 +1038,44 @@ function HouseCreate() {
     }
   };
 
+  // Build current form as housing detail (for passing to invoice page)
+  const getCurrentHousingDetail = () => {
+    const v = form.values;
+    return {
+      hawb_number: v.hawb_number,
+      routed: v.routed,
+      routed_by: v.routed_by,
+      origin_code: v.origin_code,
+      origin_name: v.origin_name,
+      destination_code: v.destination_code,
+      destination_name: v.destination_name,
+      customer_service: v.customer_service,
+      trade: v.trade,
+      origin_agent_name: v.origin_agent_name,
+      origin_agent_address: v.origin_agent_address,
+      origin_agent_email: v.origin_agent_email,
+      shipper_name: v.shipper_name,
+      shipper_address: v.shipper_address,
+      shipper_email: v.shipper_email,
+      shipper_state_id: v.shipper_state_id
+        ? Number(v.shipper_state_id)
+        : (editData as { shipper_state_id?: number } | undefined)?.shipper_state_id
+        ?? (location.state?.job as { housing_details?: Array<{ shipper_state_id?: number }> })?.housing_details?.[editIndex ?? 0]?.shipper_state_id
+        ?? null,
+      shipment_id: (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+      consignee_name: v.consignee_name,
+      consignee_address: v.consignee_address,
+      consignee_email: v.consignee_email,
+      notify_customer1_name: v.notify_customer1_name,
+      notify_customer1_address: v.notify_customer1_address,
+      notify_customer1_email: v.notify_customer1_email,
+      commodity_description: v.commodity_description,
+      marks_no: v.marks_no,
+      cargo_details: cargoDetails,
+      charges: chargesForm.values.charges,
+    };
+  };
+
   // Handle save - navigate to ImportJobCreate with housing details
   const handleSave = () => {
     // Prepare cargo details (container_number removed for Air)
@@ -1070,6 +1111,10 @@ function HouseCreate() {
       shipper_name: currentFormValues.shipper_name,
       shipper_address: currentFormValues.shipper_address,
       shipper_email: currentFormValues.shipper_email,
+      shipper_state_id: currentFormValues.shipper_state_id
+        ? Number(currentFormValues.shipper_state_id)
+        : (editData as { shipment_id?: string; shipper_state_id?: number } | undefined)?.shipper_state_id ?? null,
+      shipment_id: (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: currentFormValues.consignee_name,
       consignee_address: currentFormValues.consignee_address,
       consignee_email: currentFormValues.consignee_email,
@@ -1267,6 +1312,31 @@ function HouseCreate() {
           >
             Back to Import Job
           </Button> */}
+          <Button
+            variant="outline"
+            color="#105476"
+            onClick={() => {
+              // Navigate to invoice page with current form as housing detail (includes shipper_state_id)
+              navigate("/air/import-job/invoice", {
+                state: {
+                  hawbDetails: [getCurrentHousingDetail()],
+                  housingDetails: [getCurrentHousingDetail()],
+                  ...(location.state?.job && { job: location.state.job }),
+                  ...(location.state?.mawbDetails && {
+                    mawbDetails: location.state.mawbDetails,
+                  }),
+                  ...(location.state?.carrierDetails && {
+                    carrierDetails: location.state.carrierDetails,
+                  }),
+                  ...(location.state?.routings && {
+                    routings: location.state.routings,
+                  }),
+                },
+              });
+            }}
+          >
+            Create Invoice
+          </Button>
           <Button
             color="#105476"
             variant="outline"
@@ -1634,7 +1704,7 @@ function HouseCreate() {
                       selectedData?.label || ""
                     );
 
-                    // Use originalData to populate address options
+                    // Use originalData to populate address options and shipper_state_id
                     if (
                       value &&
                       originalData &&
@@ -1646,6 +1716,7 @@ function HouseCreate() {
                       ).addresses_data as Array<{
                         id: number;
                         address: string;
+                        state_id?: number;
                       }>;
 
                       const addressOptions = addressesData.map(
@@ -1669,9 +1740,23 @@ function HouseCreate() {
                       } else {
                         form.setFieldValue("shipper_address", "");
                       }
+
+                      // Set shipper_state_id from first address that has state_id
+                      const addrWithState = addressesData.find(
+                        (a: { state_id?: number }) => a.state_id != null
+                      );
+                      if (addrWithState?.state_id != null) {
+                        form.setFieldValue(
+                          "shipper_state_id",
+                          String(addrWithState.state_id)
+                        );
+                      } else {
+                        form.setFieldValue("shipper_state_id", "");
+                      }
                     } else {
                       setShipperAddressOptions([]);
                       form.setFieldValue("shipper_address", "");
+                      form.setFieldValue("shipper_state_id", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -2741,13 +2826,40 @@ function HouseCreate() {
             </Button>
           )}
           {active === 3 && (
-            <Button
-              rightSection={<IconChevronRight size={16} />}
-              color="#105476"
-              onClick={handleNext}
-            >
-              Save HBL
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                color="#105476"
+                onClick={() => {
+                  // Navigate to invoice page with current form as housing detail (includes shipper_state_id)
+                  navigate("/air/import-job/invoice", {
+                    state: {
+                      hawbDetails: [getCurrentHousingDetail()],
+                      housingDetails: [getCurrentHousingDetail()],
+                      ...(location.state?.job && { job: location.state.job }),
+                      ...(location.state?.mawbDetails && {
+                        mawbDetails: location.state.mawbDetails,
+                      }),
+                      ...(location.state?.carrierDetails && {
+                        carrierDetails: location.state.carrierDetails,
+                      }),
+                      ...(location.state?.routings && {
+                        routings: location.state.routings,
+                      }),
+                    },
+                  });
+                }}
+              >
+                Create Invoice
+              </Button>
+              <Button
+                rightSection={<IconChevronRight size={16} />}
+                color="#105476"
+                onClick={handleNext}
+              >
+                Save HBL
+              </Button>
+            </>
           )}
         </Group>
       </Group>

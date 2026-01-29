@@ -94,6 +94,7 @@ import {
   AirImportJobMaster,
   AirImportJobCreate,
   AirHouseCreate,
+  InvoiceCreate,
   AirExportJobMaster,
   AirExportJobCreate,
   AirExportHouseCreate,
@@ -172,6 +173,7 @@ const NavigationRoutes = () => {
             <Route path="edit" element={<AirImportJobCreate />} />
             <Route path="view" element={<AirImportJobCreate />} />
             <Route path="house-create" element={<AirHouseCreate />} />
+            <Route path="invoice" element={<InvoiceCreate />} />
           </Route>
         </Route>
         <Route path="/SeaExport">
