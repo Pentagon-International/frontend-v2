@@ -38,8 +38,6 @@ import useAuthStore from "../../../store/authStore";
 const fetchCurrencyMaster = async () => {
   try {
     const response = await getAPICall(`${URL.currencyMaster}`, API_HEADER);
-    console.log("currency response---", response);
-
     return response;
   } catch (error) {
     console.error("Error fetching currency master:", error);
@@ -57,13 +55,12 @@ const fetchStateMaster = async () => {
   }
 };
 
-// Placeholder for daybook - replace with actual API endpoint when available
+// Daybook: POST with { filters: {} }, response.data has id and name
 const fetchDaybook = async () => {
   try {
-    // TODO: Replace with actual daybook API endpoint
-    // const response = await getAPICall(`${URL.daybook}`, API_HEADER);
-    // return response;
-    return [];
+    const payload = { filters: {} };
+    const response = await postAPICall(URL.daybook, payload, API_HEADER);
+    return (response as { data?: unknown[] })?.data ?? [];
   } catch (error) {
     console.error("Error fetching daybook:", error);
     return [];
@@ -153,10 +150,11 @@ function InvoiceCreate() {
 
   // Default branch currency (active branch: is_default === true) for Billing Currency
   const defaultBranchCurrency =
-    (user?.branches?.find(
-      (b: { is_default?: boolean }) => b.is_default === true
-    ) as { currency?: { currency_code?: string } } | undefined)?.currency
-      ?.currency_code ?? "";
+    (
+      user?.branches?.find(
+        (b: { is_default?: boolean }) => b.is_default === true,
+      ) as { currency?: { currency_code?: string } } | undefined
+    )?.currency?.currency_code ?? "";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [billToDisplayName, setBillToDisplayName] = useState<string | null>(
@@ -209,7 +207,7 @@ function InvoiceCreate() {
       address: (value) => (!value ? "Address is required" : null),
       state: (value) => (!value ? "State is required" : null),
       shipment_no: (value) => (!value ? "Shipment No is required" : null),
-      // daybook: (value) => (!value ? "Daybook is required" : null),
+      daybook: (value) => (!value ? "Daybook is required" : null),
       document_date: (value) => (!value ? "Document Date is required" : null),
       due_date: (value) => (!value ? "Due Date is required" : null),
       currency: (value) => (!value ? "Currency is required" : null),
@@ -272,17 +270,17 @@ function InvoiceCreate() {
     }));
   }, [stateData]);
 
-  // Format daybook options
+  // Format daybook options: id = value, name = label
   const daybookOptions = useMemo(() => {
-    const data = daybookData as any[];
+    const data = daybookData as { id?: number; name?: string }[];
     if (!Array.isArray(data)) return [];
-    return data.map((item: any) => ({
-      value: String(item.id || item.code || ""),
-      label: item.name || item.daybook_name || "",
+    return data.map((item) => ({
+      value: String(item.id ?? ""),
+      label: item.name ?? "",
     }));
   }, [daybookData]);
 
-  // Format charge options
+  // Format charge options (legacy charge master, kept if used elsewhere)
   const chargeOptions = useMemo(() => {
     const data = chargeData as any[];
     if (!Array.isArray(data)) return [];
@@ -433,12 +431,19 @@ function InvoiceCreate() {
     if (isStateLoading || !stateData?.length) return;
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
-    const firstHawb = Array.isArray(hawbDetails) && hawbDetails.length > 0 ? hawbDetails[0] : null;
-    const jobHousing = (location.state?.job as { housing_details?: Array<{ shipper_state_id?: number | null }> })?.housing_details;
+    const firstHawb =
+      Array.isArray(hawbDetails) && hawbDetails.length > 0
+        ? hawbDetails[0]
+        : null;
+    const jobHousing = (
+      location.state?.job as {
+        housing_details?: Array<{ shipper_state_id?: number | null }>;
+      }
+    )?.housing_details;
     const shipperStateId =
       firstHawb?.shipper_state_id != null
         ? firstHawb.shipper_state_id
-        : jobHousing?.[0]?.shipper_state_id ?? null;
+        : (jobHousing?.[0]?.shipper_state_id ?? null);
     if (shipperStateId != null) {
       form.setFieldValue("state", String(shipperStateId));
     }
@@ -944,9 +949,9 @@ function InvoiceCreate() {
               <Dropdown
                 label="Daybook"
                 placeholder="Select daybook"
-                data={["test"]}
-                value={form.values.daybook}
-                onChange={(value) => form.setFieldValue("daybook", value || "")}
+                data={daybookOptions}
+                value={form.values.daybook ? form.values.daybook : null}
+                onChange={(value) => form.setFieldValue("daybook", value ?? "")}
                 searchable
                 withAsterisk
                 error={form.errors.daybook}
@@ -1239,16 +1244,24 @@ function InvoiceCreate() {
                   mt={index !== 0 ? "sm" : 0}
                 >
                   <Grid.Col span={2}>
-                    <TextInput
-                      placeholder="Charge"
-                      withAsterisk
-                      value={charge.charge_name}
-                      onChange={(e) => {
+                    <SearchableSelect
+                      placeholder="Type charge name"
+                      apiEndpoint={URL.chargeMaster}
+                      searchFields={["charge_name", "charge_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(
+                          item.charge_name ?? item.charge_code ?? "",
+                        ),
+                        label: String(
+                          item.charge_name ?? item.charge_code ?? "",
+                        ),
+                      })}
+                      value={charge.charge_name || null}
+                      onChange={(value) => {
                         form.setFieldValue(
                           `charges.${index}.charge_name`,
-                          e.target.value,
+                          value ?? "",
                         );
-                        // Clear error when field is updated
                         if (chargeErrors[index]?.charge_name) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
@@ -1260,7 +1273,9 @@ function InvoiceCreate() {
                           setChargeErrors(newErrors);
                         }
                       }}
+                      withAsterisk
                       error={chargeErrors[index]?.charge_name}
+                      minSearchLength={2}
                       styles={{
                         input: {
                           fontSize: "13px",
