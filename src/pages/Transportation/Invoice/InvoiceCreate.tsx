@@ -20,7 +20,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -143,10 +143,46 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+// Invoice data shape from filter/invoice API (for edit/view form fill)
+type InvoiceDataFromApi = {
+  id?: number;
+  bill_to?: string;
+  address?: string;
+  gstn?: string;
+  shipment_no?: string;
+  document_no?: string;
+  document_date?: string;
+  due_date?: string;
+  roe?: string | number;
+  narration?: string;
+  irn_no?: string;
+  state_id?: number;
+  currency_id?: number;
+  currency_code?: string;
+  day_book_id?: number;
+  day_book_name?: string;
+  charges?: Array<{
+    charge_name?: string;
+    unit_code?: string;
+    no_of_unit?: string | number;
+    currency_code?: string;
+    roe?: string | number;
+    amount_per_unit?: string | number;
+    amount?: string | number;
+    amount_in_local?: string | number;
+    amount_in_header?: string | number | null;
+    tax_code?: string;
+  }>;
+};
+
 function InvoiceCreate() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
+
+  const isViewMode = location.pathname.includes("/view/");
+  const isEditOrViewMode = Boolean(invoiceId && (location.pathname.includes("/edit/") || location.pathname.includes("/view/")));
 
   // Default branch currency (active branch: is_default === true) for Billing Currency
   const defaultBranchCurrency =
@@ -424,6 +460,93 @@ function InvoiceCreate() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount
+
+  // Populate form from invoice data when navigating from Accounts (edit/view)
+  useEffect(() => {
+    const invoiceData = location.state?.invoiceData as
+      | InvoiceDataFromApi
+      | undefined;
+    if (!invoiceData || !isEditOrViewMode) return;
+
+    setBillToDisplayName(invoiceData.bill_to ?? null);
+    form.setValues({
+      bill_to: invoiceData.bill_to ?? "",
+      address: invoiceData.address ?? "",
+      state: invoiceData.state_id != null ? String(invoiceData.state_id) : "",
+      gstn: invoiceData.gstn ?? "",
+      shipment_no: invoiceData.shipment_no ?? "",
+      daybook: invoiceData.day_book_id != null ? String(invoiceData.day_book_id) : "",
+      document_date: normalizeDate(invoiceData.document_date ?? null),
+      due_date: normalizeDate(invoiceData.due_date ?? null),
+      currency: invoiceData.currency_code ?? "",
+      roe:
+        invoiceData.roe != null
+          ? typeof invoiceData.roe === "string"
+            ? parseFloat(invoiceData.roe)
+            : invoiceData.roe
+          : null,
+      narration: invoiceData.narration ?? "",
+      irn_no: invoiceData.irn_no ?? "",
+      charges:
+        invoiceData.charges && invoiceData.charges.length > 0
+          ? invoiceData.charges.map((c) => ({
+              charge_name: c.charge_name ?? "",
+              unit_code: c.unit_code ?? "",
+              no_of_unit:
+                c.no_of_unit != null
+                  ? (typeof c.no_of_unit === "string"
+                      ? parseFloat(c.no_of_unit)
+                      : c.no_of_unit)
+                  : null,
+              currency: c.currency_code ?? "",
+              roe:
+                c.roe != null
+                  ? (typeof c.roe === "string" ? parseFloat(c.roe) : c.roe)
+                  : null,
+              amount_per_unit:
+                c.amount_per_unit != null
+                  ? (typeof c.amount_per_unit === "string"
+                      ? parseFloat(c.amount_per_unit)
+                      : c.amount_per_unit)
+                  : null,
+              amount:
+                c.amount != null
+                  ? (typeof c.amount === "string" ? parseFloat(c.amount) : c.amount)
+                  : null,
+              header_amount:
+                c.amount_in_header != null
+                  ? (typeof c.amount_in_header === "string"
+                      ? parseFloat(c.amount_in_header)
+                      : c.amount_in_header)
+                  : null,
+              amount_in_local:
+                c.amount_in_local != null
+                  ? (typeof c.amount_in_local === "string"
+                      ? parseFloat(c.amount_in_local)
+                      : c.amount_in_local)
+                  : null,
+              tax_code: c.tax_code ?? "",
+            }))
+          : form.values.charges.length > 0
+            ? form.values.charges
+            : [
+                {
+                  charge_name: "",
+                  unit_code: "",
+                  no_of_unit: null,
+                  currency: "",
+                  billing_currency: null,
+                  roe: null,
+                  amount_per_unit: null,
+                  amount: null,
+                  header_amount: null,
+                  amount_in_local: null,
+                  tax_code: "",
+                },
+              ],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceId, isEditOrViewMode, location.state?.invoiceData]);
 
   // Set state from housing shipper_state_id once state API has loaded
   // Use hawbDetails first, then fallback to job.housing_details (from API) when passed house has no shipper_state_id
@@ -829,7 +952,14 @@ function InvoiceCreate() {
         </Group>
 
         {/* Form */}
-        <Box component="form" onSubmit={form.onSubmit(handleSubmit)}>
+        <Box
+          component="form"
+          onSubmit={
+            isViewMode
+              ? (e) => e.preventDefault()
+              : form.onSubmit(handleSubmit)
+          }
+        >
           <Grid>
             {/* Row 1: 4 fields - Bill To (span 4 = 2 fields), State, GSTN, Shipment No */}
             {/* Bill To - spans 2 fields (span=4) */}
@@ -849,6 +979,7 @@ function InvoiceCreate() {
                 returnOriginalData={true}
                 withAsterisk
                 dropdownZIndex={1000}
+                disabled={isViewMode}
                 error={
                   form.errors.bill_to ? String(form.errors.bill_to) : undefined
                 }
@@ -878,7 +1009,7 @@ function InvoiceCreate() {
                 searchable
                 withAsterisk
                 error={form.errors.state || undefined}
-                disabled={isStateLoading}
+                disabled={isStateLoading || isViewMode}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -902,6 +1033,7 @@ function InvoiceCreate() {
                 value={form.values.gstn}
                 onChange={(e) => form.setFieldValue("gstn", e.target.value)}
                 error={form.errors.gstn}
+                readOnly={isViewMode}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -922,6 +1054,7 @@ function InvoiceCreate() {
               <TextInput
                 label="Shipment No"
                 placeholder="Enter shipment number"
+                readOnly={isViewMode}
                 value={form.values.shipment_no}
                 onChange={(e) =>
                   form.setFieldValue("shipment_no", e.target.value)
@@ -955,7 +1088,7 @@ function InvoiceCreate() {
                 searchable
                 withAsterisk
                 error={form.errors.daybook}
-                disabled={isDaybookLoading}
+                disabled={isDaybookLoading || isViewMode}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -978,6 +1111,7 @@ function InvoiceCreate() {
                 value={normalizeDate(form.values.document_date)}
                 onChange={(date) => form.setFieldValue("document_date", date)}
                 withAsterisk
+                disabled={isViewMode}
                 error={
                   form.errors.document_date
                     ? typeof form.errors.document_date === "string"
@@ -996,6 +1130,7 @@ function InvoiceCreate() {
                 value={normalizeDate(form.values.due_date)}
                 onChange={(date) => form.setFieldValue("due_date", date)}
                 withAsterisk
+                disabled={isViewMode}
                 error={
                   form.errors.due_date
                     ? typeof form.errors.due_date === "string"
@@ -1023,7 +1158,7 @@ function InvoiceCreate() {
                     ? String(form.errors.currency)
                     : undefined
                 }
-                disabled={isCurrencyLoading}
+                disabled={isCurrencyLoading || isViewMode}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -1055,6 +1190,7 @@ function InvoiceCreate() {
                   form.setFieldValue("roe", numValue);
                 }}
                 withAsterisk
+                readOnly={isViewMode}
                 error={form.errors.roe ? String(form.errors.roe) : undefined}
                 min={0}
                 decimalScale={4}
@@ -1082,6 +1218,7 @@ function InvoiceCreate() {
                 value={form.values.irn_no}
                 onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
                 error={form.errors.irn_no}
+                readOnly={isViewMode}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -1110,6 +1247,7 @@ function InvoiceCreate() {
                   }
                   searchable
                   withAsterisk
+                  disabled={isViewMode}
                   error={
                     form.errors.address
                       ? String(form.errors.address)
@@ -1137,6 +1275,7 @@ function InvoiceCreate() {
                     form.setFieldValue("address", e.target.value)
                   }
                   withAsterisk
+                  readOnly={isViewMode}
                   error={
                     form.errors.address
                       ? String(form.errors.address)
@@ -1168,6 +1307,7 @@ function InvoiceCreate() {
                   form.setFieldValue("narration", e.target.value)
                 }
                 error={form.errors.narration}
+                readOnly={isViewMode}
                 rows={2}
                 styles={{
                   input: {
@@ -1274,6 +1414,7 @@ function InvoiceCreate() {
                         }
                       }}
                       withAsterisk
+                      disabled={isViewMode}
                       error={chargeErrors[index]?.charge_name}
                       minSearchLength={2}
                       styles={{
@@ -1292,6 +1433,7 @@ function InvoiceCreate() {
                       searchable
                       data={currencyOptions}
                       value={charge.currency || null}
+                      disabled={isViewMode}
                       onChange={(value) => {
                         const roe = value ? getRoeValue(value) : null;
                         form.setFieldValue(
@@ -1329,6 +1471,7 @@ function InvoiceCreate() {
                       min={0}
                       hideControls
                       withAsterisk
+                      readOnly={isViewMode}
                       value={charge.roe || undefined}
                       onChange={(value) => {
                         const roe = value as number | null;
@@ -1402,6 +1545,7 @@ function InvoiceCreate() {
                       placeholder="No of Unit"
                       min={0}
                       hideControls
+                      readOnly={isViewMode}
                       value={charge.no_of_unit || undefined}
                       onChange={(value) => {
                         const noOfUnit = value as number | null;
@@ -1447,6 +1591,7 @@ function InvoiceCreate() {
                       placeholder="Per Unit"
                       min={0}
                       hideControls
+                      readOnly={isViewMode}
                       value={charge.amount_per_unit || undefined}
                       onChange={(value) => {
                         const amountPerUnit = value as number | null;
@@ -1493,6 +1638,7 @@ function InvoiceCreate() {
                       min={0}
                       hideControls
                       withAsterisk
+                      readOnly={isViewMode}
                       value={charge.amount || undefined}
                       onChange={(value) => {
                         const currencyAmount = value as number | null;
@@ -1548,6 +1694,7 @@ function InvoiceCreate() {
                       placeholder="Header Amount"
                       min={0}
                       hideControls
+                      readOnly={isViewMode}
                       value={charge.header_amount || undefined}
                       onChange={(value) => {
                         form.setFieldValue(
@@ -1570,6 +1717,7 @@ function InvoiceCreate() {
                       min={0}
                       hideControls
                       withAsterisk
+                      readOnly={isViewMode}
                       value={charge.amount_in_local || undefined}
                       onChange={(value) => {
                         form.setFieldValue(
@@ -1590,6 +1738,7 @@ function InvoiceCreate() {
                     <TextInput
                       placeholder="Tax Code"
                       withAsterisk
+                      readOnly={isViewMode}
                       value={charge.tax_code}
                       onChange={(e) => {
                         form.setFieldValue(
@@ -1607,6 +1756,7 @@ function InvoiceCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
+                    {!isViewMode && (
                     <Group gap="xs">
                       {form.values.charges.length > 1 && (
                         <Button
@@ -1648,6 +1798,7 @@ function InvoiceCreate() {
                         </Button>
                       )}
                     </Group>
+                    )}
                   </Grid.Col>
                 </Grid>
               ))}
@@ -1663,14 +1814,16 @@ function InvoiceCreate() {
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              color="#105476"
-              rightSection={<IconChevronRight size={16} />}
-              loading={isSubmitting}
-            >
-              Save Invoice
-            </Button>
+            {!isViewMode && (
+              <Button
+                type="submit"
+                color="#105476"
+                rightSection={<IconChevronRight size={16} />}
+                loading={isSubmitting}
+              >
+                Save Invoice
+              </Button>
+            )}
           </Group>
         </Box>
       </Stack>

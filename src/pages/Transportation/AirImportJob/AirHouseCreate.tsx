@@ -3,7 +3,8 @@ import {
   Button,
   Grid,
   Group,
-  Stepper,
+  Tabs,
+  Table,
   Text,
   TextInput,
   Textarea,
@@ -14,6 +15,7 @@ import {
   Loader,
   Center,
   Stack,
+  ScrollArea,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -24,6 +26,7 @@ import {
   IconTrash,
   IconDotsVertical,
   IconEye,
+  IconEdit,
   IconDownload,
   IconX,
 } from "@tabler/icons-react";
@@ -138,13 +141,31 @@ const fetchUnitMaster = async () => {
     const response = (await postAPICall(
       URL.unitMasterFilter,
       payload,
-      API_HEADER
+      API_HEADER,
     )) as { data?: unknown[] };
     return response?.data || [];
   } catch (error) {
     console.error("Error fetching unit master:", error);
     return [];
   }
+};
+
+// Invoice list item from /api/filter/invoice/ response
+type InvoiceListItem = {
+  id: number;
+  sno?: number;
+  day_book_name?: string;
+  day_book_code?: string;
+  document_no?: string;
+  document_date?: string;
+  due_date?: string;
+  status?: string;
+  bill_to?: string;
+  currency_code?: string;
+  charges?: Array<{
+    amount?: string | number;
+    amount_in_local?: string | number;
+  }>;
 };
 
 // Validation handled in validateStep1 and validateStep2 functions
@@ -154,6 +175,10 @@ function HouseCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
+
+  // Accounts tab: invoice list from filter/invoice API
+  const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
+  const [invoiceListLoading, setInvoiceListLoading] = useState(false);
 
   // Helper function to calculate ROE based on currency and user's country
   const getRoeValue = useCallback(
@@ -171,7 +196,7 @@ function HouseCreate() {
 
       return 1;
     },
-    [user?.country?.country_code]
+    [user?.country?.country_code],
   );
 
   // Calculate chargeable weight for AIR service (max of gross weight and volume weight)
@@ -182,7 +207,7 @@ function HouseCreate() {
       const volume = volumeWeight || 0;
       return Math.max(gross, volume);
     },
-    []
+    [],
   );
 
   // State for address options (populated from addresses_data when shipper/consignee is selected)
@@ -222,6 +247,19 @@ function HouseCreate() {
   // PDF Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
+
+  // Fetch invoice list when Accounts tab is active
+  useEffect(() => {
+    if (active !== 4) return;
+    setInvoiceListLoading(true);
+    postAPICall(URL.invoiceFilter, { filters: {} }, API_HEADER)
+      .then((res: unknown) => {
+        const data = (res as { data?: InvoiceListItem[] })?.data;
+        setInvoiceList(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setInvoiceList([]))
+      .finally(() => setInvoiceListLoading(false));
+  }, [active]);
 
   // Charges Form - Using useForm similar to routings in ImportJobCreate
   const chargesForm = useForm<{ charges: ChargeDetail[] }>({
@@ -309,7 +347,10 @@ function HouseCreate() {
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
-      shipper_state_id: editData?.shipper_state_id != null ? String(editData.shipper_state_id) : "",
+      shipper_state_id:
+        editData?.shipper_state_id != null
+          ? String(editData.shipper_state_id)
+          : "",
       consignee_code: "", // Will be set when user selects from SearchableSelect
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
@@ -337,7 +378,7 @@ function HouseCreate() {
     const updatedCargoDetails = cargoDetails.map((cargo) => {
       const chargeableWeight = calculateChargeableWeight(
         cargo.gross_weight,
-        cargo.volume_weight
+        cargo.volume_weight,
       );
       // Only update if chargeable_weight changed
       if (cargo.chargeable_weight === chargeableWeight) {
@@ -352,7 +393,7 @@ function HouseCreate() {
     // Only update if there are actual changes
     const hasChanges = updatedCargoDetails.some(
       (cargo, index) =>
-        cargo.chargeable_weight !== cargoDetails[index]?.chargeable_weight
+        cargo.chargeable_weight !== cargoDetails[index]?.chargeable_weight,
     );
 
     if (hasChanges) {
@@ -386,7 +427,10 @@ function HouseCreate() {
         shipper_name: editData.shipper_name || "",
         shipper_address: editData.shipper_address || "",
         shipper_email: editData.shipper_email || "",
-        shipper_state_id: editData.shipper_state_id != null ? String(editData.shipper_state_id) : "",
+        shipper_state_id:
+          editData.shipper_state_id != null
+            ? String(editData.shipper_state_id)
+            : "",
         consignee_code: "", // Will be set when user selects from SearchableSelect
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
@@ -409,7 +453,7 @@ function HouseCreate() {
               | null,
             chargeable_weight: cargo.chargeable_weight as number | null,
             haz: cargo.haz ? String(cargo.haz) : "",
-          })
+          }),
         );
         if (loadedCargoDetails.length > 0) {
           setCargoDetails(loadedCargoDetails);
@@ -421,11 +465,12 @@ function HouseCreate() {
       if (chargesToLoad && Array.isArray(chargesToLoad)) {
         const loadedCharges = chargesToLoad.map(
           (charge: Record<string, unknown>) => {
-            // Handle unit_code from unit_details or direct field
+            // Handle unit_code: API may send "unit" (e.g. "SHPT") or unit_details.unit_code
             const unitDetails = charge.unit_details as
               | { unit_code?: string }
               | undefined;
             const unitCode =
+              charge.unit ||
               charge.unit_code ||
               charge.unit_input ||
               unitDetails?.unit_code ||
@@ -438,17 +483,25 @@ function HouseCreate() {
             const currency =
               charge.currency || currencyDetails?.currency_code || "";
 
+            // Normalize numeric fields (API may return strings e.g. "1.0000", "33.00")
+            const toNum = (v: unknown): number | null => {
+              if (v == null) return null;
+              if (typeof v === "number" && !Number.isNaN(v)) return v;
+              const n = parseFloat(String(v));
+              return Number.isNaN(n) ? null : n;
+            };
+
             return {
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
               pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
               unit_code: unitCode ? String(unitCode) : "",
-              no_of_unit: charge.no_of_unit as number | null,
+              no_of_unit: toNum(charge.no_of_unit),
               currency: currency ? String(currency) : "",
-              roe: charge.roe as number | null,
-              amount_per_unit: charge.amount_per_unit as number | null,
-              amount: charge.amount as number | null,
+              roe: toNum(charge.roe),
+              amount_per_unit: toNum(charge.amount_per_unit),
+              amount: toNum(charge.amount),
             };
-          }
+          },
         );
         if (loadedCharges.length > 0) {
           chargesForm.setValues({ charges: loadedCharges });
@@ -486,7 +539,7 @@ function HouseCreate() {
 
     // Only update if there are actual changes to ROE
     const hasChanges = updatedCharges.some(
-      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe
+      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe,
     );
 
     if (hasChanges) {
@@ -536,7 +589,7 @@ function HouseCreate() {
     // Only update if there are actual changes
     const hasChanges = updatedCharges.some(
       (charge, index) =>
-        charge.amount !== chargesForm.values.charges[index]?.amount
+        charge.amount !== chargesForm.values.charges[index]?.amount,
     );
 
     if (hasChanges) {
@@ -678,7 +731,7 @@ function HouseCreate() {
       });
       console.log(
         "📊 updateTradeField after update, form.values.trade:",
-        form.values.trade
+        form.values.trade,
       );
     } else if (!hawbDestinationCode && form.values.trade) {
       // Clear trade if HAWB destination is cleared
@@ -1059,10 +1112,16 @@ function HouseCreate() {
       shipper_email: v.shipper_email,
       shipper_state_id: v.shipper_state_id
         ? Number(v.shipper_state_id)
-        : (editData as { shipper_state_id?: number } | undefined)?.shipper_state_id
-        ?? (location.state?.job as { housing_details?: Array<{ shipper_state_id?: number }> })?.housing_details?.[editIndex ?? 0]?.shipper_state_id
-        ?? null,
-      shipment_id: (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+        : ((editData as { shipper_state_id?: number } | undefined)
+            ?.shipper_state_id ??
+          (
+            location.state?.job as {
+              housing_details?: Array<{ shipper_state_id?: number }>;
+            }
+          )?.housing_details?.[editIndex ?? 0]?.shipper_state_id ??
+          null),
+      shipment_id:
+        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
@@ -1113,8 +1172,13 @@ function HouseCreate() {
       shipper_email: currentFormValues.shipper_email,
       shipper_state_id: currentFormValues.shipper_state_id
         ? Number(currentFormValues.shipper_state_id)
-        : (editData as { shipment_id?: string; shipper_state_id?: number } | undefined)?.shipper_state_id ?? null,
-      shipment_id: (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+        : ((
+            editData as
+              | { shipment_id?: string; shipper_state_id?: number }
+              | undefined
+          )?.shipper_state_id ?? null),
+      shipment_id:
+        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: currentFormValues.consignee_name,
       consignee_address: currentFormValues.consignee_address,
       consignee_email: currentFormValues.consignee_email,
@@ -1174,7 +1238,7 @@ function HouseCreate() {
 
       // Get default branch from user store or use default
       const defaultBranch = user?.branches?.find(
-        (branch) => branch.is_default
+        (branch) => branch.is_default,
       ) ||
         user?.branches?.[0] || { branch_name: "CHENNAI" };
       const country = user?.country || null;
@@ -1239,7 +1303,7 @@ function HouseCreate() {
         jobData,
         hawbData,
         defaultBranch,
-        country
+        country,
       );
       setPdfBlob(blobUrl);
     } catch (error) {
@@ -1313,31 +1377,6 @@ function HouseCreate() {
             Back to Import Job
           </Button> */}
           <Button
-            variant="outline"
-            color="#105476"
-            onClick={() => {
-              // Navigate to invoice page with current form as housing detail (includes shipper_state_id)
-              navigate("/air/import-job/invoice", {
-                state: {
-                  hawbDetails: [getCurrentHousingDetail()],
-                  housingDetails: [getCurrentHousingDetail()],
-                  ...(location.state?.job && { job: location.state.job }),
-                  ...(location.state?.mawbDetails && {
-                    mawbDetails: location.state.mawbDetails,
-                  }),
-                  ...(location.state?.carrierDetails && {
-                    carrierDetails: location.state.carrierDetails,
-                  }),
-                  ...(location.state?.routings && {
-                    routings: location.state.routings,
-                  }),
-                },
-              });
-            }}
-          >
-            Create Invoice
-          </Button>
-          <Button
             color="#105476"
             variant="outline"
             onClick={() => {
@@ -1391,6 +1430,24 @@ function HouseCreate() {
                   return;
                 }
                 handleSave();
+              } else if (active === 4) {
+                if (!validateStep1()) {
+                  setActive(0);
+                  return;
+                }
+                if (!validateStep2()) {
+                  setActive(1);
+                  return;
+                }
+                if (!validateStep3()) {
+                  setActive(2);
+                  return;
+                }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
+                handleSave();
               }
             }}
           >
@@ -1425,14 +1482,98 @@ function HouseCreate() {
         </Group>
       </Group>
 
-      <Stepper
+      <Tabs
+        value={String(active)}
+        onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        active={active}
-        onStepClick={setActive}
-        orientation="horizontal"
+        styles={{
+          list: {
+            borderBottom: "none",
+          },
+        }}
       >
-        {/* Stepper 1: Basic Details */}
-        <Stepper.Step label="1" description="Shipment Details">
+        <Tabs.List
+          mb="md"
+          style={{
+            display: "flex",
+            gap: "4px",
+            flexWrap: "wrap",
+            borderBottom: "none",
+          }}
+        >
+          <Tabs.Tab
+            value="0"
+            style={{
+              textAlign: "center",
+              padding: "4px 10px",
+              backgroundColor: active === 0 ? "#105476" : "transparent",
+              color: active === 0 ? "white" : "#105476",
+              fontWeight: active === 0 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Shipment Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="1"
+            style={{
+              textAlign: "center",
+              padding: "4px 10px",
+              backgroundColor: active === 1 ? "#105476" : "transparent",
+              color: active === 1 ? "white" : "#105476",
+              fontWeight: active === 1 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Party Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="2"
+            style={{
+              textAlign: "center",
+              padding: "4px 10px",
+              backgroundColor: active === 2 ? "#105476" : "transparent",
+              color: active === 2 ? "white" : "#105476",
+              fontWeight: active === 2 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Cargo Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="3"
+            style={{
+              textAlign: "center",
+              padding: "4px 10px",
+              backgroundColor: active === 3 ? "#105476" : "transparent",
+              color: active === 3 ? "white" : "#105476",
+              fontWeight: active === 3 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Charges
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="4"
+            style={{
+              textAlign: "center",
+              padding: "4px 10px",
+              backgroundColor: active === 4 ? "#105476" : "transparent",
+              color: active === 4 ? "white" : "#105476",
+              fontWeight: active === 4 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Accounts
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="0">
           <Group align="center" mb="xs">
             <Text size="lg" fw={600} c="#105476">
               Shipment Details
@@ -1550,7 +1691,7 @@ function HouseCreate() {
                       });
                       console.log(
                         "📝 After setValues, form.values.trade:",
-                        form.values.trade
+                        form.values.trade,
                       );
                     } else if (!hblDestinationCode) {
                       // Clear trade if HBL destination is cleared
@@ -1558,7 +1699,7 @@ function HouseCreate() {
                       form.setFieldValue("trade", "");
                     } else {
                       console.log(
-                        "⚠️ No MAWB destination found, cannot update Trade"
+                        "⚠️ No MAWB destination found, cannot update Trade",
                       );
                     }
                   }}
@@ -1580,12 +1721,12 @@ function HouseCreate() {
                   onChange={(value) => {
                     console.log(
                       "📥 Trade Dropdown onChange triggered with value:",
-                      value
+                      value,
                     );
                     form.setFieldValue("trade", value || "");
                     console.log(
                       "📝 Trade Dropdown after setFieldValue, form.values.trade:",
-                      form.values.trade
+                      form.values.trade,
                     );
                   }}
                   error={form.errors.trade}
@@ -1674,10 +1815,9 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 2: Agent & Customer Details */}
-        <Stepper.Step label="2" description="Party Details">
+        <Tabs.Panel value="1">
           <Box mt="md">
             {/* Shipper Section */}
             <Text size="lg" fw={600} c="#105476" mb="xs">
@@ -1701,7 +1841,7 @@ function HouseCreate() {
                     form.setFieldValue("shipper_code", value || "");
                     form.setFieldValue(
                       "shipper_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options and shipper_state_id
@@ -1723,7 +1863,7 @@ function HouseCreate() {
                         (addr: { id: number; address: string }) => ({
                           value: addr.address,
                           label: addr.address,
-                        })
+                        }),
                       );
 
                       setShipperAddressOptions(addressOptions);
@@ -1735,7 +1875,7 @@ function HouseCreate() {
                       ) {
                         form.setFieldValue(
                           "shipper_address",
-                          addressesData[0].address
+                          addressesData[0].address,
                         );
                       } else {
                         form.setFieldValue("shipper_address", "");
@@ -1743,12 +1883,12 @@ function HouseCreate() {
 
                       // Set shipper_state_id from first address that has state_id
                       const addrWithState = addressesData.find(
-                        (a: { state_id?: number }) => a.state_id != null
+                        (a: { state_id?: number }) => a.state_id != null,
                       );
                       if (addrWithState?.state_id != null) {
                         form.setFieldValue(
                           "shipper_state_id",
-                          String(addrWithState.state_id)
+                          String(addrWithState.state_id),
                         );
                       } else {
                         form.setFieldValue("shipper_state_id", "");
@@ -1825,7 +1965,7 @@ function HouseCreate() {
                     form.setFieldValue("consignee_code", value || "");
                     form.setFieldValue(
                       "consignee_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options
@@ -1846,7 +1986,7 @@ function HouseCreate() {
                         (addr: { id: number; address: string }) => ({
                           value: addr.address,
                           label: addr.address,
-                        })
+                        }),
                       );
 
                       setConsigneeAddressOptions(addressOptions);
@@ -1858,7 +1998,7 @@ function HouseCreate() {
                       ) {
                         form.setFieldValue(
                           "consignee_address",
-                          addressesData[0].address
+                          addressesData[0].address,
                         );
                       } else {
                         form.setFieldValue("consignee_address", "");
@@ -1965,7 +2105,7 @@ function HouseCreate() {
                       ) {
                         form.setFieldValue(
                           "notify_customer1_address",
-                          addressOptions[0].address
+                          addressOptions[0].address,
                         );
                       } else {
                         form.setFieldValue("notify_customer1_address", "");
@@ -2002,7 +2142,7 @@ function HouseCreate() {
                       const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
                         "notify_customer1_address",
-                        formattedValue
+                        formattedValue,
                       );
                     }}
                     error={form.errors.notify_customer1_address}
@@ -2017,7 +2157,7 @@ function HouseCreate() {
                       const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
                         "notify_customer1_address",
-                        formattedValue
+                        formattedValue,
                       );
                     }}
                     error={form.errors.notify_customer1_address}
@@ -2065,7 +2205,7 @@ function HouseCreate() {
                         (addr: { id: number; address: string }) => ({
                           value: addr.address,
                           label: addr.address,
-                        })
+                        }),
                       );
 
                       setOriginAgentAddressOptions(addressOptions);
@@ -2077,7 +2217,7 @@ function HouseCreate() {
                       ) {
                         form.setFieldValue(
                           "origin_agent_address",
-                          addressOptions[0].address
+                          addressOptions[0].address,
                         );
                       } else {
                         form.setFieldValue("origin_agent_address", "");
@@ -2114,7 +2254,7 @@ function HouseCreate() {
                       const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
                         "origin_agent_address",
-                        formattedValue
+                        formattedValue,
                       );
                     }}
                     error={form.errors.origin_agent_address}
@@ -2129,7 +2269,7 @@ function HouseCreate() {
                       const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
                         "origin_agent_address",
-                        formattedValue
+                        formattedValue,
                       );
                     }}
                     error={form.errors.origin_agent_address}
@@ -2138,10 +2278,9 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 3: Cargo Details */}
-        <Stepper.Step label="3" description="Cargo Details">
+        <Tabs.Panel value="2">
           <Box mt="md">
             <Text size="lg" fw={600} c="#105476" mb="md">
               Cargo Details
@@ -2337,7 +2476,7 @@ function HouseCreate() {
                           color="red"
                           onClick={() => {
                             const updated = cargoDetails.filter(
-                              (_, i) => i !== index
+                              (_, i) => i !== index,
                             );
                             setCargoDetails(updated);
                           }}
@@ -2372,14 +2511,41 @@ function HouseCreate() {
               ))}
             </Box>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 4: Charges */}
-        <Stepper.Step label="4" description="Charges">
+        <Tabs.Panel value="3">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
-              Charges
-            </Text>
+            <Group justify="space-between" align="center" mb="md">
+              <Text size="lg" fw={600} c="#105476">
+                Charges
+                {chargesForm.values.charges.length > 1 &&
+                  ` (${chargesForm.values.charges.length})`}
+              </Text>
+              <Button
+                variant="outline"
+                color="#105476"
+                onClick={() => {
+                  navigate("/air/import-job/invoice", {
+                    state: {
+                      hawbDetails: [getCurrentHousingDetail()],
+                      housingDetails: [getCurrentHousingDetail()],
+                      ...(location.state?.job && { job: location.state.job }),
+                      ...(location.state?.mawbDetails && {
+                        mawbDetails: location.state.mawbDetails,
+                      }),
+                      ...(location.state?.carrierDetails && {
+                        carrierDetails: location.state.carrierDetails,
+                      }),
+                      ...(location.state?.routings && {
+                        routings: location.state.routings,
+                      }),
+                    },
+                  });
+                }}
+              >
+                Create Invoice
+              </Button>
+            </Group>
 
             {/* Dynamic Charges Rows */}
             <Box mb="md">
@@ -2436,7 +2602,7 @@ function HouseCreate() {
                       onChange={(e) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.charge_name`,
-                          e.target.value
+                          e.target.value,
                         );
                         // Clear error when field is updated
                         if (chargeErrors[index]?.charge_name) {
@@ -2465,7 +2631,7 @@ function HouseCreate() {
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.pp_cc`,
-                          value || ""
+                          value || "",
                         );
                         // Clear error when field is updated
                         if (chargeErrors[index]?.pp_cc) {
@@ -2501,12 +2667,12 @@ function HouseCreate() {
                         }
                         chargesForm.setFieldValue(
                           `charges.${index}.unit_code`,
-                          value || ""
+                          value || "",
                         );
                         if (noOfUnit !== charge.no_of_unit) {
                           chargesForm.setFieldValue(
                             `charges.${index}.no_of_unit`,
-                            noOfUnit
+                            noOfUnit,
                           );
                         }
                       }}
@@ -2519,7 +2685,7 @@ function HouseCreate() {
                       hideControls
                       {...(() => {
                         const inputProps = chargesForm.getInputProps(
-                          `charges.${index}.no_of_unit`
+                          `charges.${index}.no_of_unit`,
                         );
                         return {
                           value: inputProps.value as number | undefined,
@@ -2527,7 +2693,7 @@ function HouseCreate() {
                             const noOfUnit = value as number | null;
                             chargesForm.setFieldValue(
                               `charges.${index}.no_of_unit`,
-                              noOfUnit
+                              noOfUnit,
                             );
                             // Auto-calculate amount if amount_per_unit is provided
                             const currentCharge =
@@ -2549,7 +2715,7 @@ function HouseCreate() {
                               if (calculatedAmount > 0) {
                                 chargesForm.setFieldValue(
                                   `charges.${index}.amount`,
-                                  calculatedAmount
+                                  calculatedAmount,
                                 );
                               }
                             }
@@ -2568,12 +2734,12 @@ function HouseCreate() {
                         const roe = value ? getRoeValue(value) : null;
                         chargesForm.setFieldValue(
                           `charges.${index}.currency`,
-                          value || ""
+                          value || "",
                         );
                         if (roe !== null) {
                           chargesForm.setFieldValue(
                             `charges.${index}.roe`,
-                            roe
+                            roe,
                           );
                         }
                         // Clear error when field is updated
@@ -2618,7 +2784,7 @@ function HouseCreate() {
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
-                              calculatedAmount
+                              calculatedAmount,
                             );
                           }
                         }
@@ -2647,7 +2813,7 @@ function HouseCreate() {
                         const amountPerUnit = value as number | null;
                         chargesForm.setFieldValue(
                           `charges.${index}.amount_per_unit`,
-                          amountPerUnit
+                          amountPerUnit,
                         );
                         // Auto-calculate amount if amount_per_unit is provided
                         const currentCharge = chargesForm.values.charges[index];
@@ -2668,7 +2834,7 @@ function HouseCreate() {
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
-                              calculatedAmount
+                              calculatedAmount,
                             );
                           }
                         }
@@ -2696,7 +2862,7 @@ function HouseCreate() {
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.amount`,
-                          value as number | null
+                          value as number | null,
                         );
                         // Clear error when field is updated
                         if (chargeErrors[index]?.amount) {
@@ -2760,14 +2926,148 @@ function HouseCreate() {
               ))}
             </Box>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        <Stepper.Completed>
-          <Text size="lg" ta="center" c="dimmed" py="xl">
-            HBL details saved successfully!
-          </Text>
-        </Stepper.Completed>
-      </Stepper>
+        <Tabs.Panel value="4">
+          <Box mt="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
+              Accounts
+            </Text>
+            {invoiceListLoading ? (
+              <Center py="xl">
+                <Loader color="#105476" size="lg" />
+              </Center>
+            ) : (
+              <ScrollArea>
+                <Table
+                  withTableBorder
+                  withColumnBorders
+                  striped
+                  highlightOnHover
+                  style={{ minWidth: 700 }}
+                >
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Daybook
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Invoice number
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Invoice Date
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Invoice Total
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Status
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Actions
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {invoiceList.length === 0 ? (
+                      <Table.Tr>
+                        <Table.Td colSpan={6}>
+                          <Center py="xl">
+                            <Text c="dimmed">No invoices to display</Text>
+                          </Center>
+                        </Table.Td>
+                      </Table.Tr>
+                    ) : (
+                      invoiceList.map((row) => (
+                        <Table.Tr key={row.id}>
+                          <Table.Td style={{ fontSize: "13px" }}>
+                            {row.day_book_name ?? "-"}
+                          </Table.Td>
+                          <Table.Td style={{ fontSize: "13px" }}>
+                            {row.document_no ?? "-"}
+                          </Table.Td>
+                          <Table.Td style={{ fontSize: "13px" }}>
+                            {row.document_date ?? "-"}
+                          </Table.Td>
+                          <Table.Td style={{ fontSize: "13px" }}>
+                            {row.total}
+                          </Table.Td>
+                          <Table.Td style={{ fontSize: "13px" }}>
+                            <Badge
+                              size="sm"
+                              variant="light"
+                              color={
+                                row.status === "unpost"
+                                  ? "gray"
+                                  : row.status === "posted"
+                                    ? "green"
+                                    : "#105476"
+                              }
+                            >
+                              {row.status ?? "-"}
+                            </Badge>
+                          </Table.Td>
+                          <Table.Td style={{ fontSize: "13px" }}>
+                            <Menu shadow="md" width={140} position="bottom-end">
+                              <Menu.Target>
+                                <ActionIcon
+                                  variant="light"
+                                  color="#105476"
+                                  size="sm"
+                                >
+                                  <IconDotsVertical size={14} />
+                                </ActionIcon>
+                              </Menu.Target>
+                              <Menu.Dropdown>
+                                <Menu.Item
+                                  leftSection={<IconEye size={14} />}
+                                  onClick={() =>
+                                    navigate(
+                                      `/air/import-job/invoice/view/${row.id}`,
+                                      {
+                                        state: {
+                                          invoiceData: row,
+                                          ...(location.state?.job && {
+                                            job: location.state.job,
+                                          }),
+                                        },
+                                      },
+                                    )
+                                  }
+                                >
+                                  View
+                                </Menu.Item>
+                                <Menu.Item
+                                  leftSection={<IconEdit size={14} />}
+                                  onClick={() =>
+                                    navigate(
+                                      `/air/import-job/invoice/edit/${row.id}`,
+                                      {
+                                        state: {
+                                          invoiceData: row,
+                                          ...(location.state?.job && {
+                                            job: location.state.job,
+                                          }),
+                                        },
+                                      },
+                                    )
+                                  }
+                                >
+                                  Edit
+                                </Menu.Item>
+                              </Menu.Dropdown>
+                            </Menu>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))
+                    )}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea>
+            )}
+          </Box>
+        </Tabs.Panel>
+      </Tabs>
 
       <Group justify="space-between" mt="xl">
         <Button
@@ -2826,40 +3126,13 @@ function HouseCreate() {
             </Button>
           )}
           {active === 3 && (
-            <>
-              <Button
-                variant="outline"
-                color="#105476"
-                onClick={() => {
-                  // Navigate to invoice page with current form as housing detail (includes shipper_state_id)
-                  navigate("/air/import-job/invoice", {
-                    state: {
-                      hawbDetails: [getCurrentHousingDetail()],
-                      housingDetails: [getCurrentHousingDetail()],
-                      ...(location.state?.job && { job: location.state.job }),
-                      ...(location.state?.mawbDetails && {
-                        mawbDetails: location.state.mawbDetails,
-                      }),
-                      ...(location.state?.carrierDetails && {
-                        carrierDetails: location.state.carrierDetails,
-                      }),
-                      ...(location.state?.routings && {
-                        routings: location.state.routings,
-                      }),
-                    },
-                  });
-                }}
-              >
-                Create Invoice
-              </Button>
-              <Button
-                rightSection={<IconChevronRight size={16} />}
-                color="#105476"
-                onClick={handleNext}
-              >
-                Save HBL
-              </Button>
-            </>
+            <Button
+              rightSection={<IconChevronRight size={16} />}
+              color="#105476"
+              onClick={handleNext}
+            >
+              Save HBL
+            </Button>
           )}
         </Group>
       </Group>

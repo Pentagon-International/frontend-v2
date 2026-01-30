@@ -105,6 +105,7 @@ export const URL = {
   gstRateMasterFilter: "filter/gst-rate-master/",
   gstSacMasterFilter: "filter/gst-sac-master/",
   invoice: "invoice/",
+  invoiceFilter: "filter/invoice/",
 
   // Dashboard APIs
   dashboard: {

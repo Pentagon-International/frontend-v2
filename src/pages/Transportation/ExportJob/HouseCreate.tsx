@@ -3,7 +3,7 @@ import {
   Button,
   Grid,
   Group,
-  Stepper,
+  Tabs,
   Text,
   TextInput,
   Textarea,
@@ -1370,14 +1370,55 @@ function HouseCreate() {
         </Group>
       </Group>
 
-      <Stepper
+      <Tabs
+        value={String(active)}
+        onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        active={active}
-        onStepClick={setActive}
-        orientation="horizontal"
       >
-        {/* Stepper 1: Basic Details */}
-        <Stepper.Step label="1" description="Shipment Details">
+        <Tabs.List mb="md" style={{ gap: 0 }}>
+          <Tabs.Tab
+            value="0"
+            style={{
+              backgroundColor: active === 0 ? "#105476" : "transparent",
+              color: active === 0 ? "white" : "#105476",
+              fontWeight: active === 0 ? 600 : 400,
+            }}
+          >
+            Shipment Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="1"
+            style={{
+              backgroundColor: active === 1 ? "#105476" : "transparent",
+              color: active === 1 ? "white" : "#105476",
+              fontWeight: active === 1 ? 600 : 400,
+            }}
+          >
+            Party Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="2"
+            style={{
+              backgroundColor: active === 2 ? "#105476" : "transparent",
+              color: active === 2 ? "white" : "#105476",
+              fontWeight: active === 2 ? 600 : 400,
+            }}
+          >
+            Cargo Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="3"
+            style={{
+              backgroundColor: active === 3 ? "#105476" : "transparent",
+              color: active === 3 ? "white" : "#105476",
+              fontWeight: active === 3 ? 600 : 400,
+            }}
+          >
+            Charges
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="0">
           <Group align="center" mb="xs">
             <Text size="lg" fw={600} c="#105476">
               Shipment Details
@@ -1623,10 +1664,9 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 2: Agent & Customer Details */}
-        <Stepper.Step label="2" description="Party Details">
+        <Tabs.Panel value="1">
           <Box mt="md">
             {/* Shipper Section */}
             <Text size="lg" fw={600} c="#105476" mb="xs">
@@ -1946,10 +1986,9 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 3: Cargo Details */}
-        <Stepper.Step label="3" description="Cargo Details">
+        <Tabs.Panel value="2">
           <Box mt="md">
             <Text size="lg" fw={600} c="#105476" mb="md">
               Cargo Details{" "}
@@ -2238,10 +2277,9 @@ function HouseCreate() {
               ))}
             </Box>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 4: Charges */}
-        <Stepper.Step label="4" description="Charges">
+        <Tabs.Panel value="3">
           <Box mt="md">
             <Text size="lg" fw={600} c="#105476" mb="md">
               Charges{" "}
@@ -2646,14 +2684,8 @@ function HouseCreate() {
               ))}
             </Box>
           </Box>
-        </Stepper.Step>
-
-        <Stepper.Completed>
-          <Text size="lg" ta="center" c="dimmed" py="xl">
-            HBL details saved successfully!
-          </Text>
-        </Stepper.Completed>
-      </Stepper>
+        </Tabs.Panel>
+      </Tabs>
 
       <Group justify="space-between" mt="xl">
         <Button

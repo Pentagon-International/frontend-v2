@@ -174,6 +174,8 @@ const NavigationRoutes = () => {
             <Route path="view" element={<AirImportJobCreate />} />
             <Route path="house-create" element={<AirHouseCreate />} />
             <Route path="invoice" element={<InvoiceCreate />} />
+            <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/view/:id" element={<InvoiceCreate />} />
           </Route>
         </Route>
         <Route path="/SeaExport">
