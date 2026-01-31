@@ -184,8 +184,10 @@ type ChargeItem = {
   charge_id: number | null; // id from charge master (value when selecting charge)
   charge_name: string; // display label for charge
   unit_code: string;
+  unit_id?: string; // from house / dropdown value when using id
   no_of_unit: number | null;
   currency: string;
+  currency_id?: string; // from house / dropdown value when using id
   billing_currency?: string | null;
   roe: number | null;
   amount_per_unit: number | null;
@@ -279,12 +281,14 @@ function InvoiceCreate() {
   );
 
   // Default branch currency (active branch: is_default === true) for Billing Currency
-  const defaultBranchCurrency =
-    (
-      user?.branches?.find(
-        (b: { is_default?: boolean }) => b.is_default === true,
-      ) as { currency?: { currency_code?: string } } | undefined
-    )?.currency?.currency_code ?? "";
+  const defaultBranch = user?.branches?.find(
+    (b: { is_default?: boolean }) => b.is_default === true,
+  ) as { currency?: { currency_id?: number; currency_code?: string } } | undefined;
+  const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
+  const defaultBranchCurrencyId =
+    defaultBranch?.currency?.currency_id != null
+      ? String(defaultBranch.currency.currency_id)
+      : "";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -425,14 +429,25 @@ function InvoiceCreate() {
     staleTime: Infinity,
   });
 
-  // Format currency options
+  // Format currency options: value = id (for house unit_id/currency_id) or code
   const currencyOptions = useMemo(() => {
     const data = currencyData as any[];
     if (!Array.isArray(data)) return [];
-    return data.map((item: any) => ({
-      value: String(item.code || item.currency_code || ""),
-      label: `${item.code || item.currency_code || ""}`,
-    }));
+    return data.map((item: any) => {
+      const code = item.currency_code ?? item.code ?? "";
+      const id = item.id != null ? String(item.id) : "";
+      return { value: id || code, label: `${code || id}` };
+    });
+  }, [currencyData]);
+
+  // Billing currency options: value = code so form.values.currency (code) matches dropdown
+  const billingCurrencyOptions = useMemo(() => {
+    const data = currencyData as any[];
+    if (!Array.isArray(data)) return [];
+    return data.map((item: any) => {
+      const code = (item.currency_code ?? item.code ?? "").toString().trim();
+      return { value: code, label: code ? code.toUpperCase() : "" };
+    }).filter((o: { value: string }) => o.value !== "");
   }, [currencyData]);
 
   // Format state options
@@ -470,14 +485,18 @@ function InvoiceCreate() {
     }));
   }, [chargeData]);
 
-  // Format unit options
+  // Format unit options: value = id (for house unit_id) or unit_code
   const unitOptions = useMemo(() => {
     const data = unitData as any[];
     if (!Array.isArray(data)) return [];
-    return data.map((item: any) => ({
-      value: String(item.unit_code || item.code || item.id || ""),
-      label: item.unit_name || item.name || "",
-    }));
+    return data.map((item: any) => {
+      const id = item.id != null ? String(item.id) : "";
+      const unitCode = item.unit_code ?? item.code ?? "";
+      return {
+        value: id || unitCode,
+        label: item.unit_name || item.name || unitCode || "",
+      };
+    });
   }, [unitData]);
 
   // Set Billing Currency from user's default branch when user is available and currency is still empty
@@ -517,6 +536,15 @@ function InvoiceCreate() {
       const firstHawb = hawbDetails[0];
 
       if (firstHawb) {
+        // Set billing currency (header) to user's active branch currency when coming from Air House
+        if (defaultBranchCurrency) {
+          form.setFieldValue("currency", defaultBranchCurrency);
+          const roe = getRoeValue(defaultBranchCurrency);
+          if (roe !== null && roe !== undefined) {
+            form.setFieldValue("roe", roe);
+          }
+        }
+
         // Set shipment_id from housing to shipment_no field
         if (firstHawb.shipment_id) {
           form.setFieldValue("shipment_no", String(firstHawb.shipment_id));
@@ -541,39 +569,57 @@ function InvoiceCreate() {
           Array.isArray(firstHawb.charges) &&
           firstHawb.charges.length > 0
         ) {
+          const billingCurrency = defaultBranchCurrency || form.values.currency || "";
+          const headerRoe = billingCurrency ? getRoeValue(billingCurrency) : null;
+
           const mappedCharges = firstHawb.charges.map((charge: any) => {
-            // Handle unit_code from unit_details or direct field (API may return nested object)
-            const unitDetails = charge.unit_details as
-              | { unit_code?: string }
-              | undefined;
-            const unitCode =
-              charge.unit_code ||
-              charge.unit_input ||
-              unitDetails?.unit_code ||
-              "";
+            const unitDetails = charge.unit_details as { unit_code?: string } | undefined;
+            const unitCode = String(
+              charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
+            ).trim();
+            const currencyDetails = charge.currency_details as { currency_code?: string } | undefined;
+            const currency = String(
+              charge.currency ?? currencyDetails?.currency_code ?? "",
+            ).trim();
+            const unit_id = charge.unit_id != null ? String(charge.unit_id) : "";
+            const currency_id = charge.currency_id != null ? String(charge.currency_id) : "";
 
-            // Handle currency from currency_details or direct field (API may return nested object)
-            const currencyDetails = charge.currency_details as
-              | { currency_code?: string }
-              | undefined;
-            const currency =
-              charge.currency || currencyDetails?.currency_code || "";
+            const noOfUnit = charge.no_of_unit != null ? (typeof charge.no_of_unit === "number" ? charge.no_of_unit : parseFloat(charge.no_of_unit)) : null;
+            const amountPerUnit = charge.amount_per_unit != null ? (typeof charge.amount_per_unit === "number" ? charge.amount_per_unit : parseFloat(charge.amount_per_unit)) : null;
+            const roeVal = charge.roe != null ? (typeof charge.roe === "number" ? charge.roe : parseFloat(charge.roe)) : (currency ? getRoeValue(currency) : null);
 
-            const amountInLocal =
-              charge.amount_in_local != null
-                ? typeof charge.amount_in_local === "number"
-                  ? charge.amount_in_local
-                  : parseFloat(charge.amount_in_local)
-                : null;
-            const headerAmt =
-              (charge.amount_in_header ?? charge.header_amount) != null
-                ? typeof (charge.amount_in_header ?? charge.header_amount) ===
-                  "number"
-                  ? (charge.amount_in_header ?? charge.header_amount)
-                  : parseFloat(
-                      String(charge.amount_in_header ?? charge.header_amount),
-                    )
-                : null;
+            let amount: number | null = charge.amount != null ? (typeof charge.amount === "number" ? charge.amount : parseFloat(charge.amount)) : null;
+            let amountInLocal: number | null = charge.amount_in_local != null ? (typeof charge.amount_in_local === "number" ? charge.amount_in_local : parseFloat(charge.amount_in_local)) : null;
+            let headerAmt: number | null = (charge.amount_in_header ?? charge.header_amount) != null ? (typeof (charge.amount_in_header ?? charge.header_amount) === "number" ? (charge.amount_in_header ?? charge.header_amount) : parseFloat(String(charge.amount_in_header ?? charge.header_amount))) : null;
+
+            if (
+              noOfUnit != null && noOfUnit > 0 &&
+              amountPerUnit != null && amountPerUnit > 0 &&
+              roeVal != null && roeVal > 0
+            ) {
+              const calcAmount = clampAmount(noOfUnit * roeVal * amountPerUnit);
+              if (calcAmount != null) amount = calcAmount;
+              if (amount != null && amount > 0 && roeVal > 0) {
+                const calcLocal = clampAmount(amount * roeVal);
+                if (calcLocal != null) amountInLocal = calcLocal;
+              }
+            }
+            // Amount in (billing currency): always compute when we have amount_in_local
+            if (amountInLocal != null && amountInLocal > 0) {
+              const billCurr = billingCurrency || (form.values.currency ?? "").trim();
+              const chargeCurr = currency.trim();
+              if (billCurr && chargeCurr) {
+                if (billCurr.toUpperCase() === chargeCurr.toUpperCase()) {
+                  headerAmt = amountInLocal;
+                } else if (headerRoe != null && headerRoe > 0) {
+                  headerAmt = clampAmount(amountInLocal / headerRoe);
+                } else {
+                  headerAmt = amountInLocal;
+                }
+              } else {
+                headerAmt = amountInLocal;
+              }
+            }
 
             return {
               charge_id:
@@ -581,31 +627,55 @@ function InvoiceCreate() {
                   ? Number(charge.charge_id ?? charge.id)
                   : null,
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
-              unit_code: unitCode ? String(unitCode) : "",
-              no_of_unit: charge.no_of_unit as number | null,
-              currency: currency ? String(currency) : "",
-              roe: charge.roe as number | null,
-              amount_per_unit: charge.amount_per_unit as number | null,
-              amount: charge.amount as number | null,
+              unit_code: unitCode,
+              unit_id,
+              no_of_unit: noOfUnit,
+              currency,
+              currency_id,
+              roe: roeVal,
+              amount_per_unit: amountPerUnit,
+              amount: Number.isFinite(amount) ? amount : null,
               header_amount: Number.isFinite(headerAmt) ? headerAmt : null,
-              amount_in_local: Number.isFinite(amountInLocal)
-                ? amountInLocal
-                : null,
+              amount_in_local: Number.isFinite(amountInLocal) ? amountInLocal : null,
               tax_code: charge.tax_code ? String(charge.tax_code) : "",
               dr_cr: (charge as any).dr_cr === "Dr" ? "Dr" : "Cr",
             };
           });
           form.setFieldValue("charges", mappedCharges);
+
+          // Fetch SAC code for each charge that has charge_id (from house)
+          const jobServiceIdForSac =
+            (location.state as { job?: { service_id?: number } })?.job?.service_id ?? null;
+          if (jobServiceIdForSac && mappedCharges.some((c: ChargeItem) => c.charge_id != null)) {
+            const items = mappedCharges
+              .filter((c: ChargeItem) => c.charge_id != null)
+              .map((c: ChargeItem) => ({ charge_id: c.charge_id!, service_id: jobServiceIdForSac }));
+            fetchGetEffectiveSac(items).then((data) => {
+              data.forEach((item) => {
+                const idx = mappedCharges.findIndex((c: ChargeItem) => c.charge_id === item.charge_id);
+                if (idx >= 0 && item.sac_code != null && item.sac_code !== "") {
+                  form.setFieldValue(`charges.${idx}.tax_code`, item.sac_code);
+                }
+              });
+            });
+          }
         } else {
+          const branchCurrency =
+            defaultBranchCurrency || form.values.currency || "";
+          const branchRoe = branchCurrency
+            ? getRoeValue(branchCurrency)
+            : null;
           form.setFieldValue("charges", [
             {
               charge_id: null,
               charge_name: "",
               unit_code: "",
+              unit_id: "",
               no_of_unit: null,
-              currency: "",
+              currency: branchCurrency,
+              currency_id: defaultBranchCurrencyId || "",
               billing_currency: null,
-              roe: null,
+              roe: branchRoe,
               amount_per_unit: null,
               amount: null,
               header_amount: null,
@@ -1113,18 +1183,20 @@ function InvoiceCreate() {
       };
 
       const chargesPayload = values.charges.map((charge) => {
-        const chargeCurrencyItem = (currencyData as any[])?.find(
-          (c: any) =>
-            (c.code || c.currency_code || "").toString() === charge.currency,
-        );
+        const currencyDataArr = currencyData as { id?: number; code?: string; currency_code?: string }[];
+        const chargeCurrencyItem = charge.currency_id
+          ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
+          : currencyDataArr?.find(
+              (c) => (c.code || c.currency_code || "").toString() === charge.currency,
+            );
         const chargeCurrencyId =
-          chargeCurrencyItem?.id != null
-            ? Number(chargeCurrencyItem.id)
-            : null;
-        const unitItem = (unitData as any[])?.find(
-          (u: any) =>
-            String(u.unit_code || u.code || u.id) === charge.unit_code,
-        );
+          chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
+        const unitDataArr = unitData as { id?: number; unit_code?: string; code?: string }[];
+        const unitItem = charge.unit_id
+          ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
+          : unitDataArr?.find(
+              (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
+            );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
@@ -1299,17 +1371,22 @@ function InvoiceCreate() {
         rate: row.rate ?? 0,
         amount: row.total_amount ?? 0,
       }));
+      const currencyDataArr = currencyData as { id?: number; code?: string; currency_code?: string }[];
+      const unitDataArr = unitData as { id?: number; unit_code?: string; code?: string }[];
       const chargesPayload = values.charges.map((charge) => {
-        const chargeCurrencyItem = (currencyData as { id?: number; code?: string; currency_code?: string }[])?.find(
-          (c) =>
-            (c.code || c.currency_code || "").toString() === charge.currency,
-        );
-        const chargeCurrencyId =
+        const chargeCurrencyItem = charge.currency_id
+          ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
+          : currencyDataArr?.find(
+              (c) => (c.code || c.currency_code || "").toString() === charge.currency,
+            );
+        let chargeCurrencyId =
           chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        const unitItem = (unitData as { id?: number; unit_code?: string; code?: string }[])?.find(
-          (u) =>
-            String(u.unit_code || u.code || u.id) === charge.unit_code,
-        );
+        if (chargeCurrencyId == null && currencyId != null) chargeCurrencyId = currencyId;
+        const unitItem = charge.unit_id
+          ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
+          : unitDataArr?.find(
+              (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
+            );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
@@ -1445,11 +1522,14 @@ function InvoiceCreate() {
                   : c.amount_in_header
                 : null;
             return {
+              id: c.id ?? undefined,
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
               unit_code: c.unit_code ?? "",
+              unit_id: c.unit_id != null ? String(c.unit_id) : undefined,
               no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
               currency: c.currency_code ?? "",
+              currency_id: c.currency_id != null ? String(c.currency_id) : undefined,
               roe: Number.isFinite(roe) ? roe : null,
               amount_per_unit: Number.isFinite(amountPerUnit)
                 ? amountPerUnit
@@ -1768,7 +1848,7 @@ function InvoiceCreate() {
               <Dropdown
                 label="Billing Currency"
                 placeholder="Select currency"
-                data={currencyOptions}
+                data={billingCurrencyOptions}
                 value={form.values.currency}
                 onChange={(value) =>
                   form.setFieldValue("currency", value || "")
@@ -1986,7 +2066,7 @@ function InvoiceCreate() {
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Amount per Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                      Amount in {form.values.currency ? form.values.currency.toUpperCase() : ""}
+                      Amount in {form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}
                     </Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
@@ -2082,14 +2162,17 @@ function InvoiceCreate() {
                           placeholder="Select Unit"
                           searchable
                           data={unitOptions}
-                          value={charge.unit_code || null}
+                          value={charge.unit_id || charge.unit_code || null}
                           disabled={isReadOnly}
-                          onChange={(value) =>
+                          onChange={(value) => {
+                            const v = value ?? "";
+                            form.setFieldValue(`charges.${index}.unit_id`, v);
+                            const opt = unitOptions.find((o) => o.value === v);
                             form.setFieldValue(
                               `charges.${index}.unit_code`,
-                              value ?? "",
-                            )
-                          }
+                              opt ? String(opt.label || opt.value) : v,
+                            );
+                          }}
                           styles={{
                             input: {
                               fontSize: "13px",
@@ -2105,14 +2188,15 @@ function InvoiceCreate() {
                           withAsterisk
                           searchable
                           data={currencyOptions}
-                          value={charge.currency || null}
+                          value={charge.currency_id || charge.currency || null}
                           disabled={isReadOnly}
                           onChange={(value) => {
-                            const roe = value ? getRoeValue(value) : null;
-                            form.setFieldValue(
-                              `charges.${index}.currency`,
-                              value || "",
-                            );
+                            const v = value ?? "";
+                            form.setFieldValue(`charges.${index}.currency_id`, v);
+                            const opt = currencyOptions.find((o) => o.value === v);
+                            const code = opt ? (opt.label ?? opt.value) : v;
+                            form.setFieldValue(`charges.${index}.currency`, code);
+                            const roe = code ? getRoeValue(code) : null;
                             if (roe !== null) {
                               form.setFieldValue(`charges.${index}.roe`, roe);
                             }
@@ -2379,7 +2463,7 @@ function InvoiceCreate() {
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <NumberInput
-                          placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "billing currency"}`}
+                          placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}`}
                           min={0}
                           decimalScale={2}
                           hideControls
@@ -2487,19 +2571,26 @@ function InvoiceCreate() {
                                 variant="light"
                                 color="#105476"
                                 onClick={() => {
-                                  const newChargeCurrency =
-                                    defaultBranchCurrency ||
-                                    form.values.currency ||
-                                    "";
+                                  // New charge currency = local currency (active branch) from store, not billing currency
+                                  const newChargeCurrency = defaultBranchCurrency || "";
                                   const roe = newChargeCurrency
                                     ? getRoeValue(newChargeCurrency)
                                     : null;
+                                  const newChargeCurrencyId =
+                                    defaultBranchCurrencyId ||
+                                    (currencyOptions.find(
+                                      (o) =>
+                                        (o.label || "").toUpperCase() ===
+                                        (newChargeCurrency || "").toUpperCase(),
+                                    )?.value ?? "");
                                   form.insertListItem("charges", {
                                     charge_id: null,
                                     charge_name: "",
                                     unit_code: "",
+                                    unit_id: "",
                                     no_of_unit: null,
                                     currency: newChargeCurrency,
+                                    currency_id: newChargeCurrencyId,
                                     billing_currency: null,
                                     roe,
                                     amount_per_unit: null,

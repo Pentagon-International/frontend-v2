@@ -99,6 +99,7 @@ type RoutingDetail = {
 // ContainerDetail removed for Air Import Jobs
 
 type HAWBDetail = {
+  id?: number;
   shipment_id: string;
   hawb_number: string;
   routed: string;
@@ -132,11 +133,15 @@ type HAWBDetail = {
     haz: string;
   }>;
   charges?: Array<{
+    id?: number;
+    charge_id?: number | null;
     charge_name: string;
     pp_cc: string;
-    unit_code: string;
+    unit_id?: string;
+    unit_code?: string;
     no_of_unit: number | null;
-    currency: string;
+    currency_id?: string;
+    currency?: string;
     roe: number | null;
     amount_per_unit: number | null;
     amount: number | null;
@@ -496,8 +501,16 @@ function AirImportJobCreate() {
           housingDetailsData.length > 0 &&
           !hasHawbDetailsInState
         ) {
+          console.log("[AirImportJobCreate] Mapping housing_details from jobData", {
+            housingCount: housingDetailsData.length,
+            firstHouseKeys: Object.keys((housingDetailsData as Record<string, unknown>[])[0] || {}),
+            firstHouseCargoDetails: ((housingDetailsData as Record<string, unknown>[])[0] as { cargo_details?: unknown })?.cargo_details,
+            firstHouseMawbCharges: ((housingDetailsData as Record<string, unknown>[])[0] as { mawb_charges?: unknown })?.mawb_charges,
+            firstHouseCharges: ((housingDetailsData as Record<string, unknown>[])[0] as { charges?: unknown })?.charges,
+          });
           const mappedHawbDetails = housingDetailsData.map(
             (house: Record<string, unknown>) => ({
+              id: house.id != null ? Number(house.id) : undefined,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hawb_number:
                 house.hawb_number || house.hawb_no || house.hbl_number
@@ -572,15 +585,39 @@ function AirImportJobCreate() {
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
-                      (cargo: Record<string, unknown>) => ({
-                        no_of_packages: cargo.no_of_packages as number | null,
-                        gross_weight: cargo.gross_weight as number | null,
-                        volume: cargo.volume as number | null,
-                        chargeable_weight: cargo.chargeable_weight as
-                          | number
-                          | null,
-                        haz: cargo.haz ? String(cargo.haz) : "",
-                      })
+                      (cargo: Record<string, unknown>) => {
+                        const gross =
+                          cargo.gross_weight != null && !Number.isNaN(Number(cargo.gross_weight))
+                            ? Number(cargo.gross_weight)
+                            : null;
+                        const vol =
+                          cargo.volume != null && !Number.isNaN(Number(cargo.volume))
+                            ? Number(cargo.volume)
+                            : null;
+                        const chargeable =
+                          cargo.chargeable_weight != null && !Number.isNaN(Number(cargo.chargeable_weight))
+                            ? Number(cargo.chargeable_weight)
+                            : null;
+                        const hazVal =
+                          cargo.haz === true || cargo.haz === "true"
+                            ? "Yes"
+                            : cargo.haz === false || cargo.haz === "false"
+                              ? "No"
+                              : cargo.haz
+                                ? String(cargo.haz)
+                                : "";
+                        return {
+                          no_of_packages:
+                            cargo.no_of_packages != null && !Number.isNaN(Number(cargo.no_of_packages))
+                              ? Number(cargo.no_of_packages)
+                              : null,
+                          gross_weight: gross,
+                          volume: vol,
+                          volume_weight: vol,
+                          chargeable_weight: chargeable,
+                          haz: hazVal,
+                        };
+                      }
                     )
                   : [],
               charges: (() => {
@@ -589,31 +626,33 @@ function AirImportJobCreate() {
                   | undefined;
                 if (chargesArray && Array.isArray(chargesArray)) {
                   return chargesArray.map((charge: Record<string, unknown>) => {
-                    // Handle unit_code from unit_details or direct field
-                    const unitDetails = charge.unit_details as
-                      | { unit_code?: string }
-                      | undefined;
-                    const unitCode =
-                      charge.unit_code ||
-                      charge.unit_input ||
-                      unitDetails?.unit_code ||
-                      "";
-
-                    // Handle currency from currency_details or direct field
-                    const currencyDetails = charge.currency_details as
-                      | { currency_code?: string }
-                      | undefined;
-                    const currency =
-                      charge.currency || currencyDetails?.currency_code || "";
-
+                    const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
+                    const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+                    const unitCode = String(
+                      charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
+                    ).trim();
+                    const currency = String(
+                      currencyDetails?.currency_code ?? charge.currency_code ?? "",
+                    ).trim();
+                    const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+                    const unitId =
+                      charge.unit_id != null ? String(charge.unit_id) :
+                      charge.unit != null ? String(charge.unit) :
+                      unitDetails?.unit_id != null ? String(unitDetails.unit_id) : "";
+                    const currencyId =
+                      charge.currency_id != null ? String(charge.currency_id) :
+                      charge.currency != null ? String(charge.currency) :
+                      currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : "";
                     return {
-                      charge_name: charge.charge_name
-                        ? String(charge.charge_name)
-                        : "",
+                      id: charge.id != null ? Number(charge.id) : undefined,
+                      charge_id: chargeId,
+                      charge_name: charge.charge_name ? String(charge.charge_name) : "",
                       pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
-                      unit_code: unitCode ? String(unitCode) : "",
+                      unit_id: unitId,
+                      unit_code: unitCode,
+                      currency_id: currencyId,
+                      currency,
                       no_of_unit: charge.no_of_unit as number | null,
-                      currency: currency ? String(currency) : "",
                       roe: charge.roe as number | null,
                       amount_per_unit: charge.amount_per_unit as number | null,
                       amount: charge.amount as number | null,
@@ -624,6 +663,12 @@ function AirImportJobCreate() {
               })(),
             })
           );
+          console.log("[AirImportJobCreate] Mapped hawbDetails", {
+            count: mappedHawbDetails.length,
+            firstMappedKeys: Object.keys(mappedHawbDetails[0] || {}),
+            firstMappedCargoDetailsLength: (mappedHawbDetails[0] as { cargo_details?: unknown[] })?.cargo_details?.length ?? 0,
+            firstMappedChargesLength: (mappedHawbDetails[0] as { charges?: unknown[] })?.charges?.length ?? 0,
+          });
           setHawbDetails(mappedHawbDetails);
           hawbDetailsLoadedRef.current = true;
         }
@@ -1629,6 +1674,7 @@ function AirImportJobCreate() {
           return routingPayload;
         }),
         housing_details: hawbDetails.map((hawb) => ({
+          ...(hawb.id != null && hawb.id !== undefined && { id: Number(hawb.id) }),
           hawb_no: hawb.hawb_number,
           routed: hawb.routed,
           routed_by: hawb.routed_by || null,
@@ -1653,14 +1699,15 @@ function AirImportJobCreate() {
           cargo_details: hawb.cargo_details || [],
           mawb_charges: hawb.charges
             ? hawb.charges.map((charge) => ({
-                charge_name: charge.charge_name || "",
+                ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),
+                charge_id: charge.charge_id ?? null,
                 pp_cc: charge.pp_cc || "",
-                unit_input: charge.unit_code || "",
-                no_of_unit: charge.no_of_unit || null,
-                currency: charge.currency || "",
-                roe: charge.roe || null,
-                amount_per_unit: charge.amount_per_unit || null,
-                amount: charge.amount || null,
+                unit_id: charge.unit_id ? Number(charge.unit_id) : null,
+                currency_id: charge.currency_id ? Number(charge.currency_id) : null,
+                no_of_unit: charge.no_of_unit ?? null,
+                roe: charge.roe ?? null,
+                amount_per_unit: charge.amount_per_unit ?? null,
+                amount: charge.amount ?? null,
               }))
             : [],
         })),

@@ -88,13 +88,15 @@ type CargoDetail = {
   haz: string;
 };
 
-// Type definitions for charges
+// Type definitions for charges (charge_id, unit_id, currency_id sent in payload; id for update)
 type ChargeDetail = {
+  id?: number | null;
+  charge_id: number | null;
   charge_name: string;
   pp_cc: string;
-  unit_code: string;
+  unit_id: string;
   no_of_unit: number | null;
-  currency: string;
+  currency_id: string;
   roe: number | null;
   amount_per_unit: number | null;
   amount: number | null;
@@ -268,11 +270,12 @@ function HouseCreate() {
     initialValues: {
       charges: [
         {
+          charge_id: null,
           charge_name: "",
           pp_cc: "",
-          unit_code: "",
+          unit_id: "",
           no_of_unit: null,
-          currency: "",
+          currency_id: "",
           roe: null,
           amount_per_unit: null,
           amount: null,
@@ -404,13 +407,43 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargoGrossWeights, cargoVolumeWeights, calculateChargeableWeight]);
 
-  // Track if form has been initialized from editData to prevent overwriting user changes
+  // Track if form has been initialized from editData to prevent overwriting user changes (reset when editData id/index changes)
   const formInitializedFromEditDataRef = useRef(false);
+  const lastEditKeyRef = useRef<string>("");
 
-  // Initialize form values from editData when in edit mode - only once on mount
+  // Initialize form values from editData when in edit mode (re-run when editData/editIndex changes so different house loads)
   useEffect(() => {
-    if (isEditMode && editData && !formInitializedFromEditDataRef.current) {
-      // Set all form values from editData
+    if (!isEditMode || !editData) {
+      console.log("[AirHouseCreate] EDIT LOAD skip: not edit mode or no editData", {
+        isEditMode,
+        hasEditData: !!editData,
+        editIndex,
+      });
+      return;
+    }
+
+    const editKey = `${editIndex}-${(editData as { id?: number })?.id ?? "new"}`;
+    if (lastEditKeyRef.current !== editKey) {
+      formInitializedFromEditDataRef.current = false;
+      lastEditKeyRef.current = editKey;
+      console.log("[AirHouseCreate] EDIT LOAD new house detected, reset init ref", { editKey });
+    }
+
+    console.log("[AirHouseCreate] EDIT LOAD effect run", {
+      editIndex,
+      editDataId: (editData as { id?: number })?.id,
+      editDataKeys: Object.keys(editData),
+      hasCargoDetails: !!editData.cargo_details,
+      cargoDetailsIsArray: Array.isArray(editData.cargo_details),
+      cargoDetailsLength: Array.isArray(editData.cargo_details) ? editData.cargo_details.length : 0,
+      hasCharges: !!editData.charges,
+      hasMawbCharges: !!editData.mawb_charges,
+      chargesLength: Array.isArray(editData.charges) ? editData.charges.length : (Array.isArray((editData as { mawb_charges?: unknown[] }).mawb_charges) ? (editData as { mawb_charges: unknown[] }).mawb_charges.length : 0),
+      formAlreadyInitialized: formInitializedFromEditDataRef.current,
+    });
+
+    if (!formInitializedFromEditDataRef.current) {
+      // Set all form values from editData (main form fields - only once per house)
       form.setValues({
         hawb_number:
           editData.hawb_number || editData.hbl_number || editData.hawb_no || "",
@@ -443,20 +476,29 @@ function HouseCreate() {
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
       });
+    }
 
-      // Load cargo details
-      const cargoDetailsSource = editData.cargo_details;
-      if (!cargoDetailsSource || !Array.isArray(cargoDetailsSource)) {
-        console.log("[AirHouseCreate] Cargo details: NOT SET", {
-          reason: !editData.cargo_details
-            ? "editData.cargo_details is missing"
-            : "editData.cargo_details is not an array",
-          editDataKeys: editData ? Object.keys(editData) : [],
-        });
-      } else {
-        const loadedCargoDetails = cargoDetailsSource.map(
-          (cargo: Record<string, unknown>, idx: number) => {
-            const no_of_packages =
+    // Always load cargo_details and charges when editData has them (run every time so data is set even if init ref was already true)
+    // Load cargo details (support both cargo_details from mapped object and raw API)
+    const cargoDetailsSource =
+      editData.cargo_details ??
+      (editData as { cargo_details?: unknown[] }).cargo_details;
+    if (!cargoDetailsSource || !Array.isArray(cargoDetailsSource)) {
+      console.log("[AirHouseCreate] Cargo details: NOT SET", {
+        reason: !editData.cargo_details
+          ? "editData.cargo_details is missing"
+          : "editData.cargo_details is not an array",
+        editDataKeys: editData ? Object.keys(editData) : [],
+        rawCargoDetails: (editData as Record<string, unknown>).cargo_details,
+      });
+    } else {
+      console.log("[AirHouseCreate] Cargo details: loading", {
+        count: cargoDetailsSource.length,
+        firstItem: cargoDetailsSource[0],
+      });
+      const loadedCargoDetails = cargoDetailsSource.map(
+        (cargo: Record<string, unknown>, idx: number) => {
+          const no_of_packages =
               cargo.no_of_packages != null &&
               !Number.isNaN(Number(cargo.no_of_packages))
                 ? Number(cargo.no_of_packages)
@@ -481,7 +523,14 @@ function HouseCreate() {
               !Number.isNaN(Number(cargo.chargeable_weight))
                 ? Number(cargo.chargeable_weight)
                 : null;
-            const haz = cargo.haz ? String(cargo.haz) : "";
+            const haz =
+              cargo.haz === true || cargo.haz === "true"
+                ? "Yes"
+                : cargo.haz === false || cargo.haz === "false"
+                  ? "No"
+                  : cargo.haz
+                    ? String(cargo.haz)
+                    : "";
             const row = {
               no_of_packages,
               gross_weight,
@@ -503,70 +552,67 @@ function HouseCreate() {
                 { raw: cargo, mapped: row },
               );
             }
-            return row;
-          },
-        );
-        const allCargoNotSet = loadedCargoDetails.flatMap((row, idx) => {
-          const notSet: string[] = [];
-          if (row.no_of_packages == null) notSet.push("no_of_packages");
-          if (row.gross_weight == null) notSet.push("gross_weight");
-          if (row.volume_weight == null) notSet.push("volume_weight");
-          if (row.chargeable_weight == null) notSet.push("chargeable_weight");
-          if (row.haz === "") notSet.push("haz");
-          return notSet.length ? [{ index: idx, fields: notSet }] : [];
-        });
-        console.log("[AirHouseCreate] Cargo details loaded", {
+          return row;
+        },
+      );
+      const allCargoNotSet = loadedCargoDetails.flatMap((row, idx) => {
+        const notSet: string[] = [];
+        if (row.no_of_packages == null) notSet.push("no_of_packages");
+        if (row.gross_weight == null) notSet.push("gross_weight");
+        if (row.volume_weight == null) notSet.push("volume_weight");
+        if (row.chargeable_weight == null) notSet.push("chargeable_weight");
+        if (row.haz === "") notSet.push("haz");
+        return notSet.length ? [{ index: idx, fields: notSet }] : [];
+      });
+      console.log("[AirHouseCreate] Cargo details loaded", {
+        count: loadedCargoDetails.length,
+        rowsWithMissingFields: allCargoNotSet,
+        loadedCargoDetails,
+      });
+      if (loadedCargoDetails.length > 0) {
+        setCargoDetails(loadedCargoDetails);
+        console.log("[AirHouseCreate] Cargo details: setCargoDetails called", {
           count: loadedCargoDetails.length,
-          rowsWithMissingFields: allCargoNotSet,
-          loadedCargoDetails,
         });
-        if (loadedCargoDetails.length > 0) {
-          setCargoDetails(loadedCargoDetails);
-        }
       }
+    }
 
-      // Load charges - handle both direct fields and nested structures from API
-      const chargesToLoad = editData.charges || editData.mawb_charges;
-      if (!chargesToLoad || !Array.isArray(chargesToLoad)) {
-        console.log("[AirHouseCreate] Charges: NOT SET", {
-          reason: !editData.charges && !editData.mawb_charges
-            ? "editData.charges and editData.mawb_charges are both missing"
-            : "charges source is not an array",
-          hasCharges: !!editData.charges,
-          hasMawbCharges: !!editData.mawb_charges,
-          editDataKeys: editData ? Object.keys(editData) : [],
-        });
-      } else {
-        console.log("[AirHouseCreate] Edit mode: loading charges", {
-          source: editData.charges ? "charges" : "mawb_charges",
-          count: chargesToLoad.length,
-          rawCharges: chargesToLoad,
-        });
-        const loadedCharges = chargesToLoad.map(
-          (charge: Record<string, unknown>, idx: number) => {
-            // Handle unit_code: API may send "unit" (e.g. "SHPT") or unit_details.unit_code
-            const unitDetails = charge.unit_details as
-              | { unit_code?: string }
-              | undefined;
-            const unitCode =
-              charge.unit ||
-              charge.unit_code ||
-              charge.unit_input ||
-              unitDetails?.unit_code ||
-              "";
+    // Load charges - handle both "charges" (mapped) and "mawb_charges" (raw API)
+    const chargesToLoad =
+      (editData.charges && Array.isArray(editData.charges) ? editData.charges : null) ||
+      (editData as { mawb_charges?: unknown[] }).mawb_charges ||
+      [];
+    const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
+    if (chargesArray.length === 0) {
+      console.log("[AirHouseCreate] Charges: NOT SET (empty or missing)", {
+          hasCharges: !!(editData as { charges?: unknown }).charges,
+          chargesLength: Array.isArray((editData as { charges?: unknown[] }).charges) ? (editData as { charges: unknown[] }).charges.length : 0,
+          hasMawbCharges: !!(editData as { mawb_charges?: unknown }).mawb_charges,
+          mawbChargesLength: Array.isArray((editData as { mawb_charges?: unknown[] }).mawb_charges) ? (editData as { mawb_charges: unknown[] }).mawb_charges.length : 0,
+        editDataKeys: editData ? Object.keys(editData) : [],
+      });
+    } else {
+      console.log("[AirHouseCreate] Charges: loading", {
+        source: (editData as { charges?: unknown[] }).charges && Array.isArray((editData as { charges: unknown[] }).charges) ? "charges" : "mawb_charges",
+        count: chargesArray.length,
+        firstCharge: chargesArray[0],
+      });
+      const unitDataArr: { id?: number; unit_code?: string }[] = [];
+      const currencyDataArr: { id?: number; code?: string; currency_code?: string }[] = [];
+      const loadedCharges = chargesArray.map(
+          (charge: Record<string, unknown>) => {
+            const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
+            const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+            const unitCode = String(
+              charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
+            ).trim();
+            const currencyCode = String(
+              currencyDetails?.currency_code ?? charge.currency_code ?? "",
+            ).trim();
 
-            // Handle currency from currency_details or direct field
-            const currencyDetails = charge.currency_details as
-              | { currency_code?: string }
-              | undefined;
-            const currency =
-              charge.currency || currencyDetails?.currency_code || "";
-
-            // Normalize pp_cc to uppercase so "PP"/"CC" match dropdown options
             const ppCcRaw = charge.pp_cc ? String(charge.pp_cc) : "";
             const pp_cc = ppCcRaw ? ppCcRaw.toUpperCase() : "";
 
-            // Normalize numeric fields (API may return strings e.g. "1.0000", "33.00")
             const toNum = (v: unknown): number | null => {
               if (v == null) return null;
               if (typeof v === "number" && !Number.isNaN(v)) return v;
@@ -574,120 +620,64 @@ function HouseCreate() {
               return Number.isNaN(n) ? null : n;
             };
 
-            const mapped = {
+            const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+            // API may return unit (number) and currency (number); or unit_id/currency_id; or unit_details.unit_id / currency_details.currency_id
+            const unitIdFromApi =
+              charge.unit_id != null ? String(charge.unit_id) :
+              charge.unit != null ? String(charge.unit) :
+              unitDetails?.unit_id != null ? String(unitDetails.unit_id) : null;
+            const currencyIdFromApi =
+              charge.currency_id != null ? String(charge.currency_id) :
+              charge.currency != null ? String(charge.currency) :
+              currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : null;
+            const unitByCode = unitCode ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode) : null;
+            const currByCode = currencyCode ? currencyDataArr.find((c) => (c.currency_code ?? c.code ?? "") === currencyCode) : null;
+            const unit_id = unitIdFromApi ?? (unitByCode?.id != null ? String(unitByCode.id) : "");
+            const currency_id = currencyIdFromApi ?? (currByCode?.id != null ? String(currByCode.id) : "");
+
+            return {
+              id: charge.id != null ? Number(charge.id) : undefined,
+              charge_id: chargeId,
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
               pp_cc,
-              unit_code: unitCode ? String(unitCode) : "",
+              unit_id,
               no_of_unit: toNum(charge.no_of_unit),
-              currency: currency ? String(currency) : "",
+              currency_id,
               roe: toNum(charge.roe),
               amount_per_unit: toNum(charge.amount_per_unit),
               amount: toNum(charge.amount),
-            };
-
-            // Track which charge fields are NOT SET (empty or null)
-            const chargeNotSet: string[] = [];
-            if (!mapped.charge_name?.trim()) chargeNotSet.push("charge_name");
-            if (!mapped.pp_cc?.trim()) chargeNotSet.push("pp_cc");
-            if (!mapped.unit_code?.trim()) chargeNotSet.push("unit_code");
-            if (mapped.no_of_unit == null) chargeNotSet.push("no_of_unit");
-            if (!mapped.currency?.trim()) chargeNotSet.push("currency");
-            if (mapped.roe == null) chargeNotSet.push("roe");
-            if (mapped.amount_per_unit == null)
-              chargeNotSet.push("amount_per_unit");
-            if (mapped.amount == null) chargeNotSet.push("amount");
-            if (chargeNotSet.length > 0) {
-              console.log(
-                `[AirHouseCreate] Charge[${idx}] fields NOT SET:`,
-                chargeNotSet,
-                {
-                  raw: {
-                    charge_name: charge.charge_name,
-                    pp_cc: charge.pp_cc,
-                    unit: charge.unit,
-                    unit_code: charge.unit_code,
-                    unit_details: unitDetails,
-                    currency: charge.currency,
-                    currency_details: currencyDetails,
-                    no_of_unit: charge.no_of_unit,
-                    roe: charge.roe,
-                    amount_per_unit: charge.amount_per_unit,
-                    amount: charge.amount,
-                  },
-                  mapped,
-                },
-              );
-            }
-            console.log(
-              `[AirHouseCreate] Charge[${idx}] mapped: raw pp_cc=${charge.pp_cc}, unit=${charge.unit || unitDetails?.unit_code}, currency=${charge.currency || currencyDetails?.currency_code} -> pp_cc=${mapped.pp_cc}, unit_code=${mapped.unit_code}, currency=${mapped.currency}`,
-            );
-            return mapped;
-          },
-        );
-        const allChargeNotSet = loadedCharges.map((row, idx) => {
-          const notSet: string[] = [];
-          if (!row.charge_name?.trim()) notSet.push("charge_name");
-          if (!row.pp_cc?.trim()) notSet.push("pp_cc");
-          if (!row.unit_code?.trim()) notSet.push("unit_code");
-          if (row.no_of_unit == null) notSet.push("no_of_unit");
-          if (!row.currency?.trim()) notSet.push("currency");
-          if (row.roe == null) notSet.push("roe");
-          if (row.amount_per_unit == null) notSet.push("amount_per_unit");
-          if (row.amount == null) notSet.push("amount");
-          return { index: idx, fields: notSet };
-        }).filter((x) => x.fields.length > 0);
-        console.log("[AirHouseCreate] Charges loaded", {
+          };
+        },
+      );
+      const allChargeNotSet = loadedCharges.map((row, idx) => {
+        const notSet: string[] = [];
+        if (!row.charge_name?.trim()) notSet.push("charge_name");
+        if (!row.pp_cc?.trim()) notSet.push("pp_cc");
+        if (!row.unit_id?.trim()) notSet.push("unit_id");
+        if (row.no_of_unit == null) notSet.push("no_of_unit");
+        if (!row.currency_id?.trim()) notSet.push("currency_id");
+        if (row.roe == null) notSet.push("roe");
+        if (row.amount_per_unit == null) notSet.push("amount_per_unit");
+        if (row.amount == null) notSet.push("amount");
+        return { index: idx, fields: notSet };
+      }).filter((x) => x.fields.length > 0);
+      console.log("[AirHouseCreate] Charges loaded", {
+        count: loadedCharges.length,
+        rowsWithMissingFields: allChargeNotSet,
+        loadedCharges,
+      });
+      if (loadedCharges.length > 0) {
+        chargesForm.setValues({ charges: loadedCharges });
+        console.log("[AirHouseCreate] Charges: setValues called", {
           count: loadedCharges.length,
-          rowsWithMissingFields: allChargeNotSet,
-          loadedCharges,
+          firstCharge: loadedCharges[0],
         });
-        if (loadedCharges.length > 0) {
-          chargesForm.setValues({ charges: loadedCharges });
-          console.log("[AirHouseCreate] Edit mode: charges set on form", {
-            loadedCharges,
-          });
-        }
       }
-
-      formInitializedFromEditDataRef.current = true;
     }
+
+    formInitializedFromEditDataRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditMode, editData]);
-
-  // Auto-set ROE when currency changes (but don't auto-calculate amount)
-  const chargeCurrencies = chargesForm.values.charges
-    .map((c) => c.currency)
-    .join(",");
-
-  useEffect(() => {
-    const updatedCharges = chargesForm.values.charges.map((charge) => {
-      // Auto-set ROE if currency is selected but ROE is not set
-      let roe = charge.roe;
-      if (charge.currency && !roe) {
-        roe = getRoeValue(charge.currency);
-      }
-
-      // Only update ROE, don't touch amount
-      if (roe !== charge.roe) {
-        return {
-          ...charge,
-          roe: roe || null,
-        };
-      }
-
-      return charge;
-    });
-
-    // Only update if there are actual changes to ROE
-    const hasChanges = updatedCharges.some(
-      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe,
-    );
-
-    if (hasChanges) {
-      chargesForm.setValues({ charges: updatedCharges });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCurrencies, getRoeValue]);
+  }, [isEditMode, editData, editIndex]);
 
   // Auto-calculate amount when amount_per_unit, no_of_unit, or roe changes
   // Only calculate if amount_per_unit is provided
@@ -785,57 +775,116 @@ function HouseCreate() {
     refetchOnWindowFocus: false,
   });
 
-  // Format currency data - support both code and currency_code (API may return either)
+  // Format currency data: value = id, label = currency_code (for payload we send currency_id)
   const currencyOptions = useMemo(() => {
     if (!Array.isArray(currencyData)) return [];
-    const base = currencyData.map(
-      (item: { code?: string; currency_code?: string }) => {
-        const code = item.currency_code ?? item.code ?? "";
-        return { value: String(code), label: code || "" };
-      },
-    );
-    // In edit mode, ensure loaded charge currencies are in options so dropdowns display
-    if (isEditMode && chargesForm.values.charges.length > 0) {
-      const fromCharges = new Set(
-        chargesForm.values.charges
-          .map((c) => c.currency?.trim())
-          .filter(Boolean),
-      );
-      const existingValues = new Set(base.map((o) => o.value));
-      fromCharges.forEach((code) => {
-        if (code && !existingValues.has(code)) {
-          base.push({ value: code, label: code });
-          existingValues.add(code);
-        }
-      });
-    }
-    return base;
-  }, [currencyData, isEditMode, chargesForm.values.charges]);
+    const data = currencyData as { id?: number; code?: string; currency_code?: string }[];
+    return data.map((item) => {
+      const code = item.currency_code ?? item.code ?? "";
+      const id = item.id != null ? String(item.id) : "";
+      return { value: id || code, label: code || id || "" };
+    });
+  }, [currencyData]);
 
-  // Format unit data; in edit mode include charge unit_codes so dropdowns display
+  // Format unit data: value = id, label = unit_name or unit_code (for payload we send unit_id)
   const unitOptions = useMemo(() => {
     if (!Array.isArray(unitDataRaw)) return [];
-    const base = unitDataRaw.map((item: unknown) => {
-      const unitItem = item as { unit_code?: string };
+    const data = unitDataRaw as { id?: number; unit_code?: string; unit_name?: string; name?: string }[];
+    return data.map((item) => {
+      const label = item.unit_name ?? item.name ?? item.unit_code ?? "";
+      const id = item.id != null ? String(item.id) : "";
+      return { value: id || String(item.unit_code ?? ""), label: label || String(item.unit_code ?? "") };
+    });
+  }, [unitDataRaw]);
+
+  // Auto-set ROE when currency_id changes (resolve code from currencyData, then getRoeValue)
+  const chargeCurrencyIds = chargesForm.values.charges
+    .map((c) => c.currency_id)
+    .join(",");
+  useEffect(() => {
+    const currencyArr = (currencyData ?? []) as { id?: number; code?: string; currency_code?: string }[];
+    const updatedCharges = chargesForm.values.charges.map((charge) => {
+      let roe = charge.roe;
+      if (charge.currency_id && !roe) {
+        const curr = currencyArr.find((c) => String(c.id) === charge.currency_id);
+        const code = curr?.currency_code ?? curr?.code ?? "";
+        if (code) roe = getRoeValue(code);
+      }
+      if (roe !== charge.roe) {
+        return { ...charge, roe: roe || null };
+      }
+      return charge;
+    });
+    const hasChanges = updatedCharges.some(
+      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe,
+    );
+    if (hasChanges) chargesForm.setValues({ charges: updatedCharges });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeCurrencyIds, getRoeValue, currencyData]);
+
+  // When in edit mode and unit/currency masters load, resolve charge unit_id/currency_id from unit_code/currency
+  const chargesIdsResolvedRef = useRef(false);
+  useEffect(() => {
+    const unitArr = Array.isArray(unitDataRaw) ? unitDataRaw : [];
+    const currArr = Array.isArray(currencyData) ? currencyData : [];
+    if (
+      !isEditMode ||
+      !editData ||
+      unitArr.length === 0 ||
+      currArr.length === 0 ||
+      chargesIdsResolvedRef.current
+    ) {
+      return;
+    }
+    const chargesToLoad = editData.charges || editData.mawb_charges;
+    if (!chargesToLoad || !Array.isArray(chargesToLoad)) return;
+    const unitDataArr = unitArr as { id?: number; unit_code?: string }[];
+    const currencyDataArr = currArr as { id?: number; code?: string; currency_code?: string }[];
+    const loadedCharges = chargesToLoad.map((charge: Record<string, unknown>) => {
+      const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
+      const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+      const unitCode = String(charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "").trim();
+      const currencyCode = String(currencyDetails?.currency_code ?? charge.currency_code ?? "").trim();
+      const ppCcRaw = charge.pp_cc ? String(charge.pp_cc) : "";
+      const pp_cc = ppCcRaw ? ppCcRaw.toUpperCase() : "";
+      const toNum = (v: unknown): number | null => {
+        if (v == null) return null;
+        if (typeof v === "number" && !Number.isNaN(v)) return v;
+        const n = parseFloat(String(v));
+        return Number.isNaN(n) ? null : n;
+      };
+      const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+      const unitIdFromApi =
+        charge.unit_id != null ? String(charge.unit_id) :
+        charge.unit != null ? String(charge.unit) :
+        unitDetails?.unit_id != null ? String(unitDetails.unit_id) : null;
+      const currencyIdFromApi =
+        charge.currency_id != null ? String(charge.currency_id) :
+        charge.currency != null ? String(charge.currency) :
+        currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : null;
+      const unitByCode = unitCode ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode) : null;
+      const currByCode = currencyCode ? currencyDataArr.find((c) => (c.currency_code ?? c.code ?? "") === currencyCode) : null;
+      const unit_id = unitIdFromApi ?? (unitByCode?.id != null ? String(unitByCode.id) : "");
+      const currency_id = currencyIdFromApi ?? (currByCode?.id != null ? String(currByCode.id) : "");
       return {
-        value: String(unitItem.unit_code || ""),
-        label: unitItem.unit_code || "",
+        id: charge.id != null ? Number(charge.id) : undefined,
+        charge_id: chargeId,
+        charge_name: charge.charge_name ? String(charge.charge_name) : "",
+        pp_cc,
+        unit_id,
+        no_of_unit: toNum(charge.no_of_unit),
+        currency_id,
+        roe: toNum(charge.roe),
+        amount_per_unit: toNum(charge.amount_per_unit),
+        amount: toNum(charge.amount),
       };
     });
-    // console.log("unitOptions---",unitOptions);
-    
-    const existingValues = new Set(base.map((o) => o.value));
-    if (isEditMode && chargesForm.values.charges.length > 0) {
-      chargesForm.values.charges.forEach((c) => {
-        const code = c.unit_code?.trim();
-        if (code && !existingValues.has(code)) {
-          base.push({ value: code, label: code });
-          existingValues.add(code);
-        }
-      });
+    if (loadedCharges.length > 0) {
+      chargesForm.setValues({ charges: loadedCharges });
+      chargesIdsResolvedRef.current = true;
     }
-    return base;
-  }, [unitDataRaw, isEditMode, chargesForm.values.charges]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, editData, unitDataRaw, currencyData]);
 
   // Note: Container numbers removed for Air HAWB - no containerNumberOptions needed
 
@@ -1189,8 +1238,8 @@ function HouseCreate() {
     chargesForm.values.charges.forEach((charge, index) => {
       const chargeError: Record<string, string> = {};
 
-      // Mandatory fields: charge_name, pp_cc, currency, roe, amount
-      if (!charge.charge_name || charge.charge_name.trim() === "") {
+      // Mandatory fields: charge_name (or charge_id), pp_cc, currency_id, roe, amount
+      if ((!charge.charge_name || charge.charge_name.trim() === "") && (charge.charge_id == null || charge.charge_id === 0)) {
         chargeError.charge_name = "Charge Name is required";
         hasErrors = true;
       }
@@ -1198,8 +1247,8 @@ function HouseCreate() {
         chargeError.pp_cc = "PP/CC is required";
         hasErrors = true;
       }
-      if (!charge.currency || charge.currency.trim() === "") {
-        chargeError.currency = "Currency is required";
+      if (!charge.currency_id || charge.currency_id.trim() === "") {
+        chargeError.currency_id = "Currency is required";
         hasErrors = true;
       }
       if (charge.roe === null || charge.roe === undefined) {
@@ -1325,8 +1374,10 @@ function HouseCreate() {
       allValues: currentFormValues,
     });
 
-    // Prepare housing detail object - use current form values
+    // Prepare housing detail object - use current form values (include id when editing for update payload)
+    const houseId = isEditMode && ((editData as { id?: number })?.id ?? (existingHousingDetails[editIndex as number] as { id?: number } | undefined)?.id);
     const housingDetail = {
+      ...(houseId != null && { id: Number(houseId) }),
       hawb_number: currentFormValues.hawb_number,
       routed: currentFormValues.routed,
       routed_by: currentFormValues.routed_by,
@@ -1449,16 +1500,17 @@ function HouseCreate() {
           haz: cargo.haz === "Yes",
         })),
         mawb_charges: chargesForm.values.charges
-          .filter((charge) => charge.charge_name)
+          .filter((charge) => charge.charge_name || charge.charge_id != null)
           .map((charge) => ({
-            charge_name: charge.charge_name,
-            pp_cc: charge.pp_cc,
-            unit: charge.unit_code,
-            currency: charge.currency,
-            no_of_unit: charge.no_of_unit,
-            roe: charge.roe,
-            amount_per_unit: charge.amount_per_unit,
-            amount: charge.amount,
+            ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),
+            charge_id: charge.charge_id ?? null,
+            pp_cc: charge.pp_cc || "",
+            unit_id: charge.unit_id ? Number(charge.unit_id) : null,
+            currency_id: charge.currency_id ? Number(charge.currency_id) : null,
+            no_of_unit: charge.no_of_unit ?? null,
+            roe: charge.roe ?? null,
+            amount_per_unit: charge.amount_per_unit ?? null,
+            amount: charge.amount ?? null,
           })),
       };
 
@@ -1668,7 +1720,7 @@ function HouseCreate() {
           mb="md"
           style={{
             display: "flex",
-            gap: "4px",
+            gap: "12px",
             flexWrap: "wrap",
             borderBottom: "none",
           }}
@@ -1677,7 +1729,7 @@ function HouseCreate() {
             value="0"
             style={{
               textAlign: "center",
-              padding: "4px 10px",
+              padding: "6px 14px",
               backgroundColor: active === 0 ? "#105476" : "transparent",
               color: active === 0 ? "white" : "#105476",
               fontWeight: active === 0 ? 600 : 400,
@@ -1691,7 +1743,7 @@ function HouseCreate() {
             value="1"
             style={{
               textAlign: "center",
-              padding: "4px 10px",
+              padding: "6px 14px",
               backgroundColor: active === 1 ? "#105476" : "transparent",
               color: active === 1 ? "white" : "#105476",
               fontWeight: active === 1 ? 600 : 400,
@@ -1705,7 +1757,7 @@ function HouseCreate() {
             value="2"
             style={{
               textAlign: "center",
-              padding: "4px 10px",
+              padding: "6px 14px",
               backgroundColor: active === 2 ? "#105476" : "transparent",
               color: active === 2 ? "white" : "#105476",
               fontWeight: active === 2 ? 600 : 400,
@@ -1719,7 +1771,7 @@ function HouseCreate() {
             value="3"
             style={{
               textAlign: "center",
-              padding: "4px 10px",
+              padding: "6px 14px",
               backgroundColor: active === 3 ? "#105476" : "transparent",
               color: active === 3 ? "white" : "#105476",
               fontWeight: active === 3 ? 600 : 400,
@@ -1733,7 +1785,7 @@ function HouseCreate() {
             value="4"
             style={{
               textAlign: "center",
-              padding: "4px 10px",
+              padding: "6px 14px",
               backgroundColor: active === 4 ? "#105476" : "transparent",
               color: active === 4 ? "white" : "#105476",
               fontWeight: active === 4 ? 600 : 400,
@@ -2768,27 +2820,34 @@ function HouseCreate() {
               {chargesForm.values.charges.map((charge, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
                   <Grid.Col span={1.75}>
-                    <TextInput
-                      placeholder="Charge Name"
-                      value={charge.charge_name}
-                      onChange={(e) => {
-                        chargesForm.setFieldValue(
-                          `charges.${index}.charge_name`,
-                          e.target.value,
-                        );
-                        // Clear error when field is updated
+                    <SearchableSelect
+                      placeholder="Type charge name"
+                      apiEndpoint={URL.chargeMaster}
+                      searchFields={["charge_name", "charge_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.id ?? ""),
+                        label: String(item.charge_name ?? ""),
+                      })}
+                      value={charge.charge_id != null ? String(charge.charge_id) : null}
+                      displayValue={charge.charge_name || undefined}
+                      onChange={(value, selectedData) => {
+                        const chargeId = value ? Number(value) : null;
+                        const chargeName = selectedData?.label ?? "";
+                        chargesForm.setFieldValue(`charges.${index}.charge_id`, chargeId);
+                        chargesForm.setFieldValue(`charges.${index}.charge_name`, chargeName);
                         if (chargeErrors[index]?.charge_name) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
                             delete newErrors[index].charge_name;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
+                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
                       }}
                       error={chargeErrors[index]?.charge_name}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.25}>
@@ -2825,27 +2884,22 @@ function HouseCreate() {
                       placeholder="Select Unit"
                       searchable
                       data={unitOptions}
-                      value={charge.unit_code || null}
+                      value={charge.unit_id || null}
                       onChange={(value) => {
-                        const unitUpper = (value || "").toUpperCase();
-                        // Auto-set no_of_unit to 1 for specific units
+                        const unitId = value ?? "";
+                        const selectedUnit = unitOptions.find((o) => o.value === unitId);
+                        const labelUpper = (selectedUnit?.label ?? "").toUpperCase();
                         let noOfUnit = charge.no_of_unit;
                         if (
-                          unitUpper === "SHIPMENT" ||
-                          unitUpper === "SHPT" ||
-                          unitUpper === "DOC"
+                          labelUpper === "SHIPMENT" ||
+                          labelUpper === "SHPT" ||
+                          labelUpper === "DOC"
                         ) {
                           noOfUnit = 1;
                         }
-                        chargesForm.setFieldValue(
-                          `charges.${index}.unit_code`,
-                          value || "",
-                        );
+                        chargesForm.setFieldValue(`charges.${index}.unit_id`, unitId);
                         if (noOfUnit !== charge.no_of_unit) {
-                          chargesForm.setFieldValue(
-                            `charges.${index}.no_of_unit`,
-                            noOfUnit,
-                          );
+                          chargesForm.setFieldValue(`charges.${index}.no_of_unit`, noOfUnit);
                         }
                       }}
                     />
@@ -2901,32 +2955,25 @@ function HouseCreate() {
                       placeholder="Select Currency"
                       searchable
                       data={currencyOptions}
-                      value={charge.currency || null}
+                      value={charge.currency_id || null}
                       onChange={(value) => {
-                        const roe = value ? getRoeValue(value) : null;
-                        chargesForm.setFieldValue(
-                          `charges.${index}.currency`,
-                          value || "",
-                        );
+                        const currencyId = value ?? "";
+                        const code = currencyOptions.find((o) => o.value === currencyId)?.label ?? "";
+                        const roe = code ? getRoeValue(code) : null;
+                        chargesForm.setFieldValue(`charges.${index}.currency_id`, currencyId);
                         if (roe !== null) {
-                          chargesForm.setFieldValue(
-                            `charges.${index}.roe`,
-                            roe,
-                          );
+                          chargesForm.setFieldValue(`charges.${index}.roe`, roe);
                         }
-                        // Clear error when field is updated
-                        if (chargeErrors[index]?.currency) {
+                        if (chargeErrors[index]?.currency_id) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
-                            delete newErrors[index].currency;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
+                            delete newErrors[index].currency_id;
+                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
                       }}
-                      error={chargeErrors[index]?.currency}
+                      error={chargeErrors[index]?.currency_id}
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
@@ -3067,11 +3114,12 @@ function HouseCreate() {
                         color="#105476"
                         onClick={() => {
                           chargesForm.insertListItem("charges", {
+                            charge_id: null,
                             charge_name: "",
-                            pp_cc: "CC", // Default to "CC" (Collect)
-                            unit_code: "",
+                            pp_cc: "CC",
+                            unit_id: "",
                             no_of_unit: null,
-                            currency: "",
+                            currency_id: "",
                             roe: null,
                             amount_per_unit: null,
                             amount: null,
