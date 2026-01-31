@@ -3156,14 +3156,8 @@ function HouseCreate() {
                           statusUpper === "POSTED" || row.status === "posted";
                         const isUnposted =
                           statusUpper === "UNPOSTED" || row.status === "unpost";
-                        const rowBg =
-                          isPosted
-                            ? "var(--mantine-color-green-0)"
-                            : isUnposted
-                              ? "var(--mantine-color-yellow-0)"
-                              : undefined;
                         return (
-                          <Table.Tr key={row.id} style={{ backgroundColor: rowBg }}>
+                          <Table.Tr key={row.id}>
                             <Table.Td style={{ fontSize: "13px" }}>
                               {row.day_book_name ?? "-"}
                             </Table.Td>
@@ -3192,7 +3186,7 @@ function HouseCreate() {
                               </Badge>
                             </Table.Td>
                             <Table.Td style={{ fontSize: "13px" }}>
-                              <Menu shadow="md" width={180} position="bottom-end">
+                              <Menu shadow="md" width={200} position="bottom-end">
                                 <Menu.Target>
                                   <ActionIcon
                                     variant="light"
@@ -3204,7 +3198,12 @@ function HouseCreate() {
                                 </Menu.Target>
                                 <Menu.Dropdown>
                                   <Menu.Item
-                                    leftSection={<IconEye size={14} />}
+                                    leftSection={<IconEye size={16} />}
+                                    style={{
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                      fontWeight: 500,
+                                    }}
                                     onClick={() =>
                                       navigate(
                                         `/air/import-job/invoice/view/${row.id}`,
@@ -3223,7 +3222,12 @@ function HouseCreate() {
                                   </Menu.Item>
                                   {isUnposted ? (
                                     <Menu.Item
-                                      leftSection={<IconEdit size={14} />}
+                                      leftSection={<IconEdit size={16} />}
+                                      style={{
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        fontWeight: 500,
+                                      }}
                                       onClick={() =>
                                         navigate(
                                           `/air/import-job/invoice/edit/${row.id}`,
@@ -3242,14 +3246,25 @@ function HouseCreate() {
                                     </Menu.Item>
                                   ) : (
                                     <Menu.Item
-                                      leftSection={<IconRefresh size={14} />}
-                                      onClick={() => {
-                                        // Invoice Reverse - placeholder; wire to reverse API when available
-                                        ToastNotification({
-                                          message: "Invoice Reverse – coming soon",
-                                          type: "info",
-                                        });
+                                      leftSection={<IconRefresh size={16} />}
+                                      style={{
+                                        fontSize: "13px",
+                                        fontFamily: "Inter",
+                                        fontWeight: 500,
                                       }}
+                                      onClick={() =>
+                                        navigate(
+                                          "/air/import-job/invoice/reverse",
+                                          {
+                                            state: {
+                                              document_no: row.document_no ?? "",
+                                              ...(location.state?.job && {
+                                                job: location.state.job,
+                                              }),
+                                            },
+                                          },
+                                        )
+                                      }
                                     >
                                       Invoice Reverse
                                     </Menu.Item>

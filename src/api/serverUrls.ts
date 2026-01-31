@@ -108,6 +108,8 @@ export const URL = {
   invoice: "invoice/",
   invoiceFilter: "filter/invoice/",
   invoiceCalculateGstBreakup: "invoice/calculate-gst-breakup/",
+  invoiceReversableData: "invoice/reversable-data/",
+  reverseInvoice: "reverse-invoice/",
 
   // Dashboard APIs
   dashboard: {

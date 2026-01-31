@@ -95,6 +95,7 @@ import {
   AirImportJobCreate,
   AirHouseCreate,
   InvoiceCreate,
+  InvoiceReverse,
   AirExportJobMaster,
   AirExportJobCreate,
   AirExportHouseCreate,
@@ -176,6 +177,7 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
         </Route>
         <Route path="/SeaExport">

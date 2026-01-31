@@ -1192,6 +1192,15 @@ function InvoiceCreate() {
             document_no: response.document_no ?? prev?.document_no ?? "",
             status: response.status ?? prev?.status ?? "UNPOSTED",
           }));
+          // Merge returned charge ids into form (e.g. new charges created by this PUT)
+          const res = response as { charges?: Array<{ id?: number }> };
+          if (res.charges && Array.isArray(res.charges)) {
+            const updatedCharges = form.values.charges.map((c, i) => ({
+              ...c,
+              id: res.charges![i]?.id ?? c.id,
+            }));
+            form.setFieldValue("charges", updatedCharges);
+          }
           ToastNotification({
             message: "Invoice updated successfully",
             type: "success",
@@ -1213,6 +1222,15 @@ function InvoiceCreate() {
             document_no: response.document_no ?? "",
             status: response.status ?? "UNPOSTED",
           });
+          // Merge returned charge ids into form so Update (PUT) sends id for existing charges
+          const res = response as { charges?: Array<{ id?: number }> };
+          if (res.charges && Array.isArray(res.charges)) {
+            const updatedCharges = form.values.charges.map((c, i) => ({
+              ...c,
+              id: res.charges![i]?.id ?? c.id,
+            }));
+            form.setFieldValue("charges", updatedCharges);
+          }
           ToastNotification({
             message: "Invoice created successfully",
             type: "success",
@@ -1294,6 +1312,7 @@ function InvoiceCreate() {
         );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
         return {
+          ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
           shipment_no: values.shipment_no,
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
@@ -1967,7 +1986,7 @@ function InvoiceCreate() {
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Amount per Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                      Amount in {form.values.currency ? form.values.currency.toUpperCase() : "(Billing currency)"}
+                      Amount in {form.values.currency ? form.values.currency.toUpperCase() : ""}
                     </Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
