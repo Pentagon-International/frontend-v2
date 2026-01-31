@@ -180,6 +180,7 @@ const fetchInvoiceCalculateGstBreakup = async (payload: {
 };
 
 type ChargeItem = {
+  id?: number | null; // primary key from API when editing existing charge
   charge_id: number | null; // id from charge master (value when selecting charge)
   charge_name: string; // display label for charge
   unit_code: string;
@@ -191,8 +192,8 @@ type ChargeItem = {
   amount: number | null; // Internal naming: currency_amount (amount in currency)
   header_amount: number | null;
   amount_in_local: number | null; // Auto-calculated as: amount * roe
-  tax_code: string; // sac_code from get-effective-sac (display)
-  tax_code_id: number | null; // for payload
+  tax_code: string; // sac_code from get-effective-sac / payload
+  dr_cr: "Cr" | "Dr"; // Dr/Cr for charge row, default "Cr"
 };
 
 type InvoiceFormData = {
@@ -231,6 +232,7 @@ function clampAmount(value: number | null | undefined): number | null {
 // Invoice data shape from filter/invoice API (for edit/view form fill)
 type InvoiceDataFromApi = {
   id?: number;
+  customer_id?: number;
   bill_to?: string;
   address?: string;
   gstn?: string;
@@ -246,7 +248,9 @@ type InvoiceDataFromApi = {
   currency_code?: string;
   day_book_id?: number;
   day_book_name?: string;
+  status?: string;
   charges?: Array<{
+    id?: number;
     charge_id?: number;
     charge_name?: string;
     unit_code?: string;
@@ -258,7 +262,6 @@ type InvoiceDataFromApi = {
     amount_in_local?: string | number;
     amount_in_header?: string | number | null;
     tax_code?: string;
-    tax_code_id?: number;
   }>;
 };
 
@@ -589,7 +592,7 @@ function InvoiceCreate() {
                 ? amountInLocal
                 : null,
               tax_code: charge.tax_code ? String(charge.tax_code) : "",
-              tax_code_id: charge.tax_code_id != null ? Number(charge.tax_code_id) : null,
+              dr_cr: (charge as any).dr_cr === "Dr" ? "Dr" : "Cr",
             };
           });
           form.setFieldValue("charges", mappedCharges);
@@ -608,7 +611,7 @@ function InvoiceCreate() {
               header_amount: null,
               amount_in_local: null,
               tax_code: "",
-              tax_code_id: null,
+              dr_cr: "Cr",
             },
           ]);
         }
@@ -624,11 +627,11 @@ function InvoiceCreate() {
           billing_currency: null,
           roe: null,
           amount_per_unit: null,
-          amount: null,
+              amount: null,
           header_amount: null,
           amount_in_local: null,
           tax_code: "",
-          tax_code_id: null,
+          dr_cr: "Cr",
         },
       ]);
     }
@@ -643,6 +646,15 @@ function InvoiceCreate() {
     if (!invoiceData || !isEditOrViewMode) return;
 
     setBillToDisplayName(invoiceData.bill_to ?? null);
+    // Set saveResponse so Update Invoice is shown and PUT is used when editing
+    setSaveResponse({
+      id: invoiceData.id,
+      customer_id: invoiceData.customer_id,
+      document_no: invoiceData.document_no ?? "",
+      status: invoiceData.status ?? "UNPOSTED",
+    });
+    const statusUpper = (invoiceData.status ?? "").toUpperCase();
+    setInvoiceIsPosted(statusUpper === "POSTED");
     form.setValues({
       bill_to: invoiceData.bill_to ?? "",
       address: invoiceData.address ?? "",
@@ -665,6 +677,7 @@ function InvoiceCreate() {
       charges:
         invoiceData.charges && invoiceData.charges.length > 0
           ? invoiceData.charges.map((c: any) => ({
+              id: c.id != null ? Number(c.id) : null,
               charge_id: c.charge_id != null ? Number(c.charge_id) : null,
               charge_name: c.charge_name ?? "",
               unit_code: c.unit_code ?? "",
@@ -706,7 +719,7 @@ function InvoiceCreate() {
                     : c.amount_in_local
                   : null,
               tax_code: c.tax_code ?? "",
-              tax_code_id: c.tax_code_id != null ? Number(c.tax_code_id) : null,
+              dr_cr: (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr" ? "Dr" : "Cr",
             }))
           : form.values.charges.length > 0
             ? form.values.charges
@@ -724,7 +737,7 @@ function InvoiceCreate() {
                   header_amount: null,
                   amount_in_local: null,
                   tax_code: "",
-                  tax_code_id: null,
+                  dr_cr: "Cr" as const,
                 },
               ],
     });
@@ -1085,11 +1098,12 @@ function InvoiceCreate() {
         return;
       }
 
-      // Total = sum of header amount column
+      // Total = sum of header amount column; header_total = same (Amount in billing currency total)
       const total = values.charges.reduce(
         (sum, c) => sum + (c.header_amount ?? 0),
         0,
       );
+      const header_total = total;
 
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
@@ -1098,7 +1112,41 @@ function InvoiceCreate() {
         return `${day}-${month}-${year}`;
       };
 
+      const chargesPayload = values.charges.map((charge) => {
+        const chargeCurrencyItem = (currencyData as any[])?.find(
+          (c: any) =>
+            (c.code || c.currency_code || "").toString() === charge.currency,
+        );
+        const chargeCurrencyId =
+          chargeCurrencyItem?.id != null
+            ? Number(chargeCurrencyItem.id)
+            : null;
+        const unitItem = (unitData as any[])?.find(
+          (u: any) =>
+            String(u.unit_code || u.code || u.id) === charge.unit_code,
+        );
+        const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
+        return {
+          ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
+          shipment_no: values.shipment_no,
+          charge_id: charge.charge_id ?? null,
+          unit_id: unitId,
+          no_of_unit: charge.no_of_unit ?? 0,
+          currency_id: chargeCurrencyId,
+          roe: charge.roe ?? 0,
+          amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
+          amount: clampAmount(charge.amount ?? 0) ?? 0,
+          amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+          amount_in_header: clampAmount(charge.header_amount ?? 0) ?? 0,
+          tax_code: charge.tax_code ?? "",
+          Dr_Cr: charge.dr_cr ?? "Cr",
+        };
+      });
+
+      const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
+
       const payload = {
+        ...(isUpdate ? { id: saveResponse.id } : {}),
         bill_to: values.bill_to,
         address: values.address,
         state_id: stateId,
@@ -1115,59 +1163,61 @@ function InvoiceCreate() {
         roe: values.roe,
         narration: values.narration || null,
         irn_no: values.irn_no || null,
+        ...(isUpdate ? { status: "UNPOSTED" } : {}),
         total,
-        // status: "UNPOST",
-        charges: values.charges.map((charge) => {
-          const chargeCurrencyItem = (currencyData as any[])?.find(
-            (c: any) =>
-              (c.code || c.currency_code || "").toString() === charge.currency,
-          );
-          const chargeCurrencyId =
-            chargeCurrencyItem?.id != null
-              ? Number(chargeCurrencyItem.id)
-              : null;
-          const unitItem = (unitData as any[])?.find(
-            (u: any) =>
-              String(u.unit_code || u.code || u.id) === charge.unit_code,
-          );
-          const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
-          return {
-            shipment_no: values.shipment_no,
-            charge_id: charge.charge_id ?? null,
-            unit_id: unitId,
-            no_of_unit: charge.no_of_unit ?? 0,
-            currency_id: chargeCurrencyId,
-            roe: charge.roe ?? 0,
-            amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
-            amount: clampAmount(charge.amount ?? 0) ?? 0,
-            amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
-            amount_in_header: clampAmount(charge.header_amount ?? 0) ?? 0,
-            tax_code_id: charge.tax_code_id ?? null,
-          };
-        }),
+        header_total,
+        Dr_Cr: "Dr",
+        charges: chargesPayload,
       };
       console.log("payload---", payload);
 
-      const response = (await postAPICall(URL.invoice, payload, API_HEADER)) as
-        | {
-            id?: number;
-            customer_id?: number;
-            document_no?: string;
-            status?: string;
-          }
-        | undefined;
-      if (response) {
-        setSaveResponse({
-          id: response.id,
-          customer_id: response.customer_id,
-          document_no: response.document_no ?? "",
-          status: response.status ?? "UNPOSTED",
-        });
-        ToastNotification({
-          message: "Invoice created successfully",
-          type: "success",
-        });
-        // Stay on same page with form values filled; document_no and status shown in header
+      if (isUpdate) {
+        const response = (await putAPICall(
+          URL.invoice,
+          payload,
+          API_HEADER,
+        )) as
+          | {
+              id?: number;
+              customer_id?: number;
+              document_no?: string;
+              status?: string;
+            }
+          | undefined;
+        if (response) {
+          setSaveResponse((prev) => ({
+            ...prev,
+            id: response.id ?? prev?.id,
+            customer_id: response.customer_id ?? prev?.customer_id,
+            document_no: response.document_no ?? prev?.document_no ?? "",
+            status: response.status ?? prev?.status ?? "UNPOSTED",
+          }));
+          ToastNotification({
+            message: "Invoice updated successfully",
+            type: "success",
+          });
+        }
+      } else {
+        const response = (await postAPICall(URL.invoice, payload, API_HEADER)) as
+          | {
+              id?: number;
+              customer_id?: number;
+              document_no?: string;
+              status?: string;
+            }
+          | undefined;
+        if (response) {
+          setSaveResponse({
+            id: response.id,
+            customer_id: response.customer_id,
+            document_no: response.document_no ?? "",
+            status: response.status ?? "UNPOSTED",
+          });
+          ToastNotification({
+            message: "Invoice created successfully",
+            type: "success",
+          });
+        }
       }
     } catch (error: any) {
       console.error("Error creating invoice:", error);
@@ -1210,6 +1260,7 @@ function InvoiceCreate() {
         (sum, c) => sum + (c.header_amount ?? 0),
         0,
       );
+      const header_total = total;
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -1253,7 +1304,8 @@ function InvoiceCreate() {
           amount: clampAmount(charge.amount ?? 0) ?? 0,
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
           amount_in_header: clampAmount(charge.header_amount ?? 0) ?? 0,
-          tax_code_id: charge.tax_code_id ?? null,
+          tax_code: charge.tax_code ?? "",
+          Dr_Cr: charge.dr_cr ?? "Cr",
         };
       });
       // Append tax rows from sac_wise_totals: charge_id, currency_id, roe (top), amount (total_amount), amount_in_local & amount_in_header (total_amount * roe), tax_code from sac_code; other fields empty
@@ -1271,7 +1323,8 @@ function InvoiceCreate() {
           amount: amt,
           amount_in_local: amountInLocal,
           amount_in_header: amountInLocal,
-          tax_code_id: null,
+          tax_code: row.sac_code ?? "",
+          Dr_Cr: "Cr",
         };
       });
       const allChargesPayload = [...chargesPayload, ...taxCharges];
@@ -1295,6 +1348,8 @@ function InvoiceCreate() {
         irn_no: values.irn_no || null,
         status: "POSTED",
         total,
+        header_total,
+        Dr_Cr: "Dr",
         charges: allChargesPayload,
         taxes,
       };
@@ -1385,8 +1440,8 @@ function InvoiceCreate() {
               amount_in_local: Number.isFinite(amountInLocal)
                 ? amountInLocal
                 : null,
-              tax_code: c.tax_code ?? "",
-              tax_code_id: c.tax_id != null ? c.tax_id : null,
+              tax_code: c.tax_code ?? (c.tax_id != null ? String(c.tax_id) : ""),
+              dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
             };
           });
           form.setFieldValue("charges", mappedCharges);
@@ -1576,7 +1631,7 @@ function InvoiceCreate() {
                 value={form.values.gstn}
                 onChange={(e) => form.setFieldValue("gstn", e.target.value)}
                 error={form.errors.gstn}
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -1597,7 +1652,7 @@ function InvoiceCreate() {
               <TextInput
                 label="Shipment No"
                 placeholder="Enter shipment number"
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
                 value={form.values.shipment_no}
                 onChange={(e) =>
                   form.setFieldValue("shipment_no", e.target.value)
@@ -1738,7 +1793,7 @@ function InvoiceCreate() {
                   form.setFieldValue("roe", numValue);
                 }}
                 withAsterisk
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
                 error={form.errors.roe ? String(form.errors.roe) : undefined}
                 min={0}
                 decimalScale={4}
@@ -1766,7 +1821,7 @@ function InvoiceCreate() {
                 value={form.values.irn_no}
                 onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
                 error={form.errors.irn_no}
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -1823,7 +1878,7 @@ function InvoiceCreate() {
                     form.setFieldValue("address", e.target.value)
                   }
                   withAsterisk
-                  readOnly={isReadOnly}
+                  disabled={isReadOnly}
                   error={
                     form.errors.address
                       ? String(form.errors.address)
@@ -1855,7 +1910,7 @@ function InvoiceCreate() {
                   form.setFieldValue("narration", e.target.value)
                 }
                 error={form.errors.narration}
-                readOnly={isReadOnly}
+                disabled={isReadOnly}
                 rows={2}
                 styles={{
                   input: {
@@ -1905,17 +1960,18 @@ function InvoiceCreate() {
                     }}
                   >
                     <Grid.Col span={1.5} style={{ fontSize: "13px" }}>Charge</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Unit</Grid.Col>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency</Grid.Col>
                     <Grid.Col span={0.75} style={{ fontSize: "13px" }}>ROE</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>No of Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Amount per Unit</Grid.Col>
-                    <Grid.Col span={1.25} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
-                    <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
                       Amount in {form.values.currency ? form.values.currency.toUpperCase() : "(Billing currency)"}
                     </Grid.Col>
-                    <Grid.Col span={1.25} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
+                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>Dr/Cr</Grid.Col>
                     <Grid.Col span={0.5} style={{ fontSize: "13px" }}>Actions</Grid.Col>
                   </Grid>
 
@@ -1953,10 +2009,6 @@ function InvoiceCreate() {
                               chargeName,
                             );
                             form.setFieldValue(`charges.${index}.tax_code`, "");
-                            form.setFieldValue(
-                              `charges.${index}.tax_code_id`,
-                              null,
-                            );
                             if (chargeErrors[index]?.charge_name) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
@@ -1988,13 +2040,6 @@ function InvoiceCreate() {
                                     `charges.${index}.tax_code`,
                                     item.sac_code,
                                   );
-                                  const taxCodeIdNum = Number(item.sac_code);
-                                  form.setFieldValue(
-                                    `charges.${index}.tax_code_id`,
-                                    Number.isFinite(taxCodeIdNum)
-                                      ? taxCodeIdNum
-                                      : null,
-                                  );
                                 }
                               });
                             }
@@ -2004,6 +2049,28 @@ function InvoiceCreate() {
                           error={chargeErrors[index]?.charge_name}
                           minSearchLength={2}
                           dropdownZIndex={1000}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <Dropdown
+                          placeholder="Select Unit"
+                          searchable
+                          data={unitOptions}
+                          value={charge.unit_code || null}
+                          disabled={isReadOnly}
+                          onChange={(value) =>
+                            form.setFieldValue(
+                              `charges.${index}.unit_code`,
+                              value ?? "",
+                            )
+                          }
                           styles={{
                             input: {
                               fontSize: "13px",
@@ -2054,35 +2121,13 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
-                        <Dropdown
-                          placeholder="Select Unit"
-                          searchable
-                          data={unitOptions}
-                          value={charge.unit_code || null}
-                          disabled={isReadOnly}
-                          onChange={(value) =>
-                            form.setFieldValue(
-                              `charges.${index}.unit_code`,
-                              value ?? "",
-                            )
-                          }
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
                       <Grid.Col span={0.75}>
                         <NumberInput
                           placeholder="ROE"
                           min={0}
                           hideControls
                           withAsterisk
-                          readOnly={isReadOnly}
+                          disabled={isReadOnly}
                           value={charge.roe || undefined}
                           onChange={(value) => {
                             const roe = value as number | null;
@@ -2160,7 +2205,7 @@ function InvoiceCreate() {
                           placeholder="No of Unit"
                           min={0}
                           hideControls
-                          readOnly={isReadOnly}
+                          disabled={isReadOnly}
                           value={charge.no_of_unit || undefined}
                           onChange={(value) => {
                             const noOfUnit = value as number | null;
@@ -2208,7 +2253,7 @@ function InvoiceCreate() {
                           min={0}
                           decimalScale={2}
                           hideControls
-                          readOnly={isReadOnly}
+                          disabled={isReadOnly}
                           value={charge.amount_per_unit || undefined}
                           onChange={(value) => {
                             const raw = value as number | null;
@@ -2251,14 +2296,14 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.25}>
+                      <Grid.Col span={1}>
                         <NumberInput
                           placeholder="Currency Amount"
                           min={0}
                           decimalScale={2}
                           hideControls
                           withAsterisk
-                          readOnly={isReadOnly}
+                          disabled={isReadOnly}
                           value={charge.amount || undefined}
                           onChange={(value) => {
                             const raw = value as number | null;
@@ -2313,13 +2358,13 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.25}>
+                      <Grid.Col span={1}>
                         <NumberInput
                           placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "billing currency"}`}
                           min={0}
                           decimalScale={2}
                           hideControls
-                          readOnly={isReadOnly}
+                          disabled={isReadOnly}
                           value={charge.header_amount || undefined}
                           onChange={(value) => {
                             form.setFieldValue(
@@ -2336,14 +2381,14 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.25}>
+                      <Grid.Col span={1}>
                         <NumberInput
                           placeholder="Local Amount"
                           min={0}
                           decimalScale={2}
                           hideControls
                           withAsterisk
-                          readOnly={isReadOnly}
+                          disabled={isReadOnly}
                           value={charge.amount_in_local || undefined}
                           onChange={(value) => {
                             form.setFieldValue(
@@ -2364,7 +2409,7 @@ function InvoiceCreate() {
                         <TextInput
                           placeholder="SAC Code"
                           withAsterisk
-                          readOnly
+                          disabled={isReadOnly}
                           value={charge.tax_code}
                           styles={{
                             input: {
@@ -2375,7 +2420,31 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.75}>
+                        <Dropdown
+                          placeholder="Dr/Cr"
+                          data={[
+                            { value: "Cr", label: "Cr" },
+                            { value: "Dr", label: "Dr" },
+                          ]}
+                          value={charge.dr_cr ?? "Cr"}
+                          disabled={isReadOnly}
+                          onChange={(value) =>
+                            form.setFieldValue(
+                              `charges.${index}.dr_cr`,
+                              (value === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
+                            )
+                          }
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={0.5}>
                         {!isReadOnly && (
                           <Group gap="xs">
                             {form.values.charges.length > 1 && (
@@ -2419,7 +2488,7 @@ function InvoiceCreate() {
                                     header_amount: null,
                                     amount_in_local: null,
                                     tax_code: "",
-                                    tax_code_id: null,
+                                    dr_cr: "Cr",
                                   });
                                 }}
                               >
@@ -2567,7 +2636,7 @@ function InvoiceCreate() {
                   rightSection={<IconChevronRight size={16} />}
                   loading={isSubmitting}
                 >
-                  Save Invoice
+                  {saveResponse?.id ? "Update Invoice" : "Save Invoice"}
                 </Button>
                 {saveResponse &&
                   saveResponse.status?.toUpperCase() === "UNPOSTED" &&

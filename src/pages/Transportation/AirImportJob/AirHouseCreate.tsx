@@ -29,6 +29,7 @@ import {
   IconEdit,
   IconDownload,
   IconX,
+  IconRefresh,
 } from "@tabler/icons-react";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -162,6 +163,7 @@ type InvoiceListItem = {
   status?: string;
   bill_to?: string;
   currency_code?: string;
+  total?: string | number;
   charges?: Array<{
     amount?: string | number;
     amount_in_local?: string | number;
@@ -3148,88 +3150,116 @@ function HouseCreate() {
                         </Table.Td>
                       </Table.Tr>
                     ) : (
-                      invoiceList.map((row) => (
-                        <Table.Tr key={row.id}>
-                          <Table.Td style={{ fontSize: "13px" }}>
-                            {row.day_book_name ?? "-"}
-                          </Table.Td>
-                          <Table.Td style={{ fontSize: "13px" }}>
-                            {row.document_no ?? "-"}
-                          </Table.Td>
-                          <Table.Td style={{ fontSize: "13px" }}>
-                            {row.document_date ?? "-"}
-                          </Table.Td>
-                          <Table.Td style={{ fontSize: "13px" }}>
-                            {row.total}
-                          </Table.Td>
-                          <Table.Td style={{ fontSize: "13px" }}>
-                            <Badge
-                              size="sm"
-                              variant="light"
-                              color={
-                                row.status === "unpost"
-                                  ? "gray"
-                                  : row.status === "posted"
-                                    ? "green"
-                                    : "#105476"
-                              }
-                            >
-                              {row.status ?? "-"}
-                            </Badge>
-                          </Table.Td>
-                          <Table.Td style={{ fontSize: "13px" }}>
-                            <Menu shadow="md" width={140} position="bottom-end">
-                              <Menu.Target>
-                                <ActionIcon
-                                  variant="light"
-                                  color="#105476"
-                                  size="sm"
-                                >
-                                  <IconDotsVertical size={14} />
-                                </ActionIcon>
-                              </Menu.Target>
-                              <Menu.Dropdown>
-                                <Menu.Item
-                                  leftSection={<IconEye size={14} />}
-                                  onClick={() =>
-                                    navigate(
-                                      `/air/import-job/invoice/view/${row.id}`,
-                                      {
-                                        state: {
-                                          invoiceData: row,
-                                          ...(location.state?.job && {
-                                            job: location.state.job,
-                                          }),
+                      invoiceList.map((row) => {
+                        const statusUpper = (row.status ?? "").toUpperCase();
+                        const isPosted =
+                          statusUpper === "POSTED" || row.status === "posted";
+                        const isUnposted =
+                          statusUpper === "UNPOSTED" || row.status === "unpost";
+                        const rowBg =
+                          isPosted
+                            ? "var(--mantine-color-green-0)"
+                            : isUnposted
+                              ? "var(--mantine-color-yellow-0)"
+                              : undefined;
+                        return (
+                          <Table.Tr key={row.id} style={{ backgroundColor: rowBg }}>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              {row.day_book_name ?? "-"}
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              {row.document_no ?? "-"}
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              {row.document_date ?? "-"}
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              {row.total}
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              <Badge
+                                size="sm"
+                                variant="light"
+                                color={
+                                  isUnposted
+                                    ? "yellow"
+                                    : isPosted
+                                      ? "green"
+                                      : "#105476"
+                                }
+                              >
+                                {row.status ?? "-"}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              <Menu shadow="md" width={180} position="bottom-end">
+                                <Menu.Target>
+                                  <ActionIcon
+                                    variant="light"
+                                    color="#105476"
+                                    size="sm"
+                                  >
+                                    <IconDotsVertical size={14} />
+                                  </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown>
+                                  <Menu.Item
+                                    leftSection={<IconEye size={14} />}
+                                    onClick={() =>
+                                      navigate(
+                                        `/air/import-job/invoice/view/${row.id}`,
+                                        {
+                                          state: {
+                                            invoiceData: row,
+                                            ...(location.state?.job && {
+                                              job: location.state.job,
+                                            }),
+                                          },
                                         },
-                                      },
-                                    )
-                                  }
-                                >
-                                  View
-                                </Menu.Item>
-                                <Menu.Item
-                                  leftSection={<IconEdit size={14} />}
-                                  onClick={() =>
-                                    navigate(
-                                      `/air/import-job/invoice/edit/${row.id}`,
-                                      {
-                                        state: {
-                                          invoiceData: row,
-                                          ...(location.state?.job && {
-                                            job: location.state.job,
-                                          }),
-                                        },
-                                      },
-                                    )
-                                  }
-                                >
-                                  Edit
-                                </Menu.Item>
-                              </Menu.Dropdown>
-                            </Menu>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))
+                                      )
+                                    }
+                                  >
+                                    View
+                                  </Menu.Item>
+                                  {isUnposted ? (
+                                    <Menu.Item
+                                      leftSection={<IconEdit size={14} />}
+                                      onClick={() =>
+                                        navigate(
+                                          `/air/import-job/invoice/edit/${row.id}`,
+                                          {
+                                            state: {
+                                              invoiceData: row,
+                                              ...(location.state?.job && {
+                                                job: location.state.job,
+                                              }),
+                                            },
+                                          },
+                                        )
+                                      }
+                                    >
+                                      Edit
+                                    </Menu.Item>
+                                  ) : (
+                                    <Menu.Item
+                                      leftSection={<IconRefresh size={14} />}
+                                      onClick={() => {
+                                        // Invoice Reverse - placeholder; wire to reverse API when available
+                                        ToastNotification({
+                                          message: "Invoice Reverse – coming soon",
+                                          type: "info",
+                                        });
+                                      }}
+                                    >
+                                      Invoice Reverse
+                                    </Menu.Item>
+                                  )}
+                                </Menu.Dropdown>
+                              </Menu>
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })
                     )}
                   </Table.Tbody>
                 </Table>
