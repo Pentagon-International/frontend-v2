@@ -131,11 +131,11 @@ const fetchCurrencyMaster = async () => {
   }
 };
 
-const fetchUnitMaster = async () => {
+const fetchUnitMaster = async (serviceType: string = "AIR") => {
   try {
     const payload = {
       filters: {
-        service_type: "SEA",
+        service_type: serviceType,
       },
     };
     const response = (await postAPICall(
@@ -443,18 +443,81 @@ function HouseCreate() {
       });
 
       // Load cargo details
-      if (editData.cargo_details && Array.isArray(editData.cargo_details)) {
-        const loadedCargoDetails = editData.cargo_details.map(
-          (cargo: Record<string, unknown>) => ({
-            no_of_packages: cargo.no_of_packages as number | null,
-            gross_weight: cargo.gross_weight as number | null,
-            volume_weight: (cargo.volume_weight || cargo.volume) as
-              | number
-              | null,
-            chargeable_weight: cargo.chargeable_weight as number | null,
-            haz: cargo.haz ? String(cargo.haz) : "",
-          }),
+      const cargoDetailsSource = editData.cargo_details;
+      if (!cargoDetailsSource || !Array.isArray(cargoDetailsSource)) {
+        console.log("[AirHouseCreate] Cargo details: NOT SET", {
+          reason: !editData.cargo_details
+            ? "editData.cargo_details is missing"
+            : "editData.cargo_details is not an array",
+          editDataKeys: editData ? Object.keys(editData) : [],
+        });
+      } else {
+        const loadedCargoDetails = cargoDetailsSource.map(
+          (cargo: Record<string, unknown>, idx: number) => {
+            const no_of_packages =
+              cargo.no_of_packages != null &&
+              !Number.isNaN(Number(cargo.no_of_packages))
+                ? Number(cargo.no_of_packages)
+                : null;
+            const gross_weight =
+              cargo.gross_weight != null &&
+              !Number.isNaN(Number(cargo.gross_weight))
+                ? Number(cargo.gross_weight)
+                : null;
+            const volume_weight =
+              cargo.volume_weight != null
+                ? Number(cargo.volume_weight)
+                : cargo.volume != null
+                  ? Number(cargo.volume)
+                  : null;
+            const volume_weight_final =
+              volume_weight != null && !Number.isNaN(volume_weight)
+                ? volume_weight
+                : null;
+            const chargeable_weight =
+              cargo.chargeable_weight != null &&
+              !Number.isNaN(Number(cargo.chargeable_weight))
+                ? Number(cargo.chargeable_weight)
+                : null;
+            const haz = cargo.haz ? String(cargo.haz) : "";
+            const row = {
+              no_of_packages,
+              gross_weight,
+              volume_weight: volume_weight_final,
+              chargeable_weight,
+              haz,
+            };
+            const notSet: string[] = [];
+            if (row.no_of_packages == null) notSet.push("no_of_packages");
+            if (row.gross_weight == null) notSet.push("gross_weight");
+            if (row.volume_weight == null) notSet.push("volume_weight");
+            if (row.chargeable_weight == null)
+              notSet.push("chargeable_weight");
+            if (row.haz === "") notSet.push("haz");
+            if (notSet.length > 0) {
+              console.log(
+                `[AirHouseCreate] Cargo[${idx}] fields NOT SET:`,
+                notSet,
+                { raw: cargo, mapped: row },
+              );
+            }
+            return row;
+          },
         );
+        const allCargoNotSet = loadedCargoDetails.flatMap((row, idx) => {
+          const notSet: string[] = [];
+          if (row.no_of_packages == null) notSet.push("no_of_packages");
+          if (row.gross_weight == null) notSet.push("gross_weight");
+          if (row.volume_weight == null) notSet.push("volume_weight");
+          if (row.chargeable_weight == null) notSet.push("chargeable_weight");
+          if (row.haz === "") notSet.push("haz");
+          return notSet.length ? [{ index: idx, fields: notSet }] : [];
+        });
+        console.log("[AirHouseCreate] Cargo details loaded", {
+          count: loadedCargoDetails.length,
+          rowsWithMissingFields: allCargoNotSet,
+          loadedCargoDetails,
+        });
         if (loadedCargoDetails.length > 0) {
           setCargoDetails(loadedCargoDetails);
         }
@@ -462,9 +525,23 @@ function HouseCreate() {
 
       // Load charges - handle both direct fields and nested structures from API
       const chargesToLoad = editData.charges || editData.mawb_charges;
-      if (chargesToLoad && Array.isArray(chargesToLoad)) {
+      if (!chargesToLoad || !Array.isArray(chargesToLoad)) {
+        console.log("[AirHouseCreate] Charges: NOT SET", {
+          reason: !editData.charges && !editData.mawb_charges
+            ? "editData.charges and editData.mawb_charges are both missing"
+            : "charges source is not an array",
+          hasCharges: !!editData.charges,
+          hasMawbCharges: !!editData.mawb_charges,
+          editDataKeys: editData ? Object.keys(editData) : [],
+        });
+      } else {
+        console.log("[AirHouseCreate] Edit mode: loading charges", {
+          source: editData.charges ? "charges" : "mawb_charges",
+          count: chargesToLoad.length,
+          rawCharges: chargesToLoad,
+        });
         const loadedCharges = chargesToLoad.map(
-          (charge: Record<string, unknown>) => {
+          (charge: Record<string, unknown>, idx: number) => {
             // Handle unit_code: API may send "unit" (e.g. "SHPT") or unit_details.unit_code
             const unitDetails = charge.unit_details as
               | { unit_code?: string }
@@ -483,6 +560,10 @@ function HouseCreate() {
             const currency =
               charge.currency || currencyDetails?.currency_code || "";
 
+            // Normalize pp_cc to uppercase so "PP"/"CC" match dropdown options
+            const ppCcRaw = charge.pp_cc ? String(charge.pp_cc) : "";
+            const pp_cc = ppCcRaw ? ppCcRaw.toUpperCase() : "";
+
             // Normalize numeric fields (API may return strings e.g. "1.0000", "33.00")
             const toNum = (v: unknown): number | null => {
               if (v == null) return null;
@@ -491,9 +572,9 @@ function HouseCreate() {
               return Number.isNaN(n) ? null : n;
             };
 
-            return {
+            const mapped = {
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
-              pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
+              pp_cc,
               unit_code: unitCode ? String(unitCode) : "",
               no_of_unit: toNum(charge.no_of_unit),
               currency: currency ? String(currency) : "",
@@ -501,10 +582,68 @@ function HouseCreate() {
               amount_per_unit: toNum(charge.amount_per_unit),
               amount: toNum(charge.amount),
             };
+
+            // Track which charge fields are NOT SET (empty or null)
+            const chargeNotSet: string[] = [];
+            if (!mapped.charge_name?.trim()) chargeNotSet.push("charge_name");
+            if (!mapped.pp_cc?.trim()) chargeNotSet.push("pp_cc");
+            if (!mapped.unit_code?.trim()) chargeNotSet.push("unit_code");
+            if (mapped.no_of_unit == null) chargeNotSet.push("no_of_unit");
+            if (!mapped.currency?.trim()) chargeNotSet.push("currency");
+            if (mapped.roe == null) chargeNotSet.push("roe");
+            if (mapped.amount_per_unit == null)
+              chargeNotSet.push("amount_per_unit");
+            if (mapped.amount == null) chargeNotSet.push("amount");
+            if (chargeNotSet.length > 0) {
+              console.log(
+                `[AirHouseCreate] Charge[${idx}] fields NOT SET:`,
+                chargeNotSet,
+                {
+                  raw: {
+                    charge_name: charge.charge_name,
+                    pp_cc: charge.pp_cc,
+                    unit: charge.unit,
+                    unit_code: charge.unit_code,
+                    unit_details: unitDetails,
+                    currency: charge.currency,
+                    currency_details: currencyDetails,
+                    no_of_unit: charge.no_of_unit,
+                    roe: charge.roe,
+                    amount_per_unit: charge.amount_per_unit,
+                    amount: charge.amount,
+                  },
+                  mapped,
+                },
+              );
+            }
+            console.log(
+              `[AirHouseCreate] Charge[${idx}] mapped: raw pp_cc=${charge.pp_cc}, unit=${charge.unit || unitDetails?.unit_code}, currency=${charge.currency || currencyDetails?.currency_code} -> pp_cc=${mapped.pp_cc}, unit_code=${mapped.unit_code}, currency=${mapped.currency}`,
+            );
+            return mapped;
           },
         );
+        const allChargeNotSet = loadedCharges.map((row, idx) => {
+          const notSet: string[] = [];
+          if (!row.charge_name?.trim()) notSet.push("charge_name");
+          if (!row.pp_cc?.trim()) notSet.push("pp_cc");
+          if (!row.unit_code?.trim()) notSet.push("unit_code");
+          if (row.no_of_unit == null) notSet.push("no_of_unit");
+          if (!row.currency?.trim()) notSet.push("currency");
+          if (row.roe == null) notSet.push("roe");
+          if (row.amount_per_unit == null) notSet.push("amount_per_unit");
+          if (row.amount == null) notSet.push("amount");
+          return { index: idx, fields: notSet };
+        }).filter((x) => x.fields.length > 0);
+        console.log("[AirHouseCreate] Charges loaded", {
+          count: loadedCharges.length,
+          rowsWithMissingFields: allChargeNotSet,
+          loadedCharges,
+        });
         if (loadedCharges.length > 0) {
           chargesForm.setValues({ charges: loadedCharges });
+          console.log("[AirHouseCreate] Edit mode: charges set on form", {
+            loadedCharges,
+          });
         }
       }
 
@@ -636,34 +775,65 @@ function HouseCreate() {
     refetchOnWindowFocus: false,
   });
 
-  // Unit master query
+  // Unit master query - use AIR for Air Import House so units like SHPT are available
   const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster", "SEA"],
-    queryFn: fetchUnitMaster,
+    queryKey: ["unitMaster", "AIR"],
+    queryFn: () => fetchUnitMaster("AIR"),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
 
-  // Format currency data
+  // Format currency data - support both code and currency_code (API may return either)
   const currencyOptions = useMemo(() => {
     if (!Array.isArray(currencyData)) return [];
-    return currencyData.map((item: { code?: string }) => ({
-      value: String(item.code || ""),
-      label: item.code || "",
-    }));
-  }, [currencyData]);
+    const base = currencyData.map(
+      (item: { code?: string; currency_code?: string }) => {
+        const code = item.currency_code ?? item.code ?? "";
+        return { value: String(code), label: code || "" };
+      },
+    );
+    // In edit mode, ensure loaded charge currencies are in options so dropdowns display
+    if (isEditMode && chargesForm.values.charges.length > 0) {
+      const fromCharges = new Set(
+        chargesForm.values.charges
+          .map((c) => c.currency?.trim())
+          .filter(Boolean),
+      );
+      const existingValues = new Set(base.map((o) => o.value));
+      fromCharges.forEach((code) => {
+        if (code && !existingValues.has(code)) {
+          base.push({ value: code, label: code });
+          existingValues.add(code);
+        }
+      });
+    }
+    return base;
+  }, [currencyData, isEditMode, chargesForm.values.charges]);
 
-  // Format unit data
+  // Format unit data; in edit mode include charge unit_codes so dropdowns display
   const unitOptions = useMemo(() => {
     if (!Array.isArray(unitDataRaw)) return [];
-    return unitDataRaw.map((item: unknown) => {
+    const base = unitDataRaw.map((item: unknown) => {
       const unitItem = item as { unit_code?: string };
       return {
         value: String(unitItem.unit_code || ""),
         label: unitItem.unit_code || "",
       };
     });
-  }, [unitDataRaw]);
+    // console.log("unitOptions---",unitOptions);
+    
+    const existingValues = new Set(base.map((o) => o.value));
+    if (isEditMode && chargesForm.values.charges.length > 0) {
+      chargesForm.values.charges.forEach((c) => {
+        const code = c.unit_code?.trim();
+        if (code && !existingValues.has(code)) {
+          base.push({ value: code, label: code });
+          existingValues.add(code);
+        }
+      });
+    }
+    return base;
+  }, [unitDataRaw, isEditMode, chargesForm.values.charges]);
 
   // Note: Container numbers removed for Air HAWB - no containerNumberOptions needed
 

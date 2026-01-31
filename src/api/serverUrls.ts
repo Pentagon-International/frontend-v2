@@ -102,10 +102,12 @@ export const URL = {
   chartOfAccountsFilter: "filter/chart-of-accounts/",
   glChargeMappingFilter: "filter/gl-charge-mapping/",
   gstChargeMappingFilter: "filter/gst-charge-mapping/",
+  gstChargeMappingGetEffectiveSac: "gst-charge-mapping/get-effective-sac/",
   gstRateMasterFilter: "filter/gst-rate-master/",
   gstSacMasterFilter: "filter/gst-sac-master/",
   invoice: "invoice/",
   invoiceFilter: "filter/invoice/",
+  invoiceCalculateGstBreakup: "invoice/calculate-gst-breakup/",
 
   // Dashboard APIs
   dashboard: {
