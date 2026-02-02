@@ -15,7 +15,7 @@ import {
   Table,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { IconArrowLeft, IconChevronRight, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconArrowLeft, IconChevronRight, IconTrash } from "@tabler/icons-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -1493,7 +1493,8 @@ function InvoiceReverse() {
                                 <IconTrash size={16} />
                               </Button>
                             )}
-                            {form.values.charges.length - 1 === index && (
+                            {/* Add charge disabled on invoice reverse – charges can only be deleted */}
+                            {/* {form.values.charges.length - 1 === index && (
                               <Button
                                 radius="sm"
                                 px={12}
@@ -1520,7 +1521,7 @@ function InvoiceReverse() {
                               >
                                 <IconPlus size={16} />
                               </Button>
-                            )}
+                            )} */}
                           </Group>
                         )}
                       </Grid.Col>

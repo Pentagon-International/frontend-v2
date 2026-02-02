@@ -3237,20 +3237,65 @@ function HouseCreate() {
                               <Menu shadow="md" width={200} position="bottom-end">
                                 <Menu.Target>
                                   <ActionIcon
-                                    variant="light"
+                                    variant="subtle"
                                     color="#105476"
                                     size="sm"
+                                    styles={{
+                                      root: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        border: "1px solid #E9ECEF",
+                                        borderRadius: "8px",
+                                        "&:hover": {
+                                          backgroundColor: "#F8F9FA",
+                                        },
+                                      },
+                                    }}
                                   >
-                                    <IconDotsVertical size={14} />
+                                    <IconDotsVertical size={16} />
                                   </ActionIcon>
                                 </Menu.Target>
-                                <Menu.Dropdown>
+                                <Menu.Dropdown
+                                  styles={{
+                                    dropdown: {
+                                      border: "1px solid #E9ECEF",
+                                      borderRadius: "8px",
+                                      padding: "8px",
+                                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                                    },
+                                  }}
+                                >
                                   <Menu.Item
-                                    leftSection={<IconEye size={16} />}
-                                    style={{
-                                      fontSize: "13px",
-                                      fontFamily: "Inter",
-                                      fontWeight: 500,
+                                    leftSection={
+                                      <Box
+                                        style={{
+                                          backgroundColor: "#E7F5FF",
+                                          borderRadius: "6px",
+                                          padding: "6px",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        <IconEye size={16} color="#105476" />
+                                      </Box>
+                                    }
+                                    styles={{
+                                      item: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        borderRadius: "6px",
+                                        padding: "10px 12px",
+                                        marginBottom: "4px",
+                                        "&:hover": { backgroundColor: "#F8F9FA" },
+                                      },
+                                      itemLabel: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                      },
                                     }}
                                     onClick={() =>
                                       navigate(
@@ -3270,11 +3315,36 @@ function HouseCreate() {
                                   </Menu.Item>
                                   {isUnposted ? (
                                     <Menu.Item
-                                      leftSection={<IconEdit size={16} />}
-                                      style={{
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        fontWeight: 500,
+                                      leftSection={
+                                        <Box
+                                          style={{
+                                            backgroundColor: "#E7F5FF",
+                                            borderRadius: "6px",
+                                            padding: "6px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <IconEdit size={16} color="#105476" />
+                                        </Box>
+                                      }
+                                      styles={{
+                                        item: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          borderRadius: "6px",
+                                          padding: "10px 12px",
+                                          marginBottom: "4px",
+                                          "&:hover": { backgroundColor: "#F8F9FA" },
+                                        },
+                                        itemLabel: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                        },
                                       }}
                                       onClick={() =>
                                         navigate(
@@ -3294,11 +3364,36 @@ function HouseCreate() {
                                     </Menu.Item>
                                   ) : (
                                     <Menu.Item
-                                      leftSection={<IconRefresh size={16} />}
-                                      style={{
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        fontWeight: 500,
+                                      leftSection={
+                                        <Box
+                                          style={{
+                                            backgroundColor: "#E7F5FF",
+                                            borderRadius: "6px",
+                                            padding: "6px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <IconRefresh size={16} color="#105476" />
+                                        </Box>
+                                      }
+                                      styles={{
+                                        item: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          borderRadius: "6px",
+                                          padding: "10px 12px",
+                                          marginBottom: "4px",
+                                          "&:hover": { backgroundColor: "#F8F9FA" },
+                                        },
+                                        itemLabel: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                        },
                                       }}
                                       onClick={() =>
                                         navigate(
@@ -3314,7 +3409,7 @@ function HouseCreate() {
                                         )
                                       }
                                     >
-                                      Invoice Reverse
+                                      Invoice Reversal
                                     </Menu.Item>
                                   )}
                                 </Menu.Dropdown>
