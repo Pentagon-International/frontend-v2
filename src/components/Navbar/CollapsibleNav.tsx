@@ -47,7 +47,8 @@ export const CollapsibleNav = ({
     (label === "Air" && activeSubNav.startsWith("Air")) ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||
     (label === "Ocean" && activeSubNav.startsWith("FCL")) ||
-    (label === "Ocean" && activeSubNav.startsWith("LCL"));
+    (label === "Ocean" && activeSubNav.startsWith("LCL")) ||
+    (label === "Accounts" && activeSubNav === "Receipt");
 
   // compute opened based on mode
   const opened = isSidebarCollapsed ? !!openCollapsibles[label] : openedLocal;

@@ -1174,6 +1174,11 @@ function InvoiceCreate() {
         0,
       );
       const header_total = total;
+      // Local currency total (billing currency value INR, USD)
+      const local_total = values.charges.reduce(
+        (sum, c) => sum + (c.amount_in_local ?? 0),
+        0,
+      );
 
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
@@ -1238,6 +1243,7 @@ function InvoiceCreate() {
         ...(isUpdate ? { status: "UNPOSTED" } : {}),
         total,
         header_total,
+        local_total,
         Dr_Cr: "Dr",
         charges: chargesPayload,
       };
@@ -1351,6 +1357,10 @@ function InvoiceCreate() {
         0,
       );
       const header_total = total;
+      const local_total = values.charges.reduce(
+        (sum, c) => sum + (c.amount_in_local ?? 0),
+        0,
+      );
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -1445,6 +1455,7 @@ function InvoiceCreate() {
         status: "POSTED",
         total,
         header_total,
+        local_total,
         Dr_Cr: "Dr",
         charges: allChargesPayload,
         taxes,

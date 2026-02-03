@@ -23,6 +23,8 @@ const pathTitleMap: Record<string, string> = {
   "/air": "Air",
   "/SeaExport": "Ocean",
   "/accounts": "Accounts",
+  "/receipt/create": "Receipt",
+  "/receipt": "Receipt",
   "/master": "Masters",
   "/reports": "Reports",
   "/help": "Help",

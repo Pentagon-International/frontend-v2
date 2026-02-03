@@ -121,6 +121,8 @@ import DemoPage from "../pages/dashboard/DemoPage";
 import EnquiryCreate from "../pages/dashboard/EnquiryCreate";
 import GetRate from "../pages/dashboard/GetRate";
 import EnquiryMaster from "../pages/dashboard/EnquiryMaster";
+import ReceiptMaster from "../pages/accounts/ReceiptMaster";
+import ReceiptCreate from "../pages/accounts/ReceiptCreate";
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
@@ -238,6 +240,8 @@ const NavigationRoutes = () => {
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />
         <Route path="/accounts" element={<Accounts />} />
+        <Route path="/receipt" element={<ReceiptMaster />} />
+        <Route path="/receipt/create" element={<ReceiptCreate />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
         <Route path="/lead-create" element={<CreateLead />} />

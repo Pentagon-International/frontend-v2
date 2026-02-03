@@ -14,6 +14,7 @@ type Props = {
     setIsSalesOpen?: (v: boolean) => void;
     setIsSeaExportOpen?: (v: boolean) => void;
     setIsAirOpen?: (v: boolean) => void;
+    setIsAccountsOpen?: (v: boolean) => void;
   };
 };
 
@@ -93,10 +94,12 @@ export const SubNavLink = ({
           collapsibles?.setIsTariffOpen?.(false);
           collapsibles?.setIsAirOpen?.(false);
           collapsibles?.setIsSeaExportOpen?.(false);
+          collapsibles?.setIsAccountsOpen?.(false);
           // Also close in layout store for collapsed mode
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Customer Service", false);
+          setOpenCollapsible("Accounts", false);
         } else if (parent === "Transportation") {
           collapsibles?.setIsSalesOpen?.(false);
           collapsibles?.setIsCustomerServiceOpen?.(false);
@@ -123,7 +126,20 @@ export const SubNavLink = ({
           }
           // Close Sales in collapsed mode when Transportation sub-link is clicked
           setOpenCollapsible("Sales", false);
+          collapsibles?.setIsAccountsOpen?.(false);
+          setOpenCollapsible("Accounts", false);
         } else if (parent === "Customer Service") {
+          collapsibles?.setIsSalesOpen?.(false);
+          collapsibles?.setIsTariffOpen?.(false);
+          collapsibles?.setIsAirOpen?.(false);
+          collapsibles?.setIsSeaExportOpen?.(false);
+          collapsibles?.setIsAccountsOpen?.(false);
+          // Also close in layout store for collapsed mode
+          setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Accounts", false);
+        } else if (parent === "Accounts") {
           collapsibles?.setIsSalesOpen?.(false);
           collapsibles?.setIsTariffOpen?.(false);
           collapsibles?.setIsAirOpen?.(false);
@@ -137,10 +153,12 @@ export const SubNavLink = ({
           collapsibles?.setIsTariffOpen?.(false);
           collapsibles?.setIsAirOpen?.(false);
           collapsibles?.setIsSeaExportOpen?.(false);
+          collapsibles?.setIsAccountsOpen?.(false);
           // Also close in layout store for collapsed mode
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Accounts", false);
         }
       }}
     />

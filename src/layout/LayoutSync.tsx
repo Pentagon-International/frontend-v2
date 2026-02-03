@@ -104,6 +104,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/SeaExport")) {
       setActiveNav("Transportation");
       setActiveSubNav("FCL Export Generation"); // Default to FCL
+    } else if (path.startsWith("/receipt")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Receipt");
     } else if (path.startsWith("/accounts")) {
       setActiveNav("Desk");
       setActiveSubNav("Accounts");

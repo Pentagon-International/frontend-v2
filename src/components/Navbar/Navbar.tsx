@@ -34,6 +34,7 @@ import {
   IconFileDescription,
   IconCircleCheck,
   IconGitBranch,
+  IconReceiptTax,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -42,7 +43,7 @@ import { CollapsibleNav } from "./CollapsibleNav";
 import { SubNavLink } from "./SubNavLink";
 import { NestedSubNavLink } from "./NestedSubNavLink";
 import { SectionTitle } from "./SectionTitle";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import useAuthStore from "../../store/authStore";
 
@@ -66,6 +67,14 @@ const Navbar = ({
   const [isCustomerServiceOpen, setIsCustomerServiceOpen] = useState(false);
   const [isSeaExportOpen, setIsSeaExportOpen] = useState(false);
   const [isAirOpen, setIsAirOpen] = useState(false);
+  const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+
+  // Keep Accounts expanded when on receipt routes
+  useEffect(() => {
+    if (location.pathname.startsWith("/receipt")) {
+      setIsAccountsOpen(true);
+    }
+  }, [location.pathname]);
 
   const handleLogoClick = () => {
     // Navigate to dashboard with reset flag if not already at base level
@@ -196,28 +205,28 @@ const Navbar = ({
                     label="Lead"
                     icon={IconUsers}
                     path="/lead"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Call Entry"
                     icon={IconKeyboard}
                     path="/call-entry"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Enquiry"
                     icon={IconMessageQuestion}
                     path="/enquiry"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Quotation"
                     icon={IconFileDescription}
                     path="/quotation"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
                   />
                   {showQuotationApproval && (
                     <SubNavLink
@@ -238,14 +247,14 @@ const Navbar = ({
                     label="Potential Customers"
                     icon={IconUserPlus}
                     path="/potential-customers"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Pipeline"
                     icon={IconGitBranch}
                     path="/pipeline"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen }}
+                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
                   />
 
                   {/* Tariff collapsible submenu */}
@@ -268,6 +277,7 @@ const Navbar = ({
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
+                        setIsAccountsOpen,
                       }}
                     />
                     <NestedSubNavLink
@@ -282,6 +292,7 @@ const Navbar = ({
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
+                        setIsAccountsOpen,
                       }}
                     />
                     <NestedSubNavLink
@@ -296,6 +307,7 @@ const Navbar = ({
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
+                        setIsAccountsOpen,
                       }}
                     />
                   </CollapsibleNav>
@@ -567,19 +579,29 @@ const Navbar = ({
               ) : (
                 <Divider my="xs" color="#D5D5D5" size="sm" />
               )}
-              <SimpleNavLink
-                label="Accounts"
-                key={"Accounts"}
-                icon={IconPercentage}
-                path="/accounts"
-                collapsibles={{
-                  setIsSalesOpen,
-                  setIsTariffOpen,
-                  setIsCustomerServiceOpen,
-                  setIsAirOpen,
-                  setIsSeaExportOpen,
-                }}
-              />
+              <Box>
+                <CollapsibleNav
+                  label="Accounts"
+                  key="Accounts"
+                  openedLocal={isAccountsOpen}
+                  setOpenedLocal={setIsAccountsOpen}
+                  icon={IconPercentage}
+                >
+                  <SubNavLink
+                    parent="Accounts"
+                    label="Receipt"
+                    icon={IconReceiptTax}
+                    path="/receipt"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                </CollapsibleNav>
+              </Box>
               <SimpleNavLink
                 label="Masters"
                 key={"Masters"}
@@ -591,6 +613,7 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
+                  setIsAccountsOpen,
                 }}
               />
               <SimpleNavLink
@@ -604,6 +627,7 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
+                  setIsAccountsOpen,
                 }}
               />
             </Stack>
@@ -625,6 +649,7 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
+                  setIsAccountsOpen,
                 }}
               />
               <SimpleNavLink
@@ -637,6 +662,7 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
+                  setIsAccountsOpen,
                 }}
               />
             </Stack>
