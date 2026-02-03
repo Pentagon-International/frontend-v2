@@ -1,4 +1,5 @@
 import {
+  Badge,
   Box,
   Button,
   Card,
@@ -34,6 +35,7 @@ import {
 import { getAPICall } from "../../service/getApiCall";
 import { API_HEADER } from "../../store/storeKeys";
 import { postAPICall } from "../../service/postApiCall";
+import { putAPICall } from "../../service/putApiCall";
 import useAuthStore from "../../store/authStore";
 
 const RECEIPT_TYPE_OPTIONS = [
@@ -119,6 +121,7 @@ function clampAmount(value: number | null | undefined): number | null {
 }
 
 type DetailRow = {
+  id?: number | null;
   customer_code: string;
   customer_display: string;
   narration: string;
@@ -130,6 +133,7 @@ type DetailRow = {
 };
 
 type AdjustmentRow = {
+  id?: number | null;
   location: string;
   type: string;
   subledger: string;
@@ -138,6 +142,7 @@ type AdjustmentRow = {
   document_no: string;
   doc_date: Date | null;
   currency: string;
+  roe: number | null; // invoice ROE for recalculating adj_local_amount when user edits adj_curr_amount
   adj_curr_amount: number | null;
   adj_local_amount: number | null;
 };
@@ -195,6 +200,7 @@ const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
   document_no: "",
   doc_date: null,
   currency: localCurrency,
+  roe: null,
   adj_curr_amount: null,
   adj_local_amount: null,
 });
@@ -229,6 +235,47 @@ const fieldStyles = {
   },
 };
 
+// Same styling for all fields when in posted/read-only mode (used for header, party details, adjustments)
+const readOnlyFieldStyles = {
+  input: {
+    fontSize: "13px",
+    fontFamily: "Inter",
+    height: "36px",
+    backgroundColor: "#f5f5f5",
+    cursor: "default",
+  },
+  label: fieldStyles.label,
+};
+
+// Parse document_date from API (DD-MM-YYYY or YYYY-MM-DD) to Date
+function parseDocumentDate(value: string | null | undefined): Date | null {
+  if (value == null || String(value).trim() === "") return null;
+  const s = String(value).trim();
+  const parts = s.split("-");
+  if (parts.length === 3) {
+    const [a, b, c] = parts;
+    const day = parseInt(a, 10);
+    const month = parseInt(b, 10) - 1;
+    const year = parseInt(c, 10);
+    if (c.length === 4 && !isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 0 && month <= 11) {
+      const d = new Date(year, month, day);
+      if (!isNaN(d.getTime())) return d;
+    }
+    if (a.length === 4) {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Display document_date from API (supports DD-MM-YYYY or ISO)
+function formatDocumentDateDisplay(value: string | null | undefined): string {
+  const d = parseDocumentDate(value);
+  return d ? d.toLocaleDateString() : "—";
+}
+
 export default function ReceiptCreate() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -250,7 +297,14 @@ export default function ReceiptCreate() {
     Set<number>
   >(new Set());
   const [invoiceLoading, setInvoiceLoading] = useState(false);
-  const [submitLoading, setSubmitLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
+  const [saveResponse, setSaveResponse] = useState<{
+    id?: number;
+    receipt_no?: string;
+    document_no?: string;
+    status?: string;
+  } | null>(null);
 
   const branchCode =
     (defaultBranch as { branch_code?: string } | undefined)?.branch_code ?? "";
@@ -495,7 +549,7 @@ export default function ReceiptCreate() {
       const inv = invoiceList[listIdx];
       const docDate =
         inv.document_date != null
-          ? new Date(inv.document_date as string)
+          ? parseDocumentDate(inv.document_date as string)
           : null;
       const totalNum =
         typeof inv.total === "number"
@@ -503,6 +557,22 @@ export default function ReceiptCreate() {
           : typeof inv.total === "string"
             ? parseFloat(inv.total) || null
             : null;
+      const localTotalNum =
+        inv.local_total != null
+          ? typeof inv.local_total === "number"
+            ? inv.local_total
+            : typeof inv.local_total === "string"
+              ? parseFloat(inv.local_total) || null
+              : null
+          : null;
+      const invRoe =
+        inv.roe != null
+          ? typeof inv.roe === "number"
+            ? inv.roe
+            : typeof inv.roe === "string"
+              ? parseFloat(inv.roe) || null
+              : null
+          : null;
       const daybookId =
         inv.day_book_id ?? inv.daybook_id;
       return {
@@ -514,21 +584,21 @@ export default function ReceiptCreate() {
         document_no: inv.document_no ?? "",
         doc_date: docDate,
         currency: inv.currency_code ?? localCurrency,
+        roe: invRoe,
         adj_curr_amount: totalNum,
-        adj_local_amount: totalNum,
+        adj_local_amount: localTotalNum != null ? localTotalNum : (totalNum != null && invRoe != null ? clampAmount(totalNum * invRoe) : totalNum),
       };
     });
-    // Fill from first row: set values starting at index 0
-    const targetCount = Math.max(currentAdjustments.length, newRows.length);
-    const nextAdjustments: AdjustmentRow[] = [];
-    for (let i = 0; i < targetCount; i++) {
-      if (i < newRows.length) {
-        nextAdjustments.push(newRows[i]);
-      } else {
-        nextAdjustments.push(currentAdjustments[i]);
-      }
+    // Append selected invoices to Adjustments so multiple parties' selections accumulate
+    const isSingleEmptyRow =
+      currentAdjustments.length === 1 &&
+      !currentAdjustments[0].document_no?.trim();
+    const nextAdjustments: AdjustmentRow[] = isSingleEmptyRow
+      ? newRows
+      : [...currentAdjustments, ...newRows];
+    if (nextAdjustments.length === 0) {
+      nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     }
-    if (nextAdjustments.length === 0) nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     form.setFieldValue("adjustments", nextAdjustments);
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
@@ -543,10 +613,66 @@ export default function ReceiptCreate() {
     });
   };
 
+  const buildReceiptPayload = (
+    values: ReceiptFormValues,
+    options: { status?: string } = {},
+  ) => {
+    const dayBookId = Number(values.daybook_id) || 0;
+    const currencyId =
+      currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
+    const isEdit = saveResponse?.id != null && saveResponse.id > 0;
+    const base: Record<string, unknown> = {
+      ...(isEdit ? { id: saveResponse!.id } : {}),
+      date: formatDateYYYYMMDD(values.date),
+      day_book_id: dayBookId,
+      type: values.type ?? "CASH",
+      currency_id: currencyId,
+      roe: values.roe ?? 0,
+      account_code: values.account_code ?? "",
+      amount: values.amount ?? 0,
+      local_amount: values.local_amount ?? 0,
+      narration: values.narration ?? "",
+      note: values.note ?? "",
+      bank: values.bank ?? "",
+      branch: values.branch ?? "",
+      cheque_no: values.cheque_no ?? "",
+      chq_clrd_date: formatDateYYYYMMDD(values.cheque_date),
+      dr_cr: "Cr",
+      parties: (values.details ?? []).map((d) => ({
+        ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
+        subledger_code: d.customer_code ?? "",
+        narration: d.narration ?? "",
+        currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
+        roe: d.roe ?? 0,
+        amount: d.amount ?? 0,
+        local_amount: d.local_amount ?? 0,
+        dr_cr: d.dr_cr ?? "Cr",
+      })),
+      allocations: (values.adjustments ?? []).map((a) => ({
+        ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
+        location: a.location ?? "",
+        subledger_code: a.subledger ?? "",
+        day_book_id: Number(a.daybook_id) || 0,
+        type: a.type ?? "",
+        document_no: a.document_no ?? "",
+        document_date: formatDateYYYYMMDD(a.doc_date),
+        currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
+        adj_curr_amount: a.adj_curr_amount ?? 0,
+        adj_local_amount: a.adj_local_amount ?? 0,
+      })),
+    };
+    // Create flow: do not send status. Edit flow (update/post): send status.
+    if (isEdit && options.status != null) {
+      base.status = options.status;
+    }
+    return base;
+  };
+
   const handleSubmit = async (values: ReceiptFormValues) => {
     const partyTotal =
       (values.details ?? []).reduce(
-        (sum, d) => sum + (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
+        (sum, d) =>
+          sum + (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
         0,
       ) ?? 0;
     const adjTotal =
@@ -558,95 +684,230 @@ export default function ReceiptCreate() {
             : 0),
         0,
       ) ?? 0;
-    if (adjTotal > partyTotal) {
+    if (partyTotal > adjTotal) {
       ToastNotification({
         type: "error",
         message:
-          "The total Adj Curr Amount value is greater than total amount of Party Details",
+          "The total amount of Party Details cannot exceed the total Adj Curr Amount of the Adjustments section.",
       });
       return;
     }
-    setSubmitLoading(true);
+    setIsSubmitting(true);
     try {
-      const dayBookId = Number(values.daybook_id) || 0;
-      const currencyId = currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
-      const payload = {
-        date: formatDateYYYYMMDD(values.date),
-        status: "UNPOSTED",
-        day_book_id: dayBookId,
-        type: values.type ?? "Cash",
-        currency_id: currencyId,
-        roe: values.roe ?? 0,
-        account_code: values.account_code ?? "",
-        amount: values.amount ?? 0,
-        local_amount: values.local_amount ?? 0,
-        narration: values.narration ?? "",
-        note: values.note ?? "",
-        bank: values.bank ?? "",
-        branch: values.branch ?? "",
-        cheque_no: values.cheque_no ?? "",
-        chq_clrd_date: formatDateYYYYMMDD(values.cheque_date),
-        dr_cr: "Cr",
-        parties: (values.details ?? []).map((d) => ({
-          subledger_code: d.customer_code ?? "",
-          narration: d.narration ?? "",
-          currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
-          roe: d.roe ?? 0,
-          amount: d.amount ?? 0,
-          local_amount: d.local_amount ?? 0,
-          dr_cr: d.dr_cr ?? "Cr",
-        })),
-        allocations: (values.adjustments ?? []).map((a) => ({
-          location: a.location ?? "",
-          subledger_code: a.subledger ?? "",
-          day_book_id: Number(a.daybook_id) || 0,
-          type: a.type ?? "",
-          document_no: a.document_no ?? "",
-          document_date: formatDateYYYYMMDD(a.doc_date),
-          currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
-          adj_curr_amount: a.adj_curr_amount ?? 0,
-          adj_local_amount: a.adj_local_amount ?? 0,
-        })),
-      };
-      await postAPICall(URL.receipt, payload, API_HEADER);
-      await queryClient.invalidateQueries({ queryKey: ["receipt"] });
-      ToastNotification({
-        type: "success",
-        message: "Receipt created successfully.",
-      });
-      navigate("/receipt");
+      const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
+      const payload = isUpdate
+        ? buildReceiptPayload(values, { status: "UNPOSTED" })
+        : buildReceiptPayload(values);
+
+      if (isUpdate) {
+        const raw = await putAPICall(URL.receipt, payload, API_HEADER);
+        const response = (raw as { data?: { id?: number; receipt_no?: string; status?: string | number } })?.data ?? raw;
+        const res = response as { id?: number; receipt_no?: string; status?: string | number };
+        if (res?.id != null) {
+          setSaveResponse({
+            id: res.id ?? saveResponse.id,
+            receipt_no: res.receipt_no ?? saveResponse.receipt_no ?? "",
+            document_no: saveResponse.document_no ?? "",
+            status: res.status != null ? String(res.status) : "UNPOSTED",
+          });
+          await queryClient.invalidateQueries({ queryKey: ["receipt"] });
+          ToastNotification({
+            type: "success",
+            message: "Receipt updated successfully.",
+          });
+        }
+      } else {
+        const raw = await postAPICall(URL.receipt, payload, API_HEADER);
+        const wrap = raw as {
+          data?: {
+            id?: number;
+            receipt_no?: string;
+            status?: string | number;
+            parties?: Array<{ id?: number; subledger_code?: string }>;
+            allocations?: Array<{ id?: number }>;
+          };
+        };
+        const data = wrap?.data;
+        if (data?.id != null) {
+          setSaveResponse({
+            id: data.id,
+            receipt_no: data.receipt_no ?? "",
+            document_no: data.receipt_no ?? "",
+            status: data.status != null ? String(data.status) : "UNPOSTED",
+          });
+          // Merge party and allocation ids from response into form for future updates
+          if (data.parties && Array.isArray(data.parties) && data.parties.length === form.values.details.length) {
+            const updatedDetails = form.values.details.map((d, i) => ({
+              ...d,
+              id: data.parties![i]?.id ?? d.id,
+            }));
+            form.setFieldValue("details", updatedDetails);
+          }
+          if (data.allocations && Array.isArray(data.allocations) && data.allocations.length === form.values.adjustments.length) {
+            const updatedAdjustments = form.values.adjustments.map((a, i) => ({
+              ...a,
+              id: data.allocations![i]?.id ?? a.id,
+            }));
+            form.setFieldValue("adjustments", updatedAdjustments);
+          }
+          await queryClient.invalidateQueries({ queryKey: ["receipt"] });
+          ToastNotification({
+            type: "success",
+            message: "Receipt saved successfully.",
+          });
+        }
+      }
     } catch (err) {
-      console.error("Create receipt error:", err);
+      console.error("Save/update receipt error:", err);
       ToastNotification({
         type: "error",
         message:
           (err as { response?: { data?: { message?: string } } })?.response
-            ?.data?.message ?? "Failed to create receipt.",
+            ?.data?.message ?? "Failed to save receipt.",
       });
     } finally {
-      setSubmitLoading(false);
+      setIsSubmitting(false);
     }
   };
 
+  const handlePostReceipt = async () => {
+    if (!saveResponse?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Save the receipt first before posting.",
+      });
+      return;
+    }
+    setIsPosting(true);
+    try {
+      const payload = buildReceiptPayload(form.values, { status: "POSTED" });
+      const raw = await putAPICall(URL.receipt, payload, API_HEADER);
+      const response = (raw as { data?: { id?: number; receipt_no?: string; status?: string | number } })?.data ?? raw;
+      const res = response as { id?: number; receipt_no?: string; status?: string | number };
+      if (res?.id != null) {
+        setSaveResponse((prev) => ({
+          ...prev,
+          id: res.id ?? prev?.id,
+          receipt_no: res.receipt_no ?? prev?.receipt_no ?? "",
+          document_no: prev?.document_no ?? "",
+          status: res.status != null ? String(res.status) : "POSTED",
+        }));
+        await queryClient.invalidateQueries({ queryKey: ["receipt"] });
+        ToastNotification({
+          type: "success",
+          message: "Receipt posted successfully.",
+        });
+      }
+    } catch (err) {
+      console.error("Post receipt error:", err);
+      ToastNotification({
+        type: "error",
+        message:
+          (err as { response?: { data?: { message?: string } } })?.response
+            ?.data?.message ?? "Failed to post receipt.",
+      });
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
+  const isReadOnly = statusUpper === "POSTED";
+  const inputStyles = isReadOnly ? readOnlyFieldStyles : fieldStyles;
+
   return (
-    <Box p="md">
+    <Box p="md" style={{ position: "relative" }}>
+      {(isSubmitting || isPosting) && (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(255,255,255,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="#105476" fw={500}>
+              {isPosting ? "Posting receipt..." : "Saving receipt..."}
+            </Text>
+          </Stack>
+        </Box>
+      )}
       <Stack gap="md">
-        {/* Header: Title | Back */}
+        {/* Header: Title | Receipt No & Status (left of Back) | Back */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
           <Text size="xl" fw={600} c="#105476">
             Create Receipt
           </Text>
-          <Button
-            variant="outline"
-            color="#105476"
-            leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate("/receipt")}
-          >
-            Back
-          </Button>
+          <Group gap="md" wrap="nowrap">
+            {saveResponse && (
+              <Group gap="sm" wrap="nowrap">
+                <Group gap="xs" wrap="nowrap">
+                  <Text size="sm" fw={500} c="dimmed">
+                    Receipt No:
+                  </Text>
+                  <Badge
+                    size="sm"
+                    variant="light"
+                    color="#105476"
+                    styles={{ root: { textTransform: "none" } }}
+                  >
+                    {saveResponse.receipt_no ||
+                      saveResponse.document_no ||
+                      (saveResponse.id != null ? String(saveResponse.id) : "") ||
+                      "—"}
+                  </Badge>
+                </Group>
+                <Group gap="xs" wrap="nowrap">
+                  <Text size="sm" fw={500} c="dimmed">Status:</Text>
+                  <Badge
+                    size="sm"
+                    variant="light"
+                    color={
+                      statusUpper === "UNPOSTED"
+                        ? "gray"
+                        : statusUpper === "POSTED"
+                          ? "green"
+                          : "#105476"
+                    }
+                    styles={{ root: { textTransform: "none" } }}
+                  >
+                    {statusUpper || "—"}
+                  </Badge>
+                </Group>
+              </Group>
+            )}
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconArrowLeft size={16} />}
+              onClick={() => navigate("/receipt")}
+            >
+              Back
+            </Button>
+          </Group>
         </Group>
 
-        <Box component="form" onSubmit={form.onSubmit(handleSubmit)}>
+        <Box
+          component="form"
+          onSubmit={
+            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+          }
+          style={
+            isReadOnly
+              ? {
+                  opacity: 0.92,
+                  backgroundColor: "#f5f5f5",
+                  borderRadius: 8,
+                  padding: 16,
+                }
+              : undefined
+          }
+        >
           <Grid>
             {/* Row 1: Daybook, Type, Date, Currency, ROE, Amount, Local Amount */}
             <Grid.Col span={2}>
@@ -659,7 +920,8 @@ export default function ReceiptCreate() {
                 searchable
                 withAsterisk
                 error={form.errors.daybook_id}
-                styles={fieldStyles}
+                styles={inputStyles}
+                disabled={isReadOnly}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -672,18 +934,22 @@ export default function ReceiptCreate() {
                 searchable
                 withAsterisk
                 error={form.errors.type}
-                styles={fieldStyles}
+                styles={inputStyles}
+                disabled={isReadOnly}
               />
             </Grid.Col>
             <Grid.Col span={2}>
-              <SingleDateInput
-                label="Date"
-                placeholder="Select date"
-                value={normalizeDate(form.values.date)}
-                onChange={(date) => form.setFieldValue("date", date)}
-                withAsterisk
-                error={form.errors.date as string | undefined}
-              />
+              <Box style={isReadOnly ? { backgroundColor: "#f5f5f5", borderRadius: 4, padding: "2px 0" } : undefined}>
+                <SingleDateInput
+                  label="Date"
+                  placeholder="Select date"
+                  value={normalizeDate(form.values.date)}
+                  onChange={(date) => form.setFieldValue("date", date)}
+                  withAsterisk
+                  error={form.errors.date as string | undefined}
+                  disabled={isReadOnly}
+                />
+              </Box>
             </Grid.Col>
             <Grid.Col span={1.5}>
               <Dropdown
@@ -700,7 +966,8 @@ export default function ReceiptCreate() {
                 searchable
                 withAsterisk
                 error={form.errors.currency}
-                styles={fieldStyles}
+                styles={inputStyles}
+                disabled={isReadOnly}
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -718,7 +985,8 @@ export default function ReceiptCreate() {
                 decimalScale={4}
                 max={ROE_MAX}
                 hideControls
-                styles={fieldStyles}
+                styles={inputStyles}
+                disabled={isReadOnly}
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -737,7 +1005,8 @@ export default function ReceiptCreate() {
                 decimalScale={2}
                 max={AMOUNT_MAX}
                 hideControls
-                styles={fieldStyles}
+                styles={inputStyles}
+                disabled={isReadOnly}
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -756,7 +1025,8 @@ export default function ReceiptCreate() {
                 decimalScale={2}
                 max={AMOUNT_MAX}
                 hideControls
-                styles={fieldStyles}
+                styles={inputStyles}
+                disabled={isReadOnly}
               />
             </Grid.Col>
 
@@ -768,7 +1038,8 @@ export default function ReceiptCreate() {
                     label="Bank"
                     placeholder="Bank"
                     {...form.getInputProps("bank")}
-                    styles={fieldStyles}
+                    styles={inputStyles}
+                    disabled={isReadOnly}
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -776,7 +1047,8 @@ export default function ReceiptCreate() {
                     label="Branch"
                     placeholder="Branch"
                     {...form.getInputProps("branch")}
-                    styles={fieldStyles}
+                    styles={inputStyles}
+                    disabled={isReadOnly}
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -784,16 +1056,20 @@ export default function ReceiptCreate() {
                     label="Cheque No"
                     placeholder="Cheque No"
                     {...form.getInputProps("cheque_no")}
-                    styles={fieldStyles}
+                    styles={inputStyles}
+                    disabled={isReadOnly}
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  <SingleDateInput
-                    label="Cheque Date"
-                    placeholder="Select date"
-                    value={normalizeDate(form.values.cheque_date)}
-                    onChange={(date) => form.setFieldValue("cheque_date", date)}
-                  />
+                  <Box style={isReadOnly ? { backgroundColor: "#f5f5f5", borderRadius: 4, padding: "2px 0" } : undefined}>
+                    <SingleDateInput
+                      label="Cheque Date"
+                      placeholder="Select date"
+                      value={normalizeDate(form.values.cheque_date)}
+                      onChange={(date) => form.setFieldValue("cheque_date", date)}
+                      disabled={isReadOnly}
+                    />
+                  </Box>
                 </Grid.Col>
               </>
             )}
@@ -851,6 +1127,7 @@ export default function ReceiptCreate() {
                           displayValue={
                             form.values.details[idx].customer_display || null
                           }
+                          disabled={isReadOnly}
                           onChange={(value, _selected, originalData) => {
                             const name =
                               (
@@ -897,27 +1174,22 @@ export default function ReceiptCreate() {
                           })}
                           searchFields={["customer_name", "customer_code"]}
                           returnOriginalData
-                          styles={fieldStyles}
+                          styles={inputStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={2.5}>
                         <TextInput
                           placeholder="Narration"
                           {...form.getInputProps(`details.${idx}.narration`)}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                            },
-                            label: fieldStyles.label,
-                          }}
+                          disabled={isReadOnly}
+                          styles={inputStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <TextInput
                           value={form.values.details[idx].currency}
                           readOnly
-                          styles={fieldStyles}
+                          styles={inputStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -936,7 +1208,8 @@ export default function ReceiptCreate() {
                           }
                           decimalScale={4}
                           max={ROE_MAX}
-                          styles={fieldStyles}
+                          styles={inputStyles}
+                          disabled={isReadOnly}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -955,7 +1228,8 @@ export default function ReceiptCreate() {
                           }
                           decimalScale={2}
                           max={AMOUNT_MAX}
-                          styles={fieldStyles}
+                          styles={inputStyles}
+                          disabled={isReadOnly}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -976,7 +1250,8 @@ export default function ReceiptCreate() {
                           }
                           decimalScale={2}
                           max={AMOUNT_MAX}
-                          styles={fieldStyles}
+                          styles={inputStyles}
+                          disabled={isReadOnly}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -990,7 +1265,8 @@ export default function ReceiptCreate() {
                               (v as "Cr" | "Dr") ?? "Cr",
                             )
                           }
-                          styles={fieldStyles}
+                          styles={inputStyles}
+                          disabled={isReadOnly}
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
@@ -1001,6 +1277,7 @@ export default function ReceiptCreate() {
                             size="sm"
                             onClick={addDetailRow}
                             title="Add row"
+                            disabled={isReadOnly}
                           >
                             <IconPlus size={18} />
                           </Button>
@@ -1010,7 +1287,9 @@ export default function ReceiptCreate() {
                             size="sm"
                             color="red"
                             onClick={() => removeDetailRow(idx)}
-                            disabled={form.values.details.length <= 1}
+                            disabled={
+                              isReadOnly || form.values.details.length <= 1
+                            }
                             title="Remove row"
                           >
                             <IconTrash size={18} />
@@ -1021,6 +1300,7 @@ export default function ReceiptCreate() {
                             size="sm"
                             title="Get invoice details"
                             disabled={
+                              isReadOnly ||
                               invoiceLoading ||
                               (!form.values.details[idx].customer_code &&
                                 !form.values.details[idx].customer_display)
@@ -1099,7 +1379,7 @@ export default function ReceiptCreate() {
                           placeholder="Location"
                           readOnly
                           {...form.getInputProps(`adjustments.${idx}.location`)}
-                          styles={fieldStyles}
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
@@ -1111,7 +1391,7 @@ export default function ReceiptCreate() {
                           }
                           disabled
                           readOnly
-                          styles={fieldStyles}
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -1119,7 +1399,7 @@ export default function ReceiptCreate() {
                           placeholder="Type"
                           readOnly
                           {...form.getInputProps(`adjustments.${idx}.type`)}
-                          styles={fieldStyles}
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
@@ -1130,7 +1410,7 @@ export default function ReceiptCreate() {
                             form.values.adjustments[idx].subledger_display ||
                             form.values.adjustments[idx].subledger
                           }
-                          styles={fieldStyles}
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
@@ -1140,18 +1420,20 @@ export default function ReceiptCreate() {
                           {...form.getInputProps(
                             `adjustments.${idx}.document_no`,
                           )}
-                          styles={fieldStyles}
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
-                        <SingleDateInput
-                          placeholder="Doc date"
-                          value={normalizeDate(
-                            form.values.adjustments[idx].doc_date,
-                          )}
-                          onChange={() => {}}
-                          disabled
-                        />
+                        <Box style={{ backgroundColor: "#f5f5f5", borderRadius: 4, padding: "2px 0" }}>
+                          <SingleDateInput
+                            placeholder="Doc date"
+                            value={normalizeDate(
+                              form.values.adjustments[idx].doc_date,
+                            )}
+                            onChange={() => {}}
+                            disabled
+                          />
+                        </Box>
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <Dropdown
@@ -1160,7 +1442,7 @@ export default function ReceiptCreate() {
                           value={form.values.adjustments[idx].currency || null}
                           disabled
                           readOnly
-                          styles={fieldStyles}
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -1172,17 +1454,27 @@ export default function ReceiptCreate() {
                             form.values.adjustments[idx].adj_curr_amount ??
                             undefined
                           }
-                          onChange={(v) =>
+                          onChange={(v) => {
+                            const newCurr = clampAmount(
+                              typeof v === "string" ? parseFloat(v) : v,
+                            ) ?? null;
                             form.setFieldValue(
                               `adjustments.${idx}.adj_curr_amount`,
-                              clampAmount(
-                                typeof v === "string" ? parseFloat(v) : v,
-                              ) ?? null,
-                            )
-                          }
+                              newCurr,
+                            );
+                            const rowRoe = form.values.adjustments[idx]?.roe;
+                            if (newCurr != null && rowRoe != null && Number.isFinite(rowRoe)) {
+                              const newLocal = clampAmount(newCurr * rowRoe);
+                              form.setFieldValue(
+                                `adjustments.${idx}.adj_local_amount`,
+                                newLocal,
+                              );
+                            }
+                          }}
                           decimalScale={2}
                           max={AMOUNT_MAX}
-                          styles={fieldStyles}
+                          styles={inputStyles}
+                          disabled={isReadOnly}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -1197,7 +1489,7 @@ export default function ReceiptCreate() {
                           }
                           decimalScale={2}
                           max={AMOUNT_MAX}
-                          styles={fieldStyles}
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -1208,6 +1500,7 @@ export default function ReceiptCreate() {
                             size="sm"
                             onClick={addAdjustmentRow}
                             title="Add row"
+                            disabled={isReadOnly}
                           >
                             <IconPlus size={18} />
                           </Button>
@@ -1217,7 +1510,10 @@ export default function ReceiptCreate() {
                             size="sm"
                             color="red"
                             onClick={() => removeAdjustmentRow(idx)}
-                            disabled={form.values.adjustments.length <= 1}
+                            disabled={
+                              isReadOnly ||
+                              form.values.adjustments.length <= 1
+                            }
                             title="Remove row"
                           >
                             <IconTrash size={18} />
@@ -1278,11 +1574,9 @@ export default function ReceiptCreate() {
                         <Table.Td>{inv.document_no ?? "—"}</Table.Td>
                         <Table.Td>{inv.document_no ?? "—"}</Table.Td>
                         <Table.Td>
-                          {inv.document_date
-                            ? new Date(
-                                inv.document_date as string,
-                              ).toLocaleDateString()
-                            : "—"}
+                          {formatDocumentDateDisplay(
+                            inv.document_date as string,
+                          )}
                         </Table.Td>
                         <Table.Td>
                           {inv.total != null
@@ -1334,17 +1628,31 @@ export default function ReceiptCreate() {
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              color="#105476"
-              loading={submitLoading}
-              disabled={submitLoading}
-              rightSection={
-                submitLoading ? null : <IconChevronRight size={16} />
-              }
-            >
-              Save Receipt
-            </Button>
+            {!isReadOnly && (
+              <>
+                <Button
+                  type="submit"
+                  color="#105476"
+                  loading={isSubmitting}
+                  rightSection={
+                    isSubmitting ? null : <IconChevronRight size={16} />
+                  }
+                >
+                  {saveResponse?.id ? "Update Receipt" : "Save Receipt"}
+                </Button>
+                {saveResponse && statusUpper === "UNPOSTED" && (
+                    <Button
+                      type="button"
+                      color="black"
+                      variant="filled"
+                      loading={isPosting}
+                      onClick={handlePostReceipt}
+                    >
+                      Post Receipt
+                    </Button>
+                  )}
+              </>
+            )}
           </Group>
         </Box>
       </Stack>
