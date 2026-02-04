@@ -2745,30 +2745,32 @@ function HouseCreate() {
                 {chargesForm.values.charges.length > 1 &&
                   ` (${chargesForm.values.charges.length})`}
               </Text>
-              <Button
-                variant="outline"
-                color="#105476"
-                onClick={() => {
-                  navigate("/air/import-job/invoice", {
-                    state: {
-                      hawbDetails: [getCurrentHousingDetail()],
-                      housingDetails: [getCurrentHousingDetail()],
-                      ...(location.state?.job && { job: location.state.job }),
-                      ...(location.state?.mawbDetails && {
-                        mawbDetails: location.state.mawbDetails,
-                      }),
-                      ...(location.state?.carrierDetails && {
-                        carrierDetails: location.state.carrierDetails,
-                      }),
-                      ...(location.state?.routings && {
-                        routings: location.state.routings,
-                      }),
-                    },
-                  });
-                }}
-              >
-                Create Invoice
-              </Button>
+              {location.state?.job?.id != null && (
+                <Button
+                  variant="outline"
+                  color="#105476"
+                  onClick={() => {
+                    navigate("/air/import-job/invoice", {
+                      state: {
+                        hawbDetails: [getCurrentHousingDetail()],
+                        housingDetails: [getCurrentHousingDetail()],
+                        ...(location.state?.job && { job: location.state.job }),
+                        ...(location.state?.mawbDetails && {
+                          mawbDetails: location.state.mawbDetails,
+                        }),
+                        ...(location.state?.carrierDetails && {
+                          carrierDetails: location.state.carrierDetails,
+                        }),
+                        ...(location.state?.routings && {
+                          routings: location.state.routings,
+                        }),
+                      },
+                    });
+                  }}
+                >
+                  Create Invoice
+                </Button>
+              )}
             </Group>
 
             {/* Dynamic Charges Rows */}
