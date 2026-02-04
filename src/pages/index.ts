@@ -142,6 +142,7 @@ import ChargeCreate from "./masters/charge/ChargeCreate";
 import ChartOfAccountsMaster from "./masters/chart-of-accounts/ChartOfAccountsMaster";
 import ChartOfAccountsCreate from "./masters/chart-of-accounts/ChartOfAccountsCreate";
 import GLChargeMappingMaster from "./masters/gl-charge-mapping/GLChargeMappingMaster";
+import GLChargeMappingCreate from "./masters/gl-charge-mapping/GLChargeMappingCreate";
 import GSTSACMaster from "./masters/gst-sac/GSTSACMaster";
 import GSTRateMaster from "./masters/gst-rate/GSTRateMaster";
 import GSTChargeMappingMaster from "./masters/gst-charge-mapping/GSTChargeMappingMaster";
@@ -221,6 +222,7 @@ export {
   ChartOfAccountsMaster,
   ChartOfAccountsCreate,
   GLChargeMappingMaster,
+  GLChargeMappingCreate,
   GSTSACMaster,
   GSTRateMaster,
   GSTChargeMappingMaster,

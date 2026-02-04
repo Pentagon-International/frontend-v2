@@ -20,6 +20,8 @@ import {
   Loader,
   Stack,
   Select,
+  TextInput,
+  Grid,
 } from "@mantine/core";
 import {
   IconDotsVertical,
@@ -27,19 +29,78 @@ import {
   IconPlus,
   IconChevronLeft,
   IconChevronRight,
+  IconFilter,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { useDebouncedValue } from "@mantine/hooks";
+import { SearchableSelect } from "../../../components";
+import { getAPICall } from "../../../service/getApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
 
 type GLChargeMappingMaster = {
-  id?: string;
-  charge_code?: string;
+  id?: string | number;
+  sno?: number;
+  charge_id?: number | string;
   charge_name?: string;
-  gl_account_code?: string;
-  gl_account_name?: string;
+  charge_code?: string;
+  country_id?: number | string;
+  country_name?: string;
+  country_code?: string;
+  service_id?: number | string;
+  service_code?: string;
+  service_name?: string;
+  revenue_gl_id?: number | string;
+  revenue_gl_name?: string;
+  revenue_gl_code?: string;
+  cost_gl_id?: number | string;
+  cost_gl_name?: string;
+  cost_gl_code?: string;
+  neutral_gl_id?: number | string;
+  neutral_gl_name?: string;
+  neutral_gl_code?: string;
+  revenue_sl_id?: number | string;
+  revenue_sl_name?: string;
+  revenue_sl_code?: string;
+  cost_sl_id?: number | string;
+  cost_sl_name?: string;
+  cost_sl_code?: string;
+  neutral_sl_id?: number | string;
+  neutral_sl_name?: string;
+  neutral_sl_code?: string;
   status?: "ACTIVE" | "INACTIVE";
+};
+
+type GLChargeMappingFilters = {
+  charge_id: string;
+  country_id: string;
+  service_id: string;
+  revenue_gl_id: string;
+  cost_gl_id: string;
+  neutral_gl_id: string;
+  revenue_sl_id: string;
+  cost_sl_id: string;
+  neutral_sl_id: string;
+  status: string;
+};
+
+type CountryData = {
+  id: number;
+  country_code: string;
+  country_name: string;
+  status?: string;
+};
+
+type ServiceData = {
+  id: number;
+  service_name: string;
+  service_code?: string;
+  status?: string;
 };
 
 export default function GLChargeMappingMasterList() {
@@ -50,6 +111,93 @@ export default function GLChargeMappingMasterList() {
     pageSize: 25,
   });
   const [totalRecords, setTotalRecords] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const DEFAULT_FILTERS: GLChargeMappingFilters = {
+    charge_id: "",
+    country_id: "",
+    service_id: "",
+    revenue_gl_id: "",
+    cost_gl_id: "",
+    neutral_gl_id: "",
+    revenue_sl_id: "",
+    cost_sl_id: "",
+    neutral_sl_id: "",
+    status: "",
+  };
+
+  const [draftFilters, setDraftFilters] =
+    useState<GLChargeMappingFilters>(DEFAULT_FILTERS);
+
+  const [appliedFilters, setAppliedFilters] =
+    useState<GLChargeMappingFilters>(DEFAULT_FILTERS);
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
+
+  const currentPage = pagination.pageIndex + 1;
+  const statusOptions = ["ACTIVE", "INACTIVE"];
+
+  // Fetch countries data
+  const { data: countries = [] } = useQuery({
+    queryKey: ["countries"],
+    queryFn: async () => {
+      try {
+        const response = (await getAPICall(`${URL.country}`, API_HEADER)) as
+          | CountryData[]
+          | { success: boolean; data: CountryData[] };
+
+        if (response && typeof response === "object" && "success" in response) {
+          return response.data || [];
+        }
+        return Array.isArray(response) ? response : [];
+      } catch (error) {
+        console.error("Error fetching countries:", error);
+        return [];
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Fetch service data
+  const { data: services = [] } = useQuery({
+    queryKey: ["services"],
+    queryFn: async () => {
+      try {
+        const response = (await getAPICall(
+          `${URL.serviceMaster}`,
+          API_HEADER,
+        )) as ServiceData[] | { success: boolean; data: ServiceData[] };
+
+        if (response && typeof response === "object" && "success" in response) {
+          return response.data || [];
+        }
+        return Array.isArray(response) ? response : [];
+      } catch (error) {
+        console.error("Error fetching services:", error);
+        return [];
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Memoized dropdown options
+  const countryOptions = useMemo(() => {
+    return (countries as CountryData[])
+      .filter((country) => !country.status || country.status === "ACTIVE")
+      .map((country) => ({
+        value: country.country_code,
+        label: country.country_name,
+      }));
+  }, [countries]);
+
+  const serviceOptions = useMemo(() => {
+    return (services as ServiceData[])
+      .filter((service) => !service.status || service.status === "ACTIVE")
+      .map((service) => ({
+        value: String(service.id),
+        label: service.service_name,
+      }));
+  }, [services]);
 
   // Handle page size change
   const handlePageSizeChange = (newPageSize: number) => {
@@ -67,20 +215,92 @@ export default function GLChargeMappingMasterList() {
     }));
   };
 
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+
+  const buildFiltersPayload = (
+    filters: GLChargeMappingFilters,
+    searchValue: string,
+  ) => {
+    const cleaned: Record<string, any> = {};
+
+    // Add filter IDs (convert empty strings to undefined to exclude them)
+    if (filters.charge_id && filters.charge_id.trim() !== "")
+      cleaned.charge_id = Number(filters.charge_id);
+
+    // Convert country_code to country_id
+    if (filters.country_id && filters.country_id.trim() !== "") {
+      const country = (countries as CountryData[]).find(
+        (c) => c.country_code === filters.country_id,
+      );
+      if (country) {
+        cleaned.country_id = country.id;
+      }
+    }
+
+    if (filters.service_id && filters.service_id.trim() !== "")
+      cleaned.service_id = Number(filters.service_id);
+    if (filters.revenue_gl_id && filters.revenue_gl_id.trim() !== "")
+      cleaned.revenue_gl_id = Number(filters.revenue_gl_id);
+    if (filters.cost_gl_id && filters.cost_gl_id.trim() !== "")
+      cleaned.cost_gl_id = Number(filters.cost_gl_id);
+    if (filters.neutral_gl_id && filters.neutral_gl_id.trim() !== "")
+      cleaned.neutral_gl_id = Number(filters.neutral_gl_id);
+    if (filters.revenue_sl_id && filters.revenue_sl_id.trim() !== "")
+      cleaned.revenue_sl_id = Number(filters.revenue_sl_id);
+    if (filters.cost_sl_id && filters.cost_sl_id.trim() !== "")
+      cleaned.cost_sl_id = Number(filters.cost_sl_id);
+    if (filters.neutral_sl_id && filters.neutral_sl_id.trim() !== "")
+      cleaned.neutral_sl_id = Number(filters.neutral_sl_id);
+    if (filters.status && filters.status.trim() !== "")
+      cleaned.status = filters.status;
+
+    if (searchValue?.trim()) cleaned.search = searchValue;
+
+    return cleaned;
+  };
+
+  // Fetch GL charge mapping data with React Query
   const {
     data: glChargeMappingData = [],
     isLoading: glChargeMappingLoading,
+    isFetching: glChargeMappingFetching,
     error: glChargeMappingError,
-    refetch: refetchGLChargeMapping,
   } = useQuery({
-    queryKey: ["gl-charge-mapping", pagination.pageIndex, pagination.pageSize],
+    queryKey: [
+      "gl-charge-mapping",
+      pagination.pageIndex,
+      pagination.pageSize,
+      appliedFilters,
+      debouncedSearch,
+    ],
     queryFn: async () => {
       try {
         const index = pagination.pageIndex * pagination.pageSize;
-        const response = await apiCallProtected.post(
-          `${URL.glChargeMappingFilter}?index=${index}&limit=${pagination.pageSize}`,
-          {}
+
+        const filtersPayload = buildFiltersPayload(
+          appliedFilters,
+          debouncedSearch,
         );
+
+        const payload =
+          Object.keys(filtersPayload).length > 0
+            ? { filters: filtersPayload }
+            : {};
+
+        const response = await apiCallProtected.post(
+          `${URL.glChargeMappingFilter}?${debouncedSearch && "search=" + debouncedSearch}&index=${index}&limit=${pagination.pageSize}`,
+          payload,
+        );
+        setShowFilters(false);
 
         const data = response as any;
         if (data && Array.isArray(data.data)) {
@@ -91,6 +311,7 @@ export default function GLChargeMappingMasterList() {
         return [];
       } catch (error) {
         console.error("Error fetching GL charge mapping data:", error);
+        setShowFilters(false);
         setTotalRecords(0);
         throw error;
       }
@@ -100,14 +321,8 @@ export default function GLChargeMappingMasterList() {
     refetchOnMount: true,
   });
 
-  // Refetch data when navigating from create/edit pages
-  useEffect(() => {
-    if (location.state?.refreshData) {
-      refetchGLChargeMapping();
-      // Clear the refresh flag
-      navigate(location.pathname, { replace: true, state: {} });
-    }
-  }, [location.state?.refreshData, refetchGLChargeMapping, navigate, location.pathname]);
+  const isLoading = glChargeMappingFetching || glChargeMappingLoading;
+  const tableData = glChargeMappingData ?? [];
 
   const columns = useMemo<MRT_ColumnDef<GLChargeMappingMaster>[]>(
     () => [
@@ -120,65 +335,82 @@ export default function GLChargeMappingMasterList() {
         enableColumnFilter: false,
         enableSorting: false,
       },
-      { accessorKey: "charge_code", header: "Charge Code", size: 120 },
       { accessorKey: "charge_name", header: "Charge Name", size: 180 },
-      { accessorKey: "gl_account_code", header: "GL Account Code", size: 150 },
-      { accessorKey: "gl_account_name", header: "GL Account Name", size: 200 },
+      {
+        accessorKey: "country_name",
+        header: "Country Name",
+        size: 120,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string | null | undefined>();
+          return value && value.trim() !== "" ? value : "-";
+        },
+      },
+      { accessorKey: "service_name", header: "Service Name", size: 150 },
+      { accessorKey: "revenue_gl_name", header: "Revenue GL Name", size: 150 },
+      { accessorKey: "cost_gl_name", header: "Cost GL Name", size: 150 },
+      { accessorKey: "neutral_gl_name", header: "Neutral GL Name", size: 150 },
+      { accessorKey: "revenue_sl_name", header: "Revenue SL Name", size: 150 },
+      { accessorKey: "cost_sl_name", header: "Cost SL Name", size: 150 },
+      { accessorKey: "neutral_sl_name", header: "Neutral SL Name", size: 150 },
       {
         accessorKey: "status",
         header: "Status",
-        size: 80,
-        Cell: ({ row, cell }) => {
+        size: 90,
+        Cell: ({ cell }) => {
           const value = cell.getValue<"ACTIVE" | "INACTIVE">();
 
           return (
-            <Flex justify="space-between" align="center">
-              <Badge
-                color={value === "ACTIVE" ? "green" : "red"}
-                variant="light"
-                size="sm"
-                radius="sm"
-                px={8}
-              >
-                {value}
-              </Badge>
-              <Menu
-                withinPortal
-                position="bottom-end"
-                shadow="sm"
-                radius={"md"}
-              >
-                <Menu.Target>
-                  <ActionIcon variant="subtle" color="gray">
-                    <IconDotsVertical size={16} />
-                  </ActionIcon>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() =>
-                        navigate("/master/gl-charge-mapping/edit", { state: row.original })
-                      }
-                    >
-                      <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>Edit</Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                </Menu.Dropdown>
-              </Menu>
-            </Flex>
+            <Badge
+              color={value === "ACTIVE" ? "green" : "red"}
+              variant="light"
+              size="sm"
+              radius="sm"
+              px={8}
+            >
+              {value}
+            </Badge>
           );
         },
       },
+      {
+        id: "actions",
+        header: "Actions",
+        size: 70,
+        Cell: ({ row }) => (
+          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
+            <Menu.Target>
+              <ActionIcon variant="subtle" color="gray">
+                <IconDotsVertical size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() =>
+                    navigate("/master/gl-charge-mapping/edit", {
+                      state: row.original,
+                    })
+                  }
+                >
+                  <Group gap={"sm"}>
+                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                      Edit
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
+            </Menu.Dropdown>
+          </Menu>
+        ),
+      },
     ],
-    [navigate]
+    [navigate],
   );
 
   const table = useMantineReactTable({
     columns,
-    data: glChargeMappingData,
+    data: tableData,
     enableColumnFilters: false,
     enablePagination: true,
     enableTopToolbar: false,
@@ -189,7 +421,7 @@ export default function GLChargeMappingMasterList() {
     enableStickyHeader: true,
     initialState: {
       pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { right: ["status"] },
+      columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
     manualPagination: true,
@@ -203,11 +435,10 @@ export default function GLChargeMappingMasterList() {
       highlightOnHover: true,
       withTableBorder: false,
       withColumnBorders: false,
-      style: { width: "100%" },
     },
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
+      p: "sm",
       radius: "md",
       style: {
         flex: 1,
@@ -220,7 +451,7 @@ export default function GLChargeMappingMasterList() {
     },
     mantineTableBodyCellProps: ({ column }) => {
       let extraStyles = {};
-      if (column.id === "status") {
+      if (column.id === "actions") {
         extraStyles = {
           position: "sticky",
           right: 0,
@@ -245,7 +476,7 @@ export default function GLChargeMappingMasterList() {
     },
     mantineTableHeadCellProps: ({ column }) => {
       let extraStyles = {};
-      if (column.id === "status") {
+      if (column.id === "actions") {
         extraStyles = {
           position: "sticky",
           right: 0,
@@ -282,67 +513,12 @@ export default function GLChargeMappingMasterList() {
     },
   });
 
-  if (glChargeMappingLoading) {
-    return (
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Center py="xl">
-          <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-              Loading GL charge mapping data...
-            </Text>
-          </Stack>
-        </Center>
-      </Card>
-    );
-  }
-
-  if (glChargeMappingError) {
-    return (
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Center py="xl">
-          <Text c="red" size="lg" style={{ fontFamily: "Inter, sans-serif" }}>
-            Error loading GL charge mapping data. Please try refreshing the page.
-          </Text>
-        </Center>
-      </Card>
-    );
-  }
-
   return (
     <Card
       shadow="sm"
       pt="md"
       pb="sm"
-      px="lg"
+      px="md"
       radius="md"
       withBorder
       style={{
@@ -353,8 +529,8 @@ export default function GLChargeMappingMasterList() {
         flex: 1,
       }}
     >
-      <Box mb="md">
-        <Group justify="space-between" align="center">
+      <Box>
+        <Group justify="space-between" align="center" pb="sm">
           <Text
             size="md"
             fw={600}
@@ -365,6 +541,67 @@ export default function GLChargeMappingMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
+            <TextInput
+              placeholder="Search..."
+              leftSection={<IconSearch size={16} />}
+              rightSection={
+                search ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                    }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <IconX size={16} />
+                  </ActionIcon>
+                ) : null
+              }
+              w={248}
+              size="sm"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              styles={{
+                input: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontstyle: "regular",
+                  color: "#333740",
+                  minWidth: "24px",
+                  minHeight: "24px",
+                  width: "248px",
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  "&:focus": {
+                    border: "1px solid #105476",
+                  },
+                },
+              }}
+            />
+            <ActionIcon
+              variant={showFilters ? "filled" : "outline"}
+              size={36}
+              color={showFilters ? "#E0F5FF" : "gray"}
+              onClick={() => setShowFilters(!showFilters)}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                  border: showFilters
+                    ? "1px solid #105476"
+                    : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  "&:active": {
+                    border: "1px solid #105476",
+                    color: "#FFFFFF",
+                  },
+                },
+              }}
+            >
+              <IconFilter size={18} />
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"
@@ -375,7 +612,7 @@ export default function GLChargeMappingMasterList() {
                   color: "#FFFFFF",
                   fontSize: "14px",
                   fontFamily: "Inter",
-                  fontstyle: "semibold",
+                  fontStyle: "semibold",
                   "&:hover": {
                     backgroundColor: "#105476",
                   },
@@ -389,92 +626,367 @@ export default function GLChargeMappingMasterList() {
         </Group>
       </Box>
 
-      {/* Table wrapper with flex to take remaining space */}
-      <Box style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <MantineReactTable table={table} />
-      </Box>
-
-      {/* Custom Pagination Bar */}
-      <Group
-        w="100%"
-        justify="space-between"
-        align="center"
-        p="xs"
-        wrap="nowrap"
-        pt="md"
-      >
-        {/* Left side: Rows per page */}
-        <Group gap="sm" align="center" wrap="nowrap">
-          <Text size="sm" c="dimmed">
-            Rows per page
-          </Text>
-          <Select
-            size="xs"
-            data={["10", "25", "50"]}
-            value={String(pagination.pageSize)}
-            onChange={(val) => {
-              if (!val) return;
-              handlePageSizeChange(Number(val));
+      {/* Filter Section */}
+      {showFilters && (
+        <Box
+          tt="capitalize"
+          mb="sm"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+            flexShrink: 0,
+            height: "fit-content",
+          }}
+        >
+          <Group
+            justify="space-between"
+            align="center"
+            mb="sm"
+            px="md"
+            style={{
+              backgroundColor: "#FAFAFA",
+              padding: "4px 8px",
+              borderRadius: "8px 8px 0 0",
             }}
-            w={110}
-            styles={{ input: { fontSize: 12, height: 30 } } as any}
+          >
+            <Text
+              size="sm"
+              fw={600}
+              c="#000000"
+              style={{ fontFamily: "Inter", fontSize: "14px" }}
+            >
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
+          </Group>
+
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                size="xs"
+                label="Charge"
+                placeholder="Type Charge Name"
+                apiEndpoint={`${URL.chargeMaster}?search=`}
+                searchFields={["charge_name", "charge_code"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.id),
+                  label: String(item.charge_name || ""),
+                })}
+                value={draftFilters.charge_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    charge_id: value || "",
+                  }))
+                }
+                minSearchLength={3}
+                className="filter-searchable-select"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <Select
+                size="xs"
+                label="Country"
+                placeholder="Select Country"
+                data={countryOptions}
+                value={draftFilters.country_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    country_id: value || "",
+                  }))
+                }
+                styles={{
+                  input: { fontSize: "13px", height: "36px" },
+                  label: {
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#000000",
+                    marginBottom: "4px",
+                    fontFamily: "Inter",
+                  },
+                }}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <Select
+                size="xs"
+                label="Service"
+                placeholder="Select Service"
+                data={serviceOptions}
+                value={draftFilters.service_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    service_id: value || "",
+                  }))
+                }
+                styles={{
+                  input: { fontSize: "13px", height: "36px" },
+                  label: {
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#000000",
+                    marginBottom: "4px",
+                    fontFamily: "Inter",
+                  },
+                }}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                size="xs"
+                label="Revenue GL"
+                placeholder="Type Revenue GL Name"
+                apiEndpoint={`${URL.chartOfAccounts}`}
+                searchFields={["group_name"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.id),
+                  label: String(item.group_name || ""),
+                })}
+                value={draftFilters.revenue_gl_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    revenue_gl_id: value || "",
+                  }))
+                }
+                minSearchLength={3}
+                className="filter-searchable-select"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                size="xs"
+                label="Cost GL"
+                placeholder="Type Cost GL Name"
+                apiEndpoint={`${URL.chartOfAccounts}?search=`}
+                searchFields={["group_name", "account_name"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.id),
+                  label: String(item.group_name || ""),
+                })}
+                value={draftFilters.cost_gl_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    cost_gl_id: value || "",
+                  }))
+                }
+                minSearchLength={3}
+                className="filter-searchable-select"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                size="xs"
+                label="Neutral GL"
+                placeholder="Type Neutral GL Name"
+                apiEndpoint={`${URL.chartOfAccounts}?search=`}
+                searchFields={["group_name", "account_name"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.id),
+                  label: String(item.group_name || ""),
+                })}
+                value={draftFilters.neutral_gl_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    neutral_gl_id: value || "",
+                  }))
+                }
+                minSearchLength={3}
+                className="filter-searchable-select"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                size="xs"
+                label="Revenue SL"
+                placeholder="Type Revenue SL Name"
+                apiEndpoint={`${URL.chartOfAccounts}?search=`}
+                searchFields={["group_name", "account_name"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.id),
+                  label: String(item.group_name || ""),
+                })}
+                value={draftFilters.revenue_sl_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    revenue_sl_id: value || "",
+                  }))
+                }
+                minSearchLength={3}
+                className="filter-searchable-select"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                size="xs"
+                label="Cost SL"
+                placeholder="Type Cost SL Name"
+                apiEndpoint={`${URL.chartOfAccounts}?search=`}
+                searchFields={["group_name", "account_name"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.id),
+                  label: String(item.group_name || ""),
+                })}
+                value={draftFilters.cost_sl_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    cost_sl_id: value || "",
+                  }))
+                }
+                minSearchLength={3}
+                className="filter-searchable-select"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                size="xs"
+                label="Neutral SL"
+                placeholder="Type Neutral SL Name"
+                apiEndpoint={`${URL.chartOfAccounts}?search=`}
+                searchFields={["group_name", "account_name"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.id),
+                  label: String(item.group_name || ""),
+                })}
+                value={draftFilters.neutral_sl_id}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    neutral_sl_id: value || "",
+                  }))
+                }
+                minSearchLength={3}
+                className="filter-searchable-select"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <Select
+                size="xs"
+                label="Status"
+                placeholder="Select Status"
+                data={statusOptions}
+                value={draftFilters.status}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    status: value || "",
+                  }))
+                }
+                styles={{
+                  input: { fontSize: "13px", height: "36px" },
+                  label: {
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#000000",
+                    marginBottom: "4px",
+                    fontFamily: "Inter",
+                  },
+                }}
+              />
+            </Grid.Col>
+          </Grid>
+
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={clearAllFilters}
+              leftSection={<IconX size={16} />}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  color: "#444955",
+                },
+              }}
+            >
+              Clear Filters
+            </Button>
+            <Button
+              size="sm"
+              onClick={applyFilters}
+              loading={isLoading}
+              disabled={isLoading}
+              leftSection={<IconFilter size={16} />}
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  "&:hover": {
+                    backgroundColor: "#0d4261",
+                  },
+                },
+              }}
+            >
+              Apply Filters
+            </Button>
+          </Group>
+        </Box>
+      )}
+
+      {isLoading ? (
+        <Center py="xl" style={{ flex: 1 }}>
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text c="dimmed">Loading GL Charge Mapping data...</Text>
+          </Stack>
+        </Center>
+      ) : glChargeMappingError ? (
+        <Center py="xl" style={{ flex: 1 }}>
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text c="dimmed">
+              Error loading GL charge mapping data. Please try refreshing the
+              page.
+            </Text>
+          </Stack>
+        </Center>
+      ) : (
+        <>
+          <MantineReactTable table={table} />
+
+          {/* Custom Pagination Bar */}
+          <PaginationBar
+            pageSize={pagination.pageSize}
+            currentPage={currentPage}
+            totalRecords={totalRecords}
+            onPageSizeChange={handlePageSizeChange}
+            onPageChange={handlePageChange}
+            pageSizeOptions={["10", "25", "50"]}
           />
-          <Text size="sm" c="dimmed">
-            {(() => {
-              const total = totalRecords || 0;
-              if (total === 0) return "0–0 of 0";
-              const start = pagination.pageIndex * pagination.pageSize + 1;
-              const end = Math.min(
-                (pagination.pageIndex + 1) * pagination.pageSize,
-                total
-              );
-              return `${start}–${end} of ${total}`;
-            })()}
-          </Text>
-        </Group>
-
-        {/* Right side: Page controls */}
-        <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-          <ActionIcon
-            variant="default"
-            size="sm"
-            onClick={() =>
-              handlePageChange(Math.max(1, pagination.pageIndex + 1))
-            }
-            disabled={pagination.pageIndex === 0}
-          >
-            <IconChevronLeft size={16} />
-          </ActionIcon>
-          <Text size="sm" ta="center" style={{ width: 26 }}>
-            {pagination.pageIndex + 1}
-          </Text>
-          <Text size="sm" c="dimmed">
-            of {Math.max(1, Math.ceil(totalRecords / pagination.pageSize))}
-          </Text>
-          <ActionIcon
-            variant="default"
-            size="sm"
-            onClick={() => {
-              const totalPages = Math.max(
-                1,
-                Math.ceil(totalRecords / pagination.pageSize)
-              );
-              handlePageChange(
-                Math.min(totalPages, pagination.pageIndex + 2)
-              );
-            }}
-            disabled={(() => {
-              const totalPages = Math.max(
-                1,
-                Math.ceil(totalRecords / pagination.pageSize)
-              );
-              return pagination.pageIndex + 1 >= totalPages;
-            })()}
-          >
-            <IconChevronRight size={16} />
-          </ActionIcon>
-        </Group>
-      </Group>
+        </>
+      )}
     </Card>
   );
 }

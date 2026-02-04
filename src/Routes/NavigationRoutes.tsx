@@ -73,6 +73,7 @@ import {
   ChartOfAccountsMaster,
   ChartOfAccountsCreate,
   GLChargeMappingMaster,
+  GLChargeMappingCreate,
   GSTSACMaster,
   GSTRateMaster,
   GSTChargeMappingMaster,
@@ -398,8 +399,8 @@ const NavigationRoutes = () => {
 
           <Route path="gl-charge-mapping">
             <Route index element={<GLChargeMappingMaster />} />
-            <Route path="create" element={<GLChargeMappingMaster />} />
-            <Route path="edit" element={<GLChargeMappingMaster />} />
+            <Route path="create" element={<GLChargeMappingCreate />} />
+            <Route path="edit" element={<GLChargeMappingCreate />} />
           </Route>
 
           <Route path="gst-sac">
