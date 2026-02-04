@@ -541,7 +541,7 @@ export default function GLChargeMappingMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
-            <TextInput
+            {/* <TextInput
               placeholder="Search..."
               leftSection={<IconSearch size={16} />}
               rightSection={
@@ -601,7 +601,7 @@ export default function GLChargeMappingMasterList() {
               }}
             >
               <IconFilter size={18} />
-            </ActionIcon>
+            </ActionIcon> */}
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"

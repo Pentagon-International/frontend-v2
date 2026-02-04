@@ -408,7 +408,7 @@ export default function ChartOfAccountsMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
-            <TextInput
+            {/* <TextInput
               placeholder="Search..."
               leftSection={<IconSearch size={16} />}
               rightSection={
@@ -446,7 +446,7 @@ export default function ChartOfAccountsMasterList() {
                   },
                 },
               }}
-            />
+            /> */}
             {/* <ActionIcon
               variant={showFilters ? "filled" : "outline"}
               size={36}
