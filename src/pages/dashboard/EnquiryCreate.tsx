@@ -1237,6 +1237,188 @@ function EnquiryCreate() {
     }
   };
 
+  // Build enquiry payload (baseData + documentsList) for create/edit - shared by handleFinalSubmit and handleSubmitEnquiry
+  const getEnquiryPayload = (isEdit: boolean) => {
+    const { supporting_documents, ...customerFormDataWithoutFiles } =
+      customerForm.values;
+    const baseData = {
+      ...customerFormDataWithoutFiles,
+      ...(enq?.call_entry_id && { call_entry: enq.call_entry_id }),
+      services: serviceForm.values.service_details.map((serviceDetail) => {
+        const cargo = serviceDetail.cargo_details[0];
+        const servicePayload: any = {
+          service: serviceDetail.service,
+          origin_code: serviceDetail.origin_code,
+          destination_code: serviceDetail.destination_code,
+          pickup: serviceDetail.pickup === "true",
+          delivery: serviceDetail.delivery === "true",
+          pickup_location: serviceDetail.pickup_location,
+          delivery_location: serviceDetail.delivery_location,
+          hazardous_cargo: cargo?.hazardous_cargo === "Yes",
+          stackable: cargo?.stackable === "Yes",
+          shipment_terms_code: serviceDetail.shipment_terms_code,
+          icd: serviceDetail.icd || "",
+          service_remark: serviceDetail.service_remark,
+          commodity: serviceDetail.commodity,
+        };
+
+        servicePayload.un_no =
+          cargo?.hazardous_cargo === "Yes" ? cargo?.un_no || null : null;
+        servicePayload.class_name =
+          cargo?.hazardous_cargo === "Yes" ? cargo?.class || null : null;
+        servicePayload.pkg_group =
+          cargo?.hazardous_cargo === "Yes" ? cargo?.pkg_group || null : null;
+
+        if (serviceDetail.service === "OTHERS") {
+          servicePayload.trade = null;
+          servicePayload.service_name = serviceDetail.service_name || "";
+          servicePayload.service_code = serviceDetail.service_code || "";
+        } else {
+          servicePayload.trade = serviceDetail.trade;
+        }
+
+        if (isEdit && (serviceDetail as any).id) {
+          servicePayload.id = (serviceDetail as any).id;
+        }
+
+        let effectiveServiceType = serviceDetail.service;
+        if (
+          serviceDetail.service === "OTHERS" &&
+          serviceDetail.service_code
+        ) {
+          const selectedOtherService = otherServicesData.find(
+            (item) => item.value === serviceDetail.service_code
+          );
+          if (selectedOtherService) {
+            const transportMode = selectedOtherService.transport_mode || "";
+            const fullGroupage = selectedOtherService.full_groupage || "";
+            if (transportMode === "SEA" && fullGroupage === "FULL") {
+              effectiveServiceType = "FCL";
+            } else if (
+              transportMode === "SEA" &&
+              fullGroupage === "GROUPAGE"
+            ) {
+              effectiveServiceType = "LCL";
+            } else {
+              effectiveServiceType = "AIR";
+            }
+          }
+        }
+
+        if (effectiveServiceType === "FCL") {
+          servicePayload.fcl_details = serviceDetail.cargo_details.map(
+            (cargo) => {
+              const fclDetail: any = {
+                container_type: cargo.container_type_code,
+                no_of_containers: Number(cargo.no_of_containers) || 0,
+                gross_weight: cargo.gross_weight
+                  ? Number(cargo.gross_weight).toFixed(2)
+                  : "0.00",
+              };
+              if (cargo.id) {
+                fclDetail.id = cargo.id;
+              }
+              return fclDetail;
+            }
+          );
+        } else if (effectiveServiceType === "AIR") {
+          const cargo = serviceDetail.cargo_details[0];
+          servicePayload.no_of_packages = Number(cargo.no_of_packages) || 0;
+          servicePayload.gross_weight = cargo.gross_weight
+            ? Number(cargo.gross_weight).toFixed(2)
+            : "0.00";
+          servicePayload.volume_weight = cargo.volume_weight
+            ? Math.round(Number(cargo.volume_weight) * 1000) / 1000
+            : 0;
+          servicePayload.chargeable_weight = cargo.chargable_weight
+            ? Number(cargo.chargable_weight).toFixed(2)
+            : "0.00";
+          const dimUnit = serviceDetail.dimension_unit || "";
+          const dimRows = Array.isArray(serviceDetail.diemensions)
+            ? serviceDetail.diemensions
+            : [];
+          if (dimUnit && dimRows.length > 0) {
+            servicePayload.dimension_details = dimRows.map((r: any) => {
+              const dimensionItem: any = {
+                pieces: Number(r?.pieces) || 0,
+                length: Number(r?.length) || 0,
+                width: Number(r?.width) || 0,
+                height: Number(r?.height) || 0,
+                value:
+                  Number(r?.value) || getDimensionValue("AIR", dimUnit) || 0,
+                volume_weight: r?.vol_weight
+                  ? Math.round(Number(r.vol_weight) * 1000) / 1000
+                  : 0,
+                dimension_unit: dimUnit,
+              };
+              if (r?.id) {
+                dimensionItem.id = r.id;
+              }
+              return dimensionItem;
+            });
+          }
+        } else if (effectiveServiceType === "LCL") {
+          const cargo = serviceDetail.cargo_details[0];
+          servicePayload.no_of_packages = Number(cargo.no_of_packages) || 0;
+          servicePayload.gross_weight = cargo.gross_weight
+            ? Number(cargo.gross_weight).toFixed(2)
+            : "0.00";
+          servicePayload.volume = cargo.volume
+            ? Number(cargo.volume).toFixed(3)
+            : "0.000";
+          servicePayload.chargeable_volume = cargo.chargable_volume
+            ? Number(cargo.chargable_volume).toFixed(3)
+            : "0.000";
+          const dimUnit = serviceDetail.dimension_unit || "";
+          const dimRows = Array.isArray(serviceDetail.diemensions)
+            ? serviceDetail.diemensions
+            : [];
+          if (dimUnit && dimRows.length > 0) {
+            servicePayload.dimension_details = dimRows.map((r: any) => {
+              const dimensionItem: any = {
+                pieces: Number(r?.pieces) || 0,
+                length: Number(r?.length) || 0,
+                width: Number(r?.width) || 0,
+                height: Number(r?.height) || 0,
+                value:
+                  Number(r?.value) || getDimensionValue("LCL", dimUnit) || 0,
+                volume_weight: r?.vol_weight
+                  ? Math.round(Number(r.vol_weight) * 1000) / 1000
+                  : 0,
+                dimension_unit: dimUnit,
+              };
+              if (r?.id) {
+                dimensionItem.id = r.id;
+              }
+              return dimensionItem;
+            });
+          }
+        }
+
+        return servicePayload;
+      }),
+    };
+
+    const documentsList = customerForm.values.supporting_documents
+      .filter(
+        (doc) => doc.document_id !== undefined && doc.document_id !== null
+      )
+      .map((doc) => {
+        const docItem: { id: number; document_name?: string } = {
+          id: doc.document_id!,
+        };
+        if (
+          doc.original_document_name !== undefined &&
+          doc.name !== doc.original_document_name
+        ) {
+          docItem.document_name = doc.name;
+        }
+        return docItem;
+      });
+
+    return { baseData, documentsList };
+  };
+
   const handleFinalSubmit = () => {
     // Custom validation for cargo details based on service type
     let hasCargoErrors = false;
@@ -1605,199 +1787,9 @@ function EnquiryCreate() {
     if (!hasCustomerFormErrors && !hasServiceFormErrors) {
       const isEditMode =
         enq?.actionType === "edit" || (enq?.id && enq?.quoteType !== "CHATBOT");
-      // Exclude supporting_documents from baseData as it will be sent separately as files
-      const { supporting_documents, ...customerFormDataWithoutFiles } =
-        customerForm.values;
-      const baseData = {
-        ...customerFormDataWithoutFiles,
-        ...(enq?.call_entry_id && { call_entry: enq.call_entry_id }),
-        services: serviceForm.values.service_details.map((serviceDetail) => {
-          const cargo = serviceDetail.cargo_details[0];
-          const servicePayload: any = {
-            service: serviceDetail.service,
-            origin_code: serviceDetail.origin_code,
-            destination_code: serviceDetail.destination_code,
-            pickup: serviceDetail.pickup === "true",
-            delivery: serviceDetail.delivery === "true",
-            pickup_location: serviceDetail.pickup_location,
-            delivery_location: serviceDetail.delivery_location,
-            hazardous_cargo: cargo?.hazardous_cargo === "Yes",
-            stackable: cargo?.stackable === "Yes",
-            shipment_terms_code: serviceDetail.shipment_terms_code,
-            icd: serviceDetail.icd || "",
-            service_remark: serviceDetail.service_remark,
-            commodity: serviceDetail.commodity,
-          };
-
-          // Add hazardous cargo related fields (include even if null)
-          servicePayload.un_no =
-            cargo?.hazardous_cargo === "Yes" ? cargo?.un_no || null : null;
-          servicePayload.class_name =
-            cargo?.hazardous_cargo === "Yes" ? cargo?.class || null : null;
-          servicePayload.pkg_group =
-            cargo?.hazardous_cargo === "Yes" ? cargo?.pkg_group || null : null;
-
-          // Handle OTHERS service case
-          if (serviceDetail.service === "OTHERS") {
-            servicePayload.trade = null;
-            servicePayload.service_name = serviceDetail.service_name || "";
-            servicePayload.service_code = serviceDetail.service_code || "";
-          } else {
-            servicePayload.trade = serviceDetail.trade;
-          }
-
-          if (isEditMode && (serviceDetail as any).id) {
-            servicePayload.id = (serviceDetail as any).id;
-          }
-
-          // Determine effective service type for cargo structure (for OTHERS, determine from selected service)
-          let effectiveServiceType = serviceDetail.service;
-          if (
-            serviceDetail.service === "OTHERS" &&
-            serviceDetail.service_code
-          ) {
-            const selectedOtherService = otherServicesData.find(
-              (item) => item.value === serviceDetail.service_code
-            );
-            if (selectedOtherService) {
-              const transportMode = selectedOtherService.transport_mode || "";
-              const fullGroupage = selectedOtherService.full_groupage || "";
-              if (transportMode === "SEA" && fullGroupage === "FULL") {
-                effectiveServiceType = "FCL";
-              } else if (
-                transportMode === "SEA" &&
-                fullGroupage === "GROUPAGE"
-              ) {
-                effectiveServiceType = "LCL";
-              } else {
-                effectiveServiceType = "AIR";
-              }
-            }
-          }
-
-          // Add service-specific cargo details
-          if (effectiveServiceType === "FCL") {
-            servicePayload.fcl_details = serviceDetail.cargo_details.map(
-              (cargo) => {
-                const fclDetail: any = {
-                  container_type: cargo.container_type_code,
-                  no_of_containers: Number(cargo.no_of_containers) || 0,
-                  gross_weight: cargo.gross_weight
-                    ? Number(cargo.gross_weight).toFixed(2)
-                    : "0.00",
-                };
-                // Only include id if it exists (for existing cargo details in edit mode)
-                if (cargo.id) {
-                  fclDetail.id = cargo.id;
-                }
-                return fclDetail;
-              }
-            );
-          } else if (effectiveServiceType === "AIR") {
-            const cargo = serviceDetail.cargo_details[0];
-            servicePayload.no_of_packages = Number(cargo.no_of_packages) || 0;
-            servicePayload.gross_weight = cargo.gross_weight
-              ? Number(cargo.gross_weight).toFixed(2)
-              : "0.00";
-            servicePayload.volume_weight = cargo.volume_weight
-              ? Math.round(Number(cargo.volume_weight) * 1000) / 1000
-              : 0;
-            servicePayload.chargeable_weight = cargo.chargable_weight
-              ? Number(cargo.chargable_weight).toFixed(2)
-              : "0.00";
-            // Include dimension_details directly in service payload if present
-            const dimUnit = serviceDetail.dimension_unit || "";
-            const dimRows = Array.isArray(serviceDetail.diemensions)
-              ? serviceDetail.diemensions
-              : [];
-            if (dimUnit && dimRows.length > 0) {
-              servicePayload.dimension_details = dimRows.map((r: any) => {
-                const dimensionItem: any = {
-                  pieces: Number(r?.pieces) || 0,
-                  length: Number(r?.length) || 0,
-                  width: Number(r?.width) || 0,
-                  height: Number(r?.height) || 0,
-                  value:
-                    Number(r?.value) || getDimensionValue("AIR", dimUnit) || 0,
-                  volume_weight: r?.vol_weight
-                    ? Math.round(Number(r.vol_weight) * 1000) / 1000
-                    : 0,
-                  dimension_unit: dimUnit,
-                };
-                // Only include id if it exists
-                if (r?.id) {
-                  dimensionItem.id = r.id;
-                }
-                return dimensionItem;
-              });
-            }
-          } else if (effectiveServiceType === "LCL") {
-            const cargo = serviceDetail.cargo_details[0];
-            servicePayload.no_of_packages = Number(cargo.no_of_packages) || 0;
-            servicePayload.gross_weight = cargo.gross_weight
-              ? Number(cargo.gross_weight).toFixed(2)
-              : "0.00";
-            servicePayload.volume = cargo.volume
-              ? Number(cargo.volume).toFixed(3)
-              : "0.000";
-            servicePayload.chargeable_volume = cargo.chargable_volume
-              ? Number(cargo.chargable_volume).toFixed(3)
-              : "0.000";
-            // Include dimension_details directly in service payload if present
-            const dimUnit = serviceDetail.dimension_unit || "";
-            const dimRows = Array.isArray(serviceDetail.diemensions)
-              ? serviceDetail.diemensions
-              : [];
-            if (dimUnit && dimRows.length > 0) {
-              servicePayload.dimension_details = dimRows.map((r: any) => {
-                const dimensionItem: any = {
-                  pieces: Number(r?.pieces) || 0,
-                  length: Number(r?.length) || 0,
-                  width: Number(r?.width) || 0,
-                  height: Number(r?.height) || 0,
-                  value:
-                    Number(r?.value) || getDimensionValue("LCL", dimUnit) || 0,
-                  volume_weight: r?.vol_weight
-                    ? Math.round(Number(r.vol_weight) * 1000) / 1000
-                    : 0,
-                  dimension_unit: dimUnit,
-                };
-                // Only include id if it exists
-                if (r?.id) {
-                  dimensionItem.id = r.id;
-                }
-                return dimensionItem;
-              });
-            }
-          }
-
-          return servicePayload;
-        }),
-      };
-
-      // Determine if this is edit mode based on actionType or if enquiry ID exists
+      const { baseData, documentsList } = getEnquiryPayload(isEditMode);
 
       if (isEditMode) {
-        // Collect document IDs from supporting_documents that have document_id
-        // Include document_name if it has been changed from the original
-        const documentsList = customerForm.values.supporting_documents
-          .filter(
-            (doc) => doc.document_id !== undefined && doc.document_id !== null
-          )
-          .map((doc) => {
-            const docItem: { id: number; document_name?: string } = {
-              id: doc.document_id!,
-            };
-            // Include document_name if it differs from the original
-            if (
-              doc.original_document_name !== undefined &&
-              doc.name !== doc.original_document_name
-            ) {
-              docItem.document_name = doc.name;
-            }
-            return docItem;
-          });
-
         const editData = {
           ...baseData,
           id: enq?.id,
@@ -2037,6 +2029,34 @@ function EnquiryCreate() {
       setActive((current) => current + 1);
     }
   };
+
+  // Submit enquiry from Service & Cargo Details (step 1) when navigated back from edit quotation / create quote
+  const handleSubmitEnquiry = () => {
+    const cusFormResult = customerForm.validate();
+    const serviceFormResult = serviceForm.validate();
+    const hasCustomerFormErrors =
+      cusFormResult.hasErrors || Object.keys(customerForm.errors).length > 0;
+    const hasServiceFormErrors =
+      serviceFormResult.hasErrors || Object.keys(serviceForm.errors).length > 0;
+    if (hasCustomerFormErrors || hasServiceFormErrors) return;
+
+    if (!enq?.id) {
+      ToastNotification({
+        type: "warning",
+        message: "Enquiry ID is missing. Cannot save.",
+      });
+      return;
+    }
+
+    const { baseData, documentsList } = getEnquiryPayload(true);
+    const editData = {
+      ...baseData,
+      id: enq?.id,
+      ...(documentsList.length > 0 && { documents_list: documentsList }),
+    };
+    editEnquiry(editData);
+  };
+
   const { data: enquiryData = [] } = useQuery({
     queryKey: ["enquiryData"],
     queryFn: fetchEnquiry,
@@ -8529,6 +8549,24 @@ function EnquiryCreate() {
                         {enq?.actionType === "editQuotation" ||
                         enq?.actionType === "createQuote" ? (
                           <>
+                            <Button
+                              rightSection={
+                                isSubmitting ? (
+                                  <Loader size={16} color="white" />
+                                ) : null
+                              }
+                              onClick={handleSubmitEnquiry}
+                              size="sm"
+                              disabled={isSubmitting}
+                              style={{
+                                backgroundColor: "#105476",
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                fontStyle: "medium",
+                              }}
+                            >
+                              {isSubmitting ? "Submitting..." : "Submit Enquiry"}
+                            </Button>
                             <Button
                               onClick={() => {
                                 // Validate service form before navigating to quotation
