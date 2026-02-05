@@ -127,13 +127,15 @@ function clampAmount(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value))
     return value === undefined ? null : value;
   const rounded = Math.round(value * 100) / 100;
-  if (Math.abs(rounded) > AMOUNT_MAX) return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
+  if (Math.abs(rounded) > AMOUNT_MAX)
+    return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
   return rounded;
 }
 
+/** Party row: customer_display = label in UI (subledger_name from list / customer_name from search); customer_code = subledger_code in payload */
 type DetailRow = {
   id?: number | null;
-  subledger_id?: number | null;
+  subledger_id?: string | null;
   customer_code: string;
   customer_display: string;
   narration: string;
@@ -173,7 +175,8 @@ type InvoiceCombinedItem = {
   [key: string]: unknown;
 };
 
-/** Receipt row from list API (filter/receipt) - used for View/Edit from Receipt Master */
+/** Receipt row from list API (filter/receipt) - used for View/Edit and Create Reversal from Receipt Master.
+ * Filter response may not include account_code_code / account_name / account_code_branch_account_code. */
 type ReceiptListItem = {
   id?: number;
   receipt_no?: string;
@@ -191,12 +194,15 @@ type ReceiptListItem = {
   narration?: string;
   note?: string;
   account_code?: string;
+  account_code_id?: number;
   received_from_code?: string;
   received_from_name?: string;
   bank?: string;
   branch?: string;
   cheque_no?: string;
   chq_clrd_date?: string | null;
+  dr_cr?: string;
+  /** Each party: subledger_name = UI label (Account Name), subledger_code = value for payload */
   parties?: Array<{
     id?: number;
     subledger_id?: number;
@@ -204,6 +210,7 @@ type ReceiptListItem = {
     subledger_name?: string;
     narration?: string;
     currency_code?: string;
+    currency_id?: number;
     roe?: string | number;
     amount?: string | number;
     local_amount?: string | number;
@@ -212,17 +219,21 @@ type ReceiptListItem = {
   allocations?: Array<{
     id?: number;
     subledger_id?: number;
-    location?: string;
-    type?: string;
-    day_book_id?: number;
-    day_book_name?: string;
-    document_no?: string;
-    document_date?: string;
     subledger_code?: string;
     subledger_name?: string;
+    location?: string;
+    type?: string;
+    type_name?: string;
+    type_id?: number;
+    day_book_id?: number;
+    day_book_name?: string;
+    day_book_code?: string;
+    document_no?: string;
+    document_date?: string;
     adj_curr_amount?: string | number;
     adj_local_amount?: string | number;
     currency_code?: string;
+    currency_id?: number;
     roe?: string | number;
   }>;
   [key: string]: unknown;
@@ -290,6 +301,17 @@ function formatDateYYYYMMDD(date: Date | null | undefined): string {
   return `${y}-${m}-${day}`;
 }
 
+/** DD-MM-YYYY for reverse-receipt API (create/update) */
+function formatDateDDMMYYYY(date: Date | null | undefined): string {
+  if (date == null) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const y = d.getFullYear();
+  return `${day}-${m}-${y}`;
+}
+
 const fieldStyles = {
   input: {
     fontSize: "13px",
@@ -325,7 +347,14 @@ function parseDocumentDate(value: string | null | undefined): Date | null {
     const day = parseInt(a, 10);
     const month = parseInt(b, 10) - 1;
     const year = parseInt(c, 10);
-    if (c.length === 4 && !isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 0 && month <= 11) {
+    if (
+      c.length === 4 &&
+      !isNaN(day) &&
+      !isNaN(month) &&
+      !isNaN(year) &&
+      month >= 0 &&
+      month <= 11
+    ) {
       const d = new Date(year, month, day);
       if (!isNaN(d.getTime())) return d;
     }
@@ -359,7 +388,9 @@ export default function ReceiptCreate({
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const loadedFromStateIdRef = useRef<number | string | null>(null);
+  // const loadedFromStateIdRef = useRef<number | string | null>(null);
+  /** When loading from list, hold details so Account Name displays for every row (state triggers re-render) */
+  const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
   const sourceReceiptIdForReversalRef = useRef<number | null>(null);
   const sourceReceiptNoForReversalRef = useRef<string>("");
 
@@ -494,7 +525,10 @@ export default function ReceiptCreate({
     if (!Array.isArray(data)) return {} as Record<string, number>;
     const map: Record<string, number> = {};
     data.forEach((item) => {
-      const code = (item.currency_code ?? item.code ?? "").toString().trim().toUpperCase();
+      const code = (item.currency_code ?? item.code ?? "")
+        .toString()
+        .trim()
+        .toUpperCase();
       if (code && item.id != null) map[code] = Number(item.id);
     });
     return map;
@@ -507,15 +541,23 @@ export default function ReceiptCreate({
 
   // Load receipt from list (View/Edit): location.state is the receipt row from Receipt Master
   const receiptFromState = location.state as ReceiptListItem | null | undefined;
+  console.log("receiptFromState---", receiptFromState);
+
   useEffect(() => {
     if (!receiptFromState || receiptFromState.id == null || !localCurrency) {
-      if (!receiptFromState) loadedFromStateIdRef.current = null;
+      if (!receiptFromState) {
+        // loadedFromStateIdRef.current = null;
+        setLoadedDetails(null);
+      }
       return;
     }
     const receiptId = receiptFromState.id;
-    if (loadedFromStateIdRef.current === receiptId) return;
-    loadedFromStateIdRef.current = receiptId;
+    console.log("receiptId---", receiptId);
 
+    // if (loadedFromStateIdRef.current === receiptId) return;
+    // loadedFromStateIdRef.current = receiptId;
+
+    console.log("check check check---", receiptId);
     const parseNum = (v: string | number | null | undefined): number | null => {
       if (v == null) return null;
       if (typeof v === "number") return Number.isFinite(v) ? v : null;
@@ -532,12 +574,13 @@ export default function ReceiptCreate({
     const parties = Array.isArray(receiptFromState.parties)
       ? receiptFromState.parties
       : [];
-    // Receipt Reversal: party Dr/Cr default is "Dr" (don't copy from source). Receipt Create: use source or "Cr".
+    // Party details: subledger_name = UI label (Account Name), subledger_code = value sent in payload. Set both for every row.
+    // Receipt Reversal: party Dr/Cr default is "Dr". Receipt Create: use source or "Cr".
     const details: DetailRow[] =
       parties.length > 0
         ? parties.map((p) => ({
             id: p.id ?? null,
-            subledger_id: p.subledger_id ?? null,
+            subledger_id: p.subledger_code ?? null,
             customer_code: String(p.subledger_code ?? "").trim(),
             customer_display: String(p.subledger_name ?? "").trim(),
             narration: String(p.narration ?? "").trim(),
@@ -550,6 +593,7 @@ export default function ReceiptCreate({
               : ((p.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr"),
           }))
         : [getDefaultDetailRow(localCurrency)];
+    console.log("details---", details);
 
     const allocations = receiptFromState.allocations;
     const adjustments: AdjustmentRow[] =
@@ -557,7 +601,7 @@ export default function ReceiptCreate({
         ? allocations.map((a) => ({
             id: a.id ?? null,
             location: (a.location ?? "").toString(),
-            type: (a.type ?? "").toString(),
+            type: (a.type_name ?? a.type ?? "").toString(),
             subledger: (a.subledger_code ?? "").toString(),
             subledger_display: (a.subledger_name ?? "").toString(),
             daybook_id: a.day_book_id != null ? String(a.day_book_id) : "",
@@ -570,25 +614,24 @@ export default function ReceiptCreate({
           }))
         : [getDefaultAdjustmentRow(localCurrency)];
 
-    const accountCode =
-      (receiptFromState.account_code ?? receiptFromState.received_from_code ?? "").toString();
-
+    setLoadedDetails(details);
     form.setValues({
-      daybook_id:
-        _isReversal
-          ? ""
-          : receiptFromState.day_book_id != null
-            ? String(receiptFromState.day_book_id)
-            : "",
+      daybook_id: _isReversal
+        ? ""
+        : receiptFromState.day_book_id != null
+          ? String(receiptFromState.day_book_id)
+          : "",
       type: (receiptFromState.type ?? "CASH").toString().trim(),
       date: dateVal ?? new Date(),
-      currency: (receiptFromState.currency_code ?? localCurrency).toString().trim(),
+      currency: (receiptFromState.currency_code ?? localCurrency)
+        .toString()
+        .trim(),
       roe: roeVal ?? 1,
       amount: amountVal,
       local_amount: localAmountVal,
       narration: (receiptFromState.narration ?? "").toString(),
       note: (receiptFromState.note ?? "").toString(),
-      account_code: accountCode,
+      account_code: "",
       bank: (receiptFromState.bank ?? "").toString(),
       branch: (receiptFromState.branch ?? "").toString(),
       cheque_no: (receiptFromState.cheque_no ?? "").toString(),
@@ -602,8 +645,11 @@ export default function ReceiptCreate({
     }
 
     if (_isReversal) {
-      sourceReceiptIdForReversalRef.current = Number(receiptFromState.id) || null;
-      sourceReceiptNoForReversalRef.current = (receiptFromState.receipt_no ?? "").toString();
+      sourceReceiptIdForReversalRef.current =
+        Number(receiptFromState.id) || null;
+      sourceReceiptNoForReversalRef.current = (
+        receiptFromState.receipt_no ?? ""
+      ).toString();
     } else {
       setSaveResponse({
         id: Number(receiptFromState.id),
@@ -622,10 +668,7 @@ export default function ReceiptCreate({
     if (curr === localCurrency.toUpperCase()) {
       form.setFieldValue("roe", 1);
     } else {
-      form.setFieldValue(
-        "roe",
-        getRoeValue(curr, userCountryCode),
-      );
+      form.setFieldValue("roe", getRoeValue(curr, userCountryCode));
     }
   }, [form.values.currency, localCurrency, userCountryCode]);
 
@@ -650,7 +693,12 @@ export default function ReceiptCreate({
           : null,
       );
     }
-  }, [form.values.currency, form.values.amount, form.values.roe, localCurrency]);
+  }, [
+    form.values.currency,
+    form.values.amount,
+    form.values.roe,
+    localCurrency,
+  ]);
 
   // Party details: Local Amount = Amount when same currency as header/local, else Amount * ROE
   const detailsSnapshot = form.values.details
@@ -681,11 +729,13 @@ export default function ReceiptCreate({
   const showChequeSection = form.values.type === "CHEQUE";
 
   const addDetailRow = () => {
+    setLoadedDetails(null);
     form.insertListItem("details", getDefaultDetailRow(localCurrency));
   };
 
   const removeDetailRow = (idx: number) => {
     if (form.values.details.length <= 1) return;
+    setLoadedDetails(null);
     form.removeListItem("details", idx);
   };
 
@@ -716,7 +766,9 @@ export default function ReceiptCreate({
         payload,
         API_HEADER,
       );
-      const res = response as { data?: InvoiceCombinedItem[] } | InvoiceCombinedItem[];
+      const res = response as
+        | { data?: InvoiceCombinedItem[] }
+        | InvoiceCombinedItem[];
       const data = Array.isArray(res) ? res : res?.data;
       setInvoiceList(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -780,8 +832,7 @@ export default function ReceiptCreate({
               ? parseFloat(inv.roe) || null
               : null
           : null;
-      const daybookId =
-        inv.day_book_id ?? inv.daybook_id;
+      const daybookId = inv.day_book_id ?? inv.daybook_id;
       return {
         location: branchCode,
         type: (inv.day_book_type as string) ?? "",
@@ -793,7 +844,12 @@ export default function ReceiptCreate({
         currency: inv.currency_code ?? localCurrency,
         roe: invRoe,
         adj_curr_amount: totalNum,
-        adj_local_amount: localTotalNum != null ? localTotalNum : (totalNum != null && invRoe != null ? clampAmount(totalNum * invRoe) : totalNum),
+        adj_local_amount:
+          localTotalNum != null
+            ? localTotalNum
+            : totalNum != null && invRoe != null
+              ? clampAmount(totalNum * invRoe)
+              : totalNum,
       };
     });
     // Append selected invoices to Adjustments so multiple parties' selections accumulate
@@ -847,7 +903,9 @@ export default function ReceiptCreate({
       dr_cr: "Dr",
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
-        ...(d.subledger_id != null ? { subledger_id: Number(d.subledger_id) } : {}),
+        ...(d.subledger_id != null
+          ? { subledger_id: Number(d.subledger_id) }
+          : {}),
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
@@ -876,31 +934,32 @@ export default function ReceiptCreate({
     return base;
   };
 
+  /** Build payload for reverse-receipt API. Uses DD-MM-YYYY for dates. No account_code. For create (POST) omit id. */
   const buildReversalPayload = (
     values: ReceiptFormValues,
-    options?: { reversalId?: number; receiptNo?: string; status?: string },
+    options?: {
+      reversalId?: number;
+      receiptNo?: string;
+      status?: string;
+      detailsOverride?: DetailRow[];
+    },
   ) => {
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
-    const id =
-      options?.reversalId ??
-      sourceReceiptIdForReversalRef.current ??
-      0;
     const receiptNo =
       options?.receiptNo ?? sourceReceiptNoForReversalRef.current ?? "";
-    const status = options?.status ?? "UNPOSTED";
-    return {
-      id,
-      date: formatDateYYYYMMDD(values.date),
+    const status = (options?.status ?? "UNPOSTED").toString().toUpperCase();
+    const isUpdate = options?.reversalId != null && options.reversalId > 0;
+    const details = options?.detailsOverride ?? values.details ?? [];
+    const base: Record<string, unknown> = {
+      date: formatDateDDMMYYYY(values.date),
       receipt_no: receiptNo,
       status,
       day_book_id: dayBookId,
-      type: values.type ?? "CASH",
+      type: (values.type ?? "CASH").toString().toUpperCase(),
       currency_id: currencyId,
       roe: values.roe ?? 0,
-      account_code: values.account_code ?? "",
-      received_from_code: values.account_code ?? "",
       amount: values.amount ?? 0,
       local_amount: values.local_amount ?? 0,
       narration: values.narration ?? "",
@@ -908,33 +967,34 @@ export default function ReceiptCreate({
       bank: values.bank ?? "",
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
-      chq_clrd_date: formatDateYYYYMMDD(values.cheque_date),
-      dr_cr: "Cr",
-      parties: (values.details ?? []).map((d) => ({
-        ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
-        ...(d.subledger_id != null ? { subledger_id: Number(d.subledger_id) } : {}),
-        account_code: values.account_code ?? "",
+      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      dr_cr: (receiptFromState?.dr_cr ?? "Cr").toString(),
+      // Party: label = customer_display (subledger_name from list / customer_name from search); payload = subledger_code (customer_code)
+      parties: details.map((d) => ({
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
         roe: d.roe ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
-        dr_cr: d.dr_cr ?? "Dr",
+        dr_cr: (d.dr_cr ?? "Dr").toString(),
       })),
       allocations: (values.adjustments ?? []).map((a) => ({
-        ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
         location: a.location ?? "",
         subledger_code: a.subledger ?? "",
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
         document_no: a.document_no ?? "",
-        document_date: formatDateYYYYMMDD(a.doc_date),
+        document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: a.adj_local_amount ?? 0,
       })),
     };
+    if (isUpdate && options?.reversalId != null) {
+      base.id = options.reversalId;
+    }
+    return base;
   };
 
   const handleSubmit = async (values: ReceiptFormValues) => {
@@ -966,16 +1026,26 @@ export default function ReceiptCreate({
       if (_isReversal) {
         const reversalHeaders = {
           ...API_HEADER,
-          headers: { ...API_HEADER.headers, dr_cr: "Dr" } as Record<string, string>,
+          headers: { ...API_HEADER.headers, dr_cr: "Dr" } as Record<
+            string,
+            string
+          >,
         };
         const isReversalUpdate =
-          reverseReceiptSaveResponse?.id != null && reverseReceiptSaveResponse.id > 0;
+          reverseReceiptSaveResponse?.id != null &&
+          reverseReceiptSaveResponse.id > 0;
+        const detailsForPayload =
+          loadedDetails &&
+          loadedDetails.length === (values.details ?? []).length
+            ? loadedDetails
+            : (values.details ?? []);
 
         if (isReversalUpdate) {
           const payload = buildReversalPayload(values, {
             reversalId: reverseReceiptSaveResponse.id,
             receiptNo: reverseReceiptSaveResponse.receipt_no ?? "",
             status: "UNPOSTED",
+            detailsOverride: detailsForPayload,
           });
           const raw = await putAPICall(
             `${URL.reverseReceipt}${reverseReceiptSaveResponse.id}/`,
@@ -993,14 +1063,19 @@ export default function ReceiptCreate({
               status: res.status != null ? String(res.status) : "UNPOSTED",
             }));
             await queryClient.invalidateQueries({ queryKey: ["receipt"] });
-            await queryClient.invalidateQueries({ queryKey: ["receipt-reversal"] });
+            await queryClient.invalidateQueries({
+              queryKey: ["receipt-reversal"],
+            });
             ToastNotification({
               type: "success",
               message: "Reverse receipt updated successfully.",
             });
           }
         } else {
-          const payload = buildReversalPayload(values);
+          const payload = buildReversalPayload(values, {
+            detailsOverride: detailsForPayload,
+          });
+          // Create receipt reversal: POST
           const raw = await postAPICall(
             URL.reverseReceipt,
             payload,
@@ -1022,22 +1097,34 @@ export default function ReceiptCreate({
               receipt_no: data.receipt_no ?? "",
               status: data.status != null ? String(data.status) : "UNPOSTED",
             });
-            if (data.parties && Array.isArray(data.parties) && data.parties.length === form.values.details.length) {
+            if (
+              data.parties &&
+              Array.isArray(data.parties) &&
+              data.parties.length === form.values.details.length
+            ) {
               const updatedDetails = form.values.details.map((d, i) => ({
                 ...d,
                 id: data.parties![i]?.id ?? d.id,
               }));
               form.setFieldValue("details", updatedDetails);
             }
-            if (data.allocations && Array.isArray(data.allocations) && data.allocations.length === form.values.adjustments.length) {
-              const updatedAdjustments = form.values.adjustments.map((a, i) => ({
-                ...a,
-                id: data.allocations![i]?.id ?? a.id,
-              }));
+            if (
+              data.allocations &&
+              Array.isArray(data.allocations) &&
+              data.allocations.length === form.values.adjustments.length
+            ) {
+              const updatedAdjustments = form.values.adjustments.map(
+                (a, i) => ({
+                  ...a,
+                  id: data.allocations![i]?.id ?? a.id,
+                }),
+              );
               form.setFieldValue("adjustments", updatedAdjustments);
             }
             await queryClient.invalidateQueries({ queryKey: ["receipt"] });
-            await queryClient.invalidateQueries({ queryKey: ["receipt-reversal"] });
+            await queryClient.invalidateQueries({
+              queryKey: ["receipt-reversal"],
+            });
             ToastNotification({
               type: "success",
               message: "Receipt reversal created successfully.",
@@ -1055,8 +1142,21 @@ export default function ReceiptCreate({
 
       if (isUpdate) {
         const raw = await putAPICall(URL.receipt, payload, API_HEADER);
-        const response = (raw as { data?: { id?: number; receipt_no?: string; status?: string | number } })?.data ?? raw;
-        const res = response as { id?: number; receipt_no?: string; status?: string | number };
+        const response =
+          (
+            raw as {
+              data?: {
+                id?: number;
+                receipt_no?: string;
+                status?: string | number;
+              };
+            }
+          )?.data ?? raw;
+        const res = response as {
+          id?: number;
+          receipt_no?: string;
+          status?: string | number;
+        };
         if (res?.id != null) {
           setSaveResponse({
             id: res.id ?? saveResponse.id,
@@ -1090,14 +1190,22 @@ export default function ReceiptCreate({
             status: data.status != null ? String(data.status) : "UNPOSTED",
           });
           // Merge party and allocation ids from response into form for future updates
-          if (data.parties && Array.isArray(data.parties) && data.parties.length === form.values.details.length) {
+          if (
+            data.parties &&
+            Array.isArray(data.parties) &&
+            data.parties.length === form.values.details.length
+          ) {
             const updatedDetails = form.values.details.map((d, i) => ({
               ...d,
               id: data.parties![i]?.id ?? d.id,
             }));
             form.setFieldValue("details", updatedDetails);
           }
-          if (data.allocations && Array.isArray(data.allocations) && data.allocations.length === form.values.adjustments.length) {
+          if (
+            data.allocations &&
+            Array.isArray(data.allocations) &&
+            data.allocations.length === form.values.adjustments.length
+          ) {
             const updatedAdjustments = form.values.adjustments.map((a, i) => ({
               ...a,
               id: data.allocations![i]?.id ?? a.id,
@@ -1141,14 +1249,19 @@ export default function ReceiptCreate({
       });
       const reversalHeaders = {
         ...API_HEADER,
-        headers: { ...API_HEADER.headers, dr_cr: "Dr" } as Record<string, string>,
+        headers: { ...API_HEADER.headers, dr_cr: "Dr" } as Record<
+          string,
+          string
+        >,
       };
       const raw = await putAPICall(
         `${URL.reverseReceipt}${reverseReceiptSaveResponse.id}/`,
         payload,
         reversalHeaders,
       );
-      const wrap = raw as { data?: { id?: number; receipt_no?: string; status?: string } };
+      const wrap = raw as {
+        data?: { id?: number; receipt_no?: string; status?: string };
+      };
       const res = wrap?.data;
       if (res?.id != null) {
         setReverseReceiptSaveResponse((prev) => ({
@@ -1188,8 +1301,21 @@ export default function ReceiptCreate({
     try {
       const payload = buildReceiptPayload(form.values, { status: "POSTED" });
       const raw = await putAPICall(URL.receipt, payload, API_HEADER);
-      const response = (raw as { data?: { id?: number; receipt_no?: string; status?: string | number } })?.data ?? raw;
-      const res = response as { id?: number; receipt_no?: string; status?: string | number };
+      const response =
+        (
+          raw as {
+            data?: {
+              id?: number;
+              receipt_no?: string;
+              status?: string | number;
+            };
+          }
+        )?.data ?? raw;
+      const res = response as {
+        id?: number;
+        receipt_no?: string;
+        status?: string | number;
+      };
       if (res?.id != null) {
         setSaveResponse((prev) => ({
           ...prev,
@@ -1269,12 +1395,16 @@ export default function ReceiptCreate({
                   >
                     {saveResponse.receipt_no ||
                       saveResponse.document_no ||
-                      (saveResponse.id != null ? String(saveResponse.id) : "") ||
+                      (saveResponse.id != null
+                        ? String(saveResponse.id)
+                        : "") ||
                       "—"}
                   </Badge>
                 </Group>
                 <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">Status:</Text>
+                  <Text size="sm" fw={500} c="dimmed">
+                    Status:
+                  </Text>
                   <Badge
                     size="sm"
                     variant="light"
@@ -1350,7 +1480,17 @@ export default function ReceiptCreate({
               />
             </Grid.Col>
             <Grid.Col span={2}>
-              <Box style={isReadOnly ? { backgroundColor: "#f5f5f5", borderRadius: 4, padding: "2px 0" } : undefined}>
+              <Box
+                style={
+                  isReadOnly
+                    ? {
+                        backgroundColor: "#f5f5f5",
+                        borderRadius: 4,
+                        padding: "2px 0",
+                      }
+                    : undefined
+                }
+              >
                 <SingleDateInput
                   label="Date"
                   placeholder="Select date"
@@ -1472,12 +1612,24 @@ export default function ReceiptCreate({
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  <Box style={isReadOnly ? { backgroundColor: "#f5f5f5", borderRadius: 4, padding: "2px 0" } : undefined}>
+                  <Box
+                    style={
+                      isReadOnly
+                        ? {
+                            backgroundColor: "#f5f5f5",
+                            borderRadius: 4,
+                            padding: "2px 0",
+                          }
+                        : undefined
+                    }
+                  >
                     <SingleDateInput
                       label="Cheque Date"
                       placeholder="Select date"
                       value={normalizeDate(form.values.cheque_date)}
-                      onChange={(date) => form.setFieldValue("cheque_date", date)}
+                      onChange={(date) =>
+                        form.setFieldValue("cheque_date", date)
+                      }
                       disabled={isReadOnly}
                     />
                   </Box>
@@ -1528,226 +1680,232 @@ export default function ReceiptCreate({
                     </Grid.Col>
                   </Grid>
 
-                  {form.values.details.map((_, idx) => (
-                    <Grid key={idx} w="100%" gutter="sm" mt="sm">
-                      <Grid.Col span={3}>
-                        <SearchableSelect
-                          placeholder="Account Name"
-                          apiEndpoint={URL.customer}
-                          value={
-                            form.values.details[idx].subledger_id != null
-                              ? String(form.values.details[idx].subledger_id)
-                              : form.values.details[idx].customer_code || null
-                          }
-                          displayValue={
-                            form.values.details[idx].customer_display || null
-                          }
-                          disabled={isReadOnly}
-                          onChange={(value, _selected, originalData) => {
-                            const orig = originalData as {
-                              id?: number;
-                              customer_code?: string;
-                              customer_name?: string;
-                              name?: string;
-                            };
-                            const name =
-                              orig?.customer_name ?? orig?.name ?? "";
-                            const code = orig?.customer_code ?? "";
-                            const sid =
-                              orig?.id != null
-                                ? orig.id
-                                : typeof value === "string" && /^\d+$/.test(value)
-                                  ? Number(value)
-                                  : null;
-                            form.setFieldValue(
-                              `details.${idx}.subledger_id`,
-                              sid,
-                            );
-                            form.setFieldValue(
-                              `details.${idx}.customer_code`,
-                              code || (value ?? ""),
-                            );
-                            form.setFieldValue(
-                              `details.${idx}.customer_display`,
-                              name,
-                            );
-                            form.setFieldValue(
-                              `details.${idx}.currency`,
-                              localCurrency,
-                            );
-                            form.setFieldValue(`details.${idx}.roe`, 1);
-                          }}
-                          dropdownZIndex={dropdownZIndex}
-                          displayFormat={(item) => {
-                            const i = item as {
-                              id?: number;
-                              customer_code?: string;
-                              customer_name?: string;
-                              name?: string;
-                            };
-                            return {
-                              value: String(
-                                i?.id ??
-                                  i?.customer_code ??
-                                  "",
-                              ),
-                              label: String(
-                                i?.customer_name ?? i?.name ?? "",
-                              ),
-                            };
-                          }}
-                          searchFields={["customer_name", "customer_code"]}
-                          returnOriginalData
-                          styles={inputStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={2.5}>
-                        <TextInput
-                          placeholder="Narration"
-                          {...form.getInputProps(`details.${idx}.narration`)}
-                          disabled={isReadOnly}
-                          styles={inputStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <TextInput
-                          value={form.values.details[idx].currency}
-                          readOnly
-                          styles={inputStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <NumberInput
-                          placeholder="ROE"
-                          min={0}
-                          hideControls
-                          value={form.values.details[idx].roe ?? undefined}
-                          onChange={(v) =>
-                            form.setFieldValue(
-                              `details.${idx}.roe`,
-                              clampROE(
-                                typeof v === "string" ? parseFloat(v) : v,
-                              ) ?? 1,
-                            )
-                          }
-                          decimalScale={4}
-                          max={ROE_MAX}
-                          styles={inputStyles}
-                          disabled={isReadOnly}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <NumberInput
-                          placeholder="Amount"
-                          min={0}
-                          hideControls
-                          value={form.values.details[idx].amount ?? undefined}
-                          onChange={(v) =>
-                            form.setFieldValue(
-                              `details.${idx}.amount`,
-                              clampAmount(
-                                typeof v === "string" ? parseFloat(v) : v,
-                              ) ?? null,
-                            )
-                          }
-                          decimalScale={2}
-                          max={AMOUNT_MAX}
-                          styles={inputStyles}
-                          disabled={isReadOnly}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <NumberInput
-                          placeholder="Local Amount"
-                          min={0}
-                          hideControls
-                          value={
-                            form.values.details[idx].local_amount ?? undefined
-                          }
-                          onChange={(v) =>
-                            form.setFieldValue(
-                              `details.${idx}.local_amount`,
-                              clampAmount(
-                                typeof v === "string" ? parseFloat(v) : v,
-                              ) ?? null,
-                            )
-                          }
-                          decimalScale={2}
-                          max={AMOUNT_MAX}
-                          styles={inputStyles}
-                          disabled={isReadOnly}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <Dropdown
-                          placeholder="Dr/Cr"
-                          data={DR_CR_OPTIONS}
-                          value={form.values.details[idx].dr_cr}
-                          onChange={(v) =>
-                            form.setFieldValue(
-                              `details.${idx}.dr_cr`,
-                              (v as "Cr" | "Dr") ?? "Cr",
-                            )
-                          }
-                          styles={inputStyles}
-                          disabled={isReadOnly}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1.5}>
-                        <Group gap={4} wrap="nowrap">
-                          {!_isReversal && (
-                            <Button
-                              type="button"
-                              variant="subtle"
-                              size="sm"
-                              onClick={addDetailRow}
-                              title="Add row"
-                              disabled={isReadOnly}
-                            >
-                              <IconPlus size={18} />
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            variant="subtle"
-                            size="sm"
-                            color="red"
-                            onClick={() => removeDetailRow(idx)}
-                            disabled={
-                              isReadOnly ||
-                              form.values.details.length <= 1
+                  {form.values.details.map((_, idx) => {
+                    const formRow = form.values.details[idx];
+                    console.log("formRow---", formRow);
+
+                    const loadedRow =
+                      loadedDetails &&
+                      loadedDetails.length === form.values.details.length
+                        ? loadedDetails[idx]
+                        : null;
+                    console.log("loadedRow---", loadedRow);
+
+                    const row = loadedRow ?? formRow;
+                    const partyKey = `party-${idx}-${row?.subledger_id ?? row?.customer_code ?? idx}`;
+                    return (
+                      <Grid key={partyKey} w="100%" gutter="sm" mt="sm">
+                        <Grid.Col span={3}>
+                          <SearchableSelect
+                            key={partyKey}
+                            placeholder="Account Name"
+                            apiEndpoint={URL.customer}
+                            value={row?.customer_code || null}
+                            displayValue={row?.customer_display || null}
+                            disabled={isReadOnly}
+                            onChange={(value, _selected, originalData) => {
+                              setLoadedDetails(null);
+                              const orig = originalData as {
+                                id?: number;
+                                customer_code?: string;
+                                customer_name?: string;
+                                name?: string;
+                              };
+                              const name =
+                                orig?.customer_name ?? orig?.name ?? "";
+                              const code = orig?.customer_code ?? "";
+                              const sid =
+                                orig?.id != null
+                                  ? orig.id
+                                  : typeof value === "string" &&
+                                      /^\d+$/.test(value)
+                                    ? Number(value)
+                                    : null;
+                              form.setFieldValue(
+                                `details.${idx}.subledger_id`,
+                                sid,
+                              );
+                              form.setFieldValue(
+                                `details.${idx}.customer_code`,
+                                code || (value ?? ""),
+                              );
+                              form.setFieldValue(
+                                `details.${idx}.customer_display`,
+                                name,
+                              );
+                              form.setFieldValue(
+                                `details.${idx}.currency`,
+                                localCurrency,
+                              );
+                              form.setFieldValue(`details.${idx}.roe`, 1);
+                            }}
+                            dropdownZIndex={dropdownZIndex}
+                            displayFormat={(item) => {
+                              const i = item as {
+                                id?: number;
+                                customer_code?: string;
+                                customer_name?: string;
+                                name?: string;
+                              };
+                              return {
+                                value: String(i?.id ?? i?.customer_code ?? ""),
+                                label: String(
+                                  i?.customer_name ?? i?.name ?? "",
+                                ),
+                              };
+                            }}
+                            searchFields={["customer_name", "customer_code"]}
+                            returnOriginalData
+                            styles={inputStyles}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={2.5}>
+                          <TextInput
+                            placeholder="Narration"
+                            {...form.getInputProps(`details.${idx}.narration`)}
+                            disabled={isReadOnly}
+                            styles={inputStyles}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <TextInput
+                            value={form.values.details[idx].currency}
+                            readOnly
+                            styles={inputStyles}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <NumberInput
+                            placeholder="ROE"
+                            min={0}
+                            hideControls
+                            value={form.values.details[idx].roe ?? undefined}
+                            onChange={(v) =>
+                              form.setFieldValue(
+                                `details.${idx}.roe`,
+                                clampROE(
+                                  typeof v === "string" ? parseFloat(v) : v,
+                                ) ?? 1,
+                              )
                             }
-                            title="Remove row"
-                          >
-                            <IconTrash size={18} />
-                          </Button>
-                          {!_isReversal && (
+                            decimalScale={4}
+                            max={ROE_MAX}
+                            styles={inputStyles}
+                            disabled={isReadOnly}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <NumberInput
+                            placeholder="Amount"
+                            min={0}
+                            hideControls
+                            value={form.values.details[idx].amount ?? undefined}
+                            onChange={(v) =>
+                              form.setFieldValue(
+                                `details.${idx}.amount`,
+                                clampAmount(
+                                  typeof v === "string" ? parseFloat(v) : v,
+                                ) ?? null,
+                              )
+                            }
+                            decimalScale={2}
+                            max={AMOUNT_MAX}
+                            styles={inputStyles}
+                            disabled={isReadOnly}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <NumberInput
+                            placeholder="Local Amount"
+                            min={0}
+                            hideControls
+                            value={
+                              form.values.details[idx].local_amount ?? undefined
+                            }
+                            onChange={(v) =>
+                              form.setFieldValue(
+                                `details.${idx}.local_amount`,
+                                clampAmount(
+                                  typeof v === "string" ? parseFloat(v) : v,
+                                ) ?? null,
+                              )
+                            }
+                            decimalScale={2}
+                            max={AMOUNT_MAX}
+                            styles={inputStyles}
+                            disabled={isReadOnly}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          <Dropdown
+                            placeholder="Dr/Cr"
+                            data={DR_CR_OPTIONS}
+                            value={form.values.details[idx].dr_cr}
+                            onChange={(v) =>
+                              form.setFieldValue(
+                                `details.${idx}.dr_cr`,
+                                (v as "Cr" | "Dr") ?? "Cr",
+                              )
+                            }
+                            styles={inputStyles}
+                            disabled={isReadOnly}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={1.5}>
+                          <Group gap={4} wrap="nowrap">
+                            {!_isReversal && (
+                              <Button
+                                type="button"
+                                variant="subtle"
+                                size="sm"
+                                onClick={addDetailRow}
+                                title="Add row"
+                                disabled={isReadOnly}
+                              >
+                                <IconPlus size={18} />
+                              </Button>
+                            )}
                             <Button
                               type="button"
                               variant="subtle"
                               size="sm"
-                              title="Get invoice details"
+                              color="red"
+                              onClick={() => removeDetailRow(idx)}
                               disabled={
-                                isReadOnly ||
-                                invoiceLoading ||
-                                (!form.values.details[idx].customer_code &&
-                                  !form.values.details[idx].customer_display)
+                                isReadOnly || form.values.details.length <= 1
                               }
-                              onClick={() => openInvoiceModal(idx)}
-                              leftSection={
-                                invoiceLoading &&
-                                invoiceModalDetailRowIndex === idx ? (
-                                  <Loader size="xs" color="#105476" />
-                                ) : (
-                                  <IconFileInvoice size={18} />
-                                )
-                              }
-                            />
-                          )}
-                        </Group>
-                      </Grid.Col>
-                    </Grid>
-                  ))}
+                              title="Remove row"
+                            >
+                              <IconTrash size={18} />
+                            </Button>
+                            {!_isReversal && (
+                              <Button
+                                type="button"
+                                variant="subtle"
+                                size="sm"
+                                title="Get invoice details"
+                                disabled={
+                                  isReadOnly ||
+                                  invoiceLoading ||
+                                  (!form.values.details[idx].customer_code &&
+                                    !form.values.details[idx].customer_display)
+                                }
+                                onClick={() => openInvoiceModal(idx)}
+                                leftSection={
+                                  invoiceLoading &&
+                                  invoiceModalDetailRowIndex === idx ? (
+                                    <Loader size="xs" color="#105476" />
+                                  ) : (
+                                    <IconFileInvoice size={18} />
+                                  )
+                                }
+                              />
+                            )}
+                          </Group>
+                        </Grid.Col>
+                      </Grid>
+                    );
+                  })}
                 </Box>
               </Card>
             </Grid.Col>
@@ -1853,7 +2011,13 @@ export default function ReceiptCreate({
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
-                        <Box style={{ backgroundColor: "#f5f5f5", borderRadius: 4, padding: "2px 0" }}>
+                        <Box
+                          style={{
+                            backgroundColor: "#f5f5f5",
+                            borderRadius: 4,
+                            padding: "2px 0",
+                          }}
+                        >
                           <SingleDateInput
                             placeholder="Doc date"
                             value={normalizeDate(
@@ -1884,15 +2048,20 @@ export default function ReceiptCreate({
                             undefined
                           }
                           onChange={(v) => {
-                            const newCurr = clampAmount(
-                              typeof v === "string" ? parseFloat(v) : v,
-                            ) ?? null;
+                            const newCurr =
+                              clampAmount(
+                                typeof v === "string" ? parseFloat(v) : v,
+                              ) ?? null;
                             form.setFieldValue(
                               `adjustments.${idx}.adj_curr_amount`,
                               newCurr,
                             );
                             const rowRoe = form.values.adjustments[idx]?.roe;
-                            if (newCurr != null && rowRoe != null && Number.isFinite(rowRoe)) {
+                            if (
+                              newCurr != null &&
+                              rowRoe != null &&
+                              Number.isFinite(rowRoe)
+                            ) {
                               const newLocal = clampAmount(newCurr * rowRoe);
                               form.setFieldValue(
                                 `adjustments.${idx}.adj_local_amount`,
@@ -1942,8 +2111,7 @@ export default function ReceiptCreate({
                             color="red"
                             onClick={() => removeAdjustmentRow(idx)}
                             disabled={
-                              isReadOnly ||
-                              form.values.adjustments.length <= 1
+                              isReadOnly || form.values.adjustments.length <= 1
                             }
                             title="Remove row"
                           >
@@ -2079,7 +2247,9 @@ export default function ReceiptCreate({
                 </Button>
                 {_isReversal &&
                   reverseReceiptSaveResponse &&
-                  String(reverseReceiptSaveResponse.status ?? "").toUpperCase() === "UNPOSTED" && (
+                  String(
+                    reverseReceiptSaveResponse.status ?? "",
+                  ).toUpperCase() === "UNPOSTED" && (
                     <Button
                       type="button"
                       color="black"
