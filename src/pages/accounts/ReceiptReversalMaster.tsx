@@ -8,7 +8,6 @@ import {
   ActionIcon,
   Badge,
   Box,
-  Button,
   Card,
   Center,
   Group,
@@ -25,8 +24,6 @@ import {
   IconDotsVertical,
   IconEdit,
   IconEye,
-  IconPlus,
-  IconReceiptRefund,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { URL } from "../../api/serverUrls";
@@ -58,9 +55,8 @@ type ReceiptListResult = {
   total: number;
 };
 
-export default function ReceiptMaster() {
+export default function ReceiptReversalMaster() {
   const navigate = useNavigate();
-  // 1-based current page and page size, same as EnquiryMaster
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
   const [search] = useState("");
@@ -82,7 +78,7 @@ export default function ReceiptMaster() {
     isFetching: receiptFetching,
     error: receiptError,
   } = useQuery({
-    queryKey: ["receipt", listCurrentPage, listPageSize, search],
+    queryKey: ["receipt-reversal", listCurrentPage, listPageSize, search],
     queryFn: async (): Promise<ReceiptListResult> => {
       try {
         const payload = { filters: {} as Record<string, unknown> };
@@ -90,7 +86,7 @@ export default function ReceiptMaster() {
           payload.filters.search = search.trim();
         }
         const response = await apiCallProtected.post(
-          `${URL.receiptFilter}?index=${index}&limit=${listPageSize}`,
+          `${URL.reverseReceiptFilter}?index=${index}&limit=${listPageSize}`,
           payload,
         );
         const body =
@@ -105,7 +101,8 @@ export default function ReceiptMaster() {
           : Array.isArray(body)
             ? (body as unknown as ReceiptRow[])
             : [];
-        const total = body.total != null ? Number(body.total) : list.length;
+        const total =
+          body.total != null ? Number(body.total) : list.length;
         return { list, total };
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response
@@ -113,7 +110,7 @@ export default function ReceiptMaster() {
         if (status === 404) {
           return { list: [], total: 0 };
         }
-        console.error("Error fetching receipt data:", err);
+        console.error("Error fetching receipt reversal data:", err);
         return { list: [], total: 0 };
       }
     },
@@ -198,7 +195,6 @@ export default function ReceiptMaster() {
         size: 80,
         Cell: ({ row }) => {
           const status = String(row.original?.status ?? "").toUpperCase();
-          const isPosted = status === "POSTED";
           const isUnposted = status === "UNPOSTED";
           return (
             <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
@@ -211,15 +207,14 @@ export default function ReceiptMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/receipt/create", { state: row.original })
+                      navigate("/receipt/reversal/create", {
+                        state: { ...row.original, viewMode: true },
+                      })
                     }
                   >
                     <Group gap="sm">
                       <IconEye size={16} style={{ color: "#105476" }} />
-                      <Text
-                        size="sm"
-                        style={{ fontFamily: "Inter, sans-serif" }}
-                      >
+                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
                         View
                       </Text>
                     </Group>
@@ -229,40 +224,15 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/create", { state: row.original })
-                      }
-                    >
-                      <Group gap="sm">
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          Edit
-                        </Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                )}
-                {isPosted && (
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() =>
                         navigate("/receipt/reversal/create", {
                           state: row.original,
                         })
                       }
                     >
                       <Group gap="sm">
-                        <IconReceiptRefund
-                          size={16}
-                          style={{ color: "#105476" }}
-                        />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          Create Receipt Reversal
+                        <IconEdit size={16} style={{ color: "#105476" }} />
+                        <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                          Edit
                         </Text>
                       </Group>
                     </UnstyledButton>
@@ -401,31 +371,8 @@ export default function ReceiptMaster() {
             c="#444955"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
-            Receipt List
+            Receipt Reversal List
           </Text>
-
-          <Group gap="xs" wrap="nowrap">
-            <Button
-              leftSection={<IconPlus size={16} />}
-              size="sm"
-              styles={{
-                root: {
-                  backgroundColor: "#105476",
-                  borderRadius: "4px",
-                  color: "#FFFFFF",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontstyle: "semibold",
-                  "&:hover": {
-                    backgroundColor: "#105476",
-                  },
-                },
-              }}
-              onClick={() => navigate("/receipt/create")}
-            >
-              Create New
-            </Button>
-          </Group>
         </Group>
       </Box>
 
@@ -433,21 +380,20 @@ export default function ReceiptMaster() {
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
-            <Text c="dimmed">Loading receipt data...</Text>
+            <Text c="dimmed">Loading receipt reversal data...</Text>
           </Stack>
         </Center>
       ) : receiptError ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
             <Text c="dimmed">
-              Error loading receipt data. Please try refreshing the page.
+              Error loading receipt reversal data. Please try refreshing the page.
             </Text>
           </Stack>
         </Center>
       ) : (
         <>
           <MantineReactTable table={table} />
-          {/* Pagination bar: same layout as EnquiryMaster – left: rows per page + range; right: page nav */}
           <Group
             w="100%"
             justify="space-between"
@@ -469,14 +415,14 @@ export default function ReceiptMaster() {
                   handlePageSizeChange(Number(val));
                 }}
                 w={110}
-                styles={{ input: { fontSize: 12, height: 30 } } as any}
+                styles={{ input: { fontSize: 12, height: 30 } } as Record<string, unknown>}
               />
               <Text size="sm" c="dimmed">
                 {listTotalRecords === 0
                   ? "0–0 of 0"
                   : `${(listCurrentPage - 1) * listPageSize + 1}–${Math.min(
                       listCurrentPage * listPageSize,
-                      listTotalRecords,
+                      listTotalRecords
                     )} of ${listTotalRecords}`}
               </Text>
             </Group>

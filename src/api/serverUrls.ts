@@ -113,7 +113,9 @@ export const URL = {
   reverseInvoice: "reverse-invoice/",
   invoiceCombined: "invoice/combined/",
   receiptFilter: "filter/receipt/",
+  reverseReceiptFilter: "filter/reverse-receipt/",
   receipt: "receipt/",
+  reverseReceipt: "reverse-receipt/",
 
   // Dashboard APIs
   dashboard: {

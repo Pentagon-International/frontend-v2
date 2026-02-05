@@ -24,6 +24,8 @@ const pathTitleMap: Record<string, string> = {
   "/SeaExport": "Ocean",
   "/accounts": "Accounts",
   "/receipt/create": "Receipt",
+  "/receipt/reversal/create": "Receipt Reversal",
+  "/receipt/reversal": "Receipt Reversal",
   "/receipt": "Receipt",
   "/master": "Masters",
   "/reports": "Reports",

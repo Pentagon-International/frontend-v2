@@ -124,6 +124,8 @@ import GetRate from "../pages/dashboard/GetRate";
 import EnquiryMaster from "../pages/dashboard/EnquiryMaster";
 import ReceiptMaster from "../pages/accounts/ReceiptMaster";
 import ReceiptCreate from "../pages/accounts/ReceiptCreate";
+import ReceiptReversal from "../pages/accounts/ReceiptReversal";
+import ReceiptReversalMaster from "../pages/accounts/ReceiptReversalMaster";
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
@@ -243,6 +245,8 @@ const NavigationRoutes = () => {
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/receipt" element={<ReceiptMaster />} />
         <Route path="/receipt/create" element={<ReceiptCreate />} />
+        <Route path="/receipt/reversal" element={<ReceiptReversalMaster />} />
+        <Route path="/receipt/reversal/create" element={<ReceiptReversal />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
         <Route path="/lead-create" element={<CreateLead />} />
