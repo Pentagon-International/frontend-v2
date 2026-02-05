@@ -39,6 +39,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
+import { Dropdown, SearchableSelect } from "../../../components";
 
 type ChargeMaster = {
   id?: string;
@@ -101,16 +102,16 @@ export default function ChargeMasterList() {
     }));
   };
 
-  // const applyFilters = () => {
-  //   setAppliedFilters(draftFilters);
-  //   setPagination((p) => ({ ...p, pageIndex: 0 }));
-  // };
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
 
-  // const clearAllFilters = () => {
-  //   setDraftFilters(DEFAULT_FILTERS);
-  //   setAppliedFilters(DEFAULT_FILTERS);
-  //   setPagination((p) => ({ ...p, pageIndex: 0 }));
-  // };
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
 
   const buildFiltersPayload = (filters: ChargeFilters, searchValue: string) => {
     const cleaned = Object.entries(filters).reduce(
@@ -144,21 +145,21 @@ export default function ChargeMasterList() {
       try {
         const index = pagination.pageIndex * pagination.pageSize;
 
-        // const filtersPayload = buildFiltersPayload(
-        //   appliedFilters,
-        //   debouncedSearch,
-        // );
+        const filtersPayload = buildFiltersPayload(
+          appliedFilters,
+          debouncedSearch,
+        );
 
         const payload =
-          // Object.keys(filtersPayload).length > 0
-          //   ? { filters: filtersPayload } :
+          Object.keys(filtersPayload).length > 0
+            ? { filters: filtersPayload } :
           {};
 
         const response = await apiCallProtected.post(
-          `${URL.chargeMasterFilter}?${debouncedSearch && "search=" + debouncedSearch}&index=${index}&limit=${pagination.pageSize}`,
+          `${URL.chargeMasterFilter}?&index=${index}&limit=${pagination.pageSize}`,
           payload,
         );
-        // setShowFilters(false);
+        setShowFilters(false);
 
         const data = response as any;
         if (data && Array.isArray(data.data)) {
@@ -169,7 +170,7 @@ export default function ChargeMasterList() {
         return [];
       } catch (error) {
         console.error("Error fetching charge data:", error);
-        // setShowFilters(false);
+        setShowFilters(false);
         setTotalRecords(0);
         throw error;
       }
@@ -394,7 +395,7 @@ export default function ChargeMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
-            {/*<TextInput
+            {/* <TextInput
               placeholder="Search..."
               leftSection={<IconSearch size={16} />}
               rightSection={
@@ -433,7 +434,7 @@ export default function ChargeMasterList() {
                 },
               }}
             /> */}
-            {/* <ActionIcon
+            <ActionIcon
               variant={showFilters ? "filled" : "outline"}
               size={36}
               color={showFilters ? "#E0F5FF" : "gray"}
@@ -454,7 +455,7 @@ export default function ChargeMasterList() {
               }}
             >
               <IconFilter size={18} />
-            </ActionIcon> */}
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"
@@ -480,10 +481,11 @@ export default function ChargeMasterList() {
       </Box>
 
       {/* Filter Section */}
-      {/* {showFilters && (
+      {showFilters && (
         <Box
           tt="capitalize"
           mb="sm"
+          p="sm"
           style={{
             borderRadius: "8px",
             border: "1px solid #E0E0E0",
@@ -499,7 +501,6 @@ export default function ChargeMasterList() {
             style={{
               backgroundColor: "#FAFAFA",
               padding: "4px 8px",
-              borderRadius: "8px 8px 0 0",
             }}
           >
             <Text
@@ -523,42 +524,58 @@ export default function ChargeMasterList() {
 
           <Grid gutter="sm" px="md" pt="xs" pb="sm">
             <Grid.Col span={2.4}>
-              <TextInput
-                size="xs"
+              <SearchableSelect
+                apiEndpoint={URL.chargeMaster}
                 label="Charge Code"
                 placeholder="Type Charge Code"
                 value={draftFilters.charge_code}
-                onChange={(e) =>
+                onChange={(val) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    charge_code: e.currentTarget.value,
+                    charge_code: val || "",
                   }))
                 }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.charge_code ?? ""),
+                  label: String(item.charge_code ?? ""),
+                })}
+                searchFields={["charge_code"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <TextInput
-                size="xs"
+              <SearchableSelect
+                apiEndpoint={URL.chargeMaster}
                 label="Charge Name"
                 placeholder="Type Charge Name"
                 value={draftFilters.charge_name}
-                onChange={(e) =>
+                onChange={(val) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    charge_name: e.currentTarget.value,
+                    charge_name: val || "",
                   }))
                 }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.charge_name ?? ""),
+                  label: String(item.charge_name ?? ""),
+                })}
+                searchFields={["charge_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <Select
+              <Dropdown
                 size="xs"
                 label="Charges Type"
                 placeholder="Select Charge Type"
                 data={chargesTypeOptions}
-                value={draftFilters.charges_type}
+                value={draftFilters.charges_type || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
                     ...prev,
@@ -569,12 +586,12 @@ export default function ChargeMasterList() {
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <Select
+              <Dropdown
                 size="xs"
                 label="Calculation Type"
                 placeholder="Select Calculation Type"
                 data={calculationTypeOptions}
-                value={draftFilters.calculation_type}
+                value={draftFilters.calculation_type || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
                     ...prev,
@@ -585,12 +602,12 @@ export default function ChargeMasterList() {
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <Select
+              <Dropdown
                 size="xs"
                 label="Status"
                 placeholder="Select Status"
                 data={statusOptions}
-                value={draftFilters.status}
+                value={draftFilters.status || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
                     ...prev,
@@ -645,7 +662,7 @@ export default function ChargeMasterList() {
             </Button>
           </Group>
         </Box>
-      )} */}
+      )}
 
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>
