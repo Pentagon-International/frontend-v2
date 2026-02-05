@@ -33,8 +33,10 @@ export const URL = {
   userByCoordinator: "user_master/by-coordinator/",
   coordinatorAssigned: "coordinator-access-mapping/coordinator-assigned/",
   customerRelationshipMapping: "customer-relationship-mapping/",
-  customerRelationshipMappingByCustomer: "customer-relationship-mapping/by-customer/",
-  customerRelationshipMappingBulkUpdate: "customer-relationship-mapping/bulk-update/",
+  customerRelationshipMappingByCustomer:
+    "customer-relationship-mapping/by-customer/",
+  customerRelationshipMappingBulkUpdate:
+    "customer-relationship-mapping/bulk-update/",
   // tariff: "tariff/"
   carrier: "carrier-master/",
   freight: "freight/",
@@ -101,8 +103,10 @@ export const URL = {
   chartOfAccountsFilter: "filter/chart-of-accounts/",
   glChargeMapping: "gl-charge-mapping/",
   glChargeMappingFilter: "filter/gl-charge-mapping/",
+  gstChargeMapping: "gst-charge-mapping/",
   gstChargeMappingFilter: "filter/gst-charge-mapping/",
   gstRateMasterFilter: "filter/gst-rate-master/",
+  gstSacMaster: "gst-sac-master/",
   gstSacMasterFilter: "filter/gst-sac-master/",
 
   // Dashboard APIs

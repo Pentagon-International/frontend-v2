@@ -11,7 +11,6 @@ import {
   Box,
   Button,
   Card,
-  Flex,
   Group,
   Menu,
   Text,
@@ -20,26 +19,49 @@ import {
   Loader,
   Stack,
   Select,
+  TextInput,
+  Grid,
 } from "@mantine/core";
 import {
   IconDotsVertical,
   IconEdit,
   IconPlus,
-  IconChevronLeft,
-  IconChevronRight,
+  IconFilter,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { useDebouncedValue } from "@mantine/hooks";
+import { SearchableSelect, SingleDateInput } from "../../../components";
 
 type GSTChargeMappingMaster = {
-  id?: string;
-  charge_code?: string;
+  id?: number;
+  sno?: number;
+  service_id?: number;
+  service_name?: string;
+  service_code?: string;
+  charge_id?: number;
   charge_name?: string;
-  gst_sac_code?: string;
-  gst_rate_code?: string;
+  charge_code?: string;
+  sac_id?: number;
+  sac_name?: string;
+  sac_code?: string;
+  effective_from?: string;
   status?: "ACTIVE" | "INACTIVE";
+  created_at?: string;
+  updated_at?: string;
+};
+
+type GSTChargeMappingFilters = {
+  service_id: string;
+  charge_id: string;
+  sac_id: string;
+  effective_from: Date | null;
+  status: string;
 };
 
 export default function GSTChargeMappingMasterList() {
@@ -50,8 +72,27 @@ export default function GSTChargeMappingMasterList() {
     pageSize: 25,
   });
   const [totalRecords, setTotalRecords] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const DEFAULT_FILTERS: GSTChargeMappingFilters = {
+    service_id: "",
+    charge_id: "",
+    sac_id: "",
+    effective_from: null,
+    status: "",
+  };
 
-  // Handle page size change
+  const [draftFilters, setDraftFilters] =
+    useState<GSTChargeMappingFilters>(DEFAULT_FILTERS);
+
+  const [appliedFilters, setAppliedFilters] =
+    useState<GSTChargeMappingFilters>(DEFAULT_FILTERS);
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
+
+  const currentPage = pagination.pageIndex + 1;
+  const statusOptions = ["ACTIVE", "INACTIVE"];
+
   const handlePageSizeChange = (newPageSize: number) => {
     setPagination({
       pageIndex: 0,
@@ -59,27 +100,73 @@ export default function GSTChargeMappingMasterList() {
     });
   };
 
-  // Handle page change
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({
       ...prev,
-      pageIndex: newPage - 1, // Convert to 0-based index
+      pageIndex: newPage - 1,
     }));
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+
+  const formatDateToYYYYMMDD = (date: Date | null): string | undefined => {
+    if (!date) return undefined;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const buildFiltersPayload = (
+    filters: GSTChargeMappingFilters,
+    searchValue: string
+  ) => {
+    const cleaned: Record<string, string | number> = {};
+    if (filters.service_id && filters.service_id.trim() !== "")
+      cleaned.service_id = Number(filters.service_id);
+    if (filters.charge_id && filters.charge_id.trim() !== "")
+      cleaned.charge_id = Number(filters.charge_id);
+    if (filters.sac_id && filters.sac_id.trim() !== "")
+      cleaned.sac_id = Number(filters.sac_id);
+    if (filters.status && filters.status.trim() !== "")
+      cleaned.status = filters.status;
+    const effFrom = formatDateToYYYYMMDD(filters.effective_from);
+    if (effFrom) cleaned.effective_from = effFrom;
+    if (searchValue?.trim()) cleaned.search = searchValue;
+    return Object.keys(cleaned).length > 0 ? { filters: cleaned } : {};
   };
 
   const {
     data: gstChargeMappingData = [],
     isLoading: gstChargeMappingLoading,
+    isFetching: gstChargeMappingFetching,
     error: gstChargeMappingError,
     refetch: refetchGSTChargeMapping,
   } = useQuery({
-    queryKey: ["gst-charge-mapping", pagination.pageIndex, pagination.pageSize],
+    queryKey: [
+      "gst-charge-mapping",
+      pagination.pageIndex,
+      pagination.pageSize,
+      appliedFilters,
+      debouncedSearch,
+    ],
     queryFn: async () => {
       try {
         const index = pagination.pageIndex * pagination.pageSize;
+        const payload = buildFiltersPayload(appliedFilters, debouncedSearch);
+
         const response = await apiCallProtected.post(
           `${URL.gstChargeMappingFilter}?index=${index}&limit=${pagination.pageSize}`,
-          {}
+          payload
         );
 
         const data = response as any;
@@ -100,14 +187,20 @@ export default function GSTChargeMappingMasterList() {
     refetchOnMount: true,
   });
 
-  // Refetch data when navigating from create/edit pages
   useEffect(() => {
     if (location.state?.refreshData) {
       refetchGSTChargeMapping();
-      // Clear the refresh flag
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location.state?.refreshData, refetchGSTChargeMapping, navigate, location.pathname]);
+  }, [
+    location.state?.refreshData,
+    refetchGSTChargeMapping,
+    navigate,
+    location.pathname,
+  ]);
+
+  const isLoading = gstChargeMappingFetching || gstChargeMappingLoading;
+  const tableData = gstChargeMappingData ?? [];
 
   const columns = useMemo<MRT_ColumnDef<GSTChargeMappingMaster>[]>(
     () => [
@@ -120,57 +213,60 @@ export default function GSTChargeMappingMasterList() {
         enableColumnFilter: false,
         enableSorting: false,
       },
-      { accessorKey: "charge_code", header: "Charge Code", size: 120 },
-      { accessorKey: "charge_name", header: "Charge Name", size: 180 },
-      { accessorKey: "gst_sac_code", header: "GST SAC Code", size: 130 },
-      { accessorKey: "gst_rate_code", header: "GST Rate Code", size: 130 },
+      { accessorKey: "service_name", header: "Service Name", size: 120 },
+      { accessorKey: "charge_name", header: "Charge Name", size: 150 },
+      { accessorKey: "sac_name", header: "SAC Name", size: 200 },
+      { accessorKey: "effective_from", header: "Effective From", size: 120 },
       {
         accessorKey: "status",
         header: "Status",
-        size: 80,
-        Cell: ({ row, cell }) => {
+        size: 90,
+        Cell: ({ cell }) => {
           const value = cell.getValue<"ACTIVE" | "INACTIVE">();
-
           return (
-            <Flex justify="space-between" align="center">
-              <Badge
-                color={value === "ACTIVE" ? "green" : "red"}
-                variant="light"
-                size="sm"
-                radius="sm"
-                px={8}
-              >
-                {value}
-              </Badge>
-              <Menu
-                withinPortal
-                position="bottom-end"
-                shadow="sm"
-                radius={"md"}
-              >
-                <Menu.Target>
-                  <ActionIcon variant="subtle" color="gray">
-                    <IconDotsVertical size={16} />
-                  </ActionIcon>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() =>
-                        navigate("/master/gst-charge-mapping/edit", { state: row.original })
-                      }
-                    >
-                      <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>Edit</Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                </Menu.Dropdown>
-              </Menu>
-            </Flex>
+            <Badge
+              color={value === "ACTIVE" ? "green" : "red"}
+              variant="light"
+              size="sm"
+              radius="sm"
+              px={8}
+            >
+              {value}
+            </Badge>
           );
         },
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        size: 70,
+        Cell: ({ row }) => (
+          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
+            <Menu.Target>
+              <ActionIcon variant="subtle" color="gray">
+                <IconDotsVertical size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() =>
+                    navigate("/master/gst-charge-mapping/edit", {
+                      state: row.original,
+                    })
+                  }
+                >
+                  <Group gap={"sm"}>
+                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                      Edit
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
+            </Menu.Dropdown>
+          </Menu>
+        ),
       },
     ],
     [navigate]
@@ -178,7 +274,7 @@ export default function GSTChargeMappingMasterList() {
 
   const table = useMantineReactTable({
     columns,
-    data: gstChargeMappingData,
+    data: tableData,
     enableColumnFilters: false,
     enablePagination: true,
     enableTopToolbar: false,
@@ -189,25 +285,22 @@ export default function GSTChargeMappingMasterList() {
     enableStickyHeader: true,
     initialState: {
       pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { right: ["status"] },
+      columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
     manualPagination: true,
     onPaginationChange: setPagination,
     rowCount: totalRecords,
-    state: {
-      pagination,
-    },
+    state: { pagination },
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
       withTableBorder: false,
       withColumnBorders: false,
-      style: { width: "100%" },
     },
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
+      p: "sm",
       radius: "md",
       style: {
         flex: 1,
@@ -220,7 +313,7 @@ export default function GSTChargeMappingMasterList() {
     },
     mantineTableBodyCellProps: ({ column }) => {
       let extraStyles = {};
-      if (column.id === "status") {
+      if (column.id === "actions") {
         extraStyles = {
           position: "sticky",
           right: 0,
@@ -245,7 +338,7 @@ export default function GSTChargeMappingMasterList() {
     },
     mantineTableHeadCellProps: ({ column }) => {
       let extraStyles = {};
-      if (column.id === "status") {
+      if (column.id === "actions") {
         extraStyles = {
           position: "sticky",
           right: 0,
@@ -282,67 +375,12 @@ export default function GSTChargeMappingMasterList() {
     },
   });
 
-  if (gstChargeMappingLoading) {
-    return (
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Center py="xl">
-          <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-              Loading GST Charge Mapping data...
-            </Text>
-          </Stack>
-        </Center>
-      </Card>
-    );
-  }
-
-  if (gstChargeMappingError) {
-    return (
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Center py="xl">
-          <Text c="red" size="lg" style={{ fontFamily: "Inter, sans-serif" }}>
-            Error loading GST Charge Mapping data. Please try refreshing the page.
-          </Text>
-        </Center>
-      </Card>
-    );
-  }
-
   return (
     <Card
       shadow="sm"
       pt="md"
       pb="sm"
-      px="lg"
+      px="md"
       radius="md"
       withBorder
       style={{
@@ -353,8 +391,8 @@ export default function GSTChargeMappingMasterList() {
         flex: 1,
       }}
     >
-      <Box mb="md">
-        <Group justify="space-between" align="center">
+      <Box>
+        <Group justify="space-between" align="center" pb="sm">
           <Text
             size="md"
             fw={600}
@@ -375,7 +413,7 @@ export default function GSTChargeMappingMasterList() {
                   color: "#FFFFFF",
                   fontSize: "14px",
                   fontFamily: "Inter",
-                  fontstyle: "semibold",
+                  fontStyle: "semibold",
                   "&:hover": {
                     backgroundColor: "#105476",
                   },
@@ -389,92 +427,227 @@ export default function GSTChargeMappingMasterList() {
         </Group>
       </Box>
 
-      {/* Table wrapper with flex to take remaining space */}
-      <Box style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <MantineReactTable table={table} />
-      </Box>
-
-      {/* Custom Pagination Bar */}
-      <Group
-        w="100%"
-        justify="space-between"
-        align="center"
-        p="xs"
-        wrap="nowrap"
-        pt="md"
-      >
-        {/* Left side: Rows per page */}
-        <Group gap="sm" align="center" wrap="nowrap">
-          <Text size="sm" c="dimmed">
-            Rows per page
-          </Text>
-          <Select
-            size="xs"
-            data={["10", "25", "50"]}
-            value={String(pagination.pageSize)}
-            onChange={(val) => {
-              if (!val) return;
-              handlePageSizeChange(Number(val));
+      {/* Filter Section - hidden as same as ChargeMaster */}
+      {/* {showFilters && (
+        <Box
+          tt="capitalize"
+          mb="sm"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+            flexShrink: 0,
+            height: "fit-content",
+          }}
+        >
+          <Group
+            justify="space-between"
+            align="center"
+            mb="sm"
+            px="md"
+            style={{
+              backgroundColor: "#FAFAFA",
+              padding: "4px 8px",
+              borderRadius: "8px 8px 0 0",
             }}
-            w={110}
-            styles={{ input: { fontSize: 12, height: 30 } } as any}
+          >
+            <Text
+              size="sm"
+              fw={600}
+              c="#000000"
+              style={{ fontFamily: "Inter", fontSize: "14px" }}
+            >
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
+          </Group>
+
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                apiEndpoint={URL.serviceMaster}
+                label="Service Name"
+                placeholder="Search service..."
+                value={draftFilters.service_id}
+                onChange={(val) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    service_id: val || "",
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.service_name ?? ""),
+                })}
+                searchFields={["service_name", "service_code"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                apiEndpoint={URL.chargeMaster}
+                label="Charge Name"
+                placeholder="Search charge..."
+                value={draftFilters.charge_id}
+                onChange={(val) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    charge_id: val || "",
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.charge_name ?? ""),
+                })}
+                searchFields={["charge_name", "charge_code"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                apiEndpoint={URL.gstSacMaster}
+                label="SAC Name"
+                placeholder="Search SAC..."
+                value={draftFilters.sac_id}
+                onChange={(val) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    sac_id: val || "",
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.sac_name ?? ""),
+                })}
+                searchFields={["sac_name", "sac_code"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SingleDateInput
+                label="Effective From"
+                placeholder="Select date"
+                value={draftFilters.effective_from}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    effective_from: date,
+                  }))
+                }
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <Select
+                size="xs"
+                label="Status"
+                placeholder="Select Status"
+                data={statusOptions}
+                value={draftFilters.status}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    status: value || "",
+                  }))
+                }
+              />
+            </Grid.Col>
+          </Grid>
+
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={clearAllFilters}
+              leftSection={<IconX size={16} />}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  color: "#444955",
+                },
+              }}
+            >
+              Clear Filters
+            </Button>
+            <Button
+              size="sm"
+              onClick={applyFilters}
+              loading={isLoading}
+              disabled={isLoading}
+              leftSection={<IconFilter size={16} />}
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  "&:hover": {
+                    backgroundColor: "#0d4261",
+                  },
+                },
+              }}
+            >
+              Apply Filters
+            </Button>
+          </Group>
+        </Box>
+      )} */}
+
+      {isLoading ? (
+        <Center py="xl" style={{ flex: 1 }}>
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text c="dimmed">Loading GST Charge Mapping data...</Text>
+          </Stack>
+        </Center>
+      ) : gstChargeMappingError ? (
+        <Center py="xl" style={{ flex: 1 }}>
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text c="dimmed">
+              Error loading GST Charge Mapping data. Please try refreshing the
+              page.
+            </Text>
+          </Stack>
+        </Center>
+      ) : (
+        <>
+          <MantineReactTable table={table} />
+
+          <PaginationBar
+            pageSize={pagination.pageSize}
+            currentPage={currentPage}
+            totalRecords={totalRecords}
+            onPageSizeChange={handlePageSizeChange}
+            onPageChange={handlePageChange}
+            pageSizeOptions={["10", "25", "50"]}
           />
-          <Text size="sm" c="dimmed">
-            {(() => {
-              const total = totalRecords || 0;
-              if (total === 0) return "0–0 of 0";
-              const start = pagination.pageIndex * pagination.pageSize + 1;
-              const end = Math.min(
-                (pagination.pageIndex + 1) * pagination.pageSize,
-                total
-              );
-              return `${start}–${end} of ${total}`;
-            })()}
-          </Text>
-        </Group>
-
-        {/* Right side: Page controls */}
-        <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-          <ActionIcon
-            variant="default"
-            size="sm"
-            onClick={() =>
-              handlePageChange(Math.max(1, pagination.pageIndex + 1))
-            }
-            disabled={pagination.pageIndex === 0}
-          >
-            <IconChevronLeft size={16} />
-          </ActionIcon>
-          <Text size="sm" ta="center" style={{ width: 26 }}>
-            {pagination.pageIndex + 1}
-          </Text>
-          <Text size="sm" c="dimmed">
-            of {Math.max(1, Math.ceil(totalRecords / pagination.pageSize))}
-          </Text>
-          <ActionIcon
-            variant="default"
-            size="sm"
-            onClick={() => {
-              const totalPages = Math.max(
-                1,
-                Math.ceil(totalRecords / pagination.pageSize)
-              );
-              handlePageChange(
-                Math.min(totalPages, pagination.pageIndex + 2)
-              );
-            }}
-            disabled={(() => {
-              const totalPages = Math.max(
-                1,
-                Math.ceil(totalRecords / pagination.pageSize)
-              );
-              return pagination.pageIndex + 1 >= totalPages;
-            })()}
-          >
-            <IconChevronRight size={16} />
-          </ActionIcon>
-        </Group>
-      </Group>
+        </>
+      )}
     </Card>
   );
 }

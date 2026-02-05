@@ -75,8 +75,10 @@ import {
   GLChargeMappingMaster,
   GLChargeMappingCreate,
   GSTSACMaster,
+  GSTSACCreate,
   GSTRateMaster,
   GSTChargeMappingMaster,
+  GSTChargeMappingCreate,
   ExportShipmentMaster,
   ExportShipmentCreate,
   ExportShipmentEdit,
@@ -361,8 +363,14 @@ const NavigationRoutes = () => {
 
           <Route path="customer-relationship-mapping">
             <Route index element={<CustomerRelationshipMappingMaster />} />
-            <Route path="create" element={<CustomerRelationshipMappingCreate />} />
-            <Route path="edit" element={<CustomerRelationshipMappingCreate />} />
+            <Route
+              path="create"
+              element={<CustomerRelationshipMappingCreate />}
+            />
+            <Route
+              path="edit"
+              element={<CustomerRelationshipMappingCreate />}
+            />
           </Route>
 
           <Route path="service" element={<ServiceMaster />} />
@@ -395,8 +403,8 @@ const NavigationRoutes = () => {
 
           <Route path="gst-sac">
             <Route index element={<GSTSACMaster />} />
-            <Route path="create" element={<GSTSACMaster />} />
-            <Route path="edit" element={<GSTSACMaster />} />
+            <Route path="create" element={<GSTSACCreate />} />
+            <Route path="edit" element={<GSTSACCreate />} />
           </Route>
 
           <Route path="gst-rate">
@@ -407,8 +415,8 @@ const NavigationRoutes = () => {
 
           <Route path="gst-charge-mapping">
             <Route index element={<GSTChargeMappingMaster />} />
-            <Route path="create" element={<GSTChargeMappingMaster />} />
-            <Route path="edit" element={<GSTChargeMappingMaster />} />
+            <Route path="create" element={<GSTChargeMappingCreate />} />
+            <Route path="edit" element={<GSTChargeMappingCreate />} />
           </Route>
         </Route>
       </Route>
