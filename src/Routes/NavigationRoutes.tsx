@@ -163,7 +163,7 @@ const NavigationRoutes = () => {
             <Route index element={<AirExportBookingMaster />} />
             <Route path="create" element={<AirExportBookingCreate />} />
             <Route path="edit" element={<AirExportBookingCreate />} />
-          </Route>
+          </Route>s
           <Route path="import-booking">
             <Route index element={<AirImportBookingMaster />} />
             <Route path="create" element={<AirImportBookingCreate />} />
@@ -244,8 +244,12 @@ const NavigationRoutes = () => {
         <Route path="/collapse" element={<DemoPage />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/receipt" element={<ReceiptMaster />} />
+        <Route path="/receipt/view" element={<ReceiptCreate />} />
+        <Route path="/receipt/edit" element={<ReceiptCreate />} />
         <Route path="/receipt/create" element={<ReceiptCreate />} />
         <Route path="/receipt/reversal" element={<ReceiptReversalMaster />} />
+        <Route path="/receipt/reversal/view" element={<ReceiptReversal />} />
+        <Route path="/receipt/reversal/edit" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/create" element={<ReceiptReversal />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />

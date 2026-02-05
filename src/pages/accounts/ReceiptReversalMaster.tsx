@@ -207,8 +207,8 @@ export default function ReceiptReversalMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/receipt/reversal/create", {
-                        state: { ...row.original, viewMode: true },
+                      navigate("/receipt/reversal/view", {
+                        state: row.original,
                       })
                     }
                   >
@@ -224,7 +224,7 @@ export default function ReceiptReversalMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/reversal/create", {
+                        navigate("/receipt/reversal/edit", {
                           state: row.original,
                         })
                       }

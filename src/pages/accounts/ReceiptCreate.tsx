@@ -98,17 +98,6 @@ const fetchDaybookRPTREV = async () => {
   }
 };
 
-const fetchDaybookAll = async () => {
-  try {
-    const payload = { filters: {} };
-    const response = await postAPICall(URL.daybook, payload, API_HEADER);
-    return (response as { data?: unknown[] })?.data ?? [];
-  } catch (error) {
-    console.error("Error fetching daybook (all):", error);
-    return [];
-  }
-};
-
 // ROE: max 15 digits including 4 decimal places (11 integer + 4 decimal)
 const ROE_MAX = 99999999999.9999;
 
@@ -173,6 +162,21 @@ type InvoiceCombinedItem = {
   currency_id?: number | string;
   currency_code?: string;
   [key: string]: unknown;
+};
+
+const fetchInvoiceCombined = async (
+  billTo: string,
+): Promise<InvoiceCombinedItem[]> => {
+  const response = await postAPICall(
+    URL.invoiceCombined,
+    { filters: { status: "POSTED", bill_to: billTo } },
+    API_HEADER,
+  );
+  const res = response as
+    | { data?: InvoiceCombinedItem[] }
+    | InvoiceCombinedItem[];
+  const data = Array.isArray(res) ? res : res?.data;
+  return Array.isArray(data) ? data : [];
 };
 
 /** Receipt row from list API (filter/receipt) - used for View/Edit and Create Reversal from Receipt Master.
@@ -291,17 +295,7 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function formatDateYYYYMMDD(date: Date | null | undefined): string {
-  if (date == null) return "";
-  const d = date instanceof Date ? date : new Date(date);
-  if (isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-/** DD-MM-YYYY for reverse-receipt API (create/update) */
+/** DD-MM-YYYY for receipt and reverse-receipt APIs */
 function formatDateDDMMYYYY(date: Date | null | undefined): string {
   if (date == null) return "";
   const d = date instanceof Date ? date : new Date(date);
@@ -405,11 +399,14 @@ export default function ReceiptCreate({
   const [invoiceModalDetailRowIndex, setInvoiceModalDetailRowIndex] = useState<
     number | null
   >(null);
+  /** When set, invoice combined API is triggered (or served from cache) for this billTo */
+  const [invoiceModalBillTo, setInvoiceModalBillTo] = useState<string | null>(
+    null,
+  );
   const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
-  const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -461,23 +458,24 @@ export default function ReceiptCreate({
     staleTime: Infinity,
   });
 
-  const { data: daybookData = [] } = useQuery({
-    queryKey: ["daybook", "RPT"],
-    queryFn: fetchDaybookRPT,
+  const daybookQueryKey = _isReversal ? "RPTREV" : "RPT";
+  const daybookQueryFn = _isReversal ? fetchDaybookRPTREV : fetchDaybookRPT;
+  const { data: daybookDataForPage = [] } = useQuery({
+    queryKey: ["daybook", daybookQueryKey],
+    queryFn: daybookQueryFn,
     staleTime: Infinity,
   });
 
-  const { data: daybookRPTREVData = [] } = useQuery({
-    queryKey: ["daybook", "RPTREV"],
-    queryFn: fetchDaybookRPTREV,
-    staleTime: Infinity,
-    enabled: _isReversal,
-  });
-
-  const { data: daybookAllData = [] } = useQuery({
-    queryKey: ["daybook", "all"],
-    queryFn: fetchDaybookAll,
-    staleTime: Infinity,
+  const {
+    data: invoiceCombinedData,
+    isLoading: invoiceCombinedLoading,
+    isFetching: invoiceCombinedFetching,
+    isError: invoiceCombinedError,
+  } = useQuery({
+    queryKey: ["invoiceCombined", invoiceModalBillTo ?? ""],
+    queryFn: () => fetchInvoiceCombined(invoiceModalBillTo!),
+    enabled: invoiceModalOpen && !!invoiceModalBillTo,
+    staleTime: 5 * 60 * 1000,
   });
 
   const currencyOptions = useMemo(() => {
@@ -496,25 +494,22 @@ export default function ReceiptCreate({
   }, [currencyData]);
 
   const daybookOptions = useMemo(() => {
-    const data = (_isReversal ? daybookRPTREVData : daybookData) as {
-      id?: number;
-      name?: string;
-    }[];
+    const data = daybookDataForPage as { id?: number; name?: string }[];
     if (!Array.isArray(data)) return [];
     return data.map((item) => ({
       value: String(item.id ?? ""),
       label: item.name ?? "",
     }));
-  }, [_isReversal, daybookData, daybookRPTREVData]);
+  }, [daybookDataForPage]);
 
   const daybookAdjustmentOptions = useMemo(() => {
-    const data = daybookAllData as { id?: number; name?: string }[];
+    const data = daybookDataForPage as { id?: number; name?: string }[];
     if (!Array.isArray(data)) return [];
     return data.map((item) => ({
       value: String(item.id ?? ""),
       label: item.name ?? "",
     }));
-  }, [daybookAllData]);
+  }, [daybookDataForPage]);
 
   const currencyIdByCode = useMemo(() => {
     const data = currencyData as {
@@ -539,25 +534,22 @@ export default function ReceiptCreate({
     form.setFieldValue("currency", localCurrency);
   }, [localCurrency]);
 
-  // Load receipt from list (View/Edit): location.state is the receipt row from Receipt Master
+  // Load from list: state is receipt row (Receipt Master) or reversal row (Receipt Reversal list for edit/view)
   const receiptFromState = location.state as ReceiptListItem | null | undefined;
-  console.log("receiptFromState---", receiptFromState);
+  const pathname = location.pathname;
+  const isReversalEditOrView =
+    _isReversal &&
+    (pathname.includes("/reversal/edit") ||
+      pathname.includes("/reversal/view"));
+  const isReversalCreate = _isReversal && pathname.includes("/reversal/create");
 
   useEffect(() => {
     if (!receiptFromState || receiptFromState.id == null || !localCurrency) {
       if (!receiptFromState) {
-        // loadedFromStateIdRef.current = null;
         setLoadedDetails(null);
       }
       return;
     }
-    const receiptId = receiptFromState.id;
-    console.log("receiptId---", receiptId);
-
-    // if (loadedFromStateIdRef.current === receiptId) return;
-    // loadedFromStateIdRef.current = receiptId;
-
-    console.log("check check check---", receiptId);
     const parseNum = (v: string | number | null | undefined): number | null => {
       if (v == null) return null;
       if (typeof v === "number") return Number.isFinite(v) ? v : null;
@@ -580,7 +572,7 @@ export default function ReceiptCreate({
       parties.length > 0
         ? parties.map((p) => ({
             id: p.id ?? null,
-            subledger_id: p.subledger_code ?? null,
+            subledger_id: p.subledger_id ?? null,
             customer_code: String(p.subledger_code ?? "").trim(),
             customer_display: String(p.subledger_name ?? "").trim(),
             narration: String(p.narration ?? "").trim(),
@@ -593,7 +585,6 @@ export default function ReceiptCreate({
               : ((p.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr"),
           }))
         : [getDefaultDetailRow(localCurrency)];
-    console.log("details---", details);
 
     const allocations = receiptFromState.allocations;
     const adjustments: AdjustmentRow[] =
@@ -616,7 +607,7 @@ export default function ReceiptCreate({
 
     setLoadedDetails(details);
     form.setValues({
-      daybook_id: _isReversal
+      daybook_id: isReversalCreate
         ? ""
         : receiptFromState.day_book_id != null
           ? String(receiptFromState.day_book_id)
@@ -645,11 +636,21 @@ export default function ReceiptCreate({
     }
 
     if (_isReversal) {
-      sourceReceiptIdForReversalRef.current =
-        Number(receiptFromState.id) || null;
-      sourceReceiptNoForReversalRef.current = (
-        receiptFromState.receipt_no ?? ""
-      ).toString();
+      if (isReversalEditOrView) {
+        setReverseReceiptSaveResponse({
+          id: Number(receiptFromState.id),
+          receipt_no: (receiptFromState.receipt_no ?? "").toString(),
+          status: (receiptFromState.status ?? "UNPOSTED").toString(),
+        });
+        sourceReceiptIdForReversalRef.current = null;
+        sourceReceiptNoForReversalRef.current = "";
+      } else {
+        sourceReceiptIdForReversalRef.current =
+          Number(receiptFromState.id) || null;
+        sourceReceiptNoForReversalRef.current = (
+          receiptFromState.receipt_no ?? ""
+        ).toString();
+      }
     } else {
       setSaveResponse({
         id: Number(receiptFromState.id),
@@ -658,7 +659,13 @@ export default function ReceiptCreate({
         status: (receiptFromState.status ?? "UNPOSTED").toString(),
       });
     }
-  }, [receiptFromState?.id, localCurrency, _isReversal]);
+  }, [
+    receiptFromState?.id,
+    localCurrency,
+    _isReversal,
+    isReversalEditOrView,
+    isReversalCreate,
+  ]);
 
   const userCountryCode = user?.country?.country_code;
 
@@ -748,40 +755,45 @@ export default function ReceiptCreate({
     form.removeListItem("adjustments", idx);
   };
 
-  const openInvoiceModal = async (detailRowIndex: number) => {
+  const openInvoiceModal = (detailRowIndex: number) => {
     const row = form.values.details[detailRowIndex];
     const billTo = row?.customer_display?.trim() || row?.customer_code?.trim();
     if (!billTo) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
+    setInvoiceModalBillTo(billTo);
     setInvoiceModalOpen(true);
     setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
-    setInvoiceLoading(true);
-    try {
-      const payload = {
-        filters: { status: "POSTED", bill_to: billTo },
-      };
-      const response = await postAPICall(
-        URL.invoiceCombined,
-        payload,
-        API_HEADER,
+  };
+
+  useEffect(() => {
+    if (!invoiceModalOpen || !invoiceCombinedData) return;
+    const list = invoiceCombinedData;
+    setInvoiceList(list);
+    const existingDocNos = new Set(
+      form.values.adjustments
+        .map((a) => (a.document_no ?? "").toString().trim())
+        .filter(Boolean),
+    );
+    const alreadySelected = new Set<number>();
+    existingDocNos.forEach((docNo) => {
+      const idx = list.findIndex(
+        (inv) => (inv.document_no ?? "").toString().trim() === docNo,
       );
-      const res = response as
-        | { data?: InvoiceCombinedItem[] }
-        | InvoiceCombinedItem[];
-      const data = Array.isArray(res) ? res : res?.data;
-      setInvoiceList(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Error fetching invoices:", err);
+      if (idx >= 0) alreadySelected.add(idx);
+    });
+    setSelectedInvoiceIndices(alreadySelected);
+  }, [invoiceModalOpen, invoiceCombinedData]);
+
+  useEffect(() => {
+    if (invoiceModalOpen && invoiceCombinedError) {
       ToastNotification({
         type: "error",
         message: "Failed to load invoices",
       });
       setInvoiceList([]);
-    } finally {
-      setInvoiceLoading(false);
     }
-  };
+  }, [invoiceModalOpen, invoiceCombinedError]);
 
   const toggleInvoiceSelection = (idx: number) => {
     setSelectedInvoiceIndices((prev) => {
@@ -804,6 +816,19 @@ export default function ReceiptCreate({
     }
     const detailRow = form.values.details[invoiceModalDetailRowIndex];
     const currentAdjustments = form.values.adjustments;
+    const partyCode = (detailRow?.customer_code ?? "").toString().trim();
+    const partyDisplay = (detailRow?.customer_display ?? "").toString().trim();
+    const isSameParty = (a: AdjustmentRow) =>
+      (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
+      (partyDisplay &&
+        (a.subledger_display ?? "").toString().trim() === partyDisplay);
+    const managedDocNos = new Set(
+      invoiceList
+        .map((inv) => (inv.document_no ?? "").toString().trim())
+        .filter(Boolean),
+    );
+    const isManagedRow = (a: AdjustmentRow) =>
+      managedDocNos.has((a.document_no ?? "").toString().trim());
     const newRows: AdjustmentRow[] = sorted.map((listIdx) => {
       const inv = invoiceList[listIdx];
       const docDate =
@@ -852,28 +877,35 @@ export default function ReceiptCreate({
               : totalNum,
       };
     });
-    // Append selected invoices to Adjustments so multiple parties' selections accumulate
+    let withoutThisPartyManaged = currentAdjustments.filter(
+      (a) => !(isSameParty(a) && isManagedRow(a)),
+    );
     const isSingleEmptyRow =
-      currentAdjustments.length === 1 &&
-      !currentAdjustments[0].document_no?.trim();
-    const nextAdjustments: AdjustmentRow[] = isSingleEmptyRow
-      ? newRows
-      : [...currentAdjustments, ...newRows];
+      withoutThisPartyManaged.length === 1 &&
+      !(withoutThisPartyManaged[0].document_no ?? "").toString().trim();
+    if (isSingleEmptyRow && newRows.length > 0) {
+      withoutThisPartyManaged = [];
+    }
+    const nextAdjustments: AdjustmentRow[] = [
+      ...withoutThisPartyManaged,
+      ...newRows,
+    ];
     if (nextAdjustments.length === 0) {
       nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     }
     form.setFieldValue("adjustments", nextAdjustments);
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
+    setInvoiceModalBillTo(null);
     setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
-    ToastNotification({
-      type: "success",
-      message:
-        sorted.length === 1
-          ? "Invoice added to Adjustments"
-          : `${sorted.length} invoices added to Adjustments`,
-    });
+    // ToastNotification({
+    //   type: "success",
+    //   message:
+    //     newRows.length === 1
+    //       ? "Adjustments updated (1 invoice)"
+    //       : `Adjustments updated (${newRows.length} invoices)`,
+    // });
   };
 
   const buildReceiptPayload = (
@@ -886,12 +918,11 @@ export default function ReceiptCreate({
     const isEdit = saveResponse?.id != null && saveResponse.id > 0;
     const base: Record<string, unknown> = {
       ...(isEdit ? { id: saveResponse!.id } : {}),
-      date: formatDateYYYYMMDD(values.date),
+      date: formatDateDDMMYYYY(values.date),
       day_book_id: dayBookId,
-      type: values.type ?? "CASH",
+      type: (values.type ?? "CASH").toString().toUpperCase(),
       currency_id: currencyId,
       roe: values.roe ?? 0,
-      account_code: values.account_code ?? "",
       amount: values.amount ?? 0,
       local_amount: values.local_amount ?? 0,
       narration: values.narration ?? "",
@@ -899,20 +930,17 @@ export default function ReceiptCreate({
       bank: values.bank ?? "",
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
-      chq_clrd_date: formatDateYYYYMMDD(values.cheque_date),
-      dr_cr: "Dr",
+      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      dr_cr: (receiptFromState?.dr_cr ?? "Cr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
-        ...(d.subledger_id != null
-          ? { subledger_id: Number(d.subledger_id) }
-          : {}),
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
         roe: d.roe ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
-        dr_cr: d.dr_cr ?? "Cr",
+        dr_cr: (d.dr_cr ?? "Cr").toString(),
       })),
       allocations: (values.adjustments ?? []).map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
@@ -921,15 +949,14 @@ export default function ReceiptCreate({
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
         document_no: a.document_no ?? "",
-        document_date: formatDateYYYYMMDD(a.doc_date),
+        document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: a.adj_local_amount ?? 0,
       })),
     };
-    // Create flow: do not send status. Edit flow (update/post): send status.
     if (isEdit && options.status != null) {
-      base.status = options.status;
+      base.status = (options.status ?? "UNPOSTED").toString().toUpperCase();
     }
     return base;
   };
@@ -1024,13 +1051,6 @@ export default function ReceiptCreate({
     setIsSubmitting(true);
     try {
       if (_isReversal) {
-        const reversalHeaders = {
-          ...API_HEADER,
-          headers: { ...API_HEADER.headers, dr_cr: "Dr" } as Record<
-            string,
-            string
-          >,
-        };
         const isReversalUpdate =
           reverseReceiptSaveResponse?.id != null &&
           reverseReceiptSaveResponse.id > 0;
@@ -1047,11 +1067,7 @@ export default function ReceiptCreate({
             status: "UNPOSTED",
             detailsOverride: detailsForPayload,
           });
-          const raw = await putAPICall(
-            `${URL.reverseReceipt}${reverseReceiptSaveResponse.id}/`,
-            payload,
-            reversalHeaders,
-          );
+          const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
           const wrap = raw as {
             data?: { id?: number; receipt_no?: string; status?: string };
           };
@@ -1079,7 +1095,7 @@ export default function ReceiptCreate({
           const raw = await postAPICall(
             URL.reverseReceipt,
             payload,
-            reversalHeaders,
+            API_HEADER,
           );
           const wrap = raw as {
             data?: {
@@ -1247,18 +1263,7 @@ export default function ReceiptCreate({
         receiptNo: reverseReceiptSaveResponse.receipt_no ?? "",
         status: "POSTED",
       });
-      const reversalHeaders = {
-        ...API_HEADER,
-        headers: { ...API_HEADER.headers, dr_cr: "Dr" } as Record<
-          string,
-          string
-        >,
-      };
-      const raw = await putAPICall(
-        `${URL.reverseReceipt}${reverseReceiptSaveResponse.id}/`,
-        payload,
-        reversalHeaders,
-      );
+      const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
       const wrap = raw as {
         data?: { id?: number; receipt_no?: string; status?: string };
       };
@@ -1344,9 +1349,30 @@ export default function ReceiptCreate({
   };
 
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
-  // Reversal flow: always editable so user can create the reversal; otherwise read-only when receipt is POSTED
-  const isReadOnly = !_isReversal && statusUpper === "POSTED";
+  const reversalStatusUpper = String(
+    reverseReceiptSaveResponse?.status ?? "",
+  ).toUpperCase();
+  const isViewRoute = pathname.includes("/view");
+  // Read-only: view route, or receipt/reversal with status POSTED; same field styling as POSTED view
+  const isReadOnly =
+    isViewRoute ||
+    (!_isReversal && statusUpper === "POSTED") ||
+    (_isReversal && reversalStatusUpper === "POSTED");
   const inputStyles = isReadOnly ? readOnlyFieldStyles : fieldStyles;
+
+  const pageTitle = pathname.includes("/reversal/view")
+    ? "View Receipt Reversal"
+    : pathname.includes("/reversal/edit")
+      ? "Edit Receipt Reversal"
+      : pathname.includes("/reversal/create")
+        ? "Create Receipt Reversal"
+        : pathname.includes("/receipt/view")
+          ? "View Receipt"
+          : pathname.includes("/receipt/edit")
+            ? "Edit Receipt"
+            : pathname.includes("/receipt/create")
+              ? "Create Receipt"
+              : titleOverride;
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -1367,9 +1393,11 @@ export default function ReceiptCreate({
             <Text size="sm" c="#105476" fw={500}>
               {isPosting
                 ? _isReversal
-                  ? "Posting reverse receipt..."
-                  : "Posting receipt..."
-                : "Saving receipt..."}
+                  ? "Updating reverse receipt..."
+                  : "Updating receipt..."
+                : _isReversal
+                  ? "Saving Reverse Receipt..."
+                  : "Saving receipt..."}
             </Text>
           </Stack>
         </Box>
@@ -1378,7 +1406,7 @@ export default function ReceiptCreate({
         {/* Header: Title | Receipt No & Status (left of Back) | Back */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
           <Text size="xl" fw={600} c="#105476">
-            {titleOverride}
+            {pageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
             {saveResponse && !_isReversal && (
@@ -1682,14 +1710,12 @@ export default function ReceiptCreate({
 
                   {form.values.details.map((_, idx) => {
                     const formRow = form.values.details[idx];
-                    console.log("formRow---", formRow);
 
                     const loadedRow =
                       loadedDetails &&
                       loadedDetails.length === form.values.details.length
                         ? loadedDetails[idx]
                         : null;
-                    console.log("loadedRow---", loadedRow);
 
                     const row = loadedRow ?? formRow;
                     const partyKey = `party-${idx}-${row?.subledger_id ?? row?.customer_code ?? idx}`;
@@ -1886,14 +1912,17 @@ export default function ReceiptCreate({
                                 title="Get invoice details"
                                 disabled={
                                   isReadOnly ||
-                                  invoiceLoading ||
+                                  (invoiceModalDetailRowIndex === idx &&
+                                    (invoiceCombinedLoading ||
+                                      invoiceCombinedFetching)) ||
                                   (!form.values.details[idx].customer_code &&
                                     !form.values.details[idx].customer_display)
                                 }
                                 onClick={() => openInvoiceModal(idx)}
                                 leftSection={
-                                  invoiceLoading &&
-                                  invoiceModalDetailRowIndex === idx ? (
+                                  invoiceModalDetailRowIndex === idx &&
+                                  (invoiceCombinedLoading ||
+                                    invoiceCombinedFetching) ? (
                                     <Loader size="xs" color="#105476" />
                                   ) : (
                                     <IconFileInvoice size={18} />
@@ -2132,6 +2161,7 @@ export default function ReceiptCreate({
             onClose={() => {
               setInvoiceModalOpen(false);
               setInvoiceModalDetailRowIndex(null);
+              setInvoiceModalBillTo(null);
               setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
             }}
@@ -2139,7 +2169,7 @@ export default function ReceiptCreate({
             size="lg"
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
-            {invoiceLoading ? (
+            {invoiceCombinedLoading || invoiceCombinedFetching ? (
               <Text size="sm" c="dimmed">
                 Loading invoices...
               </Text>
@@ -2156,7 +2186,6 @@ export default function ReceiptCreate({
                     <Table.Tr>
                       <Table.Th style={{ width: 40 }}></Table.Th>
                       <Table.Th>Invoice Number</Table.Th>
-                      <Table.Th>Document Number</Table.Th>
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Total</Table.Th>
                     </Table.Tr>
@@ -2170,7 +2199,6 @@ export default function ReceiptCreate({
                             onChange={() => toggleInvoiceSelection(idx)}
                           />
                         </Table.Td>
-                        <Table.Td>{inv.document_no ?? "—"}</Table.Td>
                         <Table.Td>{inv.document_no ?? "—"}</Table.Td>
                         <Table.Td>
                           {formatDocumentDateDisplay(
@@ -2188,7 +2216,9 @@ export default function ReceiptCreate({
                     ))}
                   </Table.Tbody>
                 </Table>
-                {invoiceList.length === 0 && !invoiceLoading && (
+                {invoiceList.length === 0 &&
+                  !invoiceCombinedLoading &&
+                  !invoiceCombinedFetching && (
                   <Text size="sm" c="dimmed" mt="sm">
                     No posted invoices found for this customer.
                   </Text>
@@ -2200,6 +2230,7 @@ export default function ReceiptCreate({
                     onClick={() => {
                       setInvoiceModalOpen(false);
                       setInvoiceModalDetailRowIndex(null);
+                      setInvoiceModalBillTo(null);
                       setInvoiceList([]);
                       setSelectedInvoiceIndices(new Set());
                     }}
@@ -2223,7 +2254,7 @@ export default function ReceiptCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate("/receipt")}
+              onClick={() => navigate(backPath)}
             >
               Cancel
             </Button>
@@ -2239,8 +2270,8 @@ export default function ReceiptCreate({
                 >
                   {_isReversal
                     ? reverseReceiptSaveResponse?.id
-                      ? "Update Reverse Receipt"
-                      : "Create Receipt Reverse"
+                      ? "Update Receipt Reversal"
+                      : "Create Receipt Reversal"
                     : saveResponse?.id
                       ? "Update Receipt"
                       : "Save Receipt"}

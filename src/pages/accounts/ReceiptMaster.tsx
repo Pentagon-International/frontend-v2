@@ -211,7 +211,7 @@ export default function ReceiptMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/receipt/create", { state: row.original })
+                      navigate("/receipt/view", { state: row.original })
                     }
                   >
                     <Group gap="sm">
@@ -229,7 +229,7 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/create", { state: row.original })
+                        navigate("/receipt/edit", { state: row.original })
                       }
                     >
                       <Group gap="sm">
