@@ -39,7 +39,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
-import { SearchableSelect } from "../../../components";
+import { Dropdown, SearchableSelect } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 
@@ -78,14 +78,23 @@ type GLChargeMappingMaster = {
 
 type GLChargeMappingFilters = {
   charge_id: string;
+  charge_name: string;
   country_id: string;
+  country_name: string;
   service_id: string;
+  service_name: string;
   revenue_gl_id: string;
+  revenue_gl_name: string;
   cost_gl_id: string;
+  cost_gl_name: string;
   neutral_gl_id: string;
+  neutral_gl_name: string;
   revenue_sl_id: string;
+  revenue_sl_name: string;
   cost_sl_id: string;
+  cost_sl_name: string;
   neutral_sl_id: string;
+  neutral_sl_name: string;
   status: string;
 };
 
@@ -114,14 +123,23 @@ export default function GLChargeMappingMasterList() {
   const [showFilters, setShowFilters] = useState(false);
   const DEFAULT_FILTERS: GLChargeMappingFilters = {
     charge_id: "",
+    charge_name: "",
     country_id: "",
+    country_name: "",
     service_id: "",
+    service_name: "",
     revenue_gl_id: "",
+    revenue_gl_name: "",
     cost_gl_id: "",
+    cost_gl_name: "",
     neutral_gl_id: "",
+    neutral_gl_name: "",
     revenue_sl_id: "",
+    revenue_sl_name: "",
     cost_sl_id: "",
+    cost_sl_name: "",
     neutral_sl_id: "",
+    neutral_sl_name: "",
     status: "",
   };
 
@@ -297,7 +315,7 @@ export default function GLChargeMappingMasterList() {
             : {};
 
         const response = await apiCallProtected.post(
-          `${URL.glChargeMappingFilter}?${debouncedSearch && "search=" + debouncedSearch}&index=${index}&limit=${pagination.pageSize}`,
+          `${URL.glChargeMappingFilter}?&index=${index}&limit=${pagination.pageSize}`,
           payload,
         );
         setShowFilters(false);
@@ -579,7 +597,7 @@ export default function GLChargeMappingMasterList() {
                   },
                 },
               }}
-            />
+            /> */}
             <ActionIcon
               variant={showFilters ? "filled" : "outline"}
               size={36}
@@ -601,7 +619,7 @@ export default function GLChargeMappingMasterList() {
               }}
             >
               <IconFilter size={18} />
-            </ActionIcon> */}
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"
@@ -671,240 +689,242 @@ export default function GLChargeMappingMasterList() {
           <Grid gutter="sm" px="md" pt="xs" pb="sm">
             <Grid.Col span={2.4}>
               <SearchableSelect
-                size="xs"
-                label="Charge"
+                apiEndpoint={URL.chargeMaster}
+                label="Charge Name"
                 placeholder="Type Charge Name"
-                apiEndpoint={`${URL.chargeMaster}?search=`}
-                searchFields={["charge_name", "charge_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.id),
-                  label: String(item.charge_name || ""),
-                })}
-                value={draftFilters.charge_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                value={draftFilters.charge_id || null}
+                displayValue={draftFilters.charge_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    charge_id: value || "",
+                    charge_id: val || "",
+                    charge_name: option?.label || "",
                   }))
                 }
-                minSearchLength={3}
-                className="filter-searchable-select"
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.charge_name ?? ""),
+                })}
+                searchFields={["charge_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <Select
-                size="xs"
-                label="Country"
-                placeholder="Select Country"
-                data={countryOptions}
+              <SearchableSelect
+                apiEndpoint={URL.country}
+                label="Country Name"
+                placeholder="Type Country Name"
                 value={draftFilters.country_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                displayValue={draftFilters.country_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    country_id: value || "",
+                    country_id: val || "",
+                    country_name: option?.label || "",
                   }))
                 }
-                styles={{
-                  input: { fontSize: "13px", height: "36px" },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#000000",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                  },
-                }}
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.country_name ?? ""),
+                })}
+                searchFields={["country_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <Select
-                size="xs"
-                label="Service"
-                placeholder="Select Service"
-                data={serviceOptions}
+              <SearchableSelect
+                apiEndpoint={URL.serviceMaster}
+                label="Service Name"
+                placeholder="Type Service Name"
                 value={draftFilters.service_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                displayValue={draftFilters.service_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    service_id: value || "",
+                    service_id: val || "",
+                    service_name: option?.label || "",
                   }))
                 }
-                styles={{
-                  input: { fontSize: "13px", height: "36px" },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#000000",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                  },
-                }}
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.service_name ?? ""),
+                })}
+                searchFields={["service_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
               <SearchableSelect
-                size="xs"
-                label="Revenue GL"
+                apiEndpoint={URL.chartOfAccounts}
+                label="Revenue GL Name"
                 placeholder="Type Revenue GL Name"
-                apiEndpoint={`${URL.chartOfAccounts}`}
-                searchFields={["group_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.id),
-                  label: String(item.group_name || ""),
-                })}
                 value={draftFilters.revenue_gl_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                displayValue={draftFilters.revenue_gl_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    revenue_gl_id: value || "",
+                    revenue_gl_id: val || "",
+                    revenue_gl_name: option?.label || "",
                   }))
                 }
-                minSearchLength={3}
-                className="filter-searchable-select"
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.account_name ?? ""),
+                })}
+                searchFields={["account_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
               <SearchableSelect
-                size="xs"
-                label="Cost GL"
+                apiEndpoint={URL.chartOfAccounts}
+                label="Cost GL Name"
                 placeholder="Type Cost GL Name"
-                apiEndpoint={`${URL.chartOfAccounts}?search=`}
-                searchFields={["group_name", "account_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.id),
-                  label: String(item.group_name || ""),
-                })}
                 value={draftFilters.cost_gl_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                displayValue={draftFilters.cost_gl_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    cost_gl_id: value || "",
+                    cost_gl_id: val || "",
+                    cost_gl_name: option?.label || "",
                   }))
                 }
-                minSearchLength={3}
-                className="filter-searchable-select"
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.account_name ?? ""),
+                })}
+                searchFields={["account_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
               <SearchableSelect
-                size="xs"
-                label="Neutral GL"
+                apiEndpoint={URL.chartOfAccounts}
+                label="Neutral GL Name"
                 placeholder="Type Neutral GL Name"
-                apiEndpoint={`${URL.chartOfAccounts}?search=`}
-                searchFields={["group_name", "account_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.id),
-                  label: String(item.group_name || ""),
-                })}
                 value={draftFilters.neutral_gl_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                displayValue={draftFilters.neutral_gl_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    neutral_gl_id: value || "",
+                    neutral_gl_id: val || "",
+                    neutral_gl_name: option?.label || "",
                   }))
                 }
-                minSearchLength={3}
-                className="filter-searchable-select"
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.account_name ?? ""),
+                })}
+                searchFields={["account_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
               <SearchableSelect
-                size="xs"
-                label="Revenue SL"
+                apiEndpoint={URL.chartOfAccounts}
+                label="Revenue SL Name"
                 placeholder="Type Revenue SL Name"
-                apiEndpoint={`${URL.chartOfAccounts}?search=`}
-                searchFields={["group_name", "account_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.id),
-                  label: String(item.group_name || ""),
-                })}
                 value={draftFilters.revenue_sl_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                displayValue={draftFilters.revenue_sl_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    revenue_sl_id: value || "",
+                    revenue_sl_id: val || "",
+                    revenue_sl_name: option?.label || "",
                   }))
                 }
-                minSearchLength={3}
-                className="filter-searchable-select"
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.account_name ?? ""),
+                })}
+                searchFields={["account_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
               <SearchableSelect
-                size="xs"
-                label="Cost SL"
+                apiEndpoint={URL.chartOfAccounts}
+                label="Cost SL Name"
                 placeholder="Type Cost SL Name"
-                apiEndpoint={`${URL.chartOfAccounts}?search=`}
-                searchFields={["group_name", "account_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.id),
-                  label: String(item.group_name || ""),
-                })}
                 value={draftFilters.cost_sl_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                displayValue={draftFilters.cost_sl_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    cost_sl_id: value || "",
+                    cost_sl_id: val || "",
+                    cost_sl_name: option?.label || "",
                   }))
                 }
-                minSearchLength={3}
-                className="filter-searchable-select"
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.account_name ?? ""),
+                })}
+                searchFields={["account_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
               <SearchableSelect
-                size="xs"
-                label="Neutral SL"
+                apiEndpoint={URL.chartOfAccounts}
+                label="Neutral SL Name"
                 placeholder="Type Neutral SL Name"
-                apiEndpoint={`${URL.chartOfAccounts}?search=`}
-                searchFields={["group_name", "account_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.id),
-                  label: String(item.group_name || ""),
-                })}
                 value={draftFilters.neutral_sl_id}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
+                displayValue={draftFilters.neutral_sl_name || ""}
+                onChange={(val, option) =>
+                  setDraftFilters(prev => ({
                     ...prev,
-                    neutral_sl_id: value || "",
+                    neutral_sl_id: val || "",
+                    neutral_sl_name: option?.label || "",
                   }))
                 }
-                minSearchLength={3}
-                className="filter-searchable-select"
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.account_name ?? ""),
+                })}
+                searchFields={["account_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <Select
+              <Dropdown
                 size="xs"
                 label="Status"
                 placeholder="Select Status"
                 data={statusOptions}
-                value={draftFilters.status}
+                value={draftFilters.status || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
                     ...prev,
                     status: value || "",
                   }))
                 }
-                styles={{
-                  input: { fontSize: "13px", height: "36px" },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#000000",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                  },
-                }}
               />
             </Grid.Col>
           </Grid>

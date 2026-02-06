@@ -144,8 +144,10 @@ import ChartOfAccountsCreate from "./masters/chart-of-accounts/ChartOfAccountsCr
 import GLChargeMappingMaster from "./masters/gl-charge-mapping/GLChargeMappingMaster";
 import GLChargeMappingCreate from "./masters/gl-charge-mapping/GLChargeMappingCreate";
 import GSTSACMaster from "./masters/gst-sac/GSTSACMaster";
+import GSTSACCreate from "./masters/gst-sac/GSTSACCreate";
 import GSTRateMaster from "./masters/gst-rate/GSTRateMaster";
 import GSTChargeMappingMaster from "./masters/gst-charge-mapping/GSTChargeMappingMaster";
+import GSTChargeMappingCreate from "./masters/gst-charge-mapping/GSTChargeMappingCreate";
 
 import Freight from "./call-entry/tariff/FreightMaster";
 import DestinationMaster from "./call-entry/tariff/DestinationMaster";
@@ -224,8 +226,10 @@ export {
   GLChargeMappingMaster,
   GLChargeMappingCreate,
   GSTSACMaster,
+  GSTSACCreate,
   GSTRateMaster,
   GSTChargeMappingMaster,
+  GSTChargeMappingCreate,
   QuotationCreate,
   QuotationApprovalPublic,
   GetRate,

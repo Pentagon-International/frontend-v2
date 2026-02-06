@@ -235,6 +235,7 @@ function ChartOfAccountsCreate() {
                         <Select
                           label="GL Head"
                           placeholder="Select GL Head"
+                          withAsterisk
                           data={glHeadOptions}
                           {...form.getInputProps("gl_head")}
                           styles={{
@@ -258,6 +259,7 @@ function ChartOfAccountsCreate() {
                           label="Account Name"
                           placeholder="Enter Account Name"
                           {...form.getInputProps("account_name")}
+                          withAsterisk
                           styles={{
                             label: {
                               fontSize: "13px",
@@ -279,6 +281,7 @@ function ChartOfAccountsCreate() {
                           label="GL Account Code"
                           placeholder="Enter GL Account Code"
                           {...form.getInputProps("gl_account_code")}
+                          withAsterisk
                           styles={{
                             label: {
                               fontSize: "13px",
@@ -301,6 +304,7 @@ function ChartOfAccountsCreate() {
                           label="SL Code"
                           placeholder="Enter SL Code"
                           {...form.getInputProps("sl_code")}
+                          withAsterisk
                           styles={{
                             label: {
                               fontSize: "13px",
@@ -333,6 +337,7 @@ function ChartOfAccountsCreate() {
                           label="Group Name"
                           placeholder="Enter Group Name"
                           {...form.getInputProps("group_name")}
+                          withAsterisk
                           styles={{
                             label: {
                               fontSize: "13px",
@@ -354,6 +359,7 @@ function ChartOfAccountsCreate() {
                           label="Group Code"
                           placeholder="Enter Group Code"
                           {...form.getInputProps("group_code")}
+                          withAsterisk
                           styles={{
                             label: {
                               fontSize: "13px",
@@ -386,6 +392,7 @@ function ChartOfAccountsCreate() {
                           label="Subgroup Name"
                           placeholder="Enter Subgroup Name"
                           {...form.getInputProps("subgroup_name")}
+                          withAsterisk
                           styles={{
                             label: {
                               fontSize: "13px",
@@ -407,6 +414,7 @@ function ChartOfAccountsCreate() {
                           label="Subgroup Code"
                           placeholder="Enter Subgroup Code"
                           {...form.getInputProps("subgroup_code")}
+                          withAsterisk
                           styles={{
                             label: {
                               fontSize: "13px",
