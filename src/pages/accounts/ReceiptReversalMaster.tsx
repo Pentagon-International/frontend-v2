@@ -35,6 +35,7 @@ type ReceiptRow = Record<string, unknown> & {
   sno?: number;
   day_book_name?: string;
   receipt_no?: string;
+  reverse_receipt_no?: string;
   type?: string;
   status?: string;
   amount?: number | string;
@@ -116,6 +117,7 @@ export default function ReceiptReversalMaster() {
     },
     staleTime: 0,
     refetchOnWindowFocus: false,
+    refetchOnMount: "always",
   });
 
   const isLoading = receiptFetching || receiptLoading;
@@ -143,9 +145,11 @@ export default function ReceiptReversalMaster() {
         size: 160,
       },
       {
-        accessorKey: "receipt_no",
-        header: "Receipt No",
+        id: "reverse_receipt_no",
+        header: "Reverse Receipt No",
         size: 160,
+        accessorFn: (row) =>
+          (row.reverse_receipt_no ?? row.receipt_no ?? "") as string,
       },
       {
         accessorKey: "type",

@@ -111,7 +111,7 @@ export const URL = {
   invoiceCalculateGstBreakup: "invoice/calculate-gst-breakup/",
   invoiceReversableData: "invoice/reversable-data/",
   reverseInvoice: "reverse-invoice/",
-  invoiceCombined: "invoice/combined/",
+  filterInvoice: "filter/invoice/",
   receiptFilter: "filter/receipt/",
   reverseReceiptFilter: "filter/reverse-receipt/",
   receipt: "receipt/",

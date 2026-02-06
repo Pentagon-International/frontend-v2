@@ -12,6 +12,7 @@ import {
   Stack,
   Table,
   Text,
+  Textarea,
   TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
@@ -164,11 +165,11 @@ type InvoiceCombinedItem = {
   [key: string]: unknown;
 };
 
-const fetchInvoiceCombined = async (
+const fetchFilterInvoice = async (
   billTo: string,
 ): Promise<InvoiceCombinedItem[]> => {
   const response = await postAPICall(
-    URL.invoiceCombined,
+    URL.filterInvoice,
     { filters: { status: "POSTED", bill_to: billTo } },
     API_HEADER,
   );
@@ -184,6 +185,7 @@ const fetchInvoiceCombined = async (
 type ReceiptListItem = {
   id?: number;
   receipt_no?: string;
+  reverse_receipt_no?: string;
   status?: string;
   date?: string;
   day_book_id?: number;
@@ -419,6 +421,7 @@ export default function ReceiptCreate({
   const [reverseReceiptSaveResponse, setReverseReceiptSaveResponse] = useState<{
     id: number;
     receipt_no?: string;
+    reverse_receipt_no?: string;
     status?: string;
   } | null>(null);
 
@@ -467,13 +470,13 @@ export default function ReceiptCreate({
   });
 
   const {
-    data: invoiceCombinedData,
-    isLoading: invoiceCombinedLoading,
-    isFetching: invoiceCombinedFetching,
-    isError: invoiceCombinedError,
+    data: filterInvoiceData,
+    isLoading: filterInvoiceLoading,
+    isFetching: filterInvoiceFetching,
+    isError: filterInvoiceError,
   } = useQuery({
-    queryKey: ["invoiceCombined", invoiceModalBillTo ?? ""],
-    queryFn: () => fetchInvoiceCombined(invoiceModalBillTo!),
+    queryKey: ["filterInvoice", invoiceModalBillTo ?? ""],
+    queryFn: () => fetchFilterInvoice(invoiceModalBillTo!),
     enabled: invoiceModalOpen && !!invoiceModalBillTo,
     staleTime: 5 * 60 * 1000,
   });
@@ -640,6 +643,11 @@ export default function ReceiptCreate({
         setReverseReceiptSaveResponse({
           id: Number(receiptFromState.id),
           receipt_no: (receiptFromState.receipt_no ?? "").toString(),
+          reverse_receipt_no: (
+            receiptFromState.reverse_receipt_no ??
+            receiptFromState.receipt_no ??
+            ""
+          ).toString(),
           status: (receiptFromState.status ?? "UNPOSTED").toString(),
         });
         sourceReceiptIdForReversalRef.current = null;
@@ -767,8 +775,8 @@ export default function ReceiptCreate({
   };
 
   useEffect(() => {
-    if (!invoiceModalOpen || !invoiceCombinedData) return;
-    const list = invoiceCombinedData;
+    if (!invoiceModalOpen || !filterInvoiceData) return;
+    const list = filterInvoiceData;
     setInvoiceList(list);
     const existingDocNos = new Set(
       form.values.adjustments
@@ -783,17 +791,17 @@ export default function ReceiptCreate({
       if (idx >= 0) alreadySelected.add(idx);
     });
     setSelectedInvoiceIndices(alreadySelected);
-  }, [invoiceModalOpen, invoiceCombinedData]);
+  }, [invoiceModalOpen, filterInvoiceData]);
 
   useEffect(() => {
-    if (invoiceModalOpen && invoiceCombinedError) {
+    if (invoiceModalOpen && filterInvoiceError) {
       ToastNotification({
         type: "error",
         message: "Failed to load invoices",
       });
       setInvoiceList([]);
     }
-  }, [invoiceModalOpen, invoiceCombinedError]);
+  }, [invoiceModalOpen, filterInvoiceError]);
 
   const toggleInvoiceSelection = (idx: number) => {
     setSelectedInvoiceIndices((prev) => {
@@ -1069,13 +1077,20 @@ export default function ReceiptCreate({
           });
           const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
           const wrap = raw as {
-            data?: { id?: number; receipt_no?: string; status?: string };
+            data?: {
+              id?: number;
+              receipt_no?: string;
+              reverse_receipt_no?: string;
+              status?: string;
+            };
           };
           const res = wrap?.data;
           if (res?.id != null) {
             setReverseReceiptSaveResponse((prev) => ({
               id: prev!.id,
               receipt_no: res.receipt_no ?? prev?.receipt_no ?? "",
+              reverse_receipt_no:
+                res.reverse_receipt_no ?? prev?.reverse_receipt_no ?? "",
               status: res.status != null ? String(res.status) : "UNPOSTED",
             }));
             await queryClient.invalidateQueries({ queryKey: ["receipt"] });
@@ -1101,6 +1116,7 @@ export default function ReceiptCreate({
             data?: {
               id?: number;
               receipt_no?: string;
+              reverse_receipt_no?: string;
               status?: string;
               parties?: Array<{ id?: number }>;
               allocations?: Array<{ id?: number }>;
@@ -1111,6 +1127,7 @@ export default function ReceiptCreate({
             setReverseReceiptSaveResponse({
               id: Number(data.id),
               receipt_no: data.receipt_no ?? "",
+              reverse_receipt_no: data.reverse_receipt_no ?? "",
               status: data.status != null ? String(data.status) : "UNPOSTED",
             });
             if (
@@ -1265,13 +1282,20 @@ export default function ReceiptCreate({
       });
       const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
       const wrap = raw as {
-        data?: { id?: number; receipt_no?: string; status?: string };
+        data?: {
+          id?: number;
+          receipt_no?: string;
+          reverse_receipt_no?: string;
+          status?: string;
+        };
       };
       const res = wrap?.data;
       if (res?.id != null) {
         setReverseReceiptSaveResponse((prev) => ({
           ...prev!,
           receipt_no: res.receipt_no ?? prev?.receipt_no ?? "",
+          reverse_receipt_no:
+            res.reverse_receipt_no ?? prev?.reverse_receipt_no ?? "",
           status: res.status != null ? String(res.status) : "POSTED",
         }));
         await queryClient.invalidateQueries({ queryKey: ["receipt"] });
@@ -1374,6 +1398,11 @@ export default function ReceiptCreate({
               ? "Create Receipt"
               : titleOverride;
 
+  const effectiveBackPath =
+    _isReversal && pathname.includes("/reversal/create")
+      ? "/receipt"
+      : backPath;
+
   return (
     <Box p="md" style={{ position: "relative" }}>
       {(isSubmitting || isPosting) && (
@@ -1450,11 +1479,58 @@ export default function ReceiptCreate({
                 </Group>
               </Group>
             )}
+            {_isReversal &&
+              (reverseReceiptSaveResponse ||
+                (isReversalEditOrView && receiptFromState)) && (
+                <Group gap="sm" wrap="nowrap">
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm" fw={500} c="dimmed">
+                      Reverse Receipt No:
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color="#105476"
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {(reverseReceiptSaveResponse?.reverse_receipt_no ??
+                        receiptFromState?.reverse_receipt_no ??
+                        reverseReceiptSaveResponse?.receipt_no ??
+                        receiptFromState?.receipt_no ??
+                        (reverseReceiptSaveResponse?.id != null
+                          ? String(reverseReceiptSaveResponse.id)
+                          : receiptFromState?.id != null
+                            ? String(receiptFromState.id)
+                            : "")) ||
+                        "—"}
+                    </Badge>
+                  </Group>
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm" fw={500} c="dimmed">
+                      Status:
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color={
+                        (reversalStatusUpper === "UNPOSTED"
+                          ? "gray"
+                          : reversalStatusUpper === "POSTED"
+                            ? "green"
+                            : "#105476") as string
+                      }
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {reversalStatusUpper || "—"}
+                    </Badge>
+                  </Group>
+                </Group>
+              )}
             <Button
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(backPath)}
+              onClick={() => navigate(effectiveBackPath)}
             >
               Back
             </Button>
@@ -1664,6 +1740,22 @@ export default function ReceiptCreate({
                 </Grid.Col>
               </>
             )}
+
+            <Grid.Col span={12}>
+              <Textarea
+                label="Narration"
+                placeholder="Narration"
+                value={form.values.narration ?? ""}
+                onChange={(e) =>
+                  form.setFieldValue("narration", e.currentTarget.value)
+                }
+                rows={2}
+                minRows={2}
+                autosize={false}
+                styles={inputStyles}
+                disabled={isReadOnly}
+              />
+            </Grid.Col>
 
             {/* Party details section - card with border */}
             <Grid.Col span={12}>
@@ -1913,16 +2005,16 @@ export default function ReceiptCreate({
                                 disabled={
                                   isReadOnly ||
                                   (invoiceModalDetailRowIndex === idx &&
-                                    (invoiceCombinedLoading ||
-                                      invoiceCombinedFetching)) ||
+                                    (filterInvoiceLoading ||
+                                      filterInvoiceFetching)) ||
                                   (!form.values.details[idx].customer_code &&
                                     !form.values.details[idx].customer_display)
                                 }
                                 onClick={() => openInvoiceModal(idx)}
                                 leftSection={
                                   invoiceModalDetailRowIndex === idx &&
-                                  (invoiceCombinedLoading ||
-                                    invoiceCombinedFetching) ? (
+                                  (filterInvoiceLoading ||
+                                    filterInvoiceFetching) ? (
                                     <Loader size="xs" color="#105476" />
                                   ) : (
                                     <IconFileInvoice size={18} />
@@ -2169,7 +2261,7 @@ export default function ReceiptCreate({
             size="lg"
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
-            {invoiceCombinedLoading || invoiceCombinedFetching ? (
+            {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
                 Loading invoices...
               </Text>
@@ -2217,12 +2309,12 @@ export default function ReceiptCreate({
                   </Table.Tbody>
                 </Table>
                 {invoiceList.length === 0 &&
-                  !invoiceCombinedLoading &&
-                  !invoiceCombinedFetching && (
-                  <Text size="sm" c="dimmed" mt="sm">
-                    No posted invoices found for this customer.
-                  </Text>
-                )}
+                  !filterInvoiceLoading &&
+                  !filterInvoiceFetching && (
+                    <Text size="sm" c="dimmed" mt="sm">
+                      No posted invoices found for this customer.
+                    </Text>
+                  )}
                 <Group justify="flex-end" mt="md">
                   <Button
                     variant="outline"
@@ -2254,7 +2346,7 @@ export default function ReceiptCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(backPath)}
+              onClick={() => navigate(effectiveBackPath)}
             >
               Cancel
             </Button>

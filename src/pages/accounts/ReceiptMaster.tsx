@@ -119,6 +119,7 @@ export default function ReceiptMaster() {
     },
     staleTime: 0,
     refetchOnWindowFocus: false,
+    refetchOnMount: "always",
   });
 
   const isLoading = receiptFetching || receiptLoading;
