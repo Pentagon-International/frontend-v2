@@ -146,7 +146,7 @@ const LostCustomer = ({
         },
         {
           accessorKey: "value",
-          header: "LOST CUSTOMERS",
+          header: "LOST CUSTOMERS 99",
           Cell: ({ row }) => (
             <Badge color="#e74c3c" size="md" variant="filled">
               {row.original.value}

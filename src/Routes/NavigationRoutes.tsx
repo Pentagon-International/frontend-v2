@@ -151,6 +151,9 @@ const NavigationRoutes = () => {
             <Route path="edit" element={<AirExportJobCreate />} />
             <Route path="view" element={<AirExportJobCreate />} />
             <Route path="house-create" element={<AirExportHouseCreate />} />
+            <Route path="invoice" element={<InvoiceCreate />} />
+            <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/view/:id" element={<InvoiceCreate />} />
           </Route>
           <Route path="export-generation">
             <Route index element={<AirExportGenerationMaster />} />
@@ -227,6 +230,9 @@ const NavigationRoutes = () => {
             <Route path="edit" element={<ExportJobCreate />} />
             <Route path="view" element={<ExportJobCreate />} />
             <Route path="house-create" element={<ExportHouseCreate />} />
+            <Route path="invoice" element={<InvoiceCreate />} />
+            <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/view/:id" element={<InvoiceCreate />} />
           </Route>
           <Route path="import-job">
             <Route index element={<ImportJobMaster />} />
@@ -234,6 +240,9 @@ const NavigationRoutes = () => {
             <Route path="edit" element={<ImportJobCreate />} />
             <Route path="view" element={<ImportJobCreate />} />
             <Route path="house-create" element={<HouseCreate />} />
+            <Route path="invoice" element={<InvoiceCreate />} />
+            <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/view/:id" element={<InvoiceCreate />} />
           </Route>
         </Route>
         <Route path="/reports" element={<DemoPage />} />

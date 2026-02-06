@@ -120,10 +120,14 @@ type HAWBDetail = {
     haz: string;
   }>;
   charges?: Array<{
+    id?: number;
+    charge_id?: number | null;
     charge_name: string;
     pp_cc: string;
+    unit_id?: string;
     unit_code: string;
     no_of_unit: number | null;
+    currency_id?: string;
     currency: string;
     roe: number | null;
     amount_per_unit: number | null;
@@ -562,31 +566,39 @@ function AirExportJobCreate() {
                   | undefined;
                 if (chargesArray && Array.isArray(chargesArray)) {
                   return chargesArray.map((charge: Record<string, unknown>) => {
-                    // Handle unit_code from unit_details or direct field
                     const unitDetails = charge.unit_details as
-                      | { unit_code?: string }
+                      | { unit_code?: string; unit_id?: number }
                       | undefined;
-                    const unitCode =
-                      charge.unit_code ||
-                      charge.unit_input ||
-                      unitDetails?.unit_code ||
-                      "";
-
-                    // Handle currency from currency_details or direct field
                     const currencyDetails = charge.currency_details as
-                      | { currency_code?: string }
+                      | { currency_code?: string; currency_id?: number }
                       | undefined;
-                    const currency =
-                      charge.currency || currencyDetails?.currency_code || "";
-
+                    const unitCode = String(
+                      charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
+                    ).trim();
+                    const currency = String(
+                      charge.currency ?? currencyDetails?.currency_code ?? "",
+                    ).trim();
+                    const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+                    const unitId =
+                      charge.unit_id != null ? String(charge.unit_id) :
+                      charge.unit != null ? String(charge.unit) :
+                      unitDetails?.unit_id != null ? String(unitDetails.unit_id) : "";
+                    const currencyId =
+                      charge.currency_id != null ? String(charge.currency_id) :
+                      charge.currency != null ? String(charge.currency) :
+                      currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : "";
                     return {
+                      id: charge.id != null ? Number(charge.id) : undefined,
+                      charge_id: chargeId,
                       charge_name: charge.charge_name
                         ? String(charge.charge_name)
                         : "",
                       pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
-                      unit_code: unitCode ? String(unitCode) : "",
+                      unit_id: unitId,
+                      unit_code: unitCode,
+                      currency_id: currencyId,
+                      currency,
                       no_of_unit: charge.no_of_unit as number | null,
-                      currency: currency ? String(currency) : "",
                       roe: charge.roe as number | null,
                       amount_per_unit: charge.amount_per_unit as number | null,
                       amount: charge.amount as number | null,
@@ -1254,6 +1266,7 @@ function AirExportJobCreate() {
         fromLocationState: !!location.state?.mawbDetails?.origin_agent_data,
       });
 
+
       navigate("/air/export-job/house-create", {
         state: {
           hawbDetails: hawbDetails,
@@ -1544,11 +1557,15 @@ function AirExportJobCreate() {
           cargo_details: hawb.cargo_details || [],
           mawb_charges: hawb.charges
             ? hawb.charges.map((charge) => ({
+                ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),
+                charge_id: charge.charge_id ?? null,
                 charge_name: charge.charge_name || "",
                 pp_cc: charge.pp_cc || "",
-                unit_input: charge.unit_code || "",
+                unit_id: charge.unit_id ? String(charge.unit_id) : "",
+                // unit_input: charge.unit_code || "",
+                // currency: charge.currency || "",
                 no_of_unit: charge.no_of_unit || null,
-                currency: charge.currency || "",
+                currency_id: charge.currency_id ? String(charge.currency_id) : "",
                 roe: charge.roe || null,
                 amount_per_unit: charge.amount_per_unit || null,
                 amount: charge.amount || null,

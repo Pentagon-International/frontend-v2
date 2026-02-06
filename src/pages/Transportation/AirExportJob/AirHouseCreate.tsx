@@ -3,11 +3,19 @@ import {
   Button,
   Grid,
   Group,
-  Stepper,
+  Tabs,
+  Table,
   Text,
   TextInput,
   Textarea,
   Badge,
+  ActionIcon,
+  Menu,
+  Modal,
+  Loader,
+  Center,
+  Stack,
+  ScrollArea,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -16,13 +24,24 @@ import {
   IconChevronRight,
   IconPlus,
   IconTrash,
+  IconDotsVertical,
+  IconEye,
+  IconEdit,
+  IconDownload,
+  IconX,
+  IconRefresh,
 } from "@tabler/icons-react";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
-import { SearchableSelect, Dropdown } from "../../../components";
+import {
+  SearchableSelect,
+  Dropdown,
+  ToastNotification,
+} from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -47,6 +66,7 @@ type HAWBDetailsForm = {
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
+  shipper_state_id: string;
   consignee_code: string;
   consignee_name: string;
   consignee_address: string;
@@ -63,21 +83,42 @@ type CargoDetail = {
   // container_number removed for Air HAWB
   no_of_packages: number | null;
   gross_weight: number | null;
-  volume_weight: number | null;
+  volume: number | null;
   chargeable_weight: number | null;
   haz: string;
 };
 
-// Type definitions for charges
+// Type definitions for charges (charge_id, unit_id, currency_id sent in payload; id for update)
 type ChargeDetail = {
+  id?: number | null;
+  charge_id: number | null;
   charge_name: string;
   pp_cc: string;
-  unit_code: string;
+  unit_id: string;
   no_of_unit: number | null;
-  currency: string;
+  currency_id: string;
   roe: number | null;
   amount_per_unit: number | null;
   amount: number | null;
+};
+
+// Invoice list item from /api/filter/invoice/ response
+type InvoiceListItem = {
+  id: number;
+  sno?: number;
+  day_book_name?: string;
+  day_book_code?: string;
+  document_no?: string;
+  document_date?: string;
+  due_date?: string;
+  status?: string;
+  bill_to?: string;
+  currency_code?: string;
+  total?: string | number;
+  charges?: Array<{
+    amount?: string | number;
+    amount_in_local?: string | number;
+  }>;
 };
 
 // Type definitions for salespersons
@@ -112,11 +153,11 @@ const fetchCurrencyMaster = async () => {
   }
 };
 
-const fetchUnitMaster = async () => {
+const fetchUnitMaster = async (serviceType: string = "AIR") => {
   try {
     const payload = {
       filters: {
-        service_type: "SEA",
+        service_type: serviceType,
       },
     };
     const response = (await postAPICall(
@@ -187,7 +228,7 @@ function HouseCreate() {
     {
       no_of_packages: null,
       gross_weight: null,
-      volume_weight: null,
+      volume: null,
       chargeable_weight: null,
       haz: "",
     },
@@ -203,16 +244,25 @@ function HouseCreate() {
     Record<number, Record<string, string>>
   >({});
 
+  // PDF Preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<string | null>(null);
+
+  // Accounts tab: invoice list from filter/invoice API
+  const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
+  const [invoiceListLoading, setInvoiceListLoading] = useState(false);
+
   // Charges Form - Using useForm similar to routings in ExportJobCreate
   const chargesForm = useForm<{ charges: ChargeDetail[] }>({
     initialValues: {
       charges: [
         {
+          charge_id: null,
           charge_name: "",
           pp_cc: "",
-          unit_code: "",
+          unit_id: "",
           no_of_unit: null,
-          currency: "",
+          currency_id: "",
           roe: null,
           amount_per_unit: null,
           amount: null,
@@ -289,6 +339,10 @@ function HouseCreate() {
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
+      shipper_state_id:
+      editData?.shipper_state_id != null
+        ? String(editData.shipper_state_id)
+        : "",
       consignee_code: "", // Will be set when user selects from SearchableSelect
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
@@ -310,13 +364,13 @@ function HouseCreate() {
 
   // Auto-calculate chargeable weight when gross weight or volume weight changes
   const cargoGrossWeights = cargoDetails.map((c) => c.gross_weight).join(",");
-  const cargoVolumeWeights = cargoDetails.map((c) => c.volume_weight).join(",");
+  const cargoVolumeWeights = cargoDetails.map((c) => c.volume).join(",");
 
   useEffect(() => {
     const updatedCargoDetails = cargoDetails.map((cargo) => {
       const chargeableWeight = calculateChargeableWeight(
         cargo.gross_weight,
-        cargo.volume_weight
+        cargo.volume
       );
       // Only update if chargeable_weight changed
       if (cargo.chargeable_weight === chargeableWeight) {
@@ -340,13 +394,37 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargoGrossWeights, cargoVolumeWeights, calculateChargeableWeight]);
 
-  // Track if form has been initialized from editData to prevent overwriting user changes
-  const formInitializedFromEditDataRef = useRef(false);
-
-  // Initialize form values from editData when in edit mode - only once on mount
+  // Fetch invoice list when Accounts tab is active
   useEffect(() => {
-    if (isEditMode && editData && !formInitializedFromEditDataRef.current) {
-      // Set all form values from editData
+    if (active !== 4) return;
+    setInvoiceListLoading(true);
+    postAPICall(URL.invoiceCombined, { filters: {} }, API_HEADER)
+      .then((res: unknown) => {
+        const data = (res as { data?: InvoiceListItem[] })?.data;
+        setInvoiceList(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setInvoiceList([]))
+      .finally(() => setInvoiceListLoading(false));
+  }, [active]);
+
+  // Track if form has been initialized from editData to prevent overwriting user changes (reset when editData id/index changes) - same as AirImportJob
+  const formInitializedFromEditDataRef = useRef(false);
+  const lastEditKeyRef = useRef<string>("");
+
+  // Initialize form values from editData when in edit mode (re-run when editData/editIndex changes so different house loads) - same as AirImportJob
+  useEffect(() => {
+    if (!isEditMode || !editData) {
+      return;
+    }
+
+    const editKey = `${editIndex}-${(editData as { id?: number })?.id ?? "new"}`;
+    if (lastEditKeyRef.current !== editKey) {
+      formInitializedFromEditDataRef.current = false;
+      lastEditKeyRef.current = editKey;
+    }
+
+    if (!formInitializedFromEditDataRef.current) {
+      // Set all form values from editData (main form fields - only once per house)
       form.setValues({
         hawb_number:
           editData.hawb_number || editData.hbl_number || editData.hawb_no || "",
@@ -365,6 +443,10 @@ function HouseCreate() {
         shipper_name: editData.shipper_name || "",
         shipper_address: editData.shipper_address || "",
         shipper_email: editData.shipper_email || "",
+        shipper_state_id:
+          editData.shipper_state_id != null
+            ? String(editData.shipper_state_id)
+            : "",
         consignee_code: "", // Will be set when user selects from SearchableSelect
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
@@ -375,103 +457,90 @@ function HouseCreate() {
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
       });
-
-      // Load cargo details
-      if (editData.cargo_details && Array.isArray(editData.cargo_details)) {
-        const loadedCargoDetails = editData.cargo_details.map(
-          (cargo: Record<string, unknown>) => ({
-            no_of_packages: cargo.no_of_packages as number | null,
-            gross_weight: cargo.gross_weight as number | null,
-            volume_weight: (cargo.volume_weight || cargo.volume) as
-              | number
-              | null,
-            chargeable_weight: cargo.chargeable_weight as number | null,
-            haz: cargo.haz ? String(cargo.haz) : "",
-          })
-        );
-        if (loadedCargoDetails.length > 0) {
-          setCargoDetails(loadedCargoDetails);
-        }
-      }
-
-      // Load charges - handle both direct fields and nested structures from API
-      const chargesToLoad = editData.charges || editData.mawb_charges;
-      if (chargesToLoad && Array.isArray(chargesToLoad)) {
-        const loadedCharges = chargesToLoad.map(
-          (charge: Record<string, unknown>) => {
-            // Handle unit_code from unit_details or direct field
-            const unitDetails = charge.unit_details as
-              | { unit_code?: string }
-              | undefined;
-            const unitCode =
-              charge.unit_code ||
-              charge.unit_input ||
-              unitDetails?.unit_code ||
-              "";
-
-            // Handle currency from currency_details or direct field
-            const currencyDetails = charge.currency_details as
-              | { currency_code?: string }
-              | undefined;
-            const currency =
-              charge.currency || currencyDetails?.currency_code || "";
-
-            return {
-              charge_name: charge.charge_name ? String(charge.charge_name) : "",
-              pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
-              unit_code: unitCode ? String(unitCode) : "",
-              no_of_unit: charge.no_of_unit as number | null,
-              currency: currency ? String(currency) : "",
-              roe: charge.roe as number | null,
-              amount_per_unit: charge.amount_per_unit as number | null,
-              amount: charge.amount as number | null,
-            };
-          }
-        );
-        if (loadedCharges.length > 0) {
-          chargesForm.setValues({ charges: loadedCharges });
-        }
-      }
-
-      formInitializedFromEditDataRef.current = true;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditMode, editData]);
 
-  // Auto-set ROE when currency changes (but don't auto-calculate amount)
-  const chargeCurrencies = chargesForm.values.charges
-    .map((c) => c.currency)
-    .join(",");
-
-  useEffect(() => {
-    const updatedCharges = chargesForm.values.charges.map((charge) => {
-      // Auto-set ROE if currency is selected but ROE is not set
-      let roe = charge.roe;
-      if (charge.currency && !roe) {
-        roe = getRoeValue(charge.currency);
+    // Always load cargo_details and charges when editData has them (run every time so data is set even if init ref was already true) - same as AirImportJob
+    if (editData.cargo_details && Array.isArray(editData.cargo_details)) {
+      const loadedCargoDetails = editData.cargo_details.map(
+        (cargo: Record<string, unknown>) => ({
+          no_of_packages: cargo.no_of_packages as number | null,
+          gross_weight: cargo.gross_weight as number | null,
+          volume: (cargo.volume || cargo.volume) as
+            | number
+            | null,
+          chargeable_weight: cargo.chargeable_weight as number | null,
+          haz: cargo.haz ? String(cargo.haz) : "",
+        })
+      );
+      if (loadedCargoDetails.length > 0) {
+        setCargoDetails(loadedCargoDetails);
       }
-
-      // Only update ROE, don't touch amount
-      if (roe !== charge.roe) {
-        return {
-          ...charge,
-          roe: roe || null,
-        };
-      }
-
-      return charge;
-    });
-
-    // Only update if there are actual changes to ROE
-    const hasChanges = updatedCharges.some(
-      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe
-    );
-
-    if (hasChanges) {
-      chargesForm.setValues({ charges: updatedCharges });
     }
+
+    // Load charges when editData has them - same as AirImportJob
+    const chargesToLoad =
+      (editData.charges && Array.isArray(editData.charges) ? editData.charges : null) ||
+      (editData as { mawb_charges?: unknown[] }).mawb_charges ||
+      [];
+    console.log("_____chargesToLoad", chargesToLoad);
+    const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
+    if (chargesArray.length > 0) {
+      const unitDataArr: { id?: number; unit_code?: string }[] = [];
+      const currencyDataArr: { id?: number; code?: string; currency_code?: string }[] = [];
+      const loadedCharges = chargesArray.map(
+        (charge: Record<string, unknown>) => {
+          console.log("_____charge LOADED", charge);
+          const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
+          const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+          const unitCode = String(
+            charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
+          ).trim();
+          const currencyCode = String(
+            currencyDetails?.currency_code ?? charge.currency_code ?? "",
+          ).trim();
+          const ppCcRaw = charge.pp_cc ? String(charge.pp_cc) : "";
+          const pp_cc = ppCcRaw ? ppCcRaw.toUpperCase() : "";
+          const toNum = (v: unknown): number | null => {
+            if (v == null) return null;
+            if (typeof v === "number" && !Number.isNaN(v)) return v;
+            const n = parseFloat(String(v));
+            return Number.isNaN(n) ? null : n;
+          };
+          const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+          const unitIdFromApi =
+            charge.unit_id != null ? String(charge.unit_id) :
+            charge.unit != null ? String(charge.unit) :
+            unitDetails?.unit_id != null ? String(unitDetails.unit_id) : null;
+          const currencyIdFromApi =
+            charge.currency_id != null ? String(charge.currency_id) :
+            charge.currency != null ? String(charge.currency) :
+            currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : null;
+          const unitByCode = unitCode ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode) : null;
+          const currByCode = currencyCode ? currencyDataArr.find((c) => (c.currency_code ?? c.code ?? "") === currencyCode) : null;
+          const unit_id = unitIdFromApi ?? (unitByCode?.id != null ? String(unitByCode.id) : "");
+          const currency_id = currencyIdFromApi ?? (currByCode?.id != null ? String(currByCode.id) : "");
+          return {
+            id: charge.id != null ? Number(charge.id) : undefined,
+            charge_id: chargeId,
+            charge_name: charge.charge_name ? String(charge.charge_name) : "",
+            pp_cc,
+            unit_id,
+            no_of_unit: toNum(charge.no_of_unit),
+            currency_id,
+            roe: toNum(charge.roe),
+            amount_per_unit: toNum(charge.amount_per_unit),
+            amount: toNum(charge.amount),
+          };
+        },
+      );
+      if (loadedCharges.length > 0) {
+        chargesForm.setValues({ charges: loadedCharges });
+      }
+    }
+
+    formInitializedFromEditDataRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCurrencies, getRoeValue]);
+  }, [isEditMode, editData, editIndex]);
 
   // Auto-calculate amount when amount_per_unit, no_of_unit, or roe changes
   // Only calculate if amount_per_unit is provided
@@ -561,34 +630,129 @@ function HouseCreate() {
     refetchOnWindowFocus: false,
   });
 
-  // Unit master query
+  // Unit master query - use AIR for Air Export House
   const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster", "SEA"],
-    queryFn: fetchUnitMaster,
+    queryKey: ["unitMaster", "AIR"],
+    queryFn: () => fetchUnitMaster("AIR"),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
 
-  // Format currency data
+  // Format currency data: value = id, label = currency_code (for payload we send currency_id)
   const currencyOptions = useMemo(() => {
     if (!Array.isArray(currencyData)) return [];
-    return currencyData.map((item: { code?: string }) => ({
-      value: String(item.code || ""),
-      label: item.code || "",
-    }));
+    const data = currencyData as { id?: number; code?: string; currency_code?: string }[];
+    return data.map((item) => {
+      const code = item.currency_code ?? item.code ?? "";
+      const id = item.id != null ? String(item.id) : "";
+      return { value: id || code, label: code || id || "" };
+    });
   }, [currencyData]);
 
-  // Format unit data
+  // Format unit data: value = id, label = unit_name or unit_code (for payload we send unit_id)
   const unitOptions = useMemo(() => {
     if (!Array.isArray(unitDataRaw)) return [];
-    return unitDataRaw.map((item: unknown) => {
-      const unitItem = item as { unit_code?: string };
-      return {
-        value: String(unitItem.unit_code || ""),
-        label: unitItem.unit_code || "",
-      };
+    const data = unitDataRaw as { id?: number; unit_code?: string; unit_name?: string; name?: string }[];
+    return data.map((item) => {
+      const label = item.unit_name ?? item.name ?? item.unit_code ?? "";
+      const id = item.id != null ? String(item.id) : "";
+      return { value: id || String(item.unit_code ?? ""), label: label || String(item.unit_code ?? "") };
     });
   }, [unitDataRaw]);
+
+  // Auto-set ROE when currency_id changes (resolve code from currencyData, then getRoeValue)
+  const chargeCurrencyIds = chargesForm.values.charges
+    .map((c) => c.currency_id)
+    .join(",");
+  useEffect(() => {
+    const currencyArr = (currencyData ?? []) as { id?: number; code?: string; currency_code?: string }[];
+    const updatedCharges = chargesForm.values.charges.map((charge) => {
+      let roe = charge.roe;
+      if (charge.currency_id && !roe) {
+        const curr = currencyArr.find((c) => String(c.id) === charge.currency_id);
+        const code = curr?.currency_code ?? curr?.code ?? "";
+        if (code) roe = getRoeValue(code);
+      }
+      if (roe !== charge.roe) {
+        return { ...charge, roe: roe || null };
+      }
+      return charge;
+    });
+    const hasChanges = updatedCharges.some(
+      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe,
+    );
+    if (hasChanges) chargesForm.setValues({ charges: updatedCharges });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeCurrencyIds, getRoeValue, currencyData]);
+
+  // When in edit mode and unit/currency masters load, resolve charge unit_id/currency_id from unit_code/currency
+  const chargesIdsResolvedRef = useRef(false);
+  useEffect(() => {
+    const unitArr = Array.isArray(unitDataRaw) ? unitDataRaw : [];
+    const currArr = Array.isArray(currencyData) ? currencyData : [];
+    if (
+      !isEditMode ||
+      !editData ||
+      unitArr.length === 0 ||
+      currArr.length === 0 ||
+      chargesIdsResolvedRef.current
+    ) {
+      return;
+    }
+    // const chargesToLoad = editData.charges || editData.mawb_charges;
+    // if (!chargesToLoad || !Array.isArray(chargesToLoad)) return;
+        const chargesToLoad =
+      (editData.charges && Array.isArray(editData.charges) ? editData.charges : null) ||
+      (editData as { mawb_charges?: unknown[] }).mawb_charges ||
+      [];
+    const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
+    const unitDataArr = unitArr as { id?: number; unit_code?: string }[];
+    const currencyDataArr = currArr as { id?: number; code?: string; currency_code?: string }[];
+    const loadedCharges = chargesToLoad.map((charge: Record<string, unknown>) => {
+      const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
+      const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+      const unitCode = String(charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "").trim();
+      const currencyCode = String(currencyDetails?.currency_code ?? charge.currency_code ?? "").trim();
+      const ppCcRaw = charge.pp_cc ? String(charge.pp_cc) : "";
+      const pp_cc = ppCcRaw ? ppCcRaw.toUpperCase() : "";
+      const toNum = (v: unknown): number | null => {
+        if (v == null) return null;
+        if (typeof v === "number" && !Number.isNaN(v)) return v;
+        const n = parseFloat(String(v));
+        return Number.isNaN(n) ? null : n;
+      };
+      const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+      const unitIdFromApi =
+        charge.unit_id != null ? String(charge.unit_id) :
+        charge.unit != null ? String(charge.unit) :
+        unitDetails?.unit_id != null ? String(unitDetails.unit_id) : null;
+      const currencyIdFromApi =
+        charge.currency_id != null ? String(charge.currency_id) :
+        charge.currency != null ? String(charge.currency) :
+        currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : null;
+      const unitByCode = unitCode ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode) : null;
+      const currByCode = currencyCode ? currencyDataArr.find((c) => (c.currency_code ?? c.code ?? "") === currencyCode) : null;
+      const unit_id = unitIdFromApi ?? (unitByCode?.id != null ? String(unitByCode.id) : "");
+      const currency_id = currencyIdFromApi ?? (currByCode?.id != null ? String(currByCode.id) : "");
+      return {
+        id: charge.id != null ? Number(charge.id) : undefined,
+        charge_id: chargeId,
+        charge_name: charge.charge_name ? String(charge.charge_name) : "",
+        pp_cc,
+        unit_id,
+        no_of_unit: toNum(charge.no_of_unit),
+        currency_id,
+        roe: toNum(charge.roe),
+        amount_per_unit: toNum(charge.amount_per_unit),
+        amount: toNum(charge.amount),
+      };
+    });
+    if (loadedCharges.length > 0) {
+      chargesForm.setValues({ charges: loadedCharges });
+      chargesIdsResolvedRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, editData, unitDataRaw, currencyData]);
 
   // Note: Container numbers removed for Air HAWB - no containerNumberOptions needed
 
@@ -923,8 +1087,8 @@ function HouseCreate() {
         cargoError.gross_weight = "Gross Weight is required";
         hasErrors = true;
       }
-      if (cargo.volume_weight === null || cargo.volume_weight === undefined) {
-        cargoError.volume_weight = "Volume Weight is required";
+      if (cargo.volume === null || cargo.volume === undefined) {
+        cargoError.volume = "Volume Weight is required";
         hasErrors = true;
       }
 
@@ -950,8 +1114,8 @@ function HouseCreate() {
     chargesForm.values.charges.forEach((charge, index) => {
       const chargeError: Record<string, string> = {};
 
-      // Mandatory fields: charge_name, pp_cc, currency, roe, amount
-      if (!charge.charge_name || charge.charge_name.trim() === "") {
+      // Mandatory fields: charge_name (or charge_id), pp_cc, currency_id, roe, amount
+      if ((!charge.charge_name || charge.charge_name.trim() === "") && (charge.charge_id == null || charge.charge_id === 0)) {
         chargeError.charge_name = "Charge Name is required";
         hasErrors = true;
       }
@@ -959,8 +1123,8 @@ function HouseCreate() {
         chargeError.pp_cc = "PP/CC is required";
         hasErrors = true;
       }
-      if (!charge.currency || charge.currency.trim() === "") {
-        chargeError.currency = "Currency is required";
+      if (!charge.currency_id || charge.currency_id.trim() === "") {
+        chargeError.currency_id = "Currency is required";
         hasErrors = true;
       }
       if (charge.roe === null || charge.roe === undefined) {
@@ -971,15 +1135,6 @@ function HouseCreate() {
         chargeError.amount = "Amount is required";
         hasErrors = true;
       }
-      // If amount_per_unit or no_of_unit is set, both should be set
-      // if (
-      //   (charge.amount_per_unit && !charge.no_of_unit) ||
-      //   (charge.no_of_unit && !charge.amount_per_unit)
-      // ) {
-      //   chargeError.amount_per_unit =
-      //     "Both Amount Per Unit and No of Unit must be set together";
-      //   hasErrors = true;
-      // }
 
       if (Object.keys(chargeError).length > 0) {
         newErrors[index] = chargeError;
@@ -1024,6 +1179,50 @@ function HouseCreate() {
     }
   };
 
+  // Build current form as housing detail (for passing to invoice page)
+  const getCurrentHousingDetail = () => {
+    const v = form.values;
+    return {
+      hawb_number: v.hawb_number,
+      routed: v.routed,
+      routed_by: v.routed_by,
+      origin_code: v.origin_code,
+      origin_name: v.origin_name,
+      destination_code: v.destination_code,
+      destination_name: v.destination_name,
+      customer_service: v.customer_service,
+      trade: v.trade,
+      origin_agent_name: v.origin_agent_name,
+      origin_agent_address: v.origin_agent_address,
+      origin_agent_email: v.origin_agent_email,
+      shipper_name: v.shipper_name,
+      shipper_address: v.shipper_address,
+      shipper_email: v.shipper_email,
+      shipper_state_id: v.shipper_state_id
+      ? Number(v.shipper_state_id)
+      : ((editData as { shipper_state_id?: number } | undefined)
+          ?.shipper_state_id ??
+        (
+          location.state?.job as {
+            housing_details?: Array<{ shipper_state_id?: number }>;
+          }
+        )?.housing_details?.[editIndex ?? 0]?.shipper_state_id ??
+        null),
+    shipment_id:
+      (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+      consignee_name: v.consignee_name,
+      consignee_address: v.consignee_address,
+      consignee_email: v.consignee_email,
+      notify_customer1_name: v.notify_customer1_name,
+      notify_customer1_address: v.notify_customer1_address,
+      notify_customer1_email: v.notify_customer1_email,
+      commodity_description: v.commodity_description,
+      marks_no: v.marks_no,
+      cargo_details: cargoDetails,
+      charges: chargesForm.values.charges,
+    };
+  };
+
   // Handle save - navigate to ExportJobCreate with housing details
   const handleSave = () => {
     // Prepare cargo details (container_number removed for Air)
@@ -1059,6 +1258,15 @@ function HouseCreate() {
       shipper_name: currentFormValues.shipper_name,
       shipper_address: currentFormValues.shipper_address,
       shipper_email: currentFormValues.shipper_email,
+      shipper_state_id: currentFormValues.shipper_state_id
+      ? Number(currentFormValues.shipper_state_id)
+      : ((
+          editData as
+            | { shipment_id?: string; shipper_state_id?: number }
+            | undefined
+        )?.shipper_state_id ?? null),
+    shipment_id:
+      (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: currentFormValues.consignee_name,
       consignee_address: currentFormValues.consignee_address,
       consignee_email: currentFormValues.consignee_email,
@@ -1111,6 +1319,112 @@ function HouseCreate() {
     });
   };
 
+  // Generate PDF preview from current form data
+  const generatePDFPreview = () => {
+    try {
+      setPreviewOpen(true);
+
+      const defaultBranch = user?.branches?.find(
+        (branch) => branch.is_default,
+      ) ||
+        user?.branches?.[0] || { branch_name: "CHENNAI" };
+      const country = user?.country || null;
+
+      const hawbData = {
+        hawb_number: form.values.hawb_number,
+        hawb_no: form.values.hawb_number,
+        routed: form.values.routed,
+        routed_by: form.values.routed_by,
+        origin_code: form.values.origin_code,
+        origin_name: form.values.origin_name,
+        destination_code: form.values.destination_code,
+        destination_name: form.values.destination_name,
+        customer_service: form.values.customer_service,
+        trade: form.values.trade,
+        origin_agent_name: form.values.origin_agent_name,
+        origin_agent_address: form.values.origin_agent_address,
+        origin_agent_email: form.values.origin_agent_email,
+        shipper_name: form.values.shipper_name,
+        shipper_address: form.values.shipper_address,
+        shipper_email: form.values.shipper_email,
+        consignee_name: form.values.consignee_name,
+        consignee_address: form.values.consignee_address,
+        consignee_email: form.values.consignee_email,
+        notify_customer1_name: form.values.notify_customer1_name,
+        notify_customer1_address: form.values.notify_customer1_address,
+        notify_customer1_email: form.values.notify_customer1_email,
+        commodity_description: form.values.commodity_description,
+        marks_no: form.values.marks_no,
+        cargo_details: cargoDetails.map((cargo) => ({
+          no_of_packages: cargo.no_of_packages,
+          gross_weight: cargo.gross_weight,
+          volume: cargo.volume,
+          chargeable_weight: cargo.chargeable_weight,
+          haz: cargo.haz === "Yes",
+        })),
+        mawb_charges: chargesForm.values.charges
+          .filter((charge) => charge.charge_name || charge.charge_id != null)
+          .map((charge) => ({
+            ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),
+            charge_id: charge.charge_id ?? null,
+            pp_cc: charge.pp_cc || "",
+            unit_id: charge.unit_id ? Number(charge.unit_id) : null,
+            currency_id: charge.currency_id ? Number(charge.currency_id) : null,
+            no_of_unit: charge.no_of_unit ?? null,
+            roe: charge.roe ?? null,
+            amount_per_unit: charge.amount_per_unit ?? null,
+            amount: charge.amount ?? null,
+          })),
+      };
+
+      const jobData = {
+        service: location.state?.mawbDetails?.service || "AIR",
+        service_type: "Export",
+        ...location.state?.mawbDetails,
+        ...location.state?.carrierDetails,
+        notes: location.state?.job?.notes || [],
+      };
+
+      const blobUrl = generateCargoArrivalNoticePDF(
+        jobData,
+        hawbData,
+        defaultBranch,
+        country,
+      );
+      setPdfBlob(blobUrl);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Error generating PDF preview",
+      });
+      setPreviewOpen(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(null);
+  };
+
+  const handleDownloadPDF = () => {
+    if (pdfBlob) {
+      const link = document.createElement("a");
+      link.href = pdfBlob;
+      link.download = `Cargo-Arrival-Notice-${form.values.hawb_number || "HAWB"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      ToastNotification({
+        type: "success",
+        message: "PDF downloaded successfully",
+      });
+    }
+  };
+
   return (
     <Box p="md" maw={1200} mx="auto">
       <Group justify="space-between" mb="lg">
@@ -1149,31 +1463,10 @@ function HouseCreate() {
             color="#105476"
             variant="outline"
             onClick={() => {
-              // Save HBL button: Validate all steps before saving
-              // If on step 0, 1, or 2, validate current step and show errors
-              // If on step 3, validate all steps (1, 2, 3, 4) before saving
               if (active === 0) {
-                if (!validateStep1()) {
-                  // Errors are already set, just return
-                  return;
-                }
-                // If step 1 is valid, continue to validate all steps
+                if (!validateStep1()) return;
                 if (!validateStep2()) {
-                  setActive(1); // Navigate to step 2 to show errors
-                  return;
-                }
-                if (!validateStep3()) {
-                  setActive(2); // Navigate to step 3 to show errors
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3); // Navigate to step 4 to show errors
-                  return;
-                }
-                // All validations passed, save
-                handleSave();
-              } else if (active === 1) {
-                if (!validateStep2()) {
+                  setActive(1);
                   return;
                 }
                 if (!validateStep3()) {
@@ -1185,8 +1478,10 @@ function HouseCreate() {
                   return;
                 }
                 handleSave();
-              } else if (active === 2) {
+              } else if (active === 1) {
+                if (!validateStep2()) return;
                 if (!validateStep3()) {
+                  setActive(2);
                   return;
                 }
                 if (!validateStep4()) {
@@ -1194,8 +1489,31 @@ function HouseCreate() {
                   return;
                 }
                 handleSave();
-              } else if (active === 3) {
+              } else if (active === 2) {
+                if (!validateStep3()) return;
                 if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
+                handleSave();
+              } else if (active === 3) {
+                if (!validateStep4()) return;
+                handleSave();
+              } else if (active === 4) {
+                if (!validateStep1()) {
+                  setActive(0);
+                  return;
+                }
+                if (!validateStep2()) {
+                  setActive(1);
+                  return;
+                }
+                if (!validateStep3()) {
+                  setActive(2);
+                  return;
+                }
+                if (!validateStep4()) {
+                  setActive(3);
                   return;
                 }
                 handleSave();
@@ -1204,17 +1522,127 @@ function HouseCreate() {
           >
             Save HBL
           </Button>
+          <Menu shadow="md" width={200}>
+            <Menu.Target>
+              <ActionIcon variant="light" color="#105476" size="lg">
+                <IconDotsVertical size={18} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<IconEye size={14} />}
+                onClick={generatePDFPreview}
+              >
+                Cargo Arrival Notice
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconEye size={14} />}
+                onClick={() => {
+                  ToastNotification({
+                    type: "info",
+                    message: "Delivery Order preview coming soon",
+                  });
+                }}
+              >
+                Deliver Order
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Group>
       </Group>
 
-      <Stepper
+      <Tabs
+        value={String(active)}
+        onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        active={active}
-        onStepClick={setActive}
-        orientation="horizontal"
+        styles={{
+          list: {
+            borderBottom: "none",
+          },
+        }}
       >
-        {/* Stepper 1: Basic Details */}
-        <Stepper.Step label="1" description="Shipment Details">
+        <Tabs.List
+          mb="md"
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+            borderBottom: "none",
+          }}
+        >
+          <Tabs.Tab
+            value="0"
+            style={{
+              textAlign: "center",
+              padding: "6px 14px",
+              backgroundColor: active === 0 ? "#105476" : "transparent",
+              color: active === 0 ? "white" : "#105476",
+              fontWeight: active === 0 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Shipment Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="1"
+            style={{
+              textAlign: "center",
+              padding: "6px 14px",
+              backgroundColor: active === 1 ? "#105476" : "transparent",
+              color: active === 1 ? "white" : "#105476",
+              fontWeight: active === 1 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Party Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="2"
+            style={{
+              textAlign: "center",
+              padding: "6px 14px",
+              backgroundColor: active === 2 ? "#105476" : "transparent",
+              color: active === 2 ? "white" : "#105476",
+              fontWeight: active === 2 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Cargo Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="3"
+            style={{
+              textAlign: "center",
+              padding: "6px 14px",
+              backgroundColor: active === 3 ? "#105476" : "transparent",
+              color: active === 3 ? "white" : "#105476",
+              fontWeight: active === 3 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Charges
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="4"
+            style={{
+              textAlign: "center",
+              padding: "6px 14px",
+              backgroundColor: active === 4 ? "#105476" : "transparent",
+              color: active === 4 ? "white" : "#105476",
+              fontWeight: active === 4 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Accounts
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="0">
           <Group align="center" mb="xs">
             <Text size="lg" fw={600} c="#105476">
               Shipment Details
@@ -1454,10 +1882,9 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 2: Agent & Customer Details */}
-        <Stepper.Step label="2" description="Party Details">
+        <Tabs.Panel value="1">
           <Box mt="md">
             {/* Shipper Section */}
             <Text size="lg" fw={600} c="#105476" mb="xs">
@@ -1484,7 +1911,7 @@ function HouseCreate() {
                       selectedData?.label || ""
                     );
 
-                    // Use originalData to populate address options
+                    // Use originalData to populate address options and shipper_state_id
                     if (
                       value &&
                       originalData &&
@@ -1496,6 +1923,7 @@ function HouseCreate() {
                       ).addresses_data as Array<{
                         id: number;
                         address: string;
+                        state_id?: number;
                       }>;
 
                       const addressOptions = addressesData.map(
@@ -1519,9 +1947,23 @@ function HouseCreate() {
                       } else {
                         form.setFieldValue("shipper_address", "");
                       }
+
+                    // Set shipper_state_id from first address that has state_id
+                      const addrWithState = addressesData.find(
+                        (a: { state_id?: number }) => a.state_id != null,
+                      );
+                      if (addrWithState?.state_id != null) {
+                        form.setFieldValue(
+                          "shipper_state_id",
+                          String(addrWithState.state_id),
+                        );
+                      } else {
+                        form.setFieldValue("shipper_state_id", "");
+                      }
                     } else {
                       setShipperAddressOptions([]);
                       form.setFieldValue("shipper_address", "");
+                      form.setFieldValue("shipper_state_id", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -1903,10 +2345,9 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 3: Cargo Details */}
-        <Stepper.Step label="3" description="Cargo Details">
+        <Tabs.Panel value="2">
           <Box mt="md">
             <Text size="lg" fw={600} c="#105476" mb="md">
               Cargo Details
@@ -2037,19 +2478,19 @@ function HouseCreate() {
                       placeholder="Enter Volume Weight"
                       min={0}
                       hideControls
-                      value={cargo.volume_weight || undefined}
+                      value={cargo.volume || undefined}
                       onChange={(value) => {
                         const updated = [...cargoDetails];
                         updated[index] = {
                           ...updated[index],
-                          volume_weight: value as number | null,
+                          volume: value as number | null,
                         };
                         setCargoDetails(updated);
                         // Clear error when field is updated
-                        if (cargoErrors[index]?.volume_weight) {
+                        if (cargoErrors[index]?.volume) {
                           const newErrors = { ...cargoErrors };
                           if (newErrors[index]) {
-                            delete newErrors[index].volume_weight;
+                            delete newErrors[index].volume;
                             if (Object.keys(newErrors[index]).length === 0) {
                               delete newErrors[index];
                             }
@@ -2057,7 +2498,7 @@ function HouseCreate() {
                           setCargoErrors(newErrors);
                         }
                       }}
-                      error={cargoErrors[index]?.volume_weight}
+                      error={cargoErrors[index]?.volume}
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
@@ -2121,7 +2562,7 @@ function HouseCreate() {
                               {
                                 no_of_packages: null,
                                 gross_weight: null,
-                                volume_weight: null,
+                                volume: null,
                                 chargeable_weight: null,
                                 haz: "",
                               },
@@ -2137,14 +2578,44 @@ function HouseCreate() {
               ))}
             </Box>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 4: Charges */}
-        <Stepper.Step label="4" description="Charges">
+        <Tabs.Panel value="3">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
-              Charges
-            </Text>
+            <Group justify="space-between" align="center" mb="md">
+              <Text size="lg" fw={600} c="#105476">
+                Charges
+                {chargesForm.values.charges.length > 1 &&
+                  ` (${chargesForm.values.charges.length})`}
+              </Text>
+              {location.state?.job?.id != null && (
+              <Button
+                variant="outline"
+                color="#105476"
+                onClick={() => {
+                  const currentHouse = getCurrentHousingDetail();
+                  navigate("/air/export-job/invoice", {
+                    state: {
+                      hawbDetails: [currentHouse],
+                      housingDetails: [currentHouse],
+                      ...(location.state?.job && { job: location.state.job }),
+                      ...(location.state?.mawbDetails && {
+                        mawbDetails: location.state.mawbDetails,
+                      }),
+                      ...(location.state?.carrierDetails && {
+                        carrierDetails: location.state.carrierDetails,
+                      }),
+                      ...(location.state?.routings && {
+                        routings: location.state.routings,
+                      }),
+                    },
+                  });
+                }}
+              >
+                Create Invoice
+              </Button>
+              )}
+            </Group>
 
             {/* Dynamic Charges Rows */}
             <Box mb="md">
@@ -2189,33 +2660,39 @@ function HouseCreate() {
                     *
                   </Text>
                 </Grid.Col>
-                {/* <Grid.Col span={1}>Actions</Grid.Col> */}
               </Grid>
 
               {chargesForm.values.charges.map((charge, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
                   <Grid.Col span={1.75}>
-                    <TextInput
-                      placeholder="Charge Name"
-                      value={charge.charge_name}
-                      onChange={(e) => {
-                        chargesForm.setFieldValue(
-                          `charges.${index}.charge_name`,
-                          e.target.value
-                        );
-                        // Clear error when field is updated
+                    <SearchableSelect
+                      placeholder="Type charge name"
+                      apiEndpoint={URL.chargeMaster}
+                      searchFields={["charge_name", "charge_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.id ?? ""),
+                        label: String(item.charge_name ?? ""),
+                      })}
+                      value={charge.charge_id != null ? String(charge.charge_id) : null}
+                      displayValue={charge.charge_name || undefined}
+                      onChange={(value, selectedData) => {
+                        const chargeId = value ? Number(value) : null;
+                        const chargeName = selectedData?.label ?? "";
+                        chargesForm.setFieldValue(`charges.${index}.charge_id`, chargeId);
+                        chargesForm.setFieldValue(`charges.${index}.charge_name`, chargeName);
                         if (chargeErrors[index]?.charge_name) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
                             delete newErrors[index].charge_name;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
+                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
                       }}
                       error={chargeErrors[index]?.charge_name}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.25}>
@@ -2230,7 +2707,7 @@ function HouseCreate() {
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.pp_cc`,
-                          value || ""
+                          value || "",
                         );
                         // Clear error when field is updated
                         if (chargeErrors[index]?.pp_cc) {
@@ -2252,27 +2729,22 @@ function HouseCreate() {
                       placeholder="Select Unit"
                       searchable
                       data={unitOptions}
-                      value={charge.unit_code || null}
+                      value={charge.unit_id || null}
                       onChange={(value) => {
-                        const unitUpper = (value || "").toUpperCase();
-                        // Auto-set no_of_unit to 1 for specific units
+                        const unitId = value ?? "";
+                        const selectedUnit = unitOptions.find((o) => o.value === unitId);
+                        const labelUpper = (selectedUnit?.label ?? "").toUpperCase();
                         let noOfUnit = charge.no_of_unit;
                         if (
-                          unitUpper === "SHIPMENT" ||
-                          unitUpper === "SHPT" ||
-                          unitUpper === "DOC"
+                          labelUpper === "SHIPMENT" ||
+                          labelUpper === "SHPT" ||
+                          labelUpper === "DOC"
                         ) {
                           noOfUnit = 1;
                         }
-                        chargesForm.setFieldValue(
-                          `charges.${index}.unit_code`,
-                          value || ""
-                        );
+                        chargesForm.setFieldValue(`charges.${index}.unit_id`, unitId);
                         if (noOfUnit !== charge.no_of_unit) {
-                          chargesForm.setFieldValue(
-                            `charges.${index}.no_of_unit`,
-                            noOfUnit
-                          );
+                          chargesForm.setFieldValue(`charges.${index}.no_of_unit`, noOfUnit);
                         }
                       }}
                     />
@@ -2284,7 +2756,7 @@ function HouseCreate() {
                       hideControls
                       {...(() => {
                         const inputProps = chargesForm.getInputProps(
-                          `charges.${index}.no_of_unit`
+                          `charges.${index}.no_of_unit`,
                         );
                         return {
                           value: inputProps.value as number | undefined,
@@ -2292,7 +2764,7 @@ function HouseCreate() {
                             const noOfUnit = value as number | null;
                             chargesForm.setFieldValue(
                               `charges.${index}.no_of_unit`,
-                              noOfUnit
+                              noOfUnit,
                             );
                             // Auto-calculate amount if amount_per_unit is provided
                             const currentCharge =
@@ -2314,7 +2786,7 @@ function HouseCreate() {
                               if (calculatedAmount > 0) {
                                 chargesForm.setFieldValue(
                                   `charges.${index}.amount`,
-                                  calculatedAmount
+                                  calculatedAmount,
                                 );
                               }
                             }
@@ -2328,32 +2800,25 @@ function HouseCreate() {
                       placeholder="Select Currency"
                       searchable
                       data={currencyOptions}
-                      value={charge.currency || null}
+                      value={charge.currency_id || null}
                       onChange={(value) => {
-                        const roe = value ? getRoeValue(value) : null;
-                        chargesForm.setFieldValue(
-                          `charges.${index}.currency`,
-                          value || ""
-                        );
+                        const currencyId = value ?? "";
+                        const code = currencyOptions.find((o) => o.value === currencyId)?.label ?? "";
+                        const roe = code ? getRoeValue(code) : null;
+                        chargesForm.setFieldValue(`charges.${index}.currency_id`, currencyId);
                         if (roe !== null) {
-                          chargesForm.setFieldValue(
-                            `charges.${index}.roe`,
-                            roe
-                          );
+                          chargesForm.setFieldValue(`charges.${index}.roe`, roe);
                         }
-                        // Clear error when field is updated
-                        if (chargeErrors[index]?.currency) {
+                        if (chargeErrors[index]?.currency_id) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
-                            delete newErrors[index].currency;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
+                            delete newErrors[index].currency_id;
+                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
                       }}
-                      error={chargeErrors[index]?.currency}
+                      error={chargeErrors[index]?.currency_id}
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
@@ -2383,7 +2848,7 @@ function HouseCreate() {
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
-                              calculatedAmount
+                              calculatedAmount,
                             );
                           }
                         }
@@ -2412,7 +2877,7 @@ function HouseCreate() {
                         const amountPerUnit = value as number | null;
                         chargesForm.setFieldValue(
                           `charges.${index}.amount_per_unit`,
-                          amountPerUnit
+                          amountPerUnit,
                         );
                         // Auto-calculate amount if amount_per_unit is provided
                         const currentCharge = chargesForm.values.charges[index];
@@ -2433,7 +2898,7 @@ function HouseCreate() {
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
-                              calculatedAmount
+                              calculatedAmount,
                             );
                           }
                         }
@@ -2461,7 +2926,7 @@ function HouseCreate() {
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.amount`,
-                          value as number | null
+                          value as number | null,
                         );
                         // Clear error when field is updated
                         if (chargeErrors[index]?.amount) {
@@ -2494,11 +2959,12 @@ function HouseCreate() {
                         color="#105476"
                         onClick={() => {
                           chargesForm.insertListItem("charges", {
+                            charge_id: null,
                             charge_name: "",
-                            pp_cc: "CC", // Default to "CC" (Collect)
-                            unit_code: "",
+                            pp_cc: "CC",
+                            unit_id: "",
                             no_of_unit: null,
-                            currency: "",
+                            currency_id: "",
                             roe: null,
                             amount_per_unit: null,
                             amount: null,
@@ -2525,14 +2991,286 @@ function HouseCreate() {
               ))}
             </Box>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        <Stepper.Completed>
-          <Text size="lg" ta="center" c="dimmed" py="xl">
-            HBL details saved successfully!
-          </Text>
-        </Stepper.Completed>
-      </Stepper>
+        <Tabs.Panel value="4">
+          <Box mt="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
+              Accounts
+            </Text>
+            {invoiceListLoading ? (
+              <Center py="xl">
+                <Loader color="#105476" size="lg" />
+              </Center>
+            ) : (
+              <ScrollArea>
+                <Table
+                  withTableBorder
+                  withColumnBorders
+                  striped
+                  highlightOnHover
+                  style={{ minWidth: 700 }}
+                >
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Daybook
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Invoice number
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Invoice Date
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Invoice Total
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Status
+                      </Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                        Actions
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {invoiceList.length === 0 ? (
+                      <Table.Tr>
+                        <Table.Td colSpan={6}>
+                          <Center py="xl">
+                            <Text c="dimmed">No invoices to display</Text>
+                          </Center>
+                        </Table.Td>
+                      </Table.Tr>
+                    ) : (
+                      invoiceList.map((row) => {
+                        const statusUpper = (row.status ?? "").toUpperCase();
+                        const isPosted =
+                          statusUpper === "POSTED" || row.status === "posted";
+                        const isUnposted =
+                          statusUpper === "UNPOSTED" || row.status === "unpost";
+                        return (
+                          <Table.Tr key={row.id}>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              {row.day_book_name ?? "-"}
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              {row.document_no ?? "-"}
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              {row.document_date ?? "-"}
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              {row.total}
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              <Badge
+                                size="sm"
+                                variant="light"
+                                color={
+                                  isUnposted
+                                    ? "yellow"
+                                    : isPosted
+                                      ? "green"
+                                      : "#105476"
+                                }
+                              >
+                                {row.status ?? "-"}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              <Menu shadow="md" width={200} position="bottom-end">
+                                <Menu.Target>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="#105476"
+                                    size="sm"
+                                    styles={{
+                                      root: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        border: "1px solid #E9ECEF",
+                                        borderRadius: "8px",
+                                        "&:hover": {
+                                          backgroundColor: "#F8F9FA",
+                                        },
+                                      },
+                                    }}
+                                  >
+                                    <IconDotsVertical size={16} />
+                                  </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown
+                                  styles={{
+                                    dropdown: {
+                                      border: "1px solid #E9ECEF",
+                                      borderRadius: "8px",
+                                      padding: "8px",
+                                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                                    },
+                                  }}
+                                >
+                                  <Menu.Item
+                                    leftSection={
+                                      <Box
+                                        style={{
+                                          backgroundColor: "#E7F5FF",
+                                          borderRadius: "6px",
+                                          padding: "6px",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        <IconEye size={16} color="#105476" />
+                                      </Box>
+                                    }
+                                    styles={{
+                                      item: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        borderRadius: "6px",
+                                        padding: "10px 12px",
+                                        marginBottom: "4px",
+                                        "&:hover": { backgroundColor: "#F8F9FA" },
+                                      },
+                                      itemLabel: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                      },
+                                    }}
+                                    onClick={() =>
+                                      navigate(
+                                        `/air/export-job/invoice/view/${row.id}`,
+                                        {
+                                          state: {
+                                            invoiceData: row,
+                                            ...(location.state?.job && {
+                                              job: location.state.job,
+                                            }),
+                                          },
+                                        },
+                                      )
+                                    }
+                                  >
+                                    View
+                                  </Menu.Item>
+                                  {isUnposted ? (
+                                    <Menu.Item
+                                      leftSection={
+                                        <Box
+                                          style={{
+                                            backgroundColor: "#E7F5FF",
+                                            borderRadius: "6px",
+                                            padding: "6px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <IconEdit size={16} color="#105476" />
+                                        </Box>
+                                      }
+                                      styles={{
+                                        item: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          borderRadius: "6px",
+                                          padding: "10px 12px",
+                                          marginBottom: "4px",
+                                          "&:hover": { backgroundColor: "#F8F9FA" },
+                                        },
+                                        itemLabel: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                        },
+                                      }}
+                                      onClick={() =>
+                                        navigate(
+                                          `/air/export-job/invoice/edit/${row.id}`,
+                                          {
+                                            state: {
+                                              invoiceData: row,
+                                              ...(location.state?.job && {
+                                                job: location.state.job,
+                                              }),
+                                            },
+                                          },
+                                        )
+                                      }
+                                    >
+                                      Edit
+                                    </Menu.Item>
+                                  ) : (
+                                    <Menu.Item
+                                      leftSection={
+                                        <Box
+                                          style={{
+                                            backgroundColor: "#E7F5FF",
+                                            borderRadius: "6px",
+                                            padding: "6px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <IconRefresh size={16} color="#105476" />
+                                        </Box>
+                                      }
+                                      styles={{
+                                        item: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          borderRadius: "6px",
+                                          padding: "10px 12px",
+                                          marginBottom: "4px",
+                                          "&:hover": { backgroundColor: "#F8F9FA" },
+                                        },
+                                        itemLabel: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                        },
+                                      }}
+                                      onClick={() =>
+                                        navigate(
+                                          "/air/export-job/invoice/reverse",
+                                          {
+                                            state: {
+                                              document_no: row.document_no ?? "",
+                                              ...(location.state?.job && {
+                                                job: location.state.job,
+                                              }),
+                                            },
+                                          },
+                                        )
+                                      }
+                                    >
+                                      Invoice Reversal
+                                    </Menu.Item>
+                                  )}
+                                </Menu.Dropdown>
+                              </Menu>
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })
+                    )}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea>
+            )}
+          </Box>
+        </Tabs.Panel>
+      </Tabs>
 
       <Group justify="space-between" mt="xl">
         <Button
@@ -2601,6 +3339,63 @@ function HouseCreate() {
           )}
         </Group>
       </Group>
+
+      {/* PDF Preview Modal */}
+      <Modal
+        opened={previewOpen}
+        onClose={handleClosePreview}
+        title="PDF Preview"
+        size="xl"
+        styles={{
+          body: {
+            padding: 0,
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {pdfBlob ? (
+            <>
+              <iframe
+                src={pdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }

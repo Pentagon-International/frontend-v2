@@ -83,7 +83,7 @@ type CargoDetail = {
   // container_number removed for Air HAWB
   no_of_packages: number | null;
   gross_weight: number | null;
-  volume_weight: number | null;
+  volume: number | null;
   chargeable_weight: number | null;
   haz: string;
 };
@@ -232,7 +232,7 @@ function HouseCreate() {
     {
       no_of_packages: null,
       gross_weight: null,
-      volume_weight: null,
+      volume: null,
       chargeable_weight: null,
       haz: "",
     },
@@ -256,7 +256,7 @@ function HouseCreate() {
   useEffect(() => {
     if (active !== 4) return;
     setInvoiceListLoading(true);
-    postAPICall(URL.invoiceFilter, { filters: {} }, API_HEADER)
+    postAPICall(URL.invoiceCombined, { filters: {} }, API_HEADER)
       .then((res: unknown) => {
         const data = (res as { data?: InvoiceListItem[] })?.data;
         setInvoiceList(Array.isArray(data) ? data : []);
@@ -377,13 +377,13 @@ function HouseCreate() {
 
   // Auto-calculate chargeable weight when gross weight or volume weight changes
   const cargoGrossWeights = cargoDetails.map((c) => c.gross_weight).join(",");
-  const cargoVolumeWeights = cargoDetails.map((c) => c.volume_weight).join(",");
+  const cargoVolumeWeights = cargoDetails.map((c) => c.volume).join(",");
 
   useEffect(() => {
     const updatedCargoDetails = cargoDetails.map((cargo) => {
       const chargeableWeight = calculateChargeableWeight(
         cargo.gross_weight,
-        cargo.volume_weight,
+        cargo.volume,
       );
       // Only update if chargeable_weight changed
       if (cargo.chargeable_weight === chargeableWeight) {
@@ -508,15 +508,15 @@ function HouseCreate() {
               !Number.isNaN(Number(cargo.gross_weight))
                 ? Number(cargo.gross_weight)
                 : null;
-            const volume_weight =
-              cargo.volume_weight != null
-                ? Number(cargo.volume_weight)
+            const volume =
+              cargo.volume != null
+                ? Number(cargo.volume)
                 : cargo.volume != null
                   ? Number(cargo.volume)
                   : null;
             const volume_weight_final =
-              volume_weight != null && !Number.isNaN(volume_weight)
-                ? volume_weight
+              volume != null && !Number.isNaN(volume)
+                ? volume
                 : null;
             const chargeable_weight =
               cargo.chargeable_weight != null &&
@@ -534,14 +534,14 @@ function HouseCreate() {
             const row = {
               no_of_packages,
               gross_weight,
-              volume_weight: volume_weight_final,
+              volume: volume_weight_final,
               chargeable_weight,
               haz,
             };
             const notSet: string[] = [];
             if (row.no_of_packages == null) notSet.push("no_of_packages");
             if (row.gross_weight == null) notSet.push("gross_weight");
-            if (row.volume_weight == null) notSet.push("volume_weight");
+            if (row.volume == null) notSet.push("volume");
             if (row.chargeable_weight == null)
               notSet.push("chargeable_weight");
             if (row.haz === "") notSet.push("haz");
@@ -559,7 +559,7 @@ function HouseCreate() {
         const notSet: string[] = [];
         if (row.no_of_packages == null) notSet.push("no_of_packages");
         if (row.gross_weight == null) notSet.push("gross_weight");
-        if (row.volume_weight == null) notSet.push("volume_weight");
+        if (row.volume == null) notSet.push("volume");
         if (row.chargeable_weight == null) notSet.push("chargeable_weight");
         if (row.haz === "") notSet.push("haz");
         return notSet.length ? [{ index: idx, fields: notSet }] : [];
@@ -1211,8 +1211,8 @@ function HouseCreate() {
         cargoError.gross_weight = "Gross Weight is required";
         hasErrors = true;
       }
-      if (cargo.volume_weight === null || cargo.volume_weight === undefined) {
-        cargoError.volume_weight = "Volume Weight is required";
+      if (cargo.volume === null || cargo.volume === undefined) {
+        cargoError.volume = "Volume Weight is required";
         hasErrors = true;
       }
 
@@ -1495,7 +1495,7 @@ function HouseCreate() {
         cargo_details: cargoDetails.map((cargo) => ({
           no_of_packages: cargo.no_of_packages,
           gross_weight: cargo.gross_weight,
-          volume_weight: cargo.volume_weight,
+          volume: cargo.volume,
           chargeable_weight: cargo.chargeable_weight,
           haz: cargo.haz === "Yes",
         })),
@@ -2635,19 +2635,19 @@ function HouseCreate() {
                       placeholder="Enter Volume Weight"
                       min={0}
                       hideControls
-                      value={cargo.volume_weight || undefined}
+                      value={cargo.volume || undefined}
                       onChange={(value) => {
                         const updated = [...cargoDetails];
                         updated[index] = {
                           ...updated[index],
-                          volume_weight: value as number | null,
+                          volume: value as number | null,
                         };
                         setCargoDetails(updated);
                         // Clear error when field is updated
-                        if (cargoErrors[index]?.volume_weight) {
+                        if (cargoErrors[index]?.volume) {
                           const newErrors = { ...cargoErrors };
                           if (newErrors[index]) {
-                            delete newErrors[index].volume_weight;
+                            delete newErrors[index].volume;
                             if (Object.keys(newErrors[index]).length === 0) {
                               delete newErrors[index];
                             }
@@ -2655,7 +2655,7 @@ function HouseCreate() {
                           setCargoErrors(newErrors);
                         }
                       }}
-                      error={cargoErrors[index]?.volume_weight}
+                      error={cargoErrors[index]?.volume}
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
@@ -2719,7 +2719,7 @@ function HouseCreate() {
                               {
                                 no_of_packages: null,
                                 gross_weight: null,
-                                volume_weight: null,
+                                volume: null,
                                 chargeable_weight: null,
                                 haz: "",
                               },

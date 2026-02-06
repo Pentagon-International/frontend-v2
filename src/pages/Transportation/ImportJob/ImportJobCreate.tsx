@@ -216,10 +216,13 @@ type HousingDetail = {
   }>;
   charges?: Array<{
     id?: number | string; // ID from backend when editing
+    charge_id?: number | null;
     charge_name: string;
     pp_cc: string;
+    unit_id?: string;
     unit_code: string;
     no_of_unit: number | null;
+    currency_id?: string;
     currency: string;
     roe: number | null;
     amount_per_unit: number | null;
@@ -569,14 +572,17 @@ function ImportJobCreate() {
                           ? charge.id
                           : Number(charge.id)
                         : undefined,
+                      charge_id: charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null,
                       charge_name: charge.charge_name
                         ? String(charge.charge_name)
                         : "",
                       pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
+                      unit_id: charge.unit_id != null ? String(charge.unit_id) : "",
                       unit_code: charge.unit_code
                         ? String(charge.unit_code)
                         : "",
                       no_of_unit: charge.no_of_unit as number | null,
+                      currency_id: charge.currency_id != null ? String(charge.currency_id) : "",
                       currency: charge.currency ? String(charge.currency) : "",
                       roe: charge.roe as number | null,
                       amount_per_unit: charge.amount_per_unit as number | null,
@@ -649,17 +655,30 @@ function ImportJobCreate() {
                                 : (charge.amount as number)
                               : null;
 
+                          const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
+                          const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+                          const unitIdFromApi =
+                            charge.unit_id != null ? String(charge.unit_id) :
+                            charge.unit != null ? String(charge.unit) :
+                            unitDetails?.unit_id != null ? String(unitDetails.unit_id) : "";
+                          const currencyIdFromApi =
+                            charge.currency_id != null ? String(charge.currency_id) :
+                            currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : "";
+
                           return {
                             id: charge.id
                               ? typeof charge.id === "number"
                                 ? charge.id
                                 : Number(charge.id)
                               : undefined,
+                            charge_id: charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null,
                             charge_name: charge.charge_name
                               ? String(charge.charge_name)
                               : "",
                             pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
+                            unit_id: unitIdFromApi,
                             unit_code: unitCode,
+                            currency_id: currencyIdFromApi,
                             no_of_unit:
                               charge.no_of_unit !== null &&
                               charge.no_of_unit !== undefined
@@ -1852,17 +1871,19 @@ function ImportJobCreate() {
           })),
           // Each housing detail has its own mbl_charges
           mbl_charges: (house.charges || []).map((charge) => ({
-            // Include id only in edit mode if it exists
             ...(mode === "edit" &&
               charge.id && {
                 id:
                   typeof charge.id === "number" ? charge.id : Number(charge.id),
               }),
+            charge_id: charge.charge_id ?? null,
             charge_name: charge.charge_name || "",
             pp_cc: charge.pp_cc || "",
-            unit_input: charge.unit_code || "",
+            unit_id: charge.unit_id ? Number(charge.unit_id) : null,
+            // unit_input: charge.unit_code || "",
+            currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             no_of_unit: charge.no_of_unit || null,
-            currency: charge.currency || "",
+            // currency: charge.currency || "",
             roe: charge.roe || null,
             amount_per_unit: charge.amount_per_unit || null,
             amount: charge.amount || null,

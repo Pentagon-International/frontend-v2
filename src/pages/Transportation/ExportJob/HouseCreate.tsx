@@ -4,10 +4,18 @@ import {
   Grid,
   Group,
   Tabs,
+  Table,
   Text,
   TextInput,
   Textarea,
   Badge,
+  ActionIcon,
+  Menu,
+  Modal,
+  Loader,
+  Center,
+  Stack,
+  ScrollArea,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -16,13 +24,24 @@ import {
   IconChevronRight,
   IconPlus,
   IconTrash,
+  IconDotsVertical,
+  IconEye,
+  IconEdit,
+  IconDownload,
+  IconX,
+  IconRefresh,
 } from "@tabler/icons-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
-import { SearchableSelect, Dropdown } from "../../../components";
+import {
+  SearchableSelect,
+  Dropdown,
+  ToastNotification,
+} from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -48,6 +67,7 @@ type HouseDetailsForm = {
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
+  shipper_state_id: string;
   consignee_code: string;
   consignee_name: string;
   consignee_address: string;
@@ -71,17 +91,39 @@ type CargoDetail = {
   haz: boolean | null;
 };
 
-// Type definitions for charges
+// Type definitions for charges (charge_id, unit_id, currency_id for payload; id for update)
 type ChargeDetail = {
   id?: number | string; // ID from backend when editing
+  charge_id: number | null;
   charge_name: string;
   pp_cc: string;
+  unit_id: string;
   unit_code: string;
   no_of_unit: number | null;
+  currency_id: string;
   currency: string;
   roe: number | null;
   amount_per_unit: number | null;
   amount: number | null;
+};
+
+// Invoice list item from /api/filter/invoice/ response
+type InvoiceListItem = {
+  id: number;
+  sno?: number;
+  day_book_name?: string;
+  day_book_code?: string;
+  document_no?: string;
+  document_date?: string;
+  due_date?: string;
+  status?: string;
+  bill_to?: string;
+  currency_code?: string;
+  total?: string | number;
+  charges?: Array<{
+    amount?: string | number;
+    amount_in_local?: string | number;
+  }>;
 };
 
 // Type definitions for salespersons
@@ -205,16 +247,26 @@ function HouseCreate() {
     Record<number, Record<string, string>>
   >({});
 
+  // PDF Preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<string | null>(null);
+
+  // Accounts tab: invoice list from filter/invoice API
+  const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
+  const [invoiceListLoading, setInvoiceListLoading] = useState(false);
+
   // Charges Form - Using useForm similar to routings in ImportJobCreate
   const chargesForm = useForm<{ charges: ChargeDetail[] }>({
     initialValues: {
       charges: [
         {
-          id: undefined,
+          charge_id: null,
           charge_name: "",
           pp_cc: "",
+          unit_id: "",
           unit_code: "",
           no_of_unit: null,
+          currency_id: "",
           currency: "",
           roe: null,
           amount_per_unit: null,
@@ -225,10 +277,27 @@ function HouseCreate() {
   });
 
   // Get existing housing details from location state if available
-  const existingHousingDetails = location.state?.housingDetails || [];
+  // Support both hawbDetails and housingDetails for backward compatibility (same as AirHouseCreate)
+  const existingHousingDetails =
+    location.state?.hawbDetails || location.state?.housingDetails || [];
   const editIndex = location.state?.editIndex;
   const editData = location.state?.editData;
   const isEditMode = editIndex !== undefined && editData !== undefined;
+
+  // Unit and currency masters - fetch early for charge loading when in edit mode
+  const { data: unitDataRaw = [] } = useQuery({
+    queryKey: ["unitMaster", "SEA"],
+    queryFn: fetchUnitMaster,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  const { data: currencyData = [] } = useQuery({
+    queryKey: ["currencyMaster"],
+    queryFn: fetchCurrencyMaster,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+
   // Load cargo_details and charges from editData when in edit mode
   useEffect(() => {
     if (isEditMode && editData) {
@@ -289,81 +358,62 @@ function HouseCreate() {
       }
 
       // Load charges - check both charges and mbl_charges
-      // mbl_charges is the field name in the API response, charges is used internally
-      const chargesToLoad = editData.charges || editData.mbl_charges;
-      if (
-        chargesToLoad &&
-        Array.isArray(chargesToLoad) &&
-        chargesToLoad.length > 0
-      ) {
-        const mappedCharges = chargesToLoad.map(
+      const chargesToLoad =
+        (editData.charges && Array.isArray(editData.charges) ? editData.charges : null) ||
+        (editData as { mbl_charges?: unknown[] }).mbl_charges ||
+        [];
+      const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
+      // unitArr/currArr from masters - will be empty on first run; chargesIdsResolvedRef effect resolves when masters load
+      const unitArr = Array.isArray(unitDataRaw) ? unitDataRaw : [];
+      const currArr = Array.isArray(currencyData) ? currencyData : [];
+      if (chargesArray.length > 0) {
+        const unitDataArr = unitArr as { id?: number; unit_code?: string }[];
+        const currencyDataArr = currArr as { id?: number; code?: string; currency_code?: string }[];
+        const mappedCharges = chargesArray.map(
           (charge: Record<string, unknown>) => {
-            // Handle mbl_charges structure: unit can be in charge.unit or charge.unit_details.unit_code
-            const unitCode = charge.unit_code
-              ? String(charge.unit_code)
-              : charge.unit
-                ? String(charge.unit)
-                : (charge.unit_details as Record<string, unknown>)?.unit_code
-                  ? String(
-                      (charge.unit_details as Record<string, unknown>).unit_code
-                    )
-                  : "";
+            const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
+            const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+            const unitCode = String(
+              charge.unit_code ?? charge.unit ?? charge.unit_input ?? unitDetails?.unit_code ?? ""
+            ).trim();
+            const currencyCode = String(
+              charge.currency ?? currencyDetails?.currency_code ?? (charge.currency_details as Record<string, unknown>)?.currency_code ?? ""
+            ).trim();
 
-            // Handle currency: can be in charge.currency or charge.currency_details.currency_code
-            const currencyCode = charge.currency
-              ? String(charge.currency)
-              : (charge.currency_details as Record<string, unknown>)
-                    ?.currency_code
-                ? String(
-                    (charge.currency_details as Record<string, unknown>)
-                      .currency_code
-                  )
-                : "";
+            const toNum = (v: unknown): number | null => {
+              if (v == null) return null;
+              if (typeof v === "number" && !Number.isNaN(v)) return v;
+              const n = parseFloat(String(v));
+              return Number.isNaN(n) ? null : n;
+            };
 
-            // Handle roe: can be string or number
-            const roeValue =
-              charge.roe !== null && charge.roe !== undefined
-                ? typeof charge.roe === "string"
-                  ? parseFloat(charge.roe) || null
-                  : (charge.roe as number)
-                : null;
-
-            // Handle amount_per_unit: can be string or number
-            const amountPerUnit =
-              charge.amount_per_unit !== null &&
-              charge.amount_per_unit !== undefined
-                ? typeof charge.amount_per_unit === "string"
-                  ? parseFloat(charge.amount_per_unit) || null
-                  : (charge.amount_per_unit as number)
-                : null;
-
-            // Handle amount: can be string or number
-            const amount =
-              charge.amount !== null && charge.amount !== undefined
-                ? typeof charge.amount === "string"
-                  ? parseFloat(charge.amount) || null
-                  : (charge.amount as number)
-                : null;
+            const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+            const unitIdFromApi =
+              charge.unit_id != null ? String(charge.unit_id) :
+              charge.unit != null ? String(charge.unit) :
+              unitDetails?.unit_id != null ? String(unitDetails.unit_id) : null;
+            const currencyIdFromApi =
+              charge.currency_id != null ? String(charge.currency_id) :
+              charge.currency != null ? String(charge.currency) :
+              currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : null;
+            const unitByCode = unitCode ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode) : null;
+            const currByCode = currencyCode ? currencyDataArr.find((c) => (c.currency_code ?? c.code ?? "") === currencyCode) : null;
+            const unit_id = unitIdFromApi ?? (unitByCode?.id != null ? String(unitByCode.id) : "");
+            const currency_id = currencyIdFromApi ?? (currByCode?.id != null ? String(currByCode.id) : "");
 
             return {
-              id: charge.id
-                ? typeof charge.id === "number"
-                  ? charge.id
-                  : Number(charge.id)
-                : undefined,
+              id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+              charge_id: chargeId,
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
               pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
+              unit_id,
               unit_code: unitCode,
-              no_of_unit:
-                charge.no_of_unit !== null && charge.no_of_unit !== undefined
-                  ? typeof charge.no_of_unit === "number"
-                    ? charge.no_of_unit
-                    : Number(charge.no_of_unit)
-                  : null,
+              no_of_unit: toNum(charge.no_of_unit),
+              currency_id,
               currency: currencyCode,
-              roe: roeValue,
-              amount_per_unit: amountPerUnit,
-              amount: amount,
+              roe: toNum(charge.roe),
+              amount_per_unit: toNum(charge.amount_per_unit),
+              amount: toNum(charge.amount),
             };
           }
         );
@@ -389,7 +439,7 @@ function HouseCreate() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditMode, editData]);
+  }, [isEditMode, editData, editIndex, unitDataRaw, currencyData]);
 
   // Helper function to normalize routed value (handle backwards compatibility)
   const normalizeRoutedValue = (value: unknown): string => {
@@ -444,6 +494,10 @@ function HouseCreate() {
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
+      shipper_state_id:
+        editData?.shipper_state_id != null
+          ? String(editData.shipper_state_id)
+          : "",
       consignee_code: "", // Will be set when user selects from SearchableSelect
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
@@ -495,40 +549,30 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargoGrossWeights, cargoVolumes, calculateChargeableWeight]);
 
-  // Auto-set ROE when currency changes (but don't auto-calculate amount)
-  const chargeCurrencies = chargesForm.values.charges
-    .map((c) => c.currency)
+  // Auto-set ROE when currency_id changes (resolve code from currencyData, then getRoeValue)
+  const chargeCurrencyIds = chargesForm.values.charges
+    .map((c) => c.currency_id)
     .join(",");
-
   useEffect(() => {
+    const currencyArr = (currencyData ?? []) as { id?: number; code?: string; currency_code?: string }[];
     const updatedCharges = chargesForm.values.charges.map((charge) => {
-      // Auto-set ROE if currency is selected but ROE is not set
       let roe = charge.roe;
-      if (charge.currency && !roe) {
-        roe = getRoeValue(charge.currency);
+      if (charge.currency_id && !roe) {
+        const curr = currencyArr.find((c) => String(c.id) === charge.currency_id);
+        const code = curr?.currency_code ?? curr?.code ?? "";
+        if (code) roe = getRoeValue(code);
       }
-
-      // Only update ROE, don't touch amount
       if (roe !== charge.roe) {
-        return {
-          ...charge,
-          roe: roe || null,
-        };
+        return { ...charge, roe: roe || null };
       }
-
       return charge;
     });
-
-    // Only update if there are actual changes to ROE
     const hasChanges = updatedCharges.some(
       (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe
     );
-
-    if (hasChanges) {
-      chargesForm.setValues({ charges: updatedCharges });
-    }
+    if (hasChanges) chargesForm.setValues({ charges: updatedCharges });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCurrencies, getRoeValue]);
+  }, [chargeCurrencyIds, getRoeValue, currencyData]);
 
   // Auto-calculate amount when amount_per_unit, roe, or no_of_unit changes
   // Formula: amount = roe * no_of_unit * amount_per_unit (only if amount_per_unit is given)
@@ -582,6 +626,19 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCalculationKeys]);
 
+  // Fetch invoice list when Accounts tab is active
+  useEffect(() => {
+    if (active !== 4) return;
+    setInvoiceListLoading(true);
+    postAPICall(URL.invoiceCombined, { filters: {} }, API_HEADER)
+      .then((res: unknown) => {
+        const data = (res as { data?: InvoiceListItem[] })?.data;
+        setInvoiceList(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setInvoiceList([]))
+      .finally(() => setInvoiceListLoading(false));
+  }, [active]);
+
   // Salespersons data query
   const { data: rawSalespersonsData = [] } = useQuery({
     queryKey: ["salespersons", ""],
@@ -612,40 +669,25 @@ function HouseCreate() {
     }));
   }, [rawSalespersonsData]);
 
-  // Currency master query
-  const { data: currencyData = [] } = useQuery({
-    queryKey: ["currencyMaster"],
-    queryFn: fetchCurrencyMaster,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  });
-
-  // Unit master query
-  const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster", "SEA"],
-    queryFn: fetchUnitMaster,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  });
-
-  // Format currency data
+  // Format currency data: value = id, label = currency_code (for payload we send currency_id)
   const currencyOptions = useMemo(() => {
     if (!Array.isArray(currencyData)) return [];
-    return currencyData.map((item: { code?: string }) => ({
-      value: String(item.code || ""),
-      label: item.code || "",
-    }));
+    const data = currencyData as { id?: number; code?: string; currency_code?: string }[];
+    return data.map((item) => {
+      const code = item.currency_code ?? item.code ?? "";
+      const id = item.id != null ? String(item.id) : "";
+      return { value: id || code, label: code || id || "" };
+    });
   }, [currencyData]);
 
-  // Format unit data
+  // Format unit data: value = id, label = unit_name or unit_code (for payload we send unit_id)
   const unitOptions = useMemo(() => {
     if (!Array.isArray(unitDataRaw)) return [];
-    return unitDataRaw.map((item: unknown) => {
-      const unitItem = item as { unit_code?: string };
-      return {
-        value: String(unitItem.unit_code || ""),
-        label: unitItem.unit_code || "",
-      };
+    const data = unitDataRaw as { id?: number; unit_code?: string; unit_name?: string; name?: string }[];
+    return data.map((item) => {
+      const label = item.unit_name ?? item.name ?? item.unit_code ?? "";
+      const id = item.id != null ? String(item.id) : "";
+      return { value: id || String(item.unit_code ?? ""), label: label || String(item.unit_code ?? "") };
     });
   }, [unitDataRaw]);
 
@@ -1055,8 +1097,8 @@ function HouseCreate() {
     chargesForm.values.charges.forEach((charge, index) => {
       const chargeError: Record<string, string> = {};
 
-      // Mandatory fields: charge_name, pp_cc, currency, roe, amount
-      if (!charge.charge_name || charge.charge_name.trim() === "") {
+      // Mandatory fields: charge_name (or charge_id), pp_cc, currency, roe, amount
+      if ((!charge.charge_name || charge.charge_name.trim() === "") && (charge.charge_id == null || charge.charge_id === 0)) {
         chargeError.charge_name = "Charge Name is required";
         hasErrors = true;
       }
@@ -1064,8 +1106,8 @@ function HouseCreate() {
         chargeError.pp_cc = "PP/CC is required";
         hasErrors = true;
       }
-      if (!charge.currency || charge.currency.trim() === "") {
-        chargeError.currency = "Currency is required";
+      if (!charge.currency_id || charge.currency_id.trim() === "") {
+        chargeError.currency_id = "Currency is required";
         hasErrors = true;
       }
       if (charge.roe === null || charge.roe === undefined) {
@@ -1205,18 +1247,20 @@ function HouseCreate() {
       return basePayload;
     });
 
-    // Prepare charges payload - include id only in edit mode
+    // Prepare charges payload - include id, charge_id, unit_id, currency_id
     const chargesForPayload = chargesForm.values.charges.map((charge) => ({
-      // Include id only in edit mode
       ...(isEditMode &&
         charge.id && {
           id: typeof charge.id === "number" ? charge.id : Number(charge.id),
         }),
+      ...(charge.charge_id != null && { charge_id: charge.charge_id }),
       charge_name: charge.charge_name,
       pp_cc: charge.pp_cc,
+      unit_id: charge.unit_id || undefined,
       unit_code: charge.unit_code,
-      no_of_unit: charge.no_of_unit,
+      currency_id: charge.currency_id || undefined,
       currency: charge.currency,
+      no_of_unit: charge.no_of_unit,
       roe: charge.roe,
       amount_per_unit: charge.amount_per_unit,
       amount: charge.amount,
@@ -1247,6 +1291,15 @@ function HouseCreate() {
       shipper_name: form.values.shipper_name,
       shipper_address: form.values.shipper_address,
       shipper_email: form.values.shipper_email,
+      shipper_state_id: form.values.shipper_state_id
+      ? Number(form.values.shipper_state_id)
+      : ((
+          editData as
+            | { shipment_id?: string; shipper_state_id?: number }
+            | undefined
+        )?.shipper_state_id ?? null),
+    shipment_id:
+      (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: form.values.consignee_name,
       consignee_address: form.values.consignee_address,
       consignee_email: form.values.consignee_email,
@@ -1318,6 +1371,164 @@ function HouseCreate() {
     });
   };
 
+  // Build current form as housing detail (for Create Invoice and PDF)
+  const getCurrentHousingDetail = () => {
+    const v = form.values;
+    return {
+      hbl_number: v.hbl_number,
+      routed: v.routed,
+      routed_by: v.routed_by,
+      origin_code: v.origin_code,
+      origin_name: v.origin_name,
+      destination_code: v.destination_code,
+      destination_name: v.destination_name,
+      customer_service: v.customer_service,
+      trade: v.trade,
+      origin_agent: v.origin_agent,
+      origin_agent_name: v.origin_agent_name,
+      origin_agent_address: v.origin_agent_address,
+      origin_agent_email: v.origin_agent_email,
+      shipper_name: v.shipper_name,
+      shipper_address: v.shipper_address,
+      shipper_email: v.shipper_email,
+      shipper_state_id: v.shipper_state_id
+      ? Number(v.shipper_state_id)
+      : ((editData as { shipper_state_id?: number } | undefined)
+          ?.shipper_state_id ??
+        (
+          location.state?.job as {
+            housing_details?: Array<{ shipper_state_id?: number }>;
+          }
+        )?.housing_details?.[editIndex ?? 0]?.shipper_state_id ??
+        null),
+    shipment_id:
+      (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+      consignee_name: v.consignee_name,
+      consignee_address: v.consignee_address,
+      consignee_email: v.consignee_email,
+      notify_customer1_name: v.notify_customer1_name,
+      notify_customer1_address: v.notify_customer1_address,
+      notify_customer1_email: v.notify_customer1_email,
+      commodity_description: v.commodity_description,
+      marks_no: v.marks_no,
+      cargo_details: cargoDetails,
+      charges: chargesForm.values.charges,
+    };
+  };
+
+  // Generate PDF preview from current form data
+  const generatePDFPreview = () => {
+    try {
+      setPreviewOpen(true);
+      const defaultBranch = user?.branches?.find(
+        (branch) => branch.is_default,
+      ) ||
+        user?.branches?.[0] || { branch_name: "CHENNAI" };
+      const country = user?.country || null;
+      const housingData = {
+        hbl_number: form.values.hbl_number,
+        routed: form.values.routed,
+        routed_by: form.values.routed_by,
+        origin_code: form.values.origin_code,
+        origin_name: form.values.origin_name,
+        destination_code: form.values.destination_code,
+        destination_name: form.values.destination_name,
+        customer_service: form.values.customer_service,
+        trade: form.values.trade,
+        origin_agent_name: form.values.origin_agent_name,
+        origin_agent_address: form.values.origin_agent_address,
+        origin_agent_email: form.values.origin_agent_email,
+        shipper_name: form.values.shipper_name,
+        shipper_address: form.values.shipper_address,
+        shipper_email: form.values.shipper_email,
+        shipper_state_id: form.values.shipper_state_id
+        ? Number(form.values.shipper_state_id)
+        : ((
+            editData as
+              | { shipment_id?: string; shipper_state_id?: number }
+              | undefined
+          )?.shipper_state_id ?? null),
+      shipment_id:
+        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+        consignee_name: form.values.consignee_name,
+        consignee_address: form.values.consignee_address,
+        consignee_email: form.values.consignee_email,
+        notify_customer1_name: form.values.notify_customer1_name,
+        notify_customer1_address: form.values.notify_customer1_address,
+        notify_customer1_email: form.values.notify_customer1_email,
+        commodity_description: form.values.commodity_description,
+        marks_no: form.values.marks_no,
+        cargo_details: cargoDetails.map((c) => ({
+          no_of_packages: c.no_of_packages,
+          gross_weight: c.gross_weight,
+          volume: c.volume,
+          chargeable_weight: c.chargeable_weight,
+          haz: c.haz === true || c.haz === "Yes",
+        })),
+        mbl_charges: chargesForm.values.charges
+          .filter((charge) => charge.charge_name || charge.charge_id != null)
+          .map((charge) => ({
+            ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),
+            charge_id: charge.charge_id ?? null,
+            charge_name: charge.charge_name,
+            pp_cc: charge.pp_cc,
+            unit_id: charge.unit_id ? Number(charge.unit_id) : null,
+            unit: charge.unit_code,
+            currency_id: charge.currency_id ? Number(charge.currency_id) : null,
+            currency: charge.currency,
+            no_of_unit: charge.no_of_unit,
+            roe: charge.roe,
+            amount_per_unit: charge.amount_per_unit,
+            amount: charge.amount,
+          })),
+      };
+      const jobData = {
+        service: location.state?.mblDetails?.service || "FCL",
+        service_type: "Export",
+        ...location.state?.mblDetails,
+        ...location.state?.carrierDetails,
+        notes: location.state?.job?.notes || [],
+      };
+      const blobUrl = generateCargoArrivalNoticePDF(
+        jobData,
+        housingData,
+        defaultBranch,
+        country,
+      );
+      setPdfBlob(blobUrl);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Error generating PDF preview",
+      });
+      setPreviewOpen(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(null);
+  };
+
+  const handleDownloadPDF = () => {
+    if (pdfBlob) {
+      const link = document.createElement("a");
+      link.href = pdfBlob;
+      link.download = `Cargo-Arrival-Notice-${form.values.hbl_number || "HBL"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      ToastNotification({
+        type: "success",
+        message: "PDF downloaded successfully",
+      });
+    }
+  };
+
   return (
     <Box p="md" maw={1200} mx="auto">
       <Group justify="space-between" mb="lg">
@@ -1356,17 +1567,61 @@ function HouseCreate() {
             color="#105476"
             variant="outline"
             onClick={() => {
-              if (active === 3) {
-                if (validateStep4()) {
-                  handleSave();
-                }
-              } else {
-                handleNext();
+              if (active === 0) {
+                if (!validateStep1()) return;
+                if (!validateStep2()) { setActive(1); return; }
+                if (!validateStep3()) { setActive(2); return; }
+                if (!validateStep4()) { setActive(3); return; }
+                handleSave();
+              } else if (active === 1) {
+                if (!validateStep2()) return;
+                if (!validateStep3()) { setActive(2); return; }
+                if (!validateStep4()) { setActive(3); return; }
+                handleSave();
+              } else if (active === 2) {
+                if (!validateStep3()) return;
+                if (!validateStep4()) { setActive(3); return; }
+                handleSave();
+              } else if (active === 3) {
+                if (!validateStep4()) return;
+                handleSave();
+              } else if (active === 4) {
+                if (!validateStep1()) { setActive(0); return; }
+                if (!validateStep2()) { setActive(1); return; }
+                if (!validateStep3()) { setActive(2); return; }
+                if (!validateStep4()) { setActive(3); return; }
+                handleSave();
               }
             }}
           >
             Save HBL
           </Button>
+          <Menu shadow="md" width={200}>
+            <Menu.Target>
+              <ActionIcon variant="light" color="#105476" size="lg">
+                <IconDotsVertical size={18} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<IconEye size={14} />}
+                onClick={generatePDFPreview}
+              >
+                Cargo Arrival Notice
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconEye size={14} />}
+                onClick={() => {
+                  ToastNotification({
+                    type: "info",
+                    message: "Delivery Order preview coming soon",
+                  });
+                }}
+              >
+                Deliver Order
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Group>
       </Group>
 
@@ -1374,14 +1629,31 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
+        styles={{
+          list: {
+            borderBottom: "none",
+          },
+        }}
       >
-        <Tabs.List mb="md" style={{ gap: 0 }}>
+        <Tabs.List
+          mb="md"
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+            borderBottom: "none",
+          }}
+        >
           <Tabs.Tab
             value="0"
             style={{
+              textAlign: "center",
+              padding: "6px 14px",
               backgroundColor: active === 0 ? "#105476" : "transparent",
               color: active === 0 ? "white" : "#105476",
               fontWeight: active === 0 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
             }}
           >
             Shipment Details
@@ -1389,9 +1661,13 @@ function HouseCreate() {
           <Tabs.Tab
             value="1"
             style={{
+              textAlign: "center",
+              padding: "6px 14px",
               backgroundColor: active === 1 ? "#105476" : "transparent",
               color: active === 1 ? "white" : "#105476",
               fontWeight: active === 1 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
             }}
           >
             Party Details
@@ -1399,9 +1675,13 @@ function HouseCreate() {
           <Tabs.Tab
             value="2"
             style={{
+              textAlign: "center",
+              padding: "6px 14px",
               backgroundColor: active === 2 ? "#105476" : "transparent",
               color: active === 2 ? "white" : "#105476",
               fontWeight: active === 2 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
             }}
           >
             Cargo Details
@@ -1409,12 +1689,30 @@ function HouseCreate() {
           <Tabs.Tab
             value="3"
             style={{
+              textAlign: "center",
+              padding: "6px 14px",
               backgroundColor: active === 3 ? "#105476" : "transparent",
               color: active === 3 ? "white" : "#105476",
               fontWeight: active === 3 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
             }}
           >
             Charges
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="4"
+            style={{
+              textAlign: "center",
+              padding: "6px 14px",
+              backgroundColor: active === 4 ? "#105476" : "transparent",
+              color: active === 4 ? "white" : "#105476",
+              fontWeight: active === 4 ? 600 : 400,
+              borderRadius: "4px",
+              borderBottom: "none",
+            }}
+          >
+            Accounts
           </Tabs.Tab>
         </Tabs.List>
 
@@ -1693,7 +1991,7 @@ function HouseCreate() {
                       selectedData?.label || ""
                     );
 
-                    // Use originalData to populate address options
+                    // Use originalData to populate address options and shipper_state_id
                     if (
                       value &&
                       originalData &&
@@ -1705,6 +2003,7 @@ function HouseCreate() {
                       ).addresses_data as Array<{
                         id: number;
                         address: string;
+                        state_id?: number;
                       }>;
 
                       const addressOptions = addressesData.map(
@@ -1728,9 +2027,23 @@ function HouseCreate() {
                       } else {
                         form.setFieldValue("shipper_address", "");
                       }
+
+                      // Set shipper_state_id from first address that has state_id
+                      const addrWithState = addressesData.find(
+                        (a: { state_id?: number }) => a.state_id != null,
+                      );
+                      if (addrWithState?.state_id != null) {
+                        form.setFieldValue(
+                          "shipper_state_id",
+                          String(addrWithState.state_id),
+                        );
+                      } else {
+                        form.setFieldValue("shipper_state_id", "");
+                      }
                     } else {
                       setShipperAddressOptions([]);
                       form.setFieldValue("shipper_address", "");
+                      form.setFieldValue("shipper_state_id", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -2281,11 +2594,39 @@ function HouseCreate() {
 
         <Tabs.Panel value="3">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
-              Charges{" "}
-              {chargesForm.values.charges.length > 1 &&
-                `(${chargesForm.values.charges.length})`}
-            </Text>
+            <Group justify="space-between" align="center" mb="md">
+              <Text size="lg" fw={600} c="#105476">
+                Charges{" "}
+                {chargesForm.values.charges.length > 1 &&
+                  ` (${chargesForm.values.charges.length})`}
+              </Text>
+              {location.state?.job?.id != null && (
+              <Button
+                variant="outline"
+                color="#105476"
+                onClick={() => {
+                  navigate("/SeaExport/export-job/invoice", {
+                    state: {
+                      hawbDetails: [getCurrentHousingDetail()],
+                      housingDetails: [getCurrentHousingDetail()],
+                      ...(location.state?.job && { job: location.state.job }),
+                      ...(location.state?.mblDetails && {
+                        mblDetails: location.state.mblDetails,
+                      }),
+                      ...(location.state?.carrierDetails && {
+                        carrierDetails: location.state.carrierDetails,
+                      }),
+                      ...(location.state?.routings && {
+                        routings: location.state.routings,
+                      }),
+                    },
+                  });
+                }}
+              >
+                Create Invoice
+              </Button>
+              )}
+            </Group>
 
             {/* Dynamic Charges Rows */}
             <Box mb="md">
@@ -2336,15 +2677,21 @@ function HouseCreate() {
               {chargesForm.values.charges.map((charge, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
                   <Grid.Col span={1.75}>
-                    <TextInput
-                      placeholder="Charge Name"
-                      value={charge.charge_name}
-                      onChange={(e) => {
-                        chargesForm.setFieldValue(
-                          `charges.${index}.charge_name`,
-                          e.target.value
-                        );
-                        // Clear error when field is updated
+                    <SearchableSelect
+                      placeholder="Type charge name"
+                      apiEndpoint={URL.chargeMaster}
+                      searchFields={["charge_name", "charge_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.id ?? ""),
+                        label: String(item.charge_name ?? ""),
+                      })}
+                      value={charge.charge_id != null ? String(charge.charge_id) : null}
+                      displayValue={charge.charge_name || undefined}
+                      onChange={(value, selectedData) => {
+                        const chargeId = value ? Number(value) : null;
+                        const chargeName = selectedData?.label ?? "";
+                        chargesForm.setFieldValue(`charges.${index}.charge_id`, chargeId);
+                        chargesForm.setFieldValue(`charges.${index}.charge_name`, chargeName);
                         if (chargeErrors[index]?.charge_name) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
@@ -2357,6 +2704,9 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.charge_name}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.25}>
@@ -2393,10 +2743,15 @@ function HouseCreate() {
                       placeholder="Select Unit"
                       searchable
                       data={unitOptions}
-                      value={charge.unit_code || null}
+                      value={charge.unit_id || null}
                       onChange={(value) => {
-                        const unitUpper = (value || "").toUpperCase();
-                        // Auto-set no_of_unit to 1 for specific units
+                        const unitId = value ?? "";
+                        const unitOpt = unitOptions.find((o) => o.value === unitId);
+                        const unitItem = Array.isArray(unitDataRaw) ? (unitDataRaw as { id?: number; unit_code?: string }[]).find((u) => String(u.id) === unitId || u.unit_code === unitId) : null;
+                        const unitCode = unitItem?.unit_code ?? unitOpt?.label ?? "";
+                        chargesForm.setFieldValue(`charges.${index}.unit_id`, unitId);
+                        chargesForm.setFieldValue(`charges.${index}.unit_code`, unitCode);
+                        const unitUpper = unitCode.toUpperCase();
                         let noOfUnit = charge.no_of_unit;
                         if (
                           unitUpper === "SHIPMENT" ||
@@ -2405,10 +2760,6 @@ function HouseCreate() {
                         ) {
                           noOfUnit = 1;
                         }
-                        chargesForm.setFieldValue(
-                          `charges.${index}.unit_code`,
-                          value || ""
-                        );
                         if (noOfUnit !== charge.no_of_unit) {
                           chargesForm.setFieldValue(
                             `charges.${index}.no_of_unit`,
@@ -2474,24 +2825,23 @@ function HouseCreate() {
                       placeholder="Select Currency"
                       searchable
                       data={currencyOptions}
-                      value={charge.currency || null}
+                      value={charge.currency_id || null}
                       onChange={(value) => {
-                        const roe = value ? getRoeValue(value) : null;
-                        chargesForm.setFieldValue(
-                          `charges.${index}.currency`,
-                          value || ""
-                        );
+                        const currencyId = value ?? "";
+                        const code = currencyOptions.find((o) => o.value === currencyId)?.label ?? "";
+                        chargesForm.setFieldValue(`charges.${index}.currency_id`, currencyId);
+                        chargesForm.setFieldValue(`charges.${index}.currency`, code);
+                        const roe = code ? getRoeValue(code) : null;
                         if (roe !== null) {
                           chargesForm.setFieldValue(
                             `charges.${index}.roe`,
                             roe
                           );
                         }
-                        // Clear error when field is updated
-                        if (chargeErrors[index]?.currency) {
+                        if (chargeErrors[index]?.currency_id) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
-                            delete newErrors[index].currency;
+                            delete newErrors[index].currency_id;
                             if (Object.keys(newErrors[index]).length === 0) {
                               delete newErrors[index];
                             }
@@ -2499,7 +2849,7 @@ function HouseCreate() {
                           setChargeErrors(newErrors);
                         }
                       }}
-                      error={chargeErrors[index]?.currency}
+                      error={chargeErrors[index]?.currency_id}
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
@@ -2653,9 +3003,12 @@ function HouseCreate() {
                         color="#105476"
                         onClick={() => {
                           chargesForm.insertListItem("charges", {
+                            charge_id: null,
                             charge_name: "",
                             pp_cc: "CC", // Default to "CC" (Collect)
+                            unit_id: "",
                             unit_code: "",
+                            currency_id: "",
                             no_of_unit: null,
                             currency: "",
                             roe: null,
@@ -2683,6 +3036,87 @@ function HouseCreate() {
                 </Grid>
               ))}
             </Box>
+          </Box>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="4">
+          <Box mt="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
+              Accounts
+            </Text>
+            {invoiceListLoading ? (
+              <Center py="xl">
+                <Loader color="#105476" size="lg" />
+              </Center>
+            ) : (
+              <ScrollArea>
+                <Table
+                  withTableBorder
+                  withColumnBorders
+                  striped
+                  highlightOnHover
+                  style={{ minWidth: 700 }}
+                >
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Daybook</Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice number</Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Date</Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Total</Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Status</Table.Th>
+                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Actions</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {invoiceList.length === 0 ? (
+                      <Table.Tr>
+                        <Table.Td colSpan={6}>
+                          <Center py="xl">
+                            <Text c="dimmed">No invoices to display</Text>
+                          </Center>
+                        </Table.Td>
+                      </Table.Tr>
+                    ) : (
+                      invoiceList.map((row) => {
+                        const statusUpper = (row.status ?? "").toUpperCase();
+                        const isPosted = statusUpper === "POSTED" || row.status === "posted";
+                        const isUnposted = statusUpper === "UNPOSTED" || row.status === "unpost";
+                        return (
+                          <Table.Tr key={row.id}>
+                            <Table.Td style={{ fontSize: "13px" }}>{row.day_book_name ?? "-"}</Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>{row.document_no ?? "-"}</Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>{row.document_date ?? "-"}</Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>{row.total}</Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              <Badge size="sm" variant="light" color={isUnposted ? "yellow" : isPosted ? "green" : "#105476"}>
+                                {row.status ?? "-"}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td style={{ fontSize: "13px" }}>
+                              <Menu shadow="md" width={200} position="bottom-end">
+                                <Menu.Target>
+                                  <ActionIcon variant="subtle" color="#105476" size="sm" styles={{ root: { fontFamily: "Inter", fontSize: "13px", border: "1px solid #E9ECEF", borderRadius: "8px", "&:hover": { backgroundColor: "#F8F9FA" } } }}>
+                                    <IconDotsVertical size={16} />
+                                  </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown styles={{ dropdown: { border: "1px solid #E9ECEF", borderRadius: "8px", padding: "8px", boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)" } }}>
+                                  <Menu.Item leftSection={<Box style={{ backgroundColor: "#E7F5FF", borderRadius: "6px", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}><IconEye size={16} color="#105476" /></Box>} styles={{ item: { fontFamily: "Inter", fontSize: "13px", fontWeight: 500, borderRadius: "6px", padding: "10px 12px", marginBottom: "4px", "&:hover": { backgroundColor: "#F8F9FA" } }, itemLabel: { fontFamily: "Inter", fontSize: "13px", fontWeight: 500, color: "#424242" } }} onClick={() => navigate(`/SeaExport/export-job/invoice/view/${row.id}`, { state: { invoiceData: row, ...(location.state?.job && { job: location.state.job }) } })}>View</Menu.Item>
+                                  {isUnposted ? (
+                                    <Menu.Item leftSection={<Box style={{ backgroundColor: "#E7F5FF", borderRadius: "6px", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}><IconEdit size={16} color="#105476" /></Box>} styles={{ item: { fontFamily: "Inter", fontSize: "13px", fontWeight: 500, borderRadius: "6px", padding: "10px 12px", marginBottom: "4px", "&:hover": { backgroundColor: "#F8F9FA" } }, itemLabel: { fontFamily: "Inter", fontSize: "13px", fontWeight: 500, color: "#424242" } }} onClick={() => navigate(`/SeaExport/export-job/invoice/edit/${row.id}`, { state: { invoiceData: row, ...(location.state?.job && { job: location.state.job }) } })}>Edit</Menu.Item>
+                                  ) : (
+                                    <Menu.Item leftSection={<Box style={{ backgroundColor: "#E7F5FF", borderRadius: "6px", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}><IconRefresh size={16} color="#105476" /></Box>} styles={{ item: { fontFamily: "Inter", fontSize: "13px", fontWeight: 500, borderRadius: "6px", padding: "10px 12px", marginBottom: "4px", "&:hover": { backgroundColor: "#F8F9FA" } }, itemLabel: { fontFamily: "Inter", fontSize: "13px", fontWeight: 500, color: "#424242" } }} onClick={() => navigate("/SeaExport/export-job/invoice/reverse", { state: { document_no: row.document_no ?? "", ...(location.state?.job && { job: location.state.job }) } })}>Invoice Reversal</Menu.Item>
+                                  )}
+                                </Menu.Dropdown>
+                              </Menu>
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })
+                    )}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea>
+            )}
           </Box>
         </Tabs.Panel>
       </Tabs>
@@ -2758,6 +3192,34 @@ function HouseCreate() {
           )}
         </Group>
       </Group>
+
+      {/* PDF Preview Modal */}
+      <Modal
+        opened={previewOpen}
+        onClose={handleClosePreview}
+        title="PDF Preview"
+        size="xl"
+        styles={{ body: { padding: 0 } }}
+      >
+        <Stack h="82vh">
+          {pdfBlob ? (
+            <>
+              <iframe src={pdfBlob} style={{ width: "100%", height: "100%", border: "none", borderRadius: "8px" }} title="PDF Preview" />
+              <Group justify="flex-end" p="md" style={{ borderTop: "1px solid #e9ecef" }}>
+                <Button variant="outline" onClick={handleClosePreview} leftSection={<IconX size={16} />}>Close</Button>
+                <Button onClick={handleDownloadPDF} leftSection={<IconDownload size={16} />} color="#105476">Download PDF</Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }

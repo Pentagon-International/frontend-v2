@@ -1236,11 +1236,13 @@ const Dashboard = () => {
       // Store original response data for drill-down
       setGainOriginalData(response);
 
-      // Transform response to table data format
+      // Transform response to table data format (send_email after S.No for email nudge)
       const tableData = (response.data || []).map((item: any) => ({
         SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
-        USER_NAME: item.user_name || "",
-        EMAIL: item.email || "",
+        send_email: "send_email",
+        salesperson_email: item.email || "",
+        SALESPERSON: item.user_name || "",
+        // CUSTOMER_EMAIL: item.email || "",
         CUSTOMER_COUNT: item.customer_count || 0,
       }));
 
@@ -1278,11 +1280,13 @@ const Dashboard = () => {
       // Store original response data for drill-down
       setLostOriginalData(response);
 
-      // Transform response to table data format
+      // Transform response to table data format (send_email after S.No for email nudge)
       const tableData = (response.data || []).map((item: any) => ({
         SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
-        USER_NAME: item.user_name || "",
-        EMAIL: item.email || "",
+        send_email: "send_email",
+        salesperson_email: item.email || "",
+        SALESPERSON: item.user_name || "",
+        // EMAIL: item.email || "",
         CUSTOMER_COUNT: item.customer_count || 0,
       }));
 
@@ -1329,9 +1333,11 @@ const Dashboard = () => {
       );
       const tableData = salespersonData.map((item: any) => ({
         SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
+        send_email: "send_email",
+        salesperson_email: item.email || "",
         SALESPERSON: item.salesperson || "",
-        EMAIL: item.email || "",
-        COUNT: item.count || 0,
+        // EMAIL: item.email || "",
+        CUSTOMER_COUNT: item.count || 0,
       }));
 
       setDetailedViewData(tableData);
@@ -3861,7 +3867,14 @@ const Dashboard = () => {
     let defaultMessage =
       "Please find the details of outstanding/overdue amounts.";
 
-    if (detailedViewType === "enquiry") {
+    if (
+      detailedViewType === "newCustomer" ||
+      detailedViewType === "lostCustomer" ||
+      detailedViewType === "customerNotVisited"
+    ) {
+      subject = "Sales Reports – Summary";
+      defaultMessage = "Please find the combined reports below.";
+    } else if (detailedViewType === "enquiry") {
       // Match Pulse Enquiry Conversion behaviour: generic subject, optional message
       subject = "Enquiry Conversion";
       defaultMessage = "";
@@ -3910,7 +3923,14 @@ const Dashboard = () => {
     }
 
     // Clean and normalize email addresses before setting
-    const cleanedToEmail = cleanEmailString(rowData.salesperson_email);
+    const toEmailRaw =
+      rowData.salesperson_email ??
+      rowData.CUSTOMER_EMAIL ??
+      rowData.EMAIL ??
+      "";
+    const cleanedToEmail = cleanEmailString(
+      typeof toEmailRaw === "string" ? toEmailRaw : Array.isArray(toEmailRaw) ? (toEmailRaw as string[]).join(", ") : ""
+    );
     const cleanedCcEmail = cleanEmailString(rowData.cc_mail);
 
     console.log("Raw email data:", {
@@ -4060,14 +4080,20 @@ const Dashboard = () => {
         to_email: toEmailArray.join(", "),
         subject: emailForm.subject.trim(),
         // For enquiry conversion and budget, message is optional (Pulse behaviour).
+        // For newCustomer, lostCustomer, customerNotVisited use form message or combined reports default.
         // For outstanding, fall back to default message when empty.
         message:
           detailedViewType === "enquiry" || detailedViewType === "budget"
             ? emailForm.message.trim() || ""
             : detailedViewType === "callentry"
-              ? emailForm.message.trim() // Call entry message is optional; no forced default here
-              : emailForm.message.trim() ||
-                "Please find the details of outstanding/overdue amounts.",
+              ? emailForm.message.trim()
+              : detailedViewType === "newCustomer" ||
+                  detailedViewType === "lostCustomer" ||
+                  detailedViewType === "customerNotVisited"
+                ? emailForm.message.trim() ||
+                  "Please find the combined reports below."
+                : emailForm.message.trim() ||
+                  "Please find the details of outstanding/overdue amounts.",
       };
 
       // CC as comma-separated string if provided
@@ -4268,6 +4294,111 @@ const Dashboard = () => {
           currency: "",
           budget: [budgetRow],
         };
+      } else if (detailedViewType === "newCustomer" && gainOriginalData?.data) {
+        // Gain - New Customers: data_table.new_customers
+        const salespersonName =
+          currentEmailData.SALESPERSON || currentEmailData.salesperson || "";
+        const row = gainOriginalData.data.find(
+          (item: any) =>
+            (item.user_name || "") === salespersonName ||
+            (item.salesperson || "") === salespersonName
+        );
+        if (row) {
+          const sno = row.sno !== undefined && row.sno !== null ? row.sno : 1;
+          const customers = (row.customers || []).map((c: any, idx: number) => ({
+            sno: (c.sno !== undefined && c.sno !== null ? c.sno : idx + 1),
+            customer_name: c.customer_name || "",
+            customer_code: c.customer_code || "",
+            job_date: c.job_date || "",
+          }));
+          emailPayload.data_table = {
+            new_customers: [
+              { sno, user_name: row.user_name || salespersonName, customers },
+            ],
+          };
+        } else {
+          emailPayload.data_table = {
+            new_customers: [
+              {
+                sno: 1,
+                user_name: salespersonName,
+                customers: [],
+              },
+            ],
+          };
+        }
+      } else if (detailedViewType === "lostCustomer" && lostOriginalData?.data) {
+        // Lost Customers: data_table.lost_customers
+        const salespersonName =
+          currentEmailData.SALESPERSON || currentEmailData.salesperson || "";
+        const row = lostOriginalData.data.find(
+          (item: any) =>
+            (item.user_name || "") === salespersonName ||
+            (item.salesperson || "") === salespersonName
+        );
+        if (row) {
+          const sno = row.sno !== undefined && row.sno !== null ? row.sno : 1;
+          const customers = (row.customers || []).map((c: any, idx: number) => ({
+            sno: (c.sno !== undefined && c.sno !== null ? c.sno : idx + 1),
+            customer_name: c.customer_name || "",
+            customer_code: c.customer_code || "",
+            job_date: c.job_date || "",
+          }));
+          emailPayload.data_table = {
+            lost_customers: [
+              { sno, user_name: row.user_name || salespersonName, customers },
+            ],
+          };
+        } else {
+          emailPayload.data_table = {
+            lost_customers: [
+              {
+                sno: 1,
+                user_name: salespersonName,
+                customers: [],
+              },
+            ],
+          };
+        }
+      } else if (
+        detailedViewType === "customerNotVisited" &&
+        notVisitedOriginalData?.data
+      ) {
+        // Not Visited Customers: data_table.customers_not_visited
+        const salespersonName =
+          currentEmailData.SALESPERSON || currentEmailData.salesperson || "";
+        const row = notVisitedOriginalData.data.find(
+          (item: any) =>
+            (item.salesperson || "") === salespersonName ||
+            (item.user_name || "") === salespersonName
+        );
+        if (row) {
+          const sno = row.sno !== undefined && row.sno !== null ? row.sno : 1;
+          const customers = (row.customers || []).map((c: any, idx: number) => ({
+            sno: (c.sno !== undefined && c.sno !== null ? c.sno : idx + 1),
+            customer_code: c.customer_code || "",
+            customer_name: c.customer_name || "",
+          }));
+          emailPayload.data_table = {
+            customers_not_visited: [
+              {
+                sno,
+                salesperson: row.salesperson || salespersonName,
+                customers,
+              },
+            ],
+          };
+        } else {
+          emailPayload.data_table = {
+            customers_not_visited: [
+              {
+                sno: 1,
+                salesperson: salespersonName,
+                customers: [],
+              },
+            ],
+          };
+        }
       } else {
         // Outstanding: build outstanding data_table similar to Pulse default outstanding format
         const outstandingItem: any = {};
@@ -4408,6 +4539,18 @@ const Dashboard = () => {
     try {
       // Show loader immediately
       setIsLoadingDetailedView(true);
+
+      // Handle send email (email nudge) for Gain, Lost, Not Visited modules
+      if (
+        (detailedViewType === "newCustomer" ||
+          detailedViewType === "lostCustomer" ||
+          detailedViewType === "customerNotVisited") &&
+        columnType === "send_email"
+      ) {
+        handleSendEmailClick(additionalData);
+        setIsLoadingDetailedView(false);
+        return;
+      }
 
       // Module-specific validation and filter building
       let filterData: DashboardFilters = {};
@@ -6291,8 +6434,10 @@ const Dashboard = () => {
           // Transform response to table data format using stored original data
           const tableData = (lostOriginalData.data || []).map((item: any) => ({
             SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
-            USER_NAME: item.user_name || "",
-            EMAIL: item.email || "",
+            send_email: "send_email",
+            SALESPERSON: item.user_name || "",
+            // USER_NAME: item.user_name || "",
+            // EMAIL: item.email || "",
             CUSTOMER_COUNT: item.customer_count || 0,
           }));
           setDetailedViewData(tableData);
@@ -6311,8 +6456,10 @@ const Dashboard = () => {
           // Transform response to table data format using stored original data
           const tableData = (gainOriginalData.data || []).map((item: any) => ({
             SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
-            USER_NAME: item.user_name || "",
-            EMAIL: item.email || "",
+            send_email: "send_email",
+            SALESPERSON: item.user_name || "",
+            // USER_NAME: item.user_name || "",
+            // EMAIL: item.email || "",
             CUSTOMER_COUNT: item.customer_count || 0,
           }));
           setDetailedViewData(tableData);
@@ -6334,8 +6481,9 @@ const Dashboard = () => {
           );
           const tableData = salespersonData.map((item: any) => ({
             SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
+            send_email: "send_email",
             SALESPERSON: item.salesperson || "",
-            EMAIL: item.email || "",
+            // EMAIL: item.email || "",
             COUNT: item.count || 0,
           }));
           setDetailedViewData(tableData);
