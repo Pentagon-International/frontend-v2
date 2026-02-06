@@ -58,6 +58,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import { toTitleCase } from "../../utils/textFormatter";
 import useAuthStore from "../../store/authStore";
+import CustomerDataDrawer from "../../components/CustomerDataDrawer/CustomerDataDrawer";
 
 // Type definitions
 
@@ -3353,7 +3354,7 @@ function EnquiryCreate() {
       };
 
       const customerData = (await postAPICall(
-        `${URL.customerData}?index=0&limit=5`,
+        `${URL.customerData}`,
         payload as any
       )) as CustomerDataResponse;
 
@@ -3939,7 +3940,7 @@ function EnquiryCreate() {
                             </div>
                           )}
                         </Flex>
-                        <Drawer
+                        <CustomerDataDrawer
                           opened={customerDataDrawer}
                           onClose={() => {
                             closeCustomerDataDrawer();
@@ -3953,820 +3954,82 @@ function EnquiryCreate() {
                             setCustomerTotalCreditAmount(null);
                             setTotalRevenue(null);
                             setTotalProfit(null);
-                            // Reset date range to previous month
+
                             const previousMonthRange = getPreviousMonthRange();
                             setCustomerDataFromDate(previousMonthRange.from);
                             setCustomerDataToDate(previousMonthRange.to);
                           }}
-                          title={`Customer Data for ${selectedCustomerName || customerForm.values.customer_code}`}
-                          size={"70%"}
-                          position="right"
-                        >
-                          <Divider mb={"md"} />
+                          title={`Customer Data for ${
+                            selectedCustomerName || customerForm.values.customer_code
+                          }`}
 
-                          {isLoadingData ? (
-                            <Box ta="center" py="xl">
-                              <Loader size="lg" color="#105476" />
-                              <Text mt="md" c="dimmed" size="lg">
-                                Loading customer data...
-                              </Text>
-                            </Box>
-                          ) : (
-                            <Stack gap="lg">
-                              {/* Customer Info Section */}
-                              {(customerCreditDay !== null ||
-                                customerSalesperson ||
-                                customerLastVisited ||
-                                customerTotalCreditAmount !== null ||
-                                totalOutstandingAmount !== 0 ||
-                                totalRevenue !== null ||
-                                totalProfit !== null) && (
-                                <Box>
-                                  <Group
-                                    justify="space-between"
-                                    align="center"
-                                    mb="md"
-                                  >
-                                    <Text
-                                      size="lg"
-                                      fw={700}
-                                      c="#105476"
-                                      style={{
-                                        paddingBottom: "6px",
-                                      }}
-                                    >
-                                      ℹ️ Customer Information
-                                    </Text>
-                                    {user?.is_staff && (
-                                      <Box style={{ width: "400px" }}>
-                                        <DateRangeInput
-                                          fromDate={customerDataFromDate}
-                                          toDate={customerDataToDate}
-                                          onFromDateChange={(date) => {
-                                            setCustomerDataFromDate(date);
-                                            const customerCode =
-                                              customerForm.values.customer_code;
-                                            if (
-                                              customerCode &&
-                                              date &&
-                                              customerDataToDate
-                                            ) {
-                                              fetchCustomerData(
-                                                customerCode,
-                                                date,
-                                                customerDataToDate
-                                              );
-                                            }
-                                          }}
-                                          onToDateChange={(date) => {
-                                            setCustomerDataToDate(date);
-                                            const customerCode =
-                                              customerForm.values.customer_code;
-                                            if (
-                                              customerCode &&
-                                              customerDataFromDate &&
-                                              date
-                                            ) {
-                                              fetchCustomerData(
-                                                customerCode,
-                                                customerDataFromDate,
-                                                date
-                                              );
-                                            }
-                                          }}
-                                          fromLabel="From"
-                                          toLabel="To"
-                                          size="xs"
-                                          inputWidth="180px"
-                                          hideLabels={false}
-                                        />
-                                      </Box>
-                                    )}
-                                  </Group>
-                                  <Grid gutter="md">
-                                    {/* Left Card - General Customer Info */}
-                                    <Grid.Col
-                                      span={{
-                                        base: 12,
-                                        md: user?.is_staff ? 6 : 12,
-                                      }}
-                                    >
-                                      <Card
-                                        shadow="sm"
-                                        padding="lg"
-                                        radius="md"
-                                        withBorder
-                                        style={{
-                                          border: "1px solid #e9ecef",
-                                          backgroundColor: "#ffffff",
-                                          height: "100%",
-                                        }}
-                                      >
-                                        <Grid gutter="md">
-                                          {customerSalesperson && (
-                                            <Grid.Col
-                                              span={{ base: 12, sm: 6 }}
-                                            >
-                                              <Box>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={6}
-                                                >
-                                                  Salesperson
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#333"
-                                                >
-                                                  {customerSalesperson}
-                                                </Text>
-                                              </Box>
-                                            </Grid.Col>
-                                          )}
-                                          <Grid.Col span={{ base: 12, sm: 6 }}>
-                                            <Box>
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={6}
-                                              >
-                                                Credit Days
-                                              </Text>
-                                              <Text size="sm" fw={500} c="#333">
-                                                {customerCreditDay !== null
-                                                  ? `${customerCreditDay} days`
-                                                  : "-"}
-                                              </Text>
-                                            </Box>
-                                          </Grid.Col>
-                                          {customerTotalCreditAmount !==
-                                            null && (
-                                            <Grid.Col
-                                              span={{ base: 12, sm: 6 }}
-                                            >
-                                              <Box>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={6}
-                                                >
-                                                  Credit Amount
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#333"
-                                                >
-                                                  {customerCurrency}{" "}
-                                                  {customerTotalCreditAmount.toLocaleString(
-                                                    "en-IN"
-                                                  )}
-                                                </Text>
-                                              </Box>
-                                            </Grid.Col>
-                                          )}
-                                          <Grid.Col span={{ base: 12, sm: 6 }}>
-                                            <Box>
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={6}
-                                              >
-                                                Total Outstanding Amount
-                                              </Text>
-                                              <Text
-                                                size="sm"
-                                                fw={500}
-                                                style={{
-                                                  color:
-                                                    totalOutstandingAmount > 0
-                                                      ? "#28a745"
-                                                      : totalOutstandingAmount <
-                                                          0
-                                                        ? "#dc3545"
-                                                        : undefined,
-                                                }}
-                                              >
-                                                {customerCurrency}{" "}
-                                                {totalOutstandingAmount.toLocaleString(
-                                                  "en-IN"
-                                                )}
-                                              </Text>
-                                            </Box>
-                                          </Grid.Col>
-                                          <Grid.Col span={{ base: 12, sm: 6 }}>
-                                            <Box>
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={6}
-                                              >
-                                                Last Visited
-                                              </Text>
-                                              <Text size="sm" fw={500} c="#333">
-                                                {customerLastVisited
-                                                  ? dayjs(
-                                                      customerLastVisited
-                                                    ).format("DD/MM/YYYY")
-                                                  : "-"}
-                                              </Text>
-                                            </Box>
-                                          </Grid.Col>
-                                        </Grid>
-                                      </Card>
-                                    </Grid.Col>
+                          // loading
+                          isLoading={isLoadingData}
 
-                                    {/* Right Card - Revenue/Profit with Filter - Only visible to admin users */}
-                                    {user?.is_staff && (
-                                      <Grid.Col span={{ base: 12, md: 6 }}>
-                                        <Card
-                                          shadow="sm"
-                                          padding="lg"
-                                          radius="md"
-                                          withBorder
-                                          style={{
-                                            border: "1px solid #e9ecef",
-                                            backgroundColor: "#ffffff",
-                                            height: "100%",
-                                          }}
-                                        >
-                                          <Stack gap="md">
-                                            {/* Revenue and Profit */}
-                                            <Group
-                                              justify="space-evenly"
-                                              mt={10}
-                                            >
-                                              {totalRevenue !== null && (
-                                                <Box
-                                                  style={{
-                                                    textAlign: "center",
-                                                  }}
-                                                >
-                                                  <Text
-                                                    size="xs"
-                                                    fw={600}
-                                                    c="#666"
-                                                    mb={6}
-                                                  >
-                                                    Total Revenue
-                                                  </Text>
-                                                  <Text
-                                                    size="sm"
-                                                    fw={500}
-                                                    c="#FF9800"
-                                                  >
-                                                    {customerCurrency}{" "}
-                                                    {totalRevenue.toLocaleString(
-                                                      "en-IN"
-                                                    )}
-                                                  </Text>
-                                                </Box>
-                                              )}
-                                              {totalProfit !== null && (
-                                                <Box
-                                                  style={{
-                                                    textAlign: "center",
-                                                  }}
-                                                >
-                                                  <Text
-                                                    size="xs"
-                                                    fw={600}
-                                                    c="#666"
-                                                    mb={6}
-                                                  >
-                                                    Total Profit
-                                                  </Text>
-                                                  <Text
-                                                    size="sm"
-                                                    fw={500}
-                                                    c="#105476"
-                                                  >
-                                                    {customerCurrency}{" "}
-                                                    {totalProfit.toLocaleString(
-                                                      "en-IN"
-                                                    )}
-                                                  </Text>
-                                                </Box>
-                                              )}
-                                            </Group>
-                                          </Stack>
-                                        </Card>
-                                      </Grid.Col>
-                                    )}
-                                  </Grid>
-                                </Box>
-                              )}
+                          // customer info props
+                          customerSalesperson={customerSalesperson}
+                          customerCreditDay={customerCreditDay}
+                          customerLastVisited={customerLastVisited}
+                          customerTotalCreditAmount={customerTotalCreditAmount}
+                          totalOutstandingAmount={totalOutstandingAmount}
+                          customerCurrency={customerCurrency}
+                          totalRevenue={totalRevenue}
+                          totalProfit={totalProfit}
 
-                              {/* Quotations Section */}
-                              <Box>
-                                <Text
-                                  size="lg"
-                                  fw={700}
-                                  mb="md"
-                                  c="#105476"
-                                  style={{
-                                    paddingBottom: "6px",
-                                  }}
-                                >
-                                  📋 Recent Quotations
-                                </Text>
-                                {customerQuotationData.length > 0 ? (
-                                  <Grid gutter="md">
-                                    {customerQuotationData.map(
-                                      (quotation: QuotationData) => (
-                                        <Grid.Col
-                                          key={quotation.id}
-                                          span={{ base: 12, sm: 6, md: 4 }}
-                                        >
-                                          <Card
-                                            shadow="sm"
-                                            padding="md"
-                                            radius="md"
-                                            withBorder
-                                            style={{
-                                              border: "1px solid #e9ecef",
-                                              backgroundColor: "#ffffff",
-                                              transition: "all 0.2s ease",
-                                              height: "100%",
-                                            }}
-                                          >
-                                            <Stack gap="sm">
-                                              <Group
-                                                justify="space-between"
-                                                align="center"
-                                              >
-                                                <Text
-                                                  size="sm"
-                                                  fw={600}
-                                                  c="#105476"
-                                                >
-                                                  {quotation.enquiry_received_date
-                                                    ? dayjs(
-                                                        quotation.enquiry_received_date
-                                                      ).format("DD/MM/YYYY")
-                                                    : "-"}
-                                                </Text>
-                                                <Text size="xs" c="dimmed">
-                                                  {quotation.service || "-"}
-                                                </Text>
-                                              </Group>
-                                              <Group gap="sm">
-                                                <Box style={{ flex: 1 }}>
-                                                  <Text
-                                                    size="xs"
-                                                    fw={600}
-                                                    c="#666"
-                                                    mb={2}
-                                                  >
-                                                    Origin
-                                                  </Text>
-                                                  <Text
-                                                    size="sm"
-                                                    fw={500}
-                                                    c="#333"
-                                                    truncate
-                                                  >
-                                                    {quotation.origin_name ||
-                                                      "-"}
-                                                  </Text>
-                                                </Box>
-                                                <Box style={{ flex: 1 }}>
-                                                  <Text
-                                                    size="xs"
-                                                    fw={600}
-                                                    c="#666"
-                                                    mb={2}
-                                                  >
-                                                    Destination
-                                                  </Text>
-                                                  <Text
-                                                    size="sm"
-                                                    fw={500}
-                                                    c="#333"
-                                                    truncate
-                                                  >
-                                                    {quotation.destination_name ||
-                                                      "-"}
-                                                  </Text>
-                                                </Box>
-                                              </Group>
-                                              <Group
-                                                justify="space-between"
-                                                align="center"
-                                              >
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                >
-                                                  Status:
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#28a745"
-                                                >
-                                                  {quotation.status || "-"}
-                                                </Text>
-                                              </Group>
-                                            </Stack>
-                                          </Card>
-                                        </Grid.Col>
-                                      )
-                                    )}
-                                  </Grid>
-                                ) : (
-                                  <Card
-                                    shadow="sm"
-                                    padding="md"
-                                    radius="md"
-                                    withBorder
-                                    style={{ backgroundColor: "#f8f9fa" }}
-                                  >
-                                    <Box ta="center" py="sm">
-                                      <Text c="dimmed" size="sm">
-                                        No quotations found for this customer
-                                      </Text>
-                                    </Box>
-                                  </Card>
-                                )}
-                              </Box>
+                          // admin date filter
+                          isAdmin={user?.is_staff || false}
+                          fromDate={customerDataFromDate}
+                          toDate={customerDataToDate}
+                          onFromDateChange={(date) => {
+                            setCustomerDataFromDate(date);
 
-                              {/* Shipments Section */}
-                              <Box>
-                                <Text
-                                  size="lg"
-                                  fw={700}
-                                  mb="md"
-                                  c="#105476"
-                                  style={{
-                                    paddingBottom: "6px",
-                                  }}
-                                >
-                                  📦 Recent Shipments
-                                </Text>
-                                {shipmentData.length > 0 ? (
-                                  <Grid gutter="md">
-                                    {shipmentData.map((shipment, index) => (
-                                      <Grid.Col
-                                        key={index}
-                                        span={{ base: 12, sm: 6, md: 4 }}
-                                      >
-                                        <Card
-                                          shadow="sm"
-                                          padding="md"
-                                          radius="md"
-                                          withBorder
-                                          style={{
-                                            border: "1px solid #e9ecef",
-                                            backgroundColor: "#ffffff",
-                                            height: "100%",
-                                          }}
-                                        >
-                                          <Stack gap="sm">
-                                            <Group
-                                              justify="space-between"
-                                              align="center"
-                                            >
-                                              <Text
-                                                size="sm"
-                                                fw={600}
-                                                c="#105476"
-                                              >
-                                                {shipment.customer_name || "-"}
-                                              </Text>
-                                            </Group>
-                                            <Group gap="sm">
-                                              <Box style={{ flex: 1 }}>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={2}
-                                                >
-                                                  Booking No
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#333"
-                                                >
-                                                  {shipment.booking_no || "-"}
-                                                </Text>
-                                              </Box>
-                                            </Group>
-                                          </Stack>
-                                        </Card>
-                                      </Grid.Col>
-                                    ))}
-                                  </Grid>
-                                ) : (
-                                  <Card
-                                    shadow="sm"
-                                    padding="md"
-                                    radius="md"
-                                    withBorder
-                                    style={{ backgroundColor: "#f8f9fa" }}
-                                  >
-                                    <Box ta="center" py="sm">
-                                      <Text c="dimmed" size="sm">
-                                        No shipments found for this customer
-                                      </Text>
-                                    </Box>
-                                  </Card>
-                                )}
-                              </Box>
+                            const customerCode = customerForm.values.customer_code;
+                            if (customerCode && date && customerDataToDate) {
+                              fetchCustomerData(customerCode, date, customerDataToDate);
+                            }
+                          }}
+                          onToDateChange={(date) => {
+                            setCustomerDataToDate(date);
 
-                              {/* Call Entries Section */}
-                              <Box>
-                                <Text
-                                  size="lg"
-                                  fw={700}
-                                  mb="md"
-                                  c="#105476"
-                                  style={{
-                                    paddingBottom: "6px",
-                                  }}
-                                >
-                                  📞 Recent Call Entries
-                                </Text>
-                                {callEntryData.length > 0 ? (
-                                  <Grid gutter="md">
-                                    {callEntryData.map((callEntry) => (
-                                      <Grid.Col
-                                        key={callEntry.id}
-                                        span={{ base: 12, sm: 6, md: 4 }}
-                                      >
-                                        <Card
-                                          shadow="sm"
-                                          padding="md"
-                                          radius="md"
-                                          withBorder
-                                          style={{
-                                            border: "1px solid #e9ecef",
-                                            backgroundColor: "#ffffff",
-                                            height: "100%",
-                                          }}
-                                        >
-                                          <Stack gap="sm">
-                                            <Group
-                                              justify="space-between"
-                                              align="center"
-                                            >
-                                              <Text
-                                                size="sm"
-                                                fw={600}
-                                                c="#105476"
-                                              >
-                                                {callEntry.call_date
-                                                  ? dayjs(
-                                                      callEntry.call_date
-                                                    ).format("DD/MM/YYYY")
-                                                  : "-"}
-                                              </Text>
-                                              <Text size="xs" c="dimmed">
-                                                {callEntry.call_mode || "-"}
-                                              </Text>
-                                            </Group>
-                                            <Box>
-                                              <Text
-                                                size="xs"
-                                                fw={600}
-                                                c="#666"
-                                                mb={2}
-                                              >
-                                                Call Summary
-                                              </Text>
-                                              <Text
-                                                size="sm"
-                                                fw={500}
-                                                c="#333"
-                                                style={{
-                                                  display: "-webkit-box",
-                                                  WebkitLineClamp: 2,
-                                                  WebkitBoxOrient: "vertical",
-                                                  overflow: "hidden",
-                                                  lineHeight: "1.4",
-                                                }}
-                                              >
-                                                {callEntry.call_summary || "-"}
-                                              </Text>
-                                            </Box>
-                                          </Stack>
-                                        </Card>
-                                      </Grid.Col>
-                                    ))}
-                                  </Grid>
-                                ) : (
-                                  <Card
-                                    shadow="sm"
-                                    padding="md"
-                                    radius="md"
-                                    withBorder
-                                    style={{ backgroundColor: "#f8f9fa" }}
-                                  >
-                                    <Box ta="center" py="sm">
-                                      <Text c="dimmed" size="sm">
-                                        No call entries found for this customer
-                                      </Text>
-                                    </Box>
-                                  </Card>
-                                )}
-                              </Box>
+                            const customerCode = customerForm.values.customer_code;
+                            if (customerCode && customerDataFromDate && date) {
+                              fetchCustomerData(customerCode, customerDataFromDate, date);
+                            }
+                          }}
 
-                              {/* Potential Profiling Section */}
-                              <Box>
-                                <Text
-                                  size="lg"
-                                  fw={700}
-                                  mb="md"
-                                  c="#105476"
-                                  style={{
-                                    paddingBottom: "6px",
-                                  }}
-                                >
-                                  🎯 Potential Profiling
-                                </Text>
-                                {potentialProfilingData.length > 0 ? (
-                                  <Grid gutter="md">
-                                    {potentialProfilingData.map((profile) => (
-                                      <Grid.Col
-                                        key={profile.id}
-                                        span={{ base: 12, sm: 6, md: 4 }}
-                                      >
-                                        <Card
-                                          shadow="sm"
-                                          padding="md"
-                                          radius="md"
-                                          withBorder
-                                          style={{
-                                            border: "1px solid #e9ecef",
-                                            backgroundColor: "#ffffff",
-                                            height: "100%",
-                                          }}
-                                        >
-                                          <Stack gap="sm">
-                                            <Group
-                                              justify="space-between"
-                                              align="center"
-                                            >
-                                              <Text
-                                                size="sm"
-                                                fw={600}
-                                                c="#105476"
-                                              >
-                                                {profile.service || "-"}
-                                              </Text>
-                                            </Group>
-                                            <Group gap="sm">
-                                              <Box style={{ flex: 1 }}>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={2}
-                                                >
-                                                  Origin
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#333"
-                                                  truncate
-                                                >
-                                                  {profile.origin_port_name ||
-                                                    "-"}
-                                                </Text>
-                                              </Box>
-                                              <Box style={{ flex: 1 }}>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={2}
-                                                >
-                                                  Destination
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#333"
-                                                  truncate
-                                                >
-                                                  {profile.destination_port_name ||
-                                                    "-"}
-                                                </Text>
-                                              </Box>
-                                            </Group>
-                                            <Group gap="sm">
-                                              <Box style={{ flex: 1 }}>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={2}
-                                                >
-                                                  No. of Shipments
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#333"
-                                                >
-                                                  {profile.no_of_shipments ||
-                                                    "-"}
-                                                </Text>
-                                              </Box>
-                                              <Box style={{ flex: 1 }}>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={2}
-                                                >
-                                                  Frequency
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#333"
-                                                >
-                                                  {profile.frequency_name ||
-                                                    "-"}
-                                                </Text>
-                                              </Box>
-                                            </Group>
-                                            <Group gap="sm">
-                                              <Box style={{ flex: 1 }}>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={2}
-                                                >
-                                                  Volume
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#333"
-                                                >
-                                                  {profile.volume || "-"}
-                                                </Text>
-                                              </Box>
-                                              <Box style={{ flex: 1 }}>
-                                                <Text
-                                                  size="xs"
-                                                  fw={600}
-                                                  c="#666"
-                                                  mb={2}
-                                                >
-                                                  Potential Profit
-                                                </Text>
-                                                <Text
-                                                  size="sm"
-                                                  fw={500}
-                                                  c="#105476"
-                                                >
-                                                  {customerCurrency}{" "}
-                                                  {profile.potential_profit?.toLocaleString(
-                                                    "en-IN"
-                                                  ) || "-"}
-                                                </Text>
-                                              </Box>
-                                            </Group>
-                                          </Stack>
-                                        </Card>
-                                      </Grid.Col>
-                                    ))}
-                                  </Grid>
-                                ) : (
-                                  <Card
-                                    shadow="sm"
-                                    padding="md"
-                                    radius="md"
-                                    withBorder
-                                    style={{ backgroundColor: "#f8f9fa" }}
-                                  >
-                                    <Box ta="center" py="sm">
-                                      <Text c="dimmed" size="sm">
-                                        No potential profiling data found for
-                                        this customer
-                                      </Text>
-                                    </Box>
-                                  </Card>
-                                )}
-                              </Box>
-                            </Stack>
-                          )}
-                        </Drawer>
+                          // Section data
+                          quotationData={customerQuotationData}
+                          shipmentData={shipmentData}
+                          callEntryData={callEntryData}
+                          potentialProfilingData={potentialProfilingData}
+
+                          // Navigate handler for quotations
+                          onQuotationClick={(quotation) => {
+                            const customerCode = customerForm.values.customer_code;
+
+                            navigate("/quotation-create", {
+                              state: {
+                                enquiry_id: quotation.enquiry_id,
+                                service: quotation.service,
+                                quotationData: quotation,
+                                customerData: {
+                                  customer_code: customerCode,
+                                  customer_name:
+                                    quotation.customer_name || selectedCustomerName,
+                                  total_net_balance: totalOutstandingAmount,
+                                },
+                                returnTo: "customer-create",
+                                returnToState: {
+                                  customer: customerCode,
+                                  customerName:
+                                    quotation.customer_name || selectedCustomerName,
+                                  openDrawer: true,
+                                },
+                              },
+                            });
+                          }}
+                        />
+
                       </Grid.Col>
 
                       <Grid.Col span={6}>
