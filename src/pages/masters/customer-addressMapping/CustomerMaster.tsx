@@ -48,6 +48,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { useForm } from "@mantine/form";
 import { SearchableSelect } from "../../../components";
 import dayjs from "dayjs";
+import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 
 type AddressData = {
   customer_location: string;
@@ -583,6 +584,25 @@ function CustomerMaster() {
   const [totalOutstandingAmount, setTotalOutstandingAmount] =
     useState<number>(0);
 
+  // Date range for customer data drawer (same as CallEntryNew / EnquiryCreate)
+  const getPreviousMonthRange = () => {
+    const now = new Date();
+    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayOfPreviousMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      0
+    );
+    return { from: previousMonth, to: lastDayOfPreviousMonth };
+  };
+  const previousMonthRange = getPreviousMonthRange();
+  const [customerDataFromDate, setCustomerDataFromDate] = useState<Date | null>(
+    previousMonthRange.from
+  );
+  const [customerDataToDate, setCustomerDataToDate] = useState<Date | null>(
+    previousMonthRange.to
+  );
+
   // Search data with React Query - using filter API with customer_name
   const { data: searchData, isLoading: searchLoading } = useQuery({
     queryKey: ["customerSearch", debounced, pageIndex, pageSize],
@@ -856,29 +876,29 @@ function CustomerMaster() {
     });
   };
 
-  // Fetch customer data for drawer
+  // Fetch customer data for drawer (supports date range like CallEntryNew / EnquiryCreate)
   const fetchCustomerData = useCallback(
     async (
       customerCode: string,
       customerName: string,
-      month?: number,
-      year?: number
+      fromDate?: Date | null,
+      toDate?: Date | null
     ) => {
       try {
         setIsLoadingData(true);
         setSelectedCustomerName(customerName);
         setSelectedCustomerCode(customerCode);
 
-        // Use provided month/year or current state values
-        const monthToUse = month ?? selectedMonth;
-        const yearToUse = year ?? selectedYear;
+        const fromDateToUse = fromDate ?? customerDataFromDate;
+        const toDateToUse = toDate ?? customerDataToDate;
 
-        // Calculate date_from: First day of the selected month (YYYY-MM-01)
-        const dateFrom = `${yearToUse}-${String(monthToUse).padStart(2, "0")}-01`;
+        if (!fromDateToUse || !toDateToUse) {
+          setIsLoadingData(false);
+          return;
+        }
 
-        // Calculate date_to: Today's actual date
-        const today = new Date();
-        const dateTo = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        const dateFrom = dayjs(fromDateToUse).format("YYYY-MM-DD");
+        const dateTo = dayjs(toDateToUse).format("YYYY-MM-DD");
 
         const payload: {
           customer_code: string;
@@ -891,7 +911,7 @@ function CustomerMaster() {
         };
 
         const customerData = (await postAPICall(
-          `${URL.customerData}?index=0&limit=5`,
+          `${URL.customerData}`,
           payload
         )) as CustomerDataResponse;
 
@@ -966,12 +986,20 @@ function CustomerMaster() {
         setIsLoadingData(false);
       }
     },
-    [selectedMonth, selectedYear]
+    [customerDataFromDate, customerDataToDate]
   );
 
   const handleCustomerNameClick = useCallback(
     (customer: CustomerData) => {
-      fetchCustomerData(customer.customer_code, customer.customer_name);
+      const prev = getPreviousMonthRange();
+      setCustomerDataFromDate(prev.from);
+      setCustomerDataToDate(prev.to);
+      fetchCustomerData(
+        customer.customer_code,
+        customer.customer_name,
+        prev.from,
+        prev.to
+      );
       openCustomerDataDrawer();
     },
     [fetchCustomerData, openCustomerDataDrawer]
@@ -1584,7 +1612,7 @@ function CustomerMaster() {
       </Modal>
 
       {/* Customer Data Drawer */}
-      <Drawer
+      <CustomerDataDrawer
         opened={customerDataDrawer}
         onClose={() => {
           closeCustomerDataDrawer();
@@ -1598,758 +1626,90 @@ function CustomerMaster() {
           setCustomerTotalCreditAmount(null);
           setTotalRevenue(null);
           setTotalProfit(null);
-          setSelectedMonth(new Date().getMonth() + 1);
-          setSelectedYear(new Date().getFullYear());
-          setTotalOutstandingAmount(0);
           setSelectedCustomerName("");
           setSelectedCustomerCode("");
+
+          // Reset date range to previous month (optional)
+          const previousMonthRange = getPreviousMonthRange();
+          setCustomerDataFromDate(previousMonthRange.from);
+          setCustomerDataToDate(previousMonthRange.to);
+
+          setTotalOutstandingAmount(0);
         }}
         title={`Customer Data for ${selectedCustomerName}`}
-        size={"70%"}
-        position="right"
-      >
-        <Divider mb={"md"} />
-
-        {isLoadingData ? (
-          <Box ta="center" py="xl">
-            <Loader size="lg" color="#105476" />
-            <Text mt="md" c="dimmed" size="lg">
-              Loading customer data...
-            </Text>
-          </Box>
-        ) : (
-          <Stack gap="lg">
-            {/* Customer Info Section */}
-            {(customerCreditDay !== null ||
-              customerSalesperson ||
-              customerLastVisited ||
-              customerTotalCreditAmount !== null ||
-              totalOutstandingAmount !== 0 ||
-              totalRevenue !== null ||
-              totalProfit !== null) && (
-              <Box>
-                <Text
-                  size="lg"
-                  fw={700}
-                  mb="md"
-                  c="#105476"
-                  style={{
-                    paddingBottom: "6px",
-                  }}
-                >
-                  ℹ️ Customer Information
-                </Text>
-                <Grid gutter="md">
-                  {/* Left Card - General Customer Info */}
-                  <Grid.Col span={{ base: 12, md: 6 }}>
-                    <Card
-                      shadow="sm"
-                      padding="lg"
-                      radius="md"
-                      withBorder
-                      style={{
-                        border: "1px solid #e9ecef",
-                        backgroundColor: "#ffffff",
-                        height: "100%",
-                      }}
-                    >
-                      <Grid gutter="md">
-                        {customerSalesperson && (
-                          <Grid.Col span={{ base: 12, sm: 6 }}>
-                            <Box>
-                              <Text size="xs" fw={600} c="#666" mb={6}>
-                                Salesperson
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {customerSalesperson}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
-                        )}
-                        <Grid.Col span={{ base: 12, sm: 6 }}>
-                          <Box>
-                            <Text size="xs" fw={600} c="#666" mb={6}>
-                              Credit Days
-                            </Text>
-                            <Text size="sm" fw={500} c="#333">
-                              {customerCreditDay !== null
-                                ? `${customerCreditDay} days`
-                                : "-"}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
-                        {customerTotalCreditAmount !== null && (
-                          <Grid.Col span={{ base: 12, sm: 6 }}>
-                            <Box>
-                              <Text size="xs" fw={600} c="#666" mb={6}>
-                                Credit Amount
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {customerCurrency}{" "}
-                                {customerTotalCreditAmount.toLocaleString(
-                                  "en-IN"
-                                )}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
-                        )}
-                        <Grid.Col span={{ base: 12, sm: 6 }}>
-                          <Box>
-                            <Text size="xs" fw={600} c="#666" mb={6}>
-                              Total Outstanding Amount
-                            </Text>
-                            <Text
-                              size="sm"
-                              fw={500}
-                              style={{
-                                color:
-                                  totalOutstandingAmount > 0
-                                    ? "#28a745"
-                                    : totalOutstandingAmount < 0
-                                      ? "#dc3545"
-                                      : undefined,
-                              }}
-                            >
-                              {customerCurrency} {totalOutstandingAmount.toLocaleString("en-IN")}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
-                        {customerLastVisited && (
-                          <Grid.Col span={{ base: 12, sm: 6 }}>
-                            <Box>
-                              <Text size="xs" fw={600} c="#666" mb={6}>
-                                Last Visited
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {dayjs(customerLastVisited).format(
-                                  "DD/MM/YYYY"
-                                )}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
-                        )}
-                      </Grid>
-                    </Card>
-                  </Grid.Col>
-
-                  {/* Right Card - Revenue/Profit with Filter */}
-                  <Grid.Col span={{ base: 12, md: 6 }}>
-                    <Card
-                      shadow="sm"
-                      padding="lg"
-                      radius="md"
-                      withBorder
-                      style={{
-                        border: "1px solid #e9ecef",
-                        backgroundColor: "#ffffff",
-                        height: "100%",
-                      }}
-                    >
-                      <Stack gap="md">
-                        {/* Filter Section */}
-                        <Box>
-                          <Group gap="xs" justify="space-between">
-                            <Group>
-                              <Text size="xs" fw={600} c="#666" mb={6}>
-                                Revenue & Profit
-                              </Text>
-                            </Group>
-                            <Group>
-                              <Select
-                                size="xs"
-                                value={String(selectedMonth)}
-                                onChange={(value) => {
-                                  if (value) {
-                                    const month = parseInt(value, 10);
-                                    setSelectedMonth(month);
-                                    if (selectedCustomerCode) {
-                                      fetchCustomerData(
-                                        selectedCustomerCode,
-                                        selectedCustomerName,
-                                        month,
-                                        selectedYear
-                                      );
-                                    }
-                                  }
-                                }}
-                                data={[
-                                  { value: "1", label: "January" },
-                                  { value: "2", label: "February" },
-                                  { value: "3", label: "March" },
-                                  { value: "4", label: "April" },
-                                  { value: "5", label: "May" },
-                                  { value: "6", label: "June" },
-                                  { value: "7", label: "July" },
-                                  { value: "8", label: "August" },
-                                  { value: "9", label: "September" },
-                                  { value: "10", label: "October" },
-                                  { value: "11", label: "November" },
-                                  { value: "12", label: "December" },
-                                ]}
-                                styles={{
-                                  input: { fontSize: 12, height: 30 },
-                                  label: {
-                                    fontSize: "12px",
-                                    fontWeight: 500,
-                                    color: "#495057",
-                                  },
-                                }}
-                                w={120}
-                              />
-                              <Select
-                                size="xs"
-                                value={String(selectedYear)}
-                                onChange={(value) => {
-                                  if (value) {
-                                    const year = parseInt(value, 10);
-                                    setSelectedYear(year);
-                                    if (selectedCustomerCode) {
-                                      fetchCustomerData(
-                                        selectedCustomerCode,
-                                        selectedCustomerName,
-                                        selectedMonth,
-                                        year
-                                      );
-                                    }
-                                  }
-                                }}
-                                data={Array.from({ length: 10 }, (_, i) => {
-                                  const year = new Date().getFullYear() - 9 + i;
-                                  return {
-                                    value: String(year),
-                                    label: String(year),
-                                  };
-                                })}
-                                styles={{
-                                  input: { fontSize: 12, height: 30 },
-                                  label: {
-                                    fontSize: "12px",
-                                    fontWeight: 500,
-                                    color: "#495057",
-                                  },
-                                }}
-                                w={100}
-                              />
-                            </Group>
-                          </Group>
-                        </Box>
-
-                        {/* Revenue and Profit */}
-                        <Group justify="space-evenly" mt={10}>
-                          {totalRevenue !== null && (
-                            <Box style={{ textAlign: "center" }}>
-                              <Text size="xs" fw={600} c="#666" mb={6}>
-                                Total Revenue
-                              </Text>
-                              <Text size="sm" fw={500} c="#FF9800">
-                                {customerCurrency} {totalRevenue.toLocaleString("en-IN")}
-                              </Text>
-                            </Box>
-                          )}
-                          {totalProfit !== null && (
-                            <Box style={{ textAlign: "center" }}>
-                              <Text size="xs" fw={600} c="#666" mb={6}>
-                                Total Profit
-                              </Text>
-                              <Text size="sm" fw={500} c="#105476">
-                                {customerCurrency} {totalProfit.toLocaleString("en-IN")}
-                              </Text>
-                            </Box>
-                          )}
-                        </Group>
-                      </Stack>
-                    </Card>
-                  </Grid.Col>
-                </Grid>
-              </Box>
-            )}
-
-            {/* Quotations Section */}
-            <Box>
-              <Text
-                size="lg"
-                fw={700}
-                mb="md"
-                c="#105476"
-                style={{
-                  paddingBottom: "6px",
-                }}
-              >
-                📋 Recent Quotations
-              </Text>
-              {quotationData.length > 0 ? (
-                <Grid gutter="md">
-                  {quotationData.map((quotation) => (
-                    <Grid.Col
-                      key={quotation.id}
-                      span={{ base: 12, sm: 6, md: 4 }}
-                    >
-                      <Card
-                        shadow="sm"
-                        padding="md"
-                        radius="md"
-                        withBorder
-                        style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          transition: "all 0.2s ease",
-                          cursor: "pointer",
-                          height: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow =
-                            "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#105476";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.1)";
-                          e.currentTarget.style.borderColor = "#e9ecef";
-                        }}
-                      >
-                        <Stack gap="sm">
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#105476">
-                              {quotation.enquiry_received_date
-                                ? dayjs(quotation.enquiry_received_date).format(
-                                    "DD/MM/YYYY"
-                                  )
-                                : "-"}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              {quotation.service || "-"}
-                            </Text>
-                          </Group>
-
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Origin
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {quotation.origin_name || "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Destination
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {quotation.destination_name || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Container Type
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {quotation.fcl_details &&
-                                quotation.fcl_details.length > 0
-                                  ? quotation.fcl_details
-                                      .map((detail) => detail.container_type)
-                                      .join(", ")
-                                  : "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                No. of Containers
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {quotation.fcl_details &&
-                                quotation.fcl_details.length > 0
-                                  ? quotation.fcl_details
-                                      .map((detail) => detail.no_of_containers)
-                                      .join(", ")
-                                  : "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-
-                          <Group justify="space-between" align="center">
-                            <Text size="xs" fw={600} c="#666">
-                              Status:
-                            </Text>
-                            <Text size="sm" fw={500} c="#28a745">
-                              {quotation.status || "-"}
-                            </Text>
-                          </Group>
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
-              ) : (
-                <Card
-                  shadow="sm"
-                  padding="md"
-                  radius="md"
-                  withBorder
-                  style={{ backgroundColor: "#f8f9fa" }}
-                >
-                  <Box ta="center" py="sm">
-                    <Text c="dimmed" size="sm">
-                      No quotations found for this customer
-                    </Text>
-                  </Box>
-                </Card>
-              )}
-            </Box>
-
-            {/* Shipments Section */}
-            <Box>
-              <Group justify="space-between" align="center" mb="md">
-                <Text
-                  size="lg"
-                  fw={700}
-                  c="#105476"
-                  style={{
-                    paddingBottom: "6px",
-                  }}
-                >
-                  📦 Recent Shipments
-                </Text>
-              </Group>
-              {shipmentData.length > 0 ? (
-                <Grid gutter="md">
-                  {shipmentData.map((shipment, index) => (
-                    <Grid.Col key={index} span={{ base: 12, sm: 6, md: 4 }}>
-                      <Card
-                        shadow="sm"
-                        padding="md"
-                        radius="md"
-                        withBorder
-                        style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          transition: "all 0.2s ease",
-                          cursor: "pointer",
-                          height: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow =
-                            "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#105476";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.1)";
-                          e.currentTarget.style.borderColor = "#e9ecef";
-                        }}
-                      >
-                        <Stack gap="sm">
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#105476">
-                              {shipment.customer_name || "-"}
-                            </Text>
-                          </Group>
-
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Booking No
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {shipment.booking_no || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
-              ) : (
-                <Card
-                  shadow="sm"
-                  padding="md"
-                  radius="md"
-                  withBorder
-                  style={{ backgroundColor: "#f8f9fa" }}
-                >
-                  <Box ta="center" py="sm">
-                    <Text c="dimmed" size="sm">
-                      No shipments found for this customer
-                    </Text>
-                  </Box>
-                </Card>
-              )}
-            </Box>
-
-            {/* Call Entries Section */}
-            <Box>
-              <Text
-                size="lg"
-                fw={700}
-                mb="md"
-                c="#105476"
-                style={{
-                  paddingBottom: "6px",
-                }}
-              >
-                📞 Recent Call Entries
-              </Text>
-              {callEntryData.length > 0 ? (
-                <Grid gutter="md">
-                  {callEntryData.map((callEntry) => (
-                    <Grid.Col
-                      key={callEntry.id}
-                      span={{ base: 12, sm: 6, md: 4 }}
-                    >
-                      <Card
-                        shadow="sm"
-                        padding="md"
-                        radius="md"
-                        withBorder
-                        style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          transition: "all 0.2s ease",
-                          cursor: "pointer",
-                          height: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow =
-                            "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#105476";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.1)";
-                          e.currentTarget.style.borderColor = "#e9ecef";
-                        }}
-                      >
-                        <Stack gap="sm">
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#105476">
-                              {callEntry.call_date
-                                ? dayjs(callEntry.call_date).format(
-                                    "DD/MM/YYYY"
-                                  )
-                                : "-"}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              {callEntry.call_mode || "-"}
-                            </Text>
-                          </Group>
-
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Follow-up Date
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {callEntry.followup_date
-                                  ? dayjs(callEntry.followup_date).format(
-                                      "DD/MM/YYYY"
-                                    )
-                                  : "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Action
-                              </Text>
-                              <Text
-                                size="sm"
-                                fw={500}
-                                c="#333"
-                                style={{
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: "vertical",
-                                  overflow: "hidden",
-                                  lineHeight: "1.4",
-                                }}
-                              >
-                                {callEntry.followup_action || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-                          <Box>
-                            <Text size="xs" fw={600} c="#666" mb={2}>
-                              Call Summary
-                            </Text>
-                            <Text
-                              size="sm"
-                              fw={500}
-                              c="#333"
-                              style={{
-                                display: "-webkit-box",
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: "vertical",
-                                overflow: "hidden",
-                                lineHeight: "1.4",
-                              }}
-                            >
-                              {callEntry.call_summary || "-"}
-                            </Text>
-                          </Box>
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
-              ) : (
-                <Card
-                  shadow="sm"
-                  padding="md"
-                  radius="md"
-                  withBorder
-                  style={{ backgroundColor: "#f8f9fa" }}
-                >
-                  <Box ta="center" py="sm">
-                    <Text c="dimmed" size="sm">
-                      No call entries found for this customer
-                    </Text>
-                  </Box>
-                </Card>
-              )}
-            </Box>
-
-            {/* Potential Profiling Section */}
-            <Box>
-              <Text
-                size="lg"
-                fw={700}
-                mb="md"
-                c="#105476"
-                style={{
-                  paddingBottom: "6px",
-                }}
-              >
-                🎯 Potential Profiling
-              </Text>
-              {potentialProfilingData.length > 0 ? (
-                <Grid gutter="md">
-                  {potentialProfilingData.map((profile) => (
-                    <Grid.Col
-                      key={profile.id}
-                      span={{ base: 12, sm: 6, md: 4 }}
-                    >
-                      <Card
-                        shadow="sm"
-                        padding="md"
-                        radius="md"
-                        withBorder
-                        style={{
-                          border: "1px solid #e9ecef",
-                          backgroundColor: "#ffffff",
-                          transition: "all 0.2s ease",
-                          cursor: "pointer",
-                          height: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow =
-                            "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#105476";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.1)";
-                          e.currentTarget.style.borderColor = "#e9ecef";
-                        }}
-                      >
-                        <Stack gap="sm">
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#105476">
-                              {profile.service || "-"}
-                            </Text>
-                          </Group>
-
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Origin
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {profile.origin_port_name || "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Destination
-                              </Text>
-                              <Text size="sm" fw={500} c="#333" truncate>
-                                {profile.destination_port_name || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                No. of Shipments
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {profile.no_of_shipments || "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Frequency
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {profile.frequency_name || "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-
-                          <Group gap="sm">
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Volume
-                              </Text>
-                              <Text size="sm" fw={500} c="#333">
-                                {profile.volume || "-"}
-                              </Text>
-                            </Box>
-                            <Box style={{ flex: 1 }}>
-                              <Text size="xs" fw={600} c="#666" mb={2}>
-                                Potential Profit
-                              </Text>
-                              <Text size="sm" fw={500} c="#28a745">
-                                {profile.potential_profit
-                                  ? `${customerCurrency} ${profile.potential_profit.toLocaleString("en-IN")}`
-                                  : "-"}
-                              </Text>
-                            </Box>
-                          </Group>
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
-              ) : (
-                <Card
-                  shadow="sm"
-                  padding="md"
-                  radius="md"
-                  withBorder
-                  style={{ backgroundColor: "#f8f9fa" }}
-                >
-                  <Box ta="center" py="sm">
-                    <Text c="dimmed" size="sm">
-                      No potential profiling data found for this customer
-                    </Text>
-                  </Box>
-                </Card>
-              )}
-            </Box>
-          </Stack>
-        )}
-      </Drawer>
+        isLoading={isLoadingData}
+        /* Customer Info */
+        customerSalesperson={customerSalesperson}
+        customerCreditDay={customerCreditDay}
+        customerLastVisited={customerLastVisited}
+        customerTotalCreditAmount={customerTotalCreditAmount}
+        totalOutstandingAmount={totalOutstandingAmount}
+        customerCurrency={customerCurrency}
+        totalRevenue={totalRevenue}
+        totalProfit={totalProfit}
+        /* Date Range Filter */
+        isAdmin={true} // Or user?.is_staff
+        fromDate={customerDataFromDate}
+        toDate={customerDataToDate}
+        onFromDateChange={(date) => {
+          setCustomerDataFromDate(date);
+          if (
+            selectedCustomerCode &&
+            selectedCustomerName &&
+            date &&
+            customerDataToDate
+          ) {
+            fetchCustomerData(
+              selectedCustomerCode,
+              selectedCustomerName,
+              date,
+              customerDataToDate
+            );
+          }
+        }}
+        onToDateChange={(date) => {
+          setCustomerDataToDate(date);
+          if (
+            selectedCustomerCode &&
+            selectedCustomerName &&
+            customerDataFromDate &&
+            date
+          ) {
+            fetchCustomerData(
+              selectedCustomerCode,
+              selectedCustomerName,
+              customerDataFromDate,
+              date
+            );
+          }
+        }}
+        /* Section Lists */
+        quotationData={quotationData}
+        shipmentData={shipmentData}
+        callEntryData={callEntryData}
+        potentialProfilingData={potentialProfilingData}
+        /* Click Handler */
+        onQuotationClick={(quotation) => {
+          navigate("/quotation-create", {
+            state: {
+              enquiry_id: quotation.enquiry_id,
+              service: quotation.service,
+              quotationData: quotation,
+              customerData: {
+                customer_code: selectedCustomerCode,
+                customer_name: selectedCustomerName,
+                total_net_balance: totalOutstandingAmount,
+              },
+              returnTo: "customer-create",
+              returnToState: {
+                customer: selectedCustomerCode,
+                customerName: selectedCustomerName,
+                openDrawer: true,
+              },
+            },
+          });
+        }}
+      />
 
       <Outlet />
     </>

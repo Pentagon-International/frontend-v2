@@ -113,7 +113,9 @@ function EnquiryMaster() {
   const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
   const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
   const clearStoreAll = useListFilterStore((state) => state.clearAll);
-  const clearStoreAllExcept = useListFilterStore((state) => state.clearAllExcept);
+  const clearStoreAllExcept = useListFilterStore(
+    (state) => state.clearAllExcept
+  );
 
   // Preview modal states
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -209,42 +211,73 @@ function EnquiryMaster() {
 
   const openPreview = async () => {
     try {
-      setShowPreviewTable(true); // Show preview table immediately
-      // Reset to first page when opening preview
+      setShowPreviewTable(true);
       setPreviewCurrentPage(1);
-      // Clear any existing search when switching to detailed view
-      setSearchQuery("");
-      // Close the filters section when switching to detailed view
+
+      // Use summary view's filters (ENQUIRY_MASTER) as initialFilters for detailed view (ENQUIRY_MASTER_DETAILED)
+      const summaryState = useListFilterStore.getState().getState(LIST_KEY);
+      const summaryFilters = summaryState?.filters as
+        | (FilterState & {
+            enquiry_received_date?: Date | null;
+            enquiry_received_date_to?: Date | null;
+          })
+        | undefined;
+
+      const initialPreviewFilters: PreviewFilterState = summaryFilters
+        ? {
+            customer_name: summaryFilters.customer_code ?? null,
+            sales_person: summaryFilters.sales_person ?? null,
+            enquiry_received_date:
+              summaryFilters.enquiry_received_date ?? getDefaultFromDate(),
+            enquiry_received_date_to:
+              summaryFilters.enquiry_received_date_to ?? getDefaultToDate(),
+            terms_of_shipment: null,
+            service: summaryFilters.service ?? null,
+            trade: summaryFilters.trade ?? null,
+            origin_name: summaryFilters.origin_code ?? null,
+            destination_name: summaryFilters.destination_code ?? null,
+            status: summaryFilters.status ?? "ACTIVE",
+            enquiry_id: summaryFilters.enquiry_id ?? null,
+            reference_no: summaryFilters.reference_no ?? null,
+          }
+        : {
+            customer_name: null,
+            sales_person: null,
+            enquiry_received_date: getDefaultFromDate(),
+            enquiry_received_date_to: getDefaultToDate(),
+            terms_of_shipment: null,
+            service: null,
+            trade: null,
+            origin_name: null,
+            destination_name: null,
+            status: "ACTIVE",
+            enquiry_id: null,
+            reference_no: null,
+          };
+
+      setPreviewFilters(initialPreviewFilters);
+      const hasReplicatedFilters = Boolean(
+        initialPreviewFilters.customer_name ||
+          initialPreviewFilters.sales_person ||
+          initialPreviewFilters.origin_name ||
+          initialPreviewFilters.destination_name ||
+          initialPreviewFilters.service ||
+          initialPreviewFilters.trade ||
+          initialPreviewFilters.enquiry_id ||
+          initialPreviewFilters.reference_no ||
+          (initialPreviewFilters.status &&
+            initialPreviewFilters.status !== "ALL")
+      );
+      setPreviewFiltersApplied(hasReplicatedFilters);
+
+      setStoreFilters(DETAILED_LIST_KEY, initialPreviewFilters);
+      setStoreSearch(DETAILED_LIST_KEY, summaryState?.search ?? "");
+      useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true);
+
+      setSearchQuery(summaryState?.search ?? "");
       setShowFilters(false);
 
-      // Always start detailed view with initial payload (no filters from summary view)
-      // Clear detailed view filters and reset to initial state with default dates
-      setPreviewFiltersApplied(false);
-      const emptyPreviewFilters: PreviewFilterState = {
-        customer_name: null,
-        sales_person: null,
-        enquiry_received_date: getDefaultFromDate(), // Set default from date (first day of month)
-        enquiry_received_date_to: getDefaultToDate(), // Set default to date (today)
-        terms_of_shipment: null,
-        service: null,
-        trade: null,
-        origin_name: null,
-        destination_name: null,
-        status: "ACTIVE",
-        enquiry_id: null,
-        reference_no: null,
-      };
-      setPreviewFilters(emptyPreviewFilters);
-      
-      // Clear preview filters from store - detailed view always starts fresh
-      clearStoreFilters(DETAILED_LIST_KEY);
-      clearStoreSearch(DETAILED_LIST_KEY);
-      
-      // Wait a bit for state updates to flush before refetching
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      
-      // Fetch initial data with initial payload (status: "ACTIVE" + default dates) when opening detailed view
-      await refetchInitialPreview();
+      // Restore effect will run and fetch detailed API with these initialFilters; no direct refetch here
     } catch (error: any) {
       ToastNotification({
         type: "error",
@@ -287,14 +320,14 @@ function EnquiryMaster() {
 
         // Mark filters as applied in summary view
         setFiltersApplied(true);
-        
+
         // Save summary filters to store
         saveFiltersToStore();
       } else {
         // No filters applied in detailed view, preserve existing summary view filters
         // DO NOT clear filters or reset filtersApplied - preserve the summary view filters
         // The filters and filtersApplied state should remain as they were before switching to detailed view
-        
+
         // Save current preview filters to store (even if empty) to maintain state
         savePreviewFiltersToStore();
       }
@@ -877,36 +910,36 @@ function EnquiryMaster() {
         previewCurrentPage,
         previewPageSize,
       ],
-      queryFn: async () => {
-        if (!debounced.trim()) return null;
-        try {
-          // Use the preview API with search query and pagination
-          const searchPayload = { search: debounced };
-          const requestBody = {
-            filters: { ...buildPreviewFilterPayload, ...searchPayload },
+    queryFn: async () => {
+      if (!debounced.trim()) return null;
+      try {
+        // Use the preview API with search query and pagination
+        const searchPayload = { search: debounced };
+        const requestBody = {
+          filters: { ...buildPreviewFilterPayload, ...searchPayload },
+        };
+        const response = await apiCallProtected.post(
+          `${URL.enquiryPreviewExcel}?index=${(previewCurrentPage - 1) * previewPageSize}&limit=${previewPageSize}`,
+          requestBody
+        );
+        const data = response as any;
+        if (data && Array.isArray(data.data)) {
+          return {
+            columns: Array.isArray(data?.columns) ? data.columns : [],
+            data: Array.isArray(data?.data) ? data.data : [],
+            total: data?.total_count || data?.total || 0,
           };
-          const response = await apiCallProtected.post(
-            `${URL.enquiryPreviewExcel}?index=${(previewCurrentPage - 1) * previewPageSize}&limit=${previewPageSize}`,
-            requestBody
-          );
-          const data = response as any;
-          if (data && Array.isArray(data.data)) {
-            return {
-              columns: Array.isArray(data?.columns) ? data.columns : [],
-              data: Array.isArray(data?.data) ? data.data : [],
-              total: data?.total_count || data?.total || 0,
-            };
-          }
-          return { columns: [], data: [], total: 0 };
-        } catch (error: any) {
-          console.error("Preview Search API Error:", error);
-          return { columns: [], data: [], total: 0 };
         }
-      },
-      enabled: debounced.trim() !== "" && showPreviewTable,
-      staleTime: 2 * 60 * 1000, // 2 minutes
-      gcTime: 5 * 60 * 1000, // 5 minutes
-      refetchOnWindowFocus: false,
+        return { columns: [], data: [], total: 0 };
+      } catch (error: any) {
+        console.error("Preview Search API Error:", error);
+        return { columns: [], data: [], total: 0 };
+      }
+    },
+    enabled: debounced.trim() !== "" && showPreviewTable,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
     }
   );
 
@@ -963,7 +996,7 @@ function EnquiryMaster() {
     isRefreshingData ||
     enquiryFetching ||
     filteredEnquiryFetching;
-  
+
   // Keep isLoading for backward compatibility (used elsewhere)
   // const isLoading =
   //   enquiryLoading ||
@@ -1213,7 +1246,7 @@ function EnquiryMaster() {
       if (showPreviewTable) {
         // Save preview filters and search to store
         savePreviewFiltersToStore();
-        
+
         setPreviewCurrentPage(1); // Reset to first page when applying filters
         setPreviewFiltersApplied(true); // Mark that filters were applied
         setIsRefreshingData(true);
@@ -1245,7 +1278,7 @@ function EnquiryMaster() {
           if (result.data?.length) {
             setFiltersApplied(true);
           }
-          
+
           // Check if data was returned successfully
           if (result.data && Array.isArray(result.data)) {
             // Data is now set in filteredEnquiryData via React Query
@@ -1253,10 +1286,10 @@ function EnquiryMaster() {
             // Small delay to ensure React Query has updated the data state
             await new Promise((resolve) => setTimeout(resolve, 50));
           }
-          
+
           // Hide loader after data is received and set
           setIsRefreshingData(false);
-          
+
           ToastNotification({
             type: "success",
             message: "Filters applied successfully",
@@ -1294,11 +1327,11 @@ function EnquiryMaster() {
       enquiry_id: null,
       reference_no: null,
     });
-    
+
     // Reset dates to default values (like first load)
     setFromDate(getDefaultFromDate());
     setToDate(getDefaultToDate());
-    
+
     // Reset preview view filters to initial state (status: "ACTIVE" + default dates)
     setPreviewFilters({
       customer_name: null,
@@ -1511,14 +1544,14 @@ function EnquiryMaster() {
         // Check if any non-date filters exist
         hasFilters = Boolean(
           restoredFilters.customer_code ||
-          restoredFilters.sales_person ||
-          restoredFilters.origin_code ||
-          restoredFilters.destination_code ||
-          restoredFilters.service ||
-          restoredFilters.trade ||
-          restoredFilters.enquiry_id ||
-          restoredFilters.reference_no ||
-          (restoredFilters.status && restoredFilters.status !== "ALL") ||
+            restoredFilters.sales_person ||
+            restoredFilters.origin_code ||
+            restoredFilters.destination_code ||
+            restoredFilters.service ||
+            restoredFilters.trade ||
+            restoredFilters.enquiry_id ||
+            restoredFilters.reference_no ||
+            (restoredFilters.status && restoredFilters.status !== "ALL") ||
           (restoredFilters.enquiry_received_date && restoredFilters.enquiry_received_date_to)
         );
         console.log("📥 Filter restoration check:", {
@@ -1702,7 +1735,7 @@ function EnquiryMaster() {
         enquiry_id: null,
         reference_no: null,
       });
-      
+
       // Call API after a small delay to ensure state is updated
       setTimeout(async () => {
         const result = await refetchFilteredEnquiries();
@@ -1740,12 +1773,12 @@ function EnquiryMaster() {
     // Only handle refreshData flag - filters/search are now managed via store
     if (location.state?.refreshData) {
       console.log("🔄 Refreshing data after create/edit operation");
-      
+
       // Mark that we're handling refreshData so restoration effect doesn't interfere
       if (!hasRestoredFromStore.current) {
         hasRestoredFromStore.current = true;
       }
-      
+
       setIsRefreshingData(true);
 
       // Clear the refresh flag but preserve dashboard return state
@@ -1769,10 +1802,10 @@ function EnquiryMaster() {
             // If we have filters/search in store, restore them first
             if (restoredPreviewState && (hasActivePreviewFilters || hasActivePreviewSearch)) {
               console.log("🔄 [Detailed View] Restoring filters/search from store:", {
-                hasActivePreviewFilters,
-                hasActivePreviewSearch,
-                filters: restoredPreviewState.filters,
-                search: restoredPreviewState.search,
+                  hasActivePreviewFilters,
+                  hasActivePreviewSearch,
+                  filters: restoredPreviewState.filters,
+                  search: restoredPreviewState.search,
               });
 
               // Restore preview filters from store if they exist
@@ -1801,15 +1834,15 @@ function EnquiryMaster() {
             const currentPreviewFilters = previewFilters;
             const hasPreviewFilterValues = Boolean(
               currentPreviewFilters.customer_name ||
-              currentPreviewFilters.sales_person ||
-              currentPreviewFilters.origin_name ||
-              currentPreviewFilters.destination_name ||
-              currentPreviewFilters.service ||
-              currentPreviewFilters.trade ||
-              currentPreviewFilters.terms_of_shipment ||
+                currentPreviewFilters.sales_person ||
+                currentPreviewFilters.origin_name ||
+                currentPreviewFilters.destination_name ||
+                currentPreviewFilters.service ||
+                currentPreviewFilters.trade ||
+                currentPreviewFilters.terms_of_shipment ||
               (currentPreviewFilters.status && currentPreviewFilters.status !== "ALL") ||
-              currentPreviewFilters.enquiry_id ||
-              currentPreviewFilters.reference_no ||
+                currentPreviewFilters.enquiry_id ||
+                currentPreviewFilters.reference_no ||
               (currentPreviewFilters.enquiry_received_date && currentPreviewFilters.enquiry_received_date_to)
             );
 
@@ -1890,14 +1923,14 @@ function EnquiryMaster() {
             const currentFilters = getCurrentFilters();
             const hasFilterValues = Boolean(
               currentFilters.customer_code ||
-              currentFilters.sales_person ||
-              currentFilters.origin_code ||
-              currentFilters.destination_code ||
-              currentFilters.service ||
-              currentFilters.trade ||
-              currentFilters.enquiry_id ||
-              currentFilters.reference_no ||
-              (currentFilters.status && currentFilters.status !== "ALL")
+                currentFilters.sales_person ||
+                currentFilters.origin_code ||
+                currentFilters.destination_code ||
+                currentFilters.service ||
+                currentFilters.trade ||
+                currentFilters.enquiry_id ||
+                currentFilters.reference_no ||
+                (currentFilters.status && currentFilters.status !== "ALL")
             );
 
             // Build payload to verify what will be sent
@@ -1956,11 +1989,11 @@ function EnquiryMaster() {
   // Track previous search value to detect changes (for summary view)
   const prevSearchRef = useRef<string>("");
   const searchInitializedRef = useRef(false);
-  
+
   // Track previous search value for preview view
   const prevPreviewSearchRef = useRef<string>("");
   const previewSearchInitializedRef = useRef(false);
-  
+
   // Handle search changes - trigger API when search value changes (including when cleared)
   useEffect(() => {
     if (showPreviewTable) {
@@ -1981,14 +2014,14 @@ function EnquiryMaster() {
 
     // Update ref for next comparison
     prevSearchRef.current = debouncedSearch;
-    
+
     // Save search to store immediately (use current searchQuery, not debouncedSearch)
     // This ensures store always has the latest search value
     setStoreSearch(LIST_KEY, searchQuery);
-    
+
     // Trigger API with loading state - loader will show until API response
     setIsRefreshingData(true);
-    
+
     if (debouncedSearch.trim() !== "") {
       // Search exists - trigger filtered API (search will be merged with filters in buildFilterPayload)
       refetchFilteredEnquiries()
@@ -2057,11 +2090,11 @@ function EnquiryMaster() {
 
     // Update ref for next comparison
     prevPreviewSearchRef.current = debouncedSearch;
-    
+
     // Save search to store immediately (use current searchQuery, not debouncedSearch)
     // This ensures store always has the latest search value
     setStoreSearch(DETAILED_LIST_KEY, searchQuery);
-    
+
     if (debouncedSearch.trim() !== "") {
       // Search exists - trigger preview search API
       // The previewSearchData query will handle this automatically via enabled flag
@@ -2104,7 +2137,7 @@ function EnquiryMaster() {
       hasRestoredPreviewFromStore.current = false;
       return;
     }
-    
+
     // Skip if already restored or if refreshData is present (let refreshData effect handle it)
     if (hasRestoredPreviewFromStore.current || location.state?.refreshData) {
       return;
@@ -2129,19 +2162,19 @@ function EnquiryMaster() {
       if (restoredPreviewFilters && Object.keys(restoredPreviewFilters).length > 0) {
         console.log("📥 [Detailed View] Restoring filters from store:", restoredPreviewFilters);
         setPreviewFilters(restoredPreviewFilters);
-        
+
         // Check if any filters exist
         hasPreviewFilters = Boolean(
           restoredPreviewFilters.customer_name ||
-          restoredPreviewFilters.sales_person ||
-          restoredPreviewFilters.origin_name ||
-          restoredPreviewFilters.destination_name ||
-          restoredPreviewFilters.service ||
-          restoredPreviewFilters.trade ||
-          restoredPreviewFilters.terms_of_shipment ||
+            restoredPreviewFilters.sales_person ||
+            restoredPreviewFilters.origin_name ||
+            restoredPreviewFilters.destination_name ||
+            restoredPreviewFilters.service ||
+            restoredPreviewFilters.trade ||
+            restoredPreviewFilters.terms_of_shipment ||
           (restoredPreviewFilters.status && restoredPreviewFilters.status !== "ALL") ||
-          restoredPreviewFilters.enquiry_id ||
-          restoredPreviewFilters.reference_no ||
+            restoredPreviewFilters.enquiry_id ||
+            restoredPreviewFilters.reference_no ||
           (restoredPreviewFilters.enquiry_received_date && restoredPreviewFilters.enquiry_received_date_to)
         );
       }
@@ -2181,7 +2214,7 @@ function EnquiryMaster() {
 
   // Track if pagination has been initialized (to prevent initial mount trigger)
   const paginationInitialized = useRef(false);
-  
+
   // Handle pagination changes - ONLY trigger API if filters are applied or search exists
   // API should NOT be called on pagination changes if no filters/search are active
   useEffect(() => {
@@ -2232,10 +2265,10 @@ function EnquiryMaster() {
       queryClient.invalidateQueries({ queryKey: ["previewSearch"] });
       return;
     }
-    
+
     // Set loading state during pagination changes (only for non-search queries)
     setIsRefreshingData(true);
-    
+
     // Check if filters are applied
     if (previewFiltersApplied) {
       // If filters are applied, refetch filtered preview data
@@ -2459,7 +2492,7 @@ function EnquiryMaster() {
                         useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
                       }else{
                         useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
-                      } 
+                      }
                       navigate("/enquiry-create", {
                         state: {
                           ...row.original,
@@ -2535,7 +2568,7 @@ function EnquiryMaster() {
                                 useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
                               }else{
                                 useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
-                              } 
+                              }
                               // Navigate to quotation-create in edit mode
                               navigate("/quotation-create", {
                                 state: {
@@ -2590,7 +2623,7 @@ function EnquiryMaster() {
                         useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
                       }else{
                         useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
-                      } 
+                      }
                       navigate("/get-rate", {
                         state: {
                           ...row.original,
@@ -2633,7 +2666,7 @@ function EnquiryMaster() {
                               useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
                             }else{
                               useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
-                            } 
+                            }
                             navigate("/enquiry-create", {
                               state: {
                                 ...row.original,
@@ -3239,7 +3272,7 @@ function EnquiryMaster() {
                     useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
                   }else{
                     useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
-                  } 
+                  }
                   navigate("/enquiry-create", {
                     state: {
                       preserveFilters: currentFilterState,

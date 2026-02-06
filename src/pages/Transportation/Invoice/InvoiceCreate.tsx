@@ -594,12 +594,11 @@ function InvoiceCreate() {
 
             if (
               noOfUnit != null && noOfUnit > 0 &&
-              amountPerUnit != null && amountPerUnit > 0 &&
-              roeVal != null && roeVal > 0
+              amountPerUnit != null && amountPerUnit > 0
             ) {
-              const calcAmount = clampAmount(noOfUnit * roeVal * amountPerUnit);
+              const calcAmount = clampAmount(noOfUnit * amountPerUnit);
               if (calcAmount != null) amount = calcAmount;
-              if (amount != null && amount > 0 && roeVal > 0) {
+              if (amount != null && amount > 0 && roeVal != null && roeVal > 0) {
                 const calcLocal = clampAmount(amount * roeVal);
                 if (calcLocal != null) amountInLocal = calcLocal;
               }
@@ -872,32 +871,25 @@ function InvoiceCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCurrencies, getRoeValue]);
 
-  // Auto-calculate amount when amount_per_unit, no_of_unit, or roe changes
+  // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit
   const chargeAmountPerUnits = form.values.charges
     .map((c) => c.amount_per_unit)
     .join(",");
   const chargeNoOfUnits = form.values.charges
     .map((c) => c.no_of_unit)
     .join(",");
-  const chargeRoes = form.values.charges.map((c) => c.roe).join(",");
 
   useEffect(() => {
-    const updatedCharges = form.values.charges.map((charge, index) => {
-      // Auto-calculate amount if amount_per_unit is provided
+    const updatedCharges = form.values.charges.map((charge) => {
       if (
-        charge.amount_per_unit !== null &&
-        charge.amount_per_unit !== undefined &&
+        charge.amount_per_unit != null &&
         charge.amount_per_unit > 0 &&
-        charge.no_of_unit !== null &&
-        charge.no_of_unit > 0 &&
-        charge.roe !== null &&
-        charge.roe !== undefined &&
-        charge.roe > 0
+        charge.no_of_unit != null &&
+        charge.no_of_unit > 0
       ) {
-        const calculatedAmount =
-          charge.no_of_unit * charge.roe * charge.amount_per_unit;
+        const calculatedAmount = charge.no_of_unit * charge.amount_per_unit;
         const clamped = clampAmount(calculatedAmount);
-        if (clamped != null && clamped > 0 && clamped !== charge.amount) {
+        if (clamped != null && clamped !== charge.amount) {
           return {
             ...charge,
             amount: clamped,
@@ -908,7 +900,6 @@ function InvoiceCreate() {
       return charge;
     });
 
-    // Only update if there are actual changes to amount
     const hasChanges = updatedCharges.some(
       (charge, index) => charge.amount !== form.values.charges[index]?.amount,
     );
@@ -917,13 +908,16 @@ function InvoiceCreate() {
       form.setFieldValue("charges", updatedCharges);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeAmountPerUnits, chargeNoOfUnits, chargeRoes]);
+  }, [chargeAmountPerUnits, chargeNoOfUnits]);
 
   // Auto-calculate amount_in_local (Local Amount) as: amount (currency_amount) * charge.roe
   const chargeAmounts = form.values.charges.map((c) => c.amount).join(",");
   const chargeRoesForLocal = form.values.charges.map((c) => c.roe).join(",");
 
   useEffect(() => {
+    const billingCurrency = (form.values.currency ?? "").trim().toUpperCase();
+    const topRoe = form.values.roe != null && form.values.roe > 0 ? Number(form.values.roe) : null;
+
     const updatedCharges = form.values.charges.map((charge) => {
       if (
         charge.amount !== null &&
@@ -940,9 +934,18 @@ function InvoiceCreate() {
           clamped > 0 &&
           clamped !== charge.amount_in_local
         ) {
+          // When we recalc amount_in_local, also recalc header_amount so they stay in sync
+          const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
+          const newHeaderAmount =
+            billingCurrency && chargeCurr && billingCurrency === chargeCurr
+              ? clamped
+              : topRoe != null
+                ? clampAmount(clamped / topRoe)
+                : clamped;
           return {
             ...charge,
             amount_in_local: clamped,
+            header_amount: newHeaderAmount != null ? newHeaderAmount : charge.header_amount,
           };
         }
       }
@@ -952,7 +955,8 @@ function InvoiceCreate() {
 
     const hasChanges = updatedCharges.some(
       (charge, index) =>
-        charge.amount_in_local !== form.values.charges[index]?.amount_in_local,
+        charge.amount_in_local !== form.values.charges[index]?.amount_in_local ||
+        charge.header_amount !== form.values.charges[index]?.header_amount,
     );
 
     if (hasChanges) {
@@ -1861,9 +1865,33 @@ function InvoiceCreate() {
                 placeholder="Select currency"
                 data={billingCurrencyOptions}
                 value={form.values.currency}
-                onChange={(value) =>
-                  form.setFieldValue("currency", value || "")
-                }
+                onChange={(value) => {
+                  const newCurrency = value || "";
+                  // Recalculate header_amount for all charges when billing currency changes.
+                  // When billing currency === charge currency (e.g. both INR), header_amount = amount_in_local.
+                  const headerRoe = form.values.roe;
+                  const updatedCharges = form.values.charges.map((charge) => {
+                    if (charge.amount_in_local != null && charge.amount_in_local > 0 && newCurrency) {
+                      const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
+                      const billCurr = newCurrency.trim().toUpperCase();
+                      let newHeader: number | null = null;
+                      if (billCurr === chargeCurr) {
+                        // Same currency (e.g. both INR): header amount = local amount
+                        newHeader = charge.amount_in_local;
+                      } else if (headerRoe != null && headerRoe > 0) {
+                        newHeader = clampAmount(charge.amount_in_local / headerRoe);
+                      } else {
+                        newHeader = charge.amount_in_local;
+                      }
+                      if (newHeader != null) {
+                        return { ...charge, header_amount: newHeader };
+                      }
+                    }
+                    return charge;
+                  });
+                  // Apply currency and charges in one update so header_amount is not lost
+                  form.setValues({ ...form.values, currency: newCurrency, charges: updatedCharges });
+                }}
                 searchable
                 withAsterisk
                 error={
@@ -1901,6 +1929,26 @@ function InvoiceCreate() {
                         ? parseFloat(value) || null
                         : null;
                   form.setFieldValue("roe", numValue);
+                  // Recalculate header_amount for all charges when header ROE changes
+                  const headerBillingCurrency = (form.values.currency ?? "").trim().toUpperCase();
+                  const updatedCharges = form.values.charges.map((charge) => {
+                    if (charge.amount_in_local != null && charge.amount_in_local > 0 && headerBillingCurrency) {
+                      const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
+                      let newHeader: number | null = null;
+                      if (headerBillingCurrency === chargeCurr) {
+                        newHeader = charge.amount_in_local;
+                      } else if (numValue != null && numValue > 0) {
+                        newHeader = clampAmount(charge.amount_in_local / numValue);
+                      } else {
+                        newHeader = charge.amount_in_local;
+                      }
+                      if (newHeader != null) {
+                        return { ...charge, header_amount: newHeader };
+                      }
+                    }
+                    return charge;
+                  });
+                  form.setFieldValue("charges", updatedCharges);
                 }}
                 withAsterisk
                 disabled={isReadOnly}
@@ -2207,9 +2255,26 @@ function InvoiceCreate() {
                             const opt = currencyOptions.find((o) => o.value === v);
                             const code = opt ? (opt.label ?? opt.value) : v;
                             form.setFieldValue(`charges.${index}.currency`, code);
-                            const roe = code ? getRoeValue(code) : null;
-                            if (roe !== null) {
-                              form.setFieldValue(`charges.${index}.roe`, roe);
+                            const newRoe = code ? getRoeValue(code) : null;
+                            if (newRoe !== null) {
+                              form.setFieldValue(`charges.${index}.roe`, newRoe);
+                            }
+                            const currentCharge = form.values.charges[index];
+                            const amt = currentCharge.amount;
+                            if (amt != null && amt > 0 && newRoe != null && newRoe > 0) {
+                              const local = clampAmount(amt * newRoe);
+                              if (local != null) form.setFieldValue(`charges.${index}.amount_in_local`, local);
+                              const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
+                              const chargeCurr = (code ?? "").trim().toUpperCase();
+                              const headerRoe = form.values.roe;
+                              if (local != null && billingCurr && chargeCurr) {
+                                const headerAmt = billingCurr === chargeCurr
+                                  ? local
+                                  : headerRoe != null && headerRoe > 0
+                                    ? clampAmount(local / headerRoe)
+                                    : local;
+                                if (headerAmt != null) form.setFieldValue(`charges.${index}.header_amount`, headerAmt);
+                              }
                             }
                             // Clear error when field is updated
                             if (chargeErrors[index]?.currency) {
@@ -2245,61 +2310,46 @@ function InvoiceCreate() {
                           value={charge.roe || undefined}
                           onChange={(value) => {
                             const roe = value as number | null;
-                            form.setFieldValue(`charges.${index}.roe`, roe);
                             const currentCharge = form.values.charges[index];
+                            let amount = currentCharge.amount;
+                            let amountInLocal = currentCharge.amount_in_local;
+                            let headerAmt = currentCharge.header_amount;
 
-                            // Auto-calculate amount (currency_amount) if amount_per_unit is provided
+                            // Auto-calculate amount = amount_per_unit * no_of_unit
                             if (
-                              currentCharge.amount_per_unit !== null &&
-                              currentCharge.amount_per_unit !== undefined &&
+                              currentCharge.amount_per_unit != null &&
                               currentCharge.amount_per_unit > 0 &&
-                              currentCharge.no_of_unit !== null &&
-                              currentCharge.no_of_unit > 0 &&
-                              roe !== null &&
-                              roe > 0
+                              currentCharge.no_of_unit != null &&
+                              currentCharge.no_of_unit > 0
                             ) {
-                              const calculatedAmount =
-                                currentCharge.no_of_unit *
-                                roe *
-                                currentCharge.amount_per_unit;
-                              const clampedAmount = clampAmount(calculatedAmount);
-                              if (clampedAmount != null && clampedAmount > 0) {
-                                form.setFieldValue(
-                                  `charges.${index}.amount`,
-                                  clampedAmount,
-                                );
-                              }
+                              amount = clampAmount(currentCharge.no_of_unit * currentCharge.amount_per_unit);
+                            }
+                            // Auto-calculate Local Amount = amount * roe, and header amount (same as local when billing === charge currency)
+                            if (amount != null && amount > 0 && roe != null && roe > 0) {
+                              amountInLocal = clampAmount(amount * roe);
+                              const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
+                              const chargeCurr = (currentCharge.currency ?? "").trim().toUpperCase();
+                              const headerRoe = form.values.roe;
+                              headerAmt =
+                                billingCurr === chargeCurr && amountInLocal != null
+                                  ? amountInLocal
+                                  : headerRoe != null && headerRoe > 0 && amountInLocal != null
+                                    ? clampAmount(amountInLocal / headerRoe)
+                                    : amountInLocal;
                             }
 
-                            // Auto-calculate Local Amount = currency_amount * roe
-                            if (
-                              currentCharge.amount !== null &&
-                              currentCharge.amount !== undefined &&
-                              currentCharge.amount > 0 &&
-                              roe !== null &&
-                              roe > 0
-                            ) {
-                              const calculatedLocalAmount =
-                                currentCharge.amount * roe;
-                              const clampedLocal = clampAmount(calculatedLocalAmount);
-                              if (clampedLocal != null && clampedLocal > 0) {
-                                form.setFieldValue(
-                                  `charges.${index}.amount_in_local`,
-                                  clampedLocal,
-                                );
-                              }
-                            }
+                            const updatedCharges = form.values.charges.map((c, i) =>
+                              i !== index
+                                ? c
+                                : { ...c, roe, amount, amount_in_local: amountInLocal, header_amount: headerAmt },
+                            );
+                            form.setFieldValue("charges", updatedCharges);
 
-                            // Clear error when field is updated
                             if (chargeErrors[index]?.roe) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
                                 delete newErrors[index].roe;
-                                if (
-                                  Object.keys(newErrors[index]).length === 0
-                                ) {
-                                  delete newErrors[index];
-                                }
+                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
@@ -2323,34 +2373,39 @@ function InvoiceCreate() {
                           value={charge.no_of_unit || undefined}
                           onChange={(value) => {
                             const noOfUnit = value as number | null;
-                            form.setFieldValue(
-                              `charges.${index}.no_of_unit`,
-                              noOfUnit,
-                            );
-                            // Auto-calculate amount if amount_per_unit is provided
                             const currentCharge = form.values.charges[index];
+                            let amount = currentCharge.amount;
+                            let amountInLocal = currentCharge.amount_in_local;
+                            let headerAmt = currentCharge.header_amount;
+
                             if (
-                              currentCharge.amount_per_unit !== null &&
-                              currentCharge.amount_per_unit !== undefined &&
+                              currentCharge.amount_per_unit != null &&
                               currentCharge.amount_per_unit > 0 &&
-                              noOfUnit !== null &&
-                              noOfUnit > 0 &&
-                              currentCharge.roe !== null &&
-                              currentCharge.roe !== undefined &&
-                              currentCharge.roe > 0
+                              noOfUnit != null &&
+                              noOfUnit > 0
                             ) {
-                              const calculatedAmount =
-                                noOfUnit *
-                                currentCharge.roe *
-                                currentCharge.amount_per_unit;
-                              const clampedAmount = clampAmount(calculatedAmount);
-                              if (clampedAmount != null && clampedAmount > 0) {
-                                form.setFieldValue(
-                                  `charges.${index}.amount`,
-                                  clampedAmount,
-                                );
+                              amount = clampAmount(noOfUnit * currentCharge.amount_per_unit);
+                              const roeVal = currentCharge.roe;
+                              if (amount != null && amount > 0 && roeVal != null && roeVal > 0) {
+                                amountInLocal = clampAmount(amount * roeVal);
+                                const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
+                                const chargeCurr = (currentCharge.currency ?? "").trim().toUpperCase();
+                                const headerRoe = form.values.roe;
+                                headerAmt =
+                                  billingCurr === chargeCurr && amountInLocal != null
+                                    ? amountInLocal
+                                    : headerRoe != null && headerRoe > 0 && amountInLocal != null
+                                      ? clampAmount(amountInLocal / headerRoe)
+                                      : amountInLocal;
                               }
                             }
+
+                            const updatedCharges = form.values.charges.map((c, i) =>
+                              i !== index
+                                ? c
+                                : { ...c, no_of_unit: noOfUnit, amount, amount_in_local: amountInLocal, header_amount: headerAmt },
+                            );
+                            form.setFieldValue("charges", updatedCharges);
                           }}
                           styles={{
                             input: {
@@ -2370,36 +2425,40 @@ function InvoiceCreate() {
                           disabled={isReadOnly}
                           value={charge.amount_per_unit || undefined}
                           onChange={(value) => {
-                            const raw = value as number | null;
-                            const amountPerUnit = clampAmount(raw);
-                            form.setFieldValue(
-                              `charges.${index}.amount_per_unit`,
-                              amountPerUnit,
-                            );
-                            // Auto-calculate amount if amount_per_unit is provided
+                            const amountPerUnit = clampAmount(value as number | null);
                             const currentCharge = form.values.charges[index];
+                            let amount = currentCharge.amount;
+                            let amountInLocal = currentCharge.amount_in_local;
+                            let headerAmt = currentCharge.header_amount;
+
                             if (
-                              amountPerUnit !== null &&
-                              amountPerUnit !== undefined &&
+                              amountPerUnit != null &&
                               amountPerUnit > 0 &&
-                              currentCharge.no_of_unit !== null &&
-                              currentCharge.no_of_unit > 0 &&
-                              currentCharge.roe !== null &&
-                              currentCharge.roe !== undefined &&
-                              currentCharge.roe > 0
+                              currentCharge.no_of_unit != null &&
+                              currentCharge.no_of_unit > 0
                             ) {
-                              const calculatedAmount =
-                                currentCharge.no_of_unit *
-                                currentCharge.roe *
-                                amountPerUnit;
-                              const clampedAmount = clampAmount(calculatedAmount);
-                              if (clampedAmount != null && clampedAmount > 0) {
-                                form.setFieldValue(
-                                  `charges.${index}.amount`,
-                                  clampedAmount,
-                                );
+                              amount = clampAmount(currentCharge.no_of_unit * amountPerUnit);
+                              const roeVal = currentCharge.roe;
+                              if (amount != null && amount > 0 && roeVal != null && roeVal > 0) {
+                                amountInLocal = clampAmount(amount * roeVal);
+                                const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
+                                const chargeCurr = (currentCharge.currency ?? "").trim().toUpperCase();
+                                const headerRoe = form.values.roe;
+                                headerAmt =
+                                  billingCurr === chargeCurr && amountInLocal != null
+                                    ? amountInLocal
+                                    : headerRoe != null && headerRoe > 0 && amountInLocal != null
+                                      ? clampAmount(amountInLocal / headerRoe)
+                                      : amountInLocal;
                               }
                             }
+
+                            const updatedCharges = form.values.charges.map((c, i) =>
+                              i !== index
+                                ? c
+                                : { ...c, amount_per_unit: amountPerUnit, amount, amount_in_local: amountInLocal, header_amount: headerAmt },
+                            );
+                            form.setFieldValue("charges", updatedCharges);
                           }}
                           styles={{
                             input: {
@@ -2420,44 +2479,41 @@ function InvoiceCreate() {
                           disabled={isReadOnly}
                           value={charge.amount || undefined}
                           onChange={(value) => {
-                            const raw = value as number | null;
-                            const currencyAmount = clampAmount(raw);
-                            form.setFieldValue(
-                              `charges.${index}.amount`,
-                              currencyAmount,
-                            );
-
-                            // Auto-calculate Local Amount = currency_amount * roe
+                            const currencyAmount = clampAmount(value as number | null);
                             const currentCharge = form.values.charges[index];
+                            let amountInLocal = currentCharge.amount_in_local;
+                            let headerAmt = currentCharge.header_amount;
+
                             if (
-                              currencyAmount !== null &&
-                              currencyAmount !== undefined &&
+                              currencyAmount != null &&
                               currencyAmount > 0 &&
-                              currentCharge.roe !== null &&
-                              currentCharge.roe !== undefined &&
+                              currentCharge.roe != null &&
                               currentCharge.roe > 0
                             ) {
-                              const calculatedLocalAmount =
-                                currencyAmount * currentCharge.roe;
-                              const clampedLocal = clampAmount(calculatedLocalAmount);
-                              if (clampedLocal != null && clampedLocal > 0) {
-                                form.setFieldValue(
-                                  `charges.${index}.amount_in_local`,
-                                  clampedLocal,
-                                );
-                              }
+                              amountInLocal = clampAmount(currencyAmount * currentCharge.roe);
+                              const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
+                              const chargeCurr = (currentCharge.currency ?? "").trim().toUpperCase();
+                              const headerRoe = form.values.roe;
+                              headerAmt =
+                                billingCurr === chargeCurr && amountInLocal != null
+                                  ? amountInLocal
+                                  : headerRoe != null && headerRoe > 0 && amountInLocal != null
+                                    ? clampAmount(amountInLocal / headerRoe)
+                                    : amountInLocal;
                             }
 
-                            // Clear error when field is updated
+                            const updatedCharges = form.values.charges.map((c, i) =>
+                              i !== index
+                                ? c
+                                : { ...c, amount: currencyAmount, amount_in_local: amountInLocal, header_amount: headerAmt },
+                            );
+                            form.setFieldValue("charges", updatedCharges);
+
                             if (chargeErrors[index]?.amount) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
                                 delete newErrors[index].amount;
-                                if (
-                                  Object.keys(newErrors[index]).length === 0
-                                ) {
-                                  delete newErrors[index];
-                                }
+                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
@@ -2505,10 +2561,21 @@ function InvoiceCreate() {
                           disabled={isReadOnly}
                           value={charge.amount_in_local || undefined}
                           onChange={(value) => {
-                            form.setFieldValue(
-                              `charges.${index}.amount_in_local`,
-                              clampAmount(value as number | null),
-                            );
+                            const clampedLocal = clampAmount(value as number | null);
+                            const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
+                            const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
+                            const sameCurrency = billingCurr === chargeCurr && billingCurr !== "";
+                            // Single atomic update: set amount_in_local and header_amount together when same currency
+                            const currentCharges = form.values.charges;
+                            const updatedCharges = currentCharges.map((c, i) => {
+                              if (i !== index) return c;
+                              return {
+                                ...c,
+                                amount_in_local: clampedLocal,
+                                header_amount: sameCurrency && clampedLocal != null ? clampedLocal : c.header_amount,
+                              };
+                            });
+                            form.setFieldValue("charges", updatedCharges);
                           }}
                           styles={{
                             input: {

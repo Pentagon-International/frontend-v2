@@ -73,9 +73,12 @@ import {
   ChartOfAccountsMaster,
   ChartOfAccountsCreate,
   GLChargeMappingMaster,
+  GLChargeMappingCreate,
   GSTSACMaster,
+  GSTSACCreate,
   GSTRateMaster,
   GSTChargeMappingMaster,
+  GSTChargeMappingCreate,
   ExportShipmentMaster,
   ExportShipmentCreate,
   ExportShipmentEdit,
@@ -123,6 +126,8 @@ import GetRate from "../pages/dashboard/GetRate";
 import EnquiryMaster from "../pages/dashboard/EnquiryMaster";
 import ReceiptMaster from "../pages/accounts/ReceiptMaster";
 import ReceiptCreate from "../pages/accounts/ReceiptCreate";
+import ReceiptReversal from "../pages/accounts/ReceiptReversal";
+import ReceiptReversalMaster from "../pages/accounts/ReceiptReversalMaster";
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
@@ -163,7 +168,7 @@ const NavigationRoutes = () => {
             <Route index element={<AirExportBookingMaster />} />
             <Route path="create" element={<AirExportBookingCreate />} />
             <Route path="edit" element={<AirExportBookingCreate />} />
-          </Route>
+          </Route>s
           <Route path="import-booking">
             <Route index element={<AirImportBookingMaster />} />
             <Route path="create" element={<AirImportBookingCreate />} />
@@ -250,7 +255,13 @@ const NavigationRoutes = () => {
         <Route path="/collapse" element={<DemoPage />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/receipt" element={<ReceiptMaster />} />
+        <Route path="/receipt/view" element={<ReceiptCreate />} />
+        <Route path="/receipt/edit" element={<ReceiptCreate />} />
         <Route path="/receipt/create" element={<ReceiptCreate />} />
+        <Route path="/receipt/reversal" element={<ReceiptReversalMaster />} />
+        <Route path="/receipt/reversal/view" element={<ReceiptReversal />} />
+        <Route path="/receipt/reversal/edit" element={<ReceiptReversal />} />
+        <Route path="/receipt/reversal/create" element={<ReceiptReversal />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
         <Route path="/lead-create" element={<CreateLead />} />
@@ -379,8 +390,14 @@ const NavigationRoutes = () => {
 
           <Route path="customer-relationship-mapping">
             <Route index element={<CustomerRelationshipMappingMaster />} />
-            <Route path="create" element={<CustomerRelationshipMappingCreate />} />
-            <Route path="edit" element={<CustomerRelationshipMappingCreate />} />
+            <Route
+              path="create"
+              element={<CustomerRelationshipMappingCreate />}
+            />
+            <Route
+              path="edit"
+              element={<CustomerRelationshipMappingCreate />}
+            />
           </Route>
 
           <Route path="service" element={<ServiceMaster />} />
@@ -407,14 +424,14 @@ const NavigationRoutes = () => {
 
           <Route path="gl-charge-mapping">
             <Route index element={<GLChargeMappingMaster />} />
-            <Route path="create" element={<GLChargeMappingMaster />} />
-            <Route path="edit" element={<GLChargeMappingMaster />} />
+            <Route path="create" element={<GLChargeMappingCreate />} />
+            <Route path="edit" element={<GLChargeMappingCreate />} />
           </Route>
 
           <Route path="gst-sac">
             <Route index element={<GSTSACMaster />} />
-            <Route path="create" element={<GSTSACMaster />} />
-            <Route path="edit" element={<GSTSACMaster />} />
+            <Route path="create" element={<GSTSACCreate />} />
+            <Route path="edit" element={<GSTSACCreate />} />
           </Route>
 
           <Route path="gst-rate">
@@ -425,8 +442,8 @@ const NavigationRoutes = () => {
 
           <Route path="gst-charge-mapping">
             <Route index element={<GSTChargeMappingMaster />} />
-            <Route path="create" element={<GSTChargeMappingMaster />} />
-            <Route path="edit" element={<GSTChargeMappingMaster />} />
+            <Route path="create" element={<GSTChargeMappingCreate />} />
+            <Route path="edit" element={<GSTChargeMappingCreate />} />
           </Route>
         </Route>
       </Route>

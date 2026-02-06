@@ -39,6 +39,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
+import { Dropdown, SearchableSelect } from "../../../components";
 
 type ChartOfAccountsMaster = {
   id?: string;
@@ -55,6 +56,8 @@ type ChartOfAccountsFilters = {
   sl_code: string;
   group_name: string;
   group_code: string;
+  subgroup_name: string;
+  subgroup_code: string;
   status: string;
 };
 
@@ -81,6 +84,8 @@ export default function ChartOfAccountsMasterList() {
     sl_code: "",
     group_name: "",
     group_code: "",
+    subgroup_name: "",
+    subgroup_code: "",
     status: "",
   };
 
@@ -112,16 +117,16 @@ export default function ChartOfAccountsMasterList() {
     }));
   };
 
-  // const applyFilters = () => {
-  //   setAppliedFilters(draftFilters);
-  //   setPagination((p) => ({ ...p, pageIndex: 0 }));
-  // };
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
 
-  // const clearAllFilters = () => {
-  //   setDraftFilters(DEFAULT_FILTERS);
-  //   setAppliedFilters(DEFAULT_FILTERS);
-  //   setPagination((p) => ({ ...p, pageIndex: 0 }));
-  // };
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
 
   const buildFiltersPayload = (
     filters: ChartOfAccountsFilters,
@@ -158,21 +163,21 @@ export default function ChartOfAccountsMasterList() {
       try {
         const index = pagination.pageIndex * pagination.pageSize;
 
-        // const filtersPayload = buildFiltersPayload(
-        //   appliedFilters,
-        //   debouncedSearch,
-        // );
+        const filtersPayload = buildFiltersPayload(
+          appliedFilters,
+          debouncedSearch,
+        );
 
         const payload =
-          // Object.keys(filtersPayload).length > 0
-          //   ? { filters: filtersPayload } :
+          Object.keys(filtersPayload).length > 0
+            ? { filters: filtersPayload } :
           {};
 
         const response = await apiCallProtected.post(
-          `${URL.chartOfAccountsFilter}?${debouncedSearch && "search=" + debouncedSearch}&index=${index}&limit=${pagination.pageSize}`,
+          `${URL.chartOfAccountsFilter}?&index=${index}&limit=${pagination.pageSize}`,
           payload,
         );
-        // setShowFilters(false);
+        setShowFilters(false);
 
         const data = response as any;
         if (data && Array.isArray(data.data)) {
@@ -183,7 +188,7 @@ export default function ChartOfAccountsMasterList() {
         return [];
       } catch (error) {
         console.error("Error fetching chart of accounts data:", error);
-        // setShowFilters(false);
+        setShowFilters(false);
         setTotalRecords(0);
         throw error;
       }
@@ -219,6 +224,8 @@ export default function ChartOfAccountsMasterList() {
       { accessorKey: "sl_code", header: "SL Code", size: 120 },
       { accessorKey: "group_name", header: "Group Name", size: 120 },
       { accessorKey: "group_code", header: "Group Code", size: 120 },
+      { accessorKey: "subgroup_name", header: "Sub Group Name", size: 120 },
+      { accessorKey: "subgroup_code", header: "Sub Group Code", size: 120 },
       {
         accessorKey: "status",
         header: "Status",
@@ -408,7 +415,7 @@ export default function ChartOfAccountsMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
-            <TextInput
+            {/* <TextInput
               placeholder="Search..."
               leftSection={<IconSearch size={16} />}
               rightSection={
@@ -446,8 +453,8 @@ export default function ChartOfAccountsMasterList() {
                   },
                 },
               }}
-            />
-            {/* <ActionIcon
+            /> */}
+            <ActionIcon
               variant={showFilters ? "filled" : "outline"}
               size={36}
               color={showFilters ? "#E0F5FF" : "gray"}
@@ -468,7 +475,7 @@ export default function ChartOfAccountsMasterList() {
               }}
             >
               <IconFilter size={18} />
-            </ActionIcon> */}
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"
@@ -494,7 +501,7 @@ export default function ChartOfAccountsMasterList() {
       </Box>
 
       {/* Filter Section */}
-      {/* {showFilters && (
+      {showFilters && (
         <Box
           tt="capitalize"
           mb="sm"
@@ -537,103 +544,189 @@ export default function ChartOfAccountsMasterList() {
 
           <Grid gutter="sm" px="md" pt="xs" pb="sm">
             <Grid.Col span={2.4}>
-              <TextInput
-                size="xs"
+              <SearchableSelect
+                apiEndpoint={URL.chartOfAccounts}
                 label="Account Name"
                 placeholder="Type Account Name"
                 value={draftFilters.account_name}
-                onChange={(e) =>
+                onChange={(val) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    account_name: e.currentTarget.value,
+                    account_name: val || "",
                   }))
                 }
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.account_name ?? ""),
+                  label: String(item.account_name ?? ""),
+                })}
+                searchFields={["account_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <TextInput
-                size="xs"
+              <SearchableSelect
+                apiEndpoint={URL.chartOfAccounts}
                 label="GL Account Code"
                 placeholder="Type GL Account Code"
                 value={draftFilters.gl_account_code}
-                onChange={(e) =>
+                onChange={(val) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    gl_account_code: e.currentTarget.value,
+                    gl_account_code: val || "",
                   }))
                 }
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.gl_account_code ?? ""),
+                  label: String(item.gl_account_code ?? ""),
+                })}
+                searchFields={["gl_account_code"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <TextInput
+              <Dropdown
                 size="xs"
                 label="GL Head"
-                placeholder="Type GL Head"
+                placeholder="Select GL Head"
                 data={glHeadOptions}
-                value={draftFilters.gl_head}
-                onChange={(e) =>
+                value={draftFilters.gl_head || null}
+                onChange={(value) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    gl_head: e.currentTarget.value,
+                    gl_head: value || "",
                   }))
                 }
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <TextInput
-                size="xs"
+              <SearchableSelect
+                apiEndpoint={URL.chartOfAccounts}
                 label="SL Code"
                 placeholder="Type SL Code"
                 value={draftFilters.sl_code}
-                onChange={(e) =>
+                onChange={(val) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    sl_code: e.currentTarget.value,
+                    sl_code: val || "",
                   }))
                 }
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.sl_code ?? ""),
+                  label: String(item.sl_code ?? ""),
+                })}
+                searchFields={["sl_code"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <TextInput
-                size="xs"
+              <SearchableSelect
+                apiEndpoint={URL.chartOfAccounts}
                 label="Group Name"
                 placeholder="Type Group Name"
                 value={draftFilters.group_name}
-                onChange={(e) =>
+                onChange={(val) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    group_name: e.currentTarget.value,
+                    group_name: val || "",
                   }))
                 }
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.group_name ?? ""),
+                  label: String(item.group_name ?? ""),
+                })}
+                searchFields={["group_name"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <TextInput
-                size="xs"
+              <SearchableSelect
+                apiEndpoint={URL.chartOfAccounts}
                 label="Group Code"
                 placeholder="Type Group Code"
                 value={draftFilters.group_code}
-                onChange={(e) =>
+                onChange={(val) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    group_code: e.currentTarget.value,
+                    group_code: val || "",
                   }))
                 }
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.group_code ?? ""),
+                  label: String(item.group_code ?? ""),
+                })}
+                searchFields={["group_code"]}
+                size="xs"
               />
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <Select
+              <SearchableSelect
+                apiEndpoint={URL.chartOfAccounts}
+                label="Sub Group Name"
+                placeholder="Type Sub Group Name"
+                value={draftFilters.subgroup_name}
+                onChange={(val) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    subgroup_name: val || "",
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.subgroup_name ?? ""),
+                  label: String(item.subgroup_name ?? ""),
+                })}
+                searchFields={["subgroup_name"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <SearchableSelect
+                apiEndpoint={URL.chartOfAccounts}
+                label="Sub Group Code"
+                placeholder="Type Sub Group Code"
+                value={draftFilters.subgroup_code}
+                onChange={(val) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    subgroup_code: val || "",
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={2}
+                displayFormat={(item) => ({
+                  value: String(item.subgroup_code ?? ""),
+                  label: String(item.subgroup_code ?? ""),
+                })}
+                searchFields={["subgroup_code"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2.4}>
+              <Dropdown
                 size="xs"
                 label="Status"
                 placeholder="Select Status"
                 data={statusOptions}
-                value={draftFilters.status}
+                value={draftFilters.status || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
                     ...prev,
@@ -688,7 +781,7 @@ export default function ChartOfAccountsMasterList() {
             </Button>
           </Group>
         </Box>
-      )} */}
+      )}
 
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>

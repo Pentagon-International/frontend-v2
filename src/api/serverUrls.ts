@@ -33,8 +33,10 @@ export const URL = {
   userByCoordinator: "user_master/by-coordinator/",
   coordinatorAssigned: "coordinator-access-mapping/coordinator-assigned/",
   customerRelationshipMapping: "customer-relationship-mapping/",
-  customerRelationshipMappingByCustomer: "customer-relationship-mapping/by-customer/",
-  customerRelationshipMappingBulkUpdate: "customer-relationship-mapping/bulk-update/",
+  customerRelationshipMappingByCustomer:
+    "customer-relationship-mapping/by-customer/",
+  customerRelationshipMappingBulkUpdate:
+    "customer-relationship-mapping/bulk-update/",
   // tariff: "tariff/"
   carrier: "carrier-master/",
   freight: "freight/",
@@ -100,19 +102,24 @@ export const URL = {
   chargeMasterFilter: "filter/charge-master/",
   chartOfAccounts: "chart-of-accounts/",
   chartOfAccountsFilter: "filter/chart-of-accounts/",
+  glChargeMapping: "gl-charge-mapping/",
   glChargeMappingFilter: "filter/gl-charge-mapping/",
+  gstChargeMapping: "gst-charge-mapping/",
   gstChargeMappingFilter: "filter/gst-charge-mapping/",
   gstChargeMappingGetEffectiveSac: "gst-charge-mapping/get-effective-sac/",
   gstRateMasterFilter: "filter/gst-rate-master/",
+  gstSacMaster: "gst-sac-master/",
   gstSacMasterFilter: "filter/gst-sac-master/",
   invoice: "invoice/",
   invoiceFilter: "filter/invoice/",
   invoiceCalculateGstBreakup: "invoice/calculate-gst-breakup/",
   invoiceReversableData: "invoice/reversable-data/",
   reverseInvoice: "reverse-invoice/",
-  invoiceCombined: "invoice/combined/",
+  filterInvoice: "filter/invoice/",
   receiptFilter: "filter/receipt/",
+  reverseReceiptFilter: "filter/reverse-receipt/",
   receipt: "receipt/",
+  reverseReceipt: "reverse-receipt/",
 
   // Dashboard APIs
   dashboard: {

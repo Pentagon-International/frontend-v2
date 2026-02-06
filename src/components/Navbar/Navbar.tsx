@@ -600,6 +600,19 @@ const Navbar = ({
                       setIsSeaExportOpen,
                     }}
                   />
+                  <SubNavLink
+                    parent="Accounts"
+                    label="Receipt Reversal"
+                    icon={IconReceiptTax}
+                    path="/receipt/reversal"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
                 </CollapsibleNav>
               </Box>
               <SimpleNavLink
