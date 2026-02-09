@@ -696,7 +696,7 @@ export default function ReceiptCreate({
     }
   }, [form.values.currency, localCurrency, userCountryCode]);
 
-  // When party details Local Amount is set: set header Local Amount = sum(party details local_amount), then header Amount = header Local Amount / header ROE
+  // When party details Local Amount changes: set header Local Amount = sum(party details), header Amount = header Local Amount / header ROE (same idea as party: adj local → party local, party amount = party local/roe)
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => d.local_amount ?? "")
     .join(";");
@@ -710,27 +710,40 @@ export default function ReceiptCreate({
       0,
     );
     const headerLocal = clampAmount(sum);
-    if (form.values.local_amount !== headerLocal) {
-      form.setFieldValue("local_amount", headerLocal);
-    }
-  }, [partyLocalAmountsSnapshot]);
-
-  // Header: Amount = Local Amount / ROE (when header Local Amount or ROE changes, derive Amount)
-  useEffect(() => {
-    const local = form.values.local_amount;
     const roeVal = form.values.roe;
-    const derivedAmount =
-      local != null &&
-      Number.isFinite(local) &&
+    const derivedHeaderAmount =
+      headerLocal != null &&
       roeVal != null &&
       Number.isFinite(roeVal) &&
       roeVal !== 0
-        ? clampAmount(local / roeVal)
+        ? clampAmount(headerLocal / roeVal)
         : null;
-    if (form.values.amount !== derivedAmount) {
-      form.setFieldValue("amount", derivedAmount);
+    if (form.values.local_amount !== headerLocal) {
+      form.setFieldValue("local_amount", headerLocal);
     }
-  }, [form.values.local_amount, form.values.roe]);
+    if (
+      derivedHeaderAmount != null &&
+      form.values.amount !== derivedHeaderAmount
+    ) {
+      form.setFieldValue("amount", derivedHeaderAmount);
+    }
+  }, [partyLocalAmountsSnapshot]);
+
+  // Header: when user changes ROE or Amount, set Local Amount = Amount × ROE (same as party details; header not forced to party sum)
+  useEffect(() => {
+    const amt = form.values.amount;
+    const roeVal = form.values.roe;
+    const local =
+      amt != null &&
+      Number.isFinite(amt) &&
+      roeVal != null &&
+      Number.isFinite(roeVal)
+        ? clampAmount(amt * roeVal)
+        : null;
+    if (form.values.local_amount !== local) {
+      form.setFieldValue("local_amount", local);
+    }
+  }, [form.values.amount, form.values.roe]);
 
   /** Sync party details from allocation totals: only call when adjustments actually change (Adj Curr Amount or invoice selection), not when user changes Amount/ROE. */
   const syncPartyDetailsFromAllocations = (
