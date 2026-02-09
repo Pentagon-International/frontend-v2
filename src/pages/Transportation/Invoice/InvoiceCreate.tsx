@@ -2125,7 +2125,7 @@ function InvoiceCreate() {
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Amount per Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                      Amount in {form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}
+                      Amount in {form.values.currency ? form.values.currency.toUpperCase() : "()"}
                     </Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>

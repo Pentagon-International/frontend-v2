@@ -138,6 +138,7 @@ type DetailRow = {
 
 type AdjustmentRow = {
   id?: number | null;
+  invoice_id?: number | null;
   location: string;
   type: string;
   subledger: string;
@@ -152,6 +153,7 @@ type AdjustmentRow = {
 };
 
 type InvoiceCombinedItem = {
+  id?: number;
   document_no?: string;
   document_date?: string;
   due_date?: string;
@@ -224,6 +226,8 @@ type ReceiptListItem = {
   }>;
   allocations?: Array<{
     id?: number;
+    invoice_id?: number;
+    invoice_roe?: string | number;
     subledger_id?: number;
     subledger_code?: string;
     subledger_name?: string;
@@ -288,6 +292,7 @@ const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
   roe: null,
   adj_curr_amount: null,
   adj_local_amount: null,
+  invoice_id: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -592,20 +597,24 @@ export default function ReceiptCreate({
     const allocations = receiptFromState.allocations;
     const adjustments: AdjustmentRow[] =
       Array.isArray(allocations) && allocations.length > 0
-        ? allocations.map((a) => ({
-            id: a.id ?? null,
-            location: (a.location ?? "").toString(),
-            type: (a.type_name ?? a.type ?? "").toString(),
-            subledger: (a.subledger_code ?? "").toString(),
-            subledger_display: (a.subledger_name ?? "").toString(),
-            daybook_id: a.day_book_id != null ? String(a.day_book_id) : "",
-            document_no: (a.document_no ?? "").toString(),
-            doc_date: parseDocumentDate(a.document_date),
-            currency: (a.currency_code ?? localCurrency).toString().trim(),
-            roe: parseNum(a.roe),
-            adj_curr_amount: parseNum(a.adj_curr_amount),
-            adj_local_amount: parseNum(a.adj_local_amount),
-          }))
+        ? allocations.map((a) => {
+            const roeFromApi = a.invoice_roe ?? a.roe;
+            return {
+              id: a.id ?? null,
+              invoice_id: a.invoice_id != null ? Number(a.invoice_id) : null,
+              location: (a.location ?? "").toString(),
+              type: (a.type_name ?? a.type ?? "").toString(),
+              subledger: (a.subledger_code ?? "").toString(),
+              subledger_display: (a.subledger_name ?? "").toString(),
+              daybook_id: a.day_book_id != null ? String(a.day_book_id) : "",
+              document_no: (a.document_no ?? "").toString(),
+              doc_date: parseDocumentDate(a.document_date),
+              currency: (a.currency_code ?? localCurrency).toString().trim(),
+              roe: parseNum(roeFromApi),
+              adj_curr_amount: parseNum(a.adj_curr_amount),
+              adj_local_amount: parseNum(a.adj_local_amount),
+            };
+          })
         : [getDefaultAdjustmentRow(localCurrency)];
 
     setLoadedDetails(details);
@@ -687,59 +696,108 @@ export default function ReceiptCreate({
     }
   }, [form.values.currency, localCurrency, userCountryCode]);
 
-  // Header: Local Amount = Amount when same currency, else Amount * ROE
-  useEffect(() => {
-    const amt = form.values.amount;
-    const roeVal = form.values.roe;
-    const curr = form.values.currency?.trim().toUpperCase();
-    if (curr === localCurrency?.toUpperCase()) {
-      form.setFieldValue(
-        "local_amount",
-        amt != null && Number.isFinite(amt) ? clampAmount(amt) : null,
-      );
-    } else {
-      form.setFieldValue(
-        "local_amount",
-        amt != null &&
-          Number.isFinite(amt) &&
-          roeVal != null &&
-          Number.isFinite(roeVal)
-          ? clampAmount(amt * roeVal)
-          : null,
-      );
-    }
-  }, [
-    form.values.currency,
-    form.values.amount,
-    form.values.roe,
-    localCurrency,
-  ]);
-
-  // Party details: Local Amount = Amount when same currency as header/local, else Amount * ROE
-  const detailsSnapshot = form.values.details
-    .map((r) => `${r.currency}|${r.amount}|${r.roe}`)
+  // When party details Local Amount is set: set header Local Amount = sum(party details local_amount), then header Amount = header Local Amount / header ROE
+  const partyLocalAmountsSnapshot = form.values.details
+    .map((d) => d.local_amount ?? "")
     .join(";");
+  useEffect(() => {
+    const sum = (form.values.details ?? []).reduce(
+      (s, d) =>
+        s +
+        (d.local_amount != null && Number.isFinite(d.local_amount)
+          ? d.local_amount
+          : 0),
+      0,
+    );
+    const headerLocal = clampAmount(sum);
+    if (form.values.local_amount !== headerLocal) {
+      form.setFieldValue("local_amount", headerLocal);
+    }
+  }, [partyLocalAmountsSnapshot]);
+
+  // Header: Amount = Local Amount / ROE (when header Local Amount or ROE changes, derive Amount)
+  useEffect(() => {
+    const local = form.values.local_amount;
+    const roeVal = form.values.roe;
+    const derivedAmount =
+      local != null &&
+      Number.isFinite(local) &&
+      roeVal != null &&
+      Number.isFinite(roeVal) &&
+      roeVal !== 0
+        ? clampAmount(local / roeVal)
+        : null;
+    if (form.values.amount !== derivedAmount) {
+      form.setFieldValue("amount", derivedAmount);
+    }
+  }, [form.values.local_amount, form.values.roe]);
+
+  /** Sync party details from allocation totals: only call when adjustments actually change (Adj Curr Amount or invoice selection), not when user changes Amount/ROE. */
+  const syncPartyDetailsFromAllocations = (
+    adjustmentsToUse?: AdjustmentRow[],
+  ) => {
+    const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
+    form.values.details.forEach((row, idx) => {
+      const partyCode = (row.customer_code ?? "").toString().trim();
+      const partyDisplay = (row.customer_display ?? "").toString().trim();
+      const matchingAllocations = adjustments.filter(
+        (a) =>
+          (partyCode &&
+            (a.subledger ?? "").toString().trim() === partyCode) ||
+          (partyDisplay &&
+            (a.subledger_display ?? "").toString().trim() === partyDisplay),
+      );
+      if (matchingAllocations.length === 0) return;
+      const sum = matchingAllocations.reduce(
+        (s, a) =>
+          s +
+          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+            ? a.adj_local_amount
+            : 0),
+        0,
+      );
+      const local = clampAmount(sum);
+      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
+      const derivedAmount =
+        local != null &&
+        roeVal != null &&
+        Number.isFinite(roeVal) &&
+        roeVal !== 0
+          ? clampAmount(local / roeVal)
+          : null;
+      if (form.values.details[idx].local_amount !== local) {
+        form.setFieldValue(`details.${idx}.local_amount`, local);
+      }
+      if (
+        derivedAmount != null &&
+        form.values.details[idx].amount !== derivedAmount
+      ) {
+        form.setFieldValue(`details.${idx}.amount`, derivedAmount);
+      }
+    });
+  };
+
+  // When Amount or ROE change: Local Amount = Amount * ROE (always use ROE when available)
+  const detailsSnapshotForLocal =
+    form.values.details
+      .map(
+        (r) =>
+          `${r.customer_code}|${r.customer_display}|${r.currency}|${r.amount}|${r.roe}`,
+      )
+      .join(";");
   useEffect(() => {
     form.values.details.forEach((row, idx) => {
       const amt = row.amount;
-      const roeVal = row.roe;
-      const curr = row.currency?.trim().toUpperCase();
+      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
       const local =
-        curr === localCurrency?.toUpperCase()
-          ? amt != null && Number.isFinite(amt)
-            ? clampAmount(amt)
-            : null
-          : amt != null &&
-              Number.isFinite(amt) &&
-              roeVal != null &&
-              Number.isFinite(roeVal)
-            ? clampAmount(amt * roeVal)
-            : null;
+        amt != null && Number.isFinite(amt)
+          ? clampAmount(amt * roeVal)
+          : null;
       if (form.values.details[idx].local_amount !== local) {
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
     });
-  }, [detailsSnapshot, localCurrency]);
+  }, [detailsSnapshotForLocal, localCurrency]);
 
   const showChequeSection = form.values.type === "CHEQUE";
 
@@ -883,6 +941,7 @@ export default function ReceiptCreate({
             : totalNum != null && invRoe != null
               ? clampAmount(totalNum * invRoe)
               : totalNum,
+        invoice_id: inv.id != null ? Number(inv.id) : null,
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -902,6 +961,7 @@ export default function ReceiptCreate({
       nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     }
     form.setFieldValue("adjustments", nextAdjustments);
+    syncPartyDetailsFromAllocations(nextAdjustments);
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
     setInvoiceModalBillTo(null);
@@ -952,6 +1012,9 @@ export default function ReceiptCreate({
       })),
       allocations: (values.adjustments ?? []).map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
+        ...(a.invoice_id != null && a.invoice_id > 0
+          ? { invoice_id: a.invoice_id }
+          : {}),
         location: a.location ?? "",
         subledger_code: a.subledger ?? "",
         day_book_id: Number(a.daybook_id) || 0,
@@ -1033,26 +1096,29 @@ export default function ReceiptCreate({
   };
 
   const handleSubmit = async (values: ReceiptFormValues) => {
-    const partyTotal =
+    const partyLocalTotal =
       (values.details ?? []).reduce(
         (sum, d) =>
-          sum + (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
-        0,
-      ) ?? 0;
-    const adjTotal =
-      (values.adjustments ?? []).reduce(
-        (sum, a) =>
           sum +
-          (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-            ? a.adj_curr_amount
+          (d.local_amount != null && Number.isFinite(d.local_amount)
+            ? d.local_amount
             : 0),
         0,
       ) ?? 0;
-    if (partyTotal > adjTotal) {
+    const adjLocalTotal =
+      (values.adjustments ?? []).reduce(
+        (sum, a) =>
+          sum +
+          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+            ? a.adj_local_amount
+            : 0),
+        0,
+      ) ?? 0;
+    if (partyLocalTotal > adjLocalTotal) {
       ToastNotification({
         type: "error",
         message:
-          "The total amount of Party Details cannot exceed the total Adj Curr Amount of the Adjustments section.",
+          "The total Local Amount of Party Details cannot exceed the total Adj Local Amount of the Adjustments section.",
       });
       return;
     }
@@ -1382,6 +1448,8 @@ export default function ReceiptCreate({
     isViewRoute ||
     (!_isReversal && statusUpper === "POSTED") ||
     (_isReversal && reversalStatusUpper === "POSTED");
+  // On reversal page, all fields are disabled except daybook; user can only change daybook and use action buttons
+  const reversalFormDisabled = _isReversal;
   const inputStyles = isReadOnly ? readOnlyFieldStyles : fieldStyles;
 
   const pageTitle = pathname.includes("/reversal/view")
@@ -1580,7 +1648,7 @@ export default function ReceiptCreate({
                 withAsterisk
                 error={form.errors.type}
                 styles={inputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -1602,7 +1670,7 @@ export default function ReceiptCreate({
                   onChange={(date) => form.setFieldValue("date", date)}
                   withAsterisk
                   error={form.errors.date as string | undefined}
-                  disabled={isReadOnly}
+                  disabled={isReadOnly || reversalFormDisabled}
                 />
               </Box>
             </Grid.Col>
@@ -1622,7 +1690,7 @@ export default function ReceiptCreate({
                 withAsterisk
                 error={form.errors.currency}
                 styles={inputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -1641,7 +1709,7 @@ export default function ReceiptCreate({
                 max={ROE_MAX}
                 hideControls
                 styles={inputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -1661,7 +1729,7 @@ export default function ReceiptCreate({
                 max={AMOUNT_MAX}
                 hideControls
                 styles={inputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -1681,7 +1749,7 @@ export default function ReceiptCreate({
                 max={AMOUNT_MAX}
                 hideControls
                 styles={inputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
 
@@ -1694,7 +1762,7 @@ export default function ReceiptCreate({
                     placeholder="Bank"
                     {...form.getInputProps("bank")}
                     styles={inputStyles}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || reversalFormDisabled}
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -1703,7 +1771,7 @@ export default function ReceiptCreate({
                     placeholder="Branch"
                     {...form.getInputProps("branch")}
                     styles={inputStyles}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || reversalFormDisabled}
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -1712,7 +1780,7 @@ export default function ReceiptCreate({
                     placeholder="Cheque No"
                     {...form.getInputProps("cheque_no")}
                     styles={inputStyles}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || reversalFormDisabled}
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -1734,7 +1802,7 @@ export default function ReceiptCreate({
                       onChange={(date) =>
                         form.setFieldValue("cheque_date", date)
                       }
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || reversalFormDisabled}
                     />
                   </Box>
                 </Grid.Col>
@@ -1753,7 +1821,7 @@ export default function ReceiptCreate({
                 minRows={2}
                 autosize={false}
                 styles={inputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
 
@@ -1820,7 +1888,7 @@ export default function ReceiptCreate({
                             apiEndpoint={URL.customer}
                             value={row?.customer_code || null}
                             displayValue={row?.customer_display || null}
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || reversalFormDisabled}
                             onChange={(value, _selected, originalData) => {
                               setLoadedDetails(null);
                               const orig = originalData as {
@@ -1881,7 +1949,7 @@ export default function ReceiptCreate({
                           <TextInput
                             placeholder="Narration"
                             {...form.getInputProps(`details.${idx}.narration`)}
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || reversalFormDisabled}
                             styles={inputStyles}
                           />
                         </Grid.Col>
@@ -1898,18 +1966,32 @@ export default function ReceiptCreate({
                             min={0}
                             hideControls
                             value={form.values.details[idx].roe ?? undefined}
-                            onChange={(v) =>
-                              form.setFieldValue(
-                                `details.${idx}.roe`,
+                            onChange={(v) => {
+                              const newRoe =
                                 clampROE(
                                   typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? 1,
-                              )
-                            }
+                                ) ?? 1;
+                              form.setFieldValue(
+                                `details.${idx}.roe`,
+                                newRoe,
+                              );
+                              const amt = form.values.details[idx]?.amount;
+                              if (
+                                amt != null &&
+                                Number.isFinite(amt) &&
+                                newRoe != null &&
+                                Number.isFinite(newRoe)
+                              ) {
+                                form.setFieldValue(
+                                  `details.${idx}.local_amount`,
+                                  clampAmount(amt * newRoe),
+                                );
+                              }
+                            }}
                             decimalScale={4}
                             max={ROE_MAX}
                             styles={inputStyles}
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || reversalFormDisabled}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -1918,18 +2000,34 @@ export default function ReceiptCreate({
                             min={0}
                             hideControls
                             value={form.values.details[idx].amount ?? undefined}
-                            onChange={(v) =>
-                              form.setFieldValue(
-                                `details.${idx}.amount`,
+                            onChange={(v) => {
+                              const newAmount =
                                 clampAmount(
                                   typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? null,
-                              )
-                            }
+                                ) ?? null;
+                              form.setFieldValue(
+                                `details.${idx}.amount`,
+                                newAmount,
+                              );
+                              const roeVal =
+                                form.values.details[idx]?.roe ??
+                                1;
+                              if (
+                                newAmount != null &&
+                                Number.isFinite(newAmount) &&
+                                roeVal != null &&
+                                Number.isFinite(roeVal)
+                              ) {
+                                form.setFieldValue(
+                                  `details.${idx}.local_amount`,
+                                  clampAmount(newAmount * roeVal),
+                                );
+                              }
+                            }}
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={inputStyles}
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || reversalFormDisabled}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -1951,7 +2049,7 @@ export default function ReceiptCreate({
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={inputStyles}
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || reversalFormDisabled}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -1966,7 +2064,7 @@ export default function ReceiptCreate({
                               )
                             }
                             styles={inputStyles}
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || reversalFormDisabled}
                           />
                         </Grid.Col>
                         <Grid.Col span={1.5}>
@@ -1978,7 +2076,7 @@ export default function ReceiptCreate({
                                 size="sm"
                                 onClick={addDetailRow}
                                 title="Add row"
-                                disabled={isReadOnly}
+                                disabled={isReadOnly || reversalFormDisabled}
                               >
                                 <IconPlus size={18} />
                               </Button>
@@ -2178,22 +2276,34 @@ export default function ReceiptCreate({
                               newCurr,
                             );
                             const rowRoe = form.values.adjustments[idx]?.roe;
+                            let newLocal: number | null = null;
                             if (
                               newCurr != null &&
                               rowRoe != null &&
                               Number.isFinite(rowRoe)
                             ) {
-                              const newLocal = clampAmount(newCurr * rowRoe);
+                              newLocal = clampAmount(newCurr * rowRoe);
                               form.setFieldValue(
                                 `adjustments.${idx}.adj_local_amount`,
                                 newLocal,
                               );
                             }
+                            const effectiveAdjustments =
+                              form.values.adjustments.map((a, i) =>
+                                i === idx
+                                  ? {
+                                      ...a,
+                                      adj_curr_amount: newCurr,
+                                      adj_local_amount: newLocal ?? a.adj_local_amount,
+                                    }
+                                  : a,
+                              );
+                            syncPartyDetailsFromAllocations(effectiveAdjustments);
                           }}
                           decimalScale={2}
                           max={AMOUNT_MAX}
                           styles={inputStyles}
-                          disabled={isReadOnly}
+                          disabled={isReadOnly || reversalFormDisabled}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -2220,7 +2330,7 @@ export default function ReceiptCreate({
                               size="sm"
                               onClick={addAdjustmentRow}
                               title="Add row"
-                              disabled={isReadOnly}
+                              disabled={isReadOnly || reversalFormDisabled}
                             >
                               <IconPlus size={18} />
                             </Button>
@@ -2380,7 +2490,7 @@ export default function ReceiptCreate({
                       loading={isPosting}
                       onClick={handlePostReverseReceipt}
                     >
-                      Post Reverse Receipt
+                      Post Receipt Reversal
                     </Button>
                   )}
                 {!_isReversal && saveResponse && statusUpper === "UNPOSTED" && (
