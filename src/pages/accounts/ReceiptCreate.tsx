@@ -370,18 +370,6 @@ const reversalNonEditableStyles = {
   label: fieldStyles.label,
 };
 
-// Wrapper style for date/number fields on receipt reversal so they match input/dropdown (same look as readOnlyFieldStyles)
-const reversalReadOnlyWrapperStyle = {
-  backgroundColor: "#f5f5f5",
-  borderRadius: 4,
-  padding: "6px 12px",
-  minHeight: 36,
-  fontSize: "13px",
-  fontFamily: "Inter",
-  opacity: 1,
-  pointerEvents: "none" as const,
-} as const;
-
 // Parse document_date from API (DD-MM-YYYY or YYYY-MM-DD) to Date
 function parseDocumentDate(value: string | null | undefined): Date | null {
   if (value == null || String(value).trim() === "") return null;
@@ -813,8 +801,7 @@ export default function ReceiptCreate({
       const partyDisplay = (row.customer_display ?? "").toString().trim();
       const matchingAllocations = adjustments.filter(
         (a) =>
-          (partyCode &&
-            (a.subledger ?? "").toString().trim() === partyCode) ||
+          (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
           (partyDisplay &&
             (a.subledger_display ?? "").toString().trim() === partyDisplay),
       );
@@ -849,21 +836,18 @@ export default function ReceiptCreate({
   };
 
   // When Amount or ROE change: Local Amount = Amount * ROE (always use ROE when available)
-  const detailsSnapshotForLocal =
-    form.values.details
-      .map(
-        (r) =>
-          `${r.customer_code}|${r.customer_display}|${r.currency}|${r.amount}|${r.roe}`,
-      )
-      .join(";");
+  const detailsSnapshotForLocal = form.values.details
+    .map(
+      (r) =>
+        `${r.customer_code}|${r.customer_display}|${r.currency}|${r.amount}|${r.roe}`,
+    )
+    .join(";");
   useEffect(() => {
     form.values.details.forEach((row, idx) => {
       const amt = row.amount;
       const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
       const local =
-        amt != null && Number.isFinite(amt)
-          ? clampAmount(amt * roeVal)
-          : null;
+        amt != null && Number.isFinite(amt) ? clampAmount(amt * roeVal) : null;
       if (form.values.details[idx].local_amount !== local) {
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
@@ -1528,7 +1512,9 @@ export default function ReceiptCreate({
   // Receipt & receipt reversal: same unified non-editable style (styling-only, no disabled prop) for all read-only fields
   const useNonEditableStyleOnly = isReadOnly || _isReversal;
   const headerFieldStyles = headerOtherDisabled
-    ? (useNonEditableStyleOnly ? reversalNonEditableStyles : readOnlyFieldStyles)
+    ? useNonEditableStyleOnly
+      ? reversalNonEditableStyles
+      : readOnlyFieldStyles
     : fieldStyles;
   const partyFieldStyles =
     isReadOnly || reversalFormDisabled
@@ -1745,22 +1731,22 @@ export default function ReceiptCreate({
                   headerDateDisabled ? reversalReadOnlyWrapperStyle : undefined
                 }
               > */}
-                <SingleDateInput
-                  label="Date"
-                  placeholder="Select date"
-                  value={normalizeDate(form.values.date)}
-                  onChange={(date) => form.setFieldValue("date", date)}
-                  withAsterisk
-                  error={form.errors.date as string | undefined}
-                  disabled={useNonEditableStyleOnly ? false : headerDateDisabled}
-                  styles={
-                    headerDateDisabled
-                      ? useNonEditableStyleOnly
-                        ? reversalNonEditableStyles
-                        : readOnlyFieldStyles
-                      : undefined
-                  }
-                />
+              <SingleDateInput
+                label="Date"
+                placeholder="Select date"
+                value={normalizeDate(form.values.date)}
+                onChange={(date) => form.setFieldValue("date", date)}
+                withAsterisk
+                error={form.errors.date as string | undefined}
+                disabled={headerDateDisabled}
+                styles={
+                  headerDateDisabled
+                    ? useNonEditableStyleOnly
+                      ? reversalNonEditableStyles
+                      : readOnlyFieldStyles
+                    : undefined
+                }
+              />
               {/* </Box> */}
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -1851,7 +1837,9 @@ export default function ReceiptCreate({
                     placeholder="Bank"
                     {...form.getInputProps("bank")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -1860,7 +1848,9 @@ export default function ReceiptCreate({
                     placeholder="Branch"
                     {...form.getInputProps("branch")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -1869,7 +1859,9 @@ export default function ReceiptCreate({
                     placeholder="Cheque No"
                     {...form.getInputProps("cheque_no")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -1880,22 +1872,20 @@ export default function ReceiptCreate({
                         : undefined
                     }
                   > */}
-                    <SingleDateInput
-                      label="Cheque Date"
-                      placeholder="Select date"
-                      value={normalizeDate(form.values.cheque_date)}
-                      onChange={(date) =>
-                        form.setFieldValue("cheque_date", date)
-                      }
-                      disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
-                      styles={
-                        headerOtherDisabled
-                          ? useNonEditableStyleOnly
-                            ? reversalNonEditableStyles
-                            : readOnlyFieldStyles
-                          : undefined
-                      }
-                    />
+                  <SingleDateInput
+                    label="Cheque Date"
+                    placeholder="Select date"
+                    value={normalizeDate(form.values.cheque_date)}
+                    onChange={(date) => form.setFieldValue("cheque_date", date)}
+                    disabled={headerDateDisabled}
+                    styles={
+                      headerDateDisabled
+                        ? useNonEditableStyleOnly
+                          ? reversalNonEditableStyles
+                          : readOnlyFieldStyles
+                        : undefined
+                    }
+                  />
                   {/* </Box> */}
                 </Grid.Col>
               </>
@@ -1980,7 +1970,11 @@ export default function ReceiptCreate({
                             apiEndpoint={URL.customer}
                             value={row?.customer_code || null}
                             displayValue={row?.customer_display || null}
-                            disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                            disabled={
+                              useNonEditableStyleOnly
+                                ? false
+                                : isReadOnly || reversalFormDisabled
+                            }
                             onChange={(value, _selected, originalData) => {
                               setLoadedDetails(null);
                               const orig = originalData as {
@@ -2041,7 +2035,11 @@ export default function ReceiptCreate({
                           <TextInput
                             placeholder="Narration"
                             {...form.getInputProps(`details.${idx}.narration`)}
-                            disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                            disabled={
+                              useNonEditableStyleOnly
+                                ? false
+                                : isReadOnly || reversalFormDisabled
+                            }
                             styles={partyFieldStyles}
                           />
                         </Grid.Col>
@@ -2063,10 +2061,7 @@ export default function ReceiptCreate({
                                 clampROE(
                                   typeof v === "string" ? parseFloat(v) : v,
                                 ) ?? 1;
-                              form.setFieldValue(
-                                `details.${idx}.roe`,
-                                newRoe,
-                              );
+                              form.setFieldValue(`details.${idx}.roe`, newRoe);
                               const amt = form.values.details[idx]?.amount;
                               if (
                                 amt != null &&
@@ -2083,7 +2078,11 @@ export default function ReceiptCreate({
                             decimalScale={4}
                             max={ROE_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                            disabled={
+                              useNonEditableStyleOnly
+                                ? false
+                                : isReadOnly || reversalFormDisabled
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2101,9 +2100,7 @@ export default function ReceiptCreate({
                                 `details.${idx}.amount`,
                                 newAmount,
                               );
-                              const roeVal =
-                                form.values.details[idx]?.roe ??
-                                1;
+                              const roeVal = form.values.details[idx]?.roe ?? 1;
                               if (
                                 newAmount != null &&
                                 Number.isFinite(newAmount) &&
@@ -2119,7 +2116,11 @@ export default function ReceiptCreate({
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                            disabled={
+                              useNonEditableStyleOnly
+                                ? false
+                                : isReadOnly || reversalFormDisabled
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2141,7 +2142,11 @@ export default function ReceiptCreate({
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                            disabled={
+                              useNonEditableStyleOnly
+                                ? false
+                                : isReadOnly || reversalFormDisabled
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2156,7 +2161,11 @@ export default function ReceiptCreate({
                               )
                             }
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                            disabled={
+                              useNonEditableStyleOnly
+                                ? false
+                                : isReadOnly || reversalFormDisabled
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1.5}>
@@ -2168,7 +2177,11 @@ export default function ReceiptCreate({
                                 size="sm"
                                 onClick={addDetailRow}
                                 title="Add row"
-                                disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                                disabled={
+                                  useNonEditableStyleOnly
+                                    ? false
+                                    : isReadOnly || reversalFormDisabled
+                                }
                               >
                                 <IconPlus size={18} />
                               </Button>
@@ -2323,15 +2336,15 @@ export default function ReceiptCreate({
                       </Grid.Col>
                       <Grid.Col span={1.5}>
                         {/* <Box style={reversalReadOnlyWrapperStyle}> */}
-                          <SingleDateInput
-                            placeholder="Document date"
-                            value={normalizeDate(
-                              form.values.adjustments[idx].doc_date,
-                            )}
-                            onChange={() => {}}
-                            disabled={false}
-                            styles={adjustmentFieldStyles}
-                          />
+                        <SingleDateInput
+                          placeholder="Document date"
+                          value={normalizeDate(
+                            form.values.adjustments[idx].doc_date,
+                          )}
+                          onChange={() => {}}
+                          disabled
+                          styles={adjustmentFieldStyles}
+                        />
                         {/* </Box> */}
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -2381,11 +2394,14 @@ export default function ReceiptCreate({
                                   ? {
                                       ...a,
                                       adj_curr_amount: newCurr,
-                                      adj_local_amount: newLocal ?? a.adj_local_amount,
+                                      adj_local_amount:
+                                        newLocal ?? a.adj_local_amount,
                                     }
                                   : a,
                               );
-                            syncPartyDetailsFromAllocations(effectiveAdjustments);
+                            syncPartyDetailsFromAllocations(
+                              effectiveAdjustments,
+                            );
                           }}
                           decimalScale={2}
                           max={AMOUNT_MAX}
@@ -2394,7 +2410,11 @@ export default function ReceiptCreate({
                               ? adjustmentFieldStyles
                               : fieldStyles
                           }
-                          disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                          disabled={
+                            useNonEditableStyleOnly
+                              ? false
+                              : isReadOnly || reversalFormDisabled
+                          }
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -2421,7 +2441,11 @@ export default function ReceiptCreate({
                               size="sm"
                               onClick={addAdjustmentRow}
                               title="Add row"
-                              disabled={useNonEditableStyleOnly ? false : (isReadOnly || reversalFormDisabled)}
+                              disabled={
+                                useNonEditableStyleOnly
+                                  ? false
+                                  : isReadOnly || reversalFormDisabled
+                              }
                             >
                               <IconPlus size={18} />
                             </Button>
