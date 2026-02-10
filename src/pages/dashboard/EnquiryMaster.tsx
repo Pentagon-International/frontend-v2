@@ -110,11 +110,14 @@ function EnquiryMaster() {
   // Zustand store for filter and search preservation
   const setStoreFilters = useListFilterStore((state) => state.setFilters);
   const setStoreSearch = useListFilterStore((state) => state.setSearch);
+  const setStoreDisplayValues = useListFilterStore(
+    (state) => state.setDisplayValues,
+  );
   const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
   const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
   const clearStoreAll = useListFilterStore((state) => state.clearAll);
   const clearStoreAllExcept = useListFilterStore(
-    (state) => state.clearAllExcept
+    (state) => state.clearAllExcept,
   );
 
   // Preview modal states
@@ -128,16 +131,16 @@ function EnquiryMaster() {
 
   // Date range state for summary view
   const [fromDate, setFromDate] = useState<Date | null>(
-    hasInitialFilters ? null : getDefaultFromDate()
+    hasInitialFilters ? null : getDefaultFromDate(),
   );
   const [toDate, setToDate] = useState<Date | null>(
-    hasInitialFilters ? null : getDefaultToDate()
+    hasInitialFilters ? null : getDefaultToDate(),
   );
 
   const isMountedRef = useRef(false); // Start as false, will be set when mounted or initial filters processed
   const initialFiltersProcessed = useRef(false);
   const returnToDashboardRef = useRef<boolean>(
-    Boolean(location.state?.returnToDashboard)
+    Boolean(location.state?.returnToDashboard),
   ); // Persist returnToDashboard flag
   const dashboardStateRef = useRef<any>(location.state?.dashboardState); // Persist dashboard state
 
@@ -155,7 +158,7 @@ function EnquiryMaster() {
     string | null
   >(null);
   const [originDisplayValue, setOriginDisplayValue] = useState<string | null>(
-    null
+    null,
   );
   const [destinationDisplayValue, setDestinationDisplayValue] = useState<
     string | null
@@ -266,7 +269,7 @@ function EnquiryMaster() {
           initialPreviewFilters.enquiry_id ||
           initialPreviewFilters.reference_no ||
           (initialPreviewFilters.status &&
-            initialPreviewFilters.status !== "ALL")
+            initialPreviewFilters.status !== "ALL"),
       );
       setPreviewFiltersApplied(hasReplicatedFilters);
 
@@ -457,7 +460,7 @@ function EnquiryMaster() {
     (key: keyof PreviewFilterState, value: any) => {
       setPreviewFilters((prev) => ({ ...prev, [key]: value }));
     },
-    []
+    [],
   );
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -467,8 +470,6 @@ function EnquiryMaster() {
   // Helper function to save filters with dates to store (ensures consistency)
   // This function captures current filter/date/search values when called
   const saveFiltersToStore = useCallback(() => {
-    // Access current values directly - React closure will have latest values
-    // since this callback is recreated when dependencies change
     const filtersWithDates = {
       ...filters,
       enquiry_received_date: fromDate,
@@ -476,24 +477,63 @@ function EnquiryMaster() {
     };
     setStoreFilters(LIST_KEY, filtersWithDates);
     setStoreSearch(LIST_KEY, searchQuery);
+    setStoreDisplayValues(LIST_KEY, {
+      customer_code: customerDisplayValue ?? null,
+      origin_code: originDisplayValue ?? null,
+      destination_code: destinationDisplayValue ?? null,
+    });
     console.log("💾 Saved filters to store:", {
       filters: filtersWithDates,
       search: searchQuery,
+      displayValues: {
+        customer_code: customerDisplayValue,
+        origin_code: originDisplayValue,
+        destination_code: destinationDisplayValue,
+      },
       timestamp: new Date().toISOString(),
     });
-  }, [filters, fromDate, toDate, searchQuery, setStoreFilters, setStoreSearch]);
+  }, [
+    filters,
+    fromDate,
+    toDate,
+    searchQuery,
+    customerDisplayValue,
+    originDisplayValue,
+    destinationDisplayValue,
+    setStoreFilters,
+    setStoreSearch,
+    setStoreDisplayValues,
+  ]);
 
   // Helper function to save preview filters to store (for Detailed view)
   const savePreviewFiltersToStore = useCallback(() => {
-    // Preview filters already include dates, so we can save them directly
     setStoreFilters(DETAILED_LIST_KEY, previewFilters);
     setStoreSearch(DETAILED_LIST_KEY, searchQuery);
+    setStoreDisplayValues(DETAILED_LIST_KEY, {
+      customer_code: customerDisplayValue ?? null,
+      origin_code: originDisplayValue ?? null,
+      destination_code: destinationDisplayValue ?? null,
+    });
     console.log("💾 [Detailed View] Saved filters to store:", {
       filters: previewFilters,
       search: searchQuery,
+      displayValues: {
+        customer_code: customerDisplayValue,
+        origin_code: originDisplayValue,
+        destination_code: destinationDisplayValue,
+      },
       timestamp: new Date().toISOString(),
     });
-  }, [previewFilters, searchQuery, setStoreFilters, setStoreSearch]);
+  }, [
+    previewFilters,
+    searchQuery,
+    customerDisplayValue,
+    originDisplayValue,
+    destinationDisplayValue,
+    setStoreFilters,
+    setStoreSearch,
+    setStoreDisplayValues,
+  ]);
 
   const [showFilters, setShowFilters] = useState(false);
 
@@ -538,8 +578,7 @@ function EnquiryMaster() {
     // Include search based on latest available value.
     // Prefer debouncedSearch for typing flows, but fall back to searchQuery
     // so restored search (setSearchQuery) is not lost before debounce fires.
-    const effectiveSearch =
-      debouncedSearch.trim() || searchQuery.trim();
+    const effectiveSearch = debouncedSearch.trim() || searchQuery.trim();
     if (effectiveSearch) {
       payload.search = effectiveSearch;
     }
@@ -561,7 +600,8 @@ function EnquiryMaster() {
     if (filters.customer_code) payload.customer_code = filters.customer_code;
     if (filters.sales_person) payload.sales_person = filters.sales_person;
     if (filters.origin_code) payload.origin_code = filters.origin_code;
-    if (filters.destination_code) payload.destination_code = filters.destination_code;
+    if (filters.destination_code)
+      payload.destination_code = filters.destination_code;
     if (filters.service) payload.service = filters.service;
     if (filters.trade) payload.trade = filters.trade;
     if (filters.enquiry_id) payload.enquiry_id = filters.enquiry_id;
@@ -575,8 +615,7 @@ function EnquiryMaster() {
     // Include search as part of the payload (search is a filter)
     // Use debouncedSearch when typing, but fall back to searchQuery so
     // restored values are included even before debounce completes.
-    const effectiveSearch =
-      debouncedSearch.trim() || searchQuery.trim();
+    const effectiveSearch = debouncedSearch.trim() || searchQuery.trim();
     if (effectiveSearch) {
       payload.search = effectiveSearch;
     }
@@ -593,13 +632,18 @@ function EnquiryMaster() {
     queryKey: ["enquirySummary", listCurrentPage, listPageSize],
     queryFn: async () => {
       try {
-        // Always build payload from current filters + dates + debounced search
-        // (we only control WHEN this runs via refetchSummary)
-        const filterPayload = buildFilterPayload();
+        // Use restored payload from store when returning from sub-page (exact filters preserved)
+        let filterPayload: Record<string, unknown>;
+        if (restorePayloadRef.current) {
+          filterPayload = restorePayloadRef.current as Record<string, unknown>;
+          restorePayloadRef.current = null;
+        } else {
+          filterPayload = buildFilterPayload();
+        }
 
         const response = await apiCallProtected.post(
           `${URL.enquiryFilter}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
-          { filters: filterPayload }
+          { filters: filterPayload },
         );
         const data = response as any;
         const rows = Array.isArray(data?.data) ? data.data : [];
@@ -632,7 +676,7 @@ function EnquiryMaster() {
         const filterPayload = buildPreviewFilterPayload;
         const res: any = await apiCallProtected.post(
           `${URL.enquiryPreviewExcel}?index=${(previewCurrentPage - 1) * previewPageSize}&limit=${previewPageSize}`,
-          { filters: { ...filterPayload } }
+          { filters: { ...filterPayload } },
         );
         return {
           columns: Array.isArray(res?.columns) ? res.columns : [],
@@ -690,7 +734,7 @@ function EnquiryMaster() {
       { value: "LCL", label: "LCL" },
       { value: "AIR", label: "AIR" },
     ],
-    []
+    [],
   );
 
   // Memoized trade options
@@ -699,7 +743,7 @@ function EnquiryMaster() {
       { value: "Import", label: "Import" },
       { value: "Export", label: "Export" },
     ],
-    []
+    [],
   );
 
   // Memoized status options
@@ -711,7 +755,7 @@ function EnquiryMaster() {
       { value: "LOST", label: "Lost" },
       { value: "ALL", label: "All" },
     ],
-    []
+    [],
   );
 
   // No separate search queries – search is merged into the main payloads
@@ -771,7 +815,7 @@ function EnquiryMaster() {
 
       const availableColumns = (tablePreviewData?.columns || []).filter(
         (col: string) =>
-          !["No of Containers", "sno", "S.No", "SNO", "S No"].includes(col)
+          !["No of Containers", "sno", "S.No", "SNO", "S No"].includes(col),
       );
 
       if (!availableColumns.includes("Reference No")) {
@@ -781,7 +825,7 @@ function EnquiryMaster() {
       const orderedColumns: string[] = [
         ...desiredOrder.filter((col: string) => availableColumns.includes(col)),
         ...availableColumns.filter(
-          (col: string) => !desiredOrder.includes(col)
+          (col: string) => !desiredOrder.includes(col),
         ),
       ];
 
@@ -1232,11 +1276,14 @@ function EnquiryMaster() {
   // Track if we've restored from store to prevent duplicate API calls
   const hasRestoredFromStore = useRef(false);
   const hasRestoredPreviewFromStore = useRef(false);
+  // When restoring from store on return from sub-page, pass this payload to the next refetch
+  // so the API is hit with exact saved filters (avoids stale state/closure issues)
+  const restorePayloadRef = useRef<Record<string, unknown> | null>(null);
 
   // Clear other keys in store on mount (keep only current LIST_KEY)
-  useEffect(() => {
-    clearStoreAllExcept(LIST_KEY);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Do not clear store on mount so returning from sub-pages (Create New, Get Rate, Edit, Preview)
+  // can restore filters from both LIST_KEY and DETAILED_LIST_KEY
+  // useEffect(() => { clearStoreAllExcept(LIST_KEY); }, []);
 
   // Restore filters and search from store on mount and fetch data
   // Skip if refreshData is present (let refreshData effect handle it)
@@ -1245,8 +1292,7 @@ function EnquiryMaster() {
     // Skip restoration if refreshData is present - let refreshData effect handle it
     if (location.state?.refreshData) return;
 
-    const restoredState =
-      useListFilterStore.getState().getState(LIST_KEY);
+    const restoredState = useListFilterStore.getState().getState(LIST_KEY);
 
     const performRestore = async () => {
       if (!restoredState) {
@@ -1265,12 +1311,17 @@ function EnquiryMaster() {
       if (restoredFilters && Object.keys(restoredFilters).length > 0) {
         console.log("📥 Restoring filters from store:", restoredFilters);
         setFilters(restoredFilters);
-        // Restore date range from filters
         if (restoredFilters.enquiry_received_date) {
           setFromDate(restoredFilters.enquiry_received_date);
         }
         if (restoredFilters.enquiry_received_date_to) {
           setToDate(restoredFilters.enquiry_received_date_to);
+        }
+        const dv = restoredState.displayValues;
+        if (dv) {
+          setCustomerDisplayValue(dv.customer_code ?? null);
+          setOriginDisplayValue(dv.origin_code ?? null);
+          setDestinationDisplayValue(dv.destination_code ?? null);
         }
         // Check if any non-date filters exist
         hasFilters = Boolean(
@@ -1283,7 +1334,8 @@ function EnquiryMaster() {
             restoredFilters.enquiry_id ||
             restoredFilters.reference_no ||
             (restoredFilters.status && restoredFilters.status !== "ALL") ||
-          (restoredFilters.enquiry_received_date && restoredFilters.enquiry_received_date_to)
+            (restoredFilters.enquiry_received_date &&
+              restoredFilters.enquiry_received_date_to),
         );
         console.log("📥 Filter restoration check:", {
           hasFilters,
@@ -1305,11 +1357,37 @@ function EnquiryMaster() {
 
       // 2️⃣ Restore search
       let hasSearch = false;
-      if (typeof restoredState.search === "string" && restoredState.search.trim()) {
+      if (
+        typeof restoredState.search === "string" &&
+        restoredState.search.trim()
+      ) {
         console.log("📥 Restoring search from store:", restoredState.search);
         setSearchQuery(restoredState.search);
         hasSearch = true;
       }
+
+      // 3️⃣ Build payload from store so refetch uses exact saved filters
+      const payload: Record<string, unknown> = {};
+      if (restoredFilters?.enquiry_received_date && restoredFilters?.enquiry_received_date_to) {
+        payload.enquiry_received_date_from = dayjs(restoredFilters.enquiry_received_date).format("YYYY-MM-DD");
+        payload.enquiry_received_date_to = dayjs(restoredFilters.enquiry_received_date_to).format("YYYY-MM-DD");
+      }
+      if (restoredFilters?.customer_code) payload.customer_code = restoredFilters.customer_code;
+      if (restoredFilters?.sales_person) payload.sales_person = restoredFilters.sales_person;
+      if (restoredFilters?.origin_code) payload.origin_code = restoredFilters.origin_code;
+      if (restoredFilters?.destination_code) payload.destination_code = restoredFilters.destination_code;
+      if (restoredFilters?.service) payload.service = restoredFilters.service;
+      if (restoredFilters?.trade) payload.trade = restoredFilters.trade;
+      if (restoredFilters?.enquiry_id) payload.enquiry_id = restoredFilters.enquiry_id;
+      if (restoredFilters?.reference_no) payload.reference_no = restoredFilters.reference_no;
+      if (restoredFilters?.status && restoredFilters.status !== "ALL") {
+        payload.status = restoredFilters.status;
+      } else {
+        payload.status = "";
+      }
+      const searchStr = (restoredState.search ?? "").trim();
+      if (searchStr) payload.search = searchStr;
+      restorePayloadRef.current = Object.keys(payload).length > 0 ? payload : null;
 
       // Wait for state updates to flush
       await new Promise((resolve) => setTimeout(resolve, 150));
@@ -1332,7 +1410,7 @@ function EnquiryMaster() {
       }
     };
 
-    if(restoredState?.shouldRestore){
+    if (restoredState?.shouldRestore) {
       performRestore();
       useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
       hasRestoredFromStore.current = true;
@@ -1340,7 +1418,6 @@ function EnquiryMaster() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.refreshData]);
-
 
   // Handle initial filters from navigation
   useEffect(() => {
@@ -1351,7 +1428,7 @@ function EnquiryMaster() {
       // Persist returnToDashboard and dashboardState in refs
       if (location.state?.returnToDashboard !== undefined) {
         returnToDashboardRef.current = Boolean(
-          location.state.returnToDashboard
+          location.state.returnToDashboard,
         );
       }
       if (location.state?.dashboardState !== undefined) {
@@ -1369,14 +1446,14 @@ function EnquiryMaster() {
         const parsedFrom = dayjs(
           initialFilters.enquiry_received_date_from,
           "YYYY-MM-DD",
-          true
+          true,
         );
         if (parsedFrom.isValid()) {
           enquiryReceivedDateFrom = parsedFrom.toDate();
         } else {
           console.error(
             "Invalid from date:",
-            initialFilters.enquiry_received_date_from
+            initialFilters.enquiry_received_date_from,
           );
         }
       }
@@ -1385,14 +1462,14 @@ function EnquiryMaster() {
         const parsedTo = dayjs(
           initialFilters.enquiry_received_date_to,
           "YYYY-MM-DD",
-          true
+          true,
         );
         if (parsedTo.isValid()) {
           enquiryReceivedDateTo = parsedTo.toDate();
         } else {
           console.error(
             "Invalid to date:",
-            initialFilters.enquiry_received_date_to
+            initialFilters.enquiry_received_date_to,
           );
         }
       }
@@ -1435,7 +1512,7 @@ function EnquiryMaster() {
       // Update refs before navigation to ensure they persist
       if (location.state?.returnToDashboard !== undefined) {
         returnToDashboardRef.current = Boolean(
-          location.state.returnToDashboard
+          location.state.returnToDashboard,
         );
       }
       if (location.state?.dashboardState !== undefined) {
@@ -1492,11 +1569,7 @@ function EnquiryMaster() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    location.state,
-    location.pathname,
-    refetchSummary,
-  ]);
+  }, [location.state, location.pathname, refetchSummary]);
 
   // Add effect to refresh data when returning from create/edit operations
   useEffect(() => {
@@ -1524,194 +1597,124 @@ function EnquiryMaster() {
       const refreshData = async () => {
         try {
           if (showPreviewTable) {
-            // Check if we have filters or search from store for preview view
-            const restoredPreviewState = useListFilterStore.getState().getState(DETAILED_LIST_KEY);
-            const hasActivePreviewFilters = restoredPreviewState?.filters && Object.keys(restoredPreviewState.filters).length > 0;
-            const hasActivePreviewSearch = restoredPreviewState?.search && restoredPreviewState.search.trim() !== "";
+            const restoredPreviewState = useListFilterStore
+              .getState()
+              .getState(DETAILED_LIST_KEY);
 
-            // If we have filters/search in store, restore them first
-            if (restoredPreviewState && (hasActivePreviewFilters || hasActivePreviewSearch)) {
-              console.log("🔄 [Detailed View] Restoring filters/search from store:", {
-                  hasActivePreviewFilters,
-                  hasActivePreviewSearch,
+            if (restoredPreviewState) {
+              console.log(
+                "🔄 [refreshData - Detailed] Restoring filters/search from store:",
+                {
                   filters: restoredPreviewState.filters,
                   search: restoredPreviewState.search,
+                },
+              );
+
+              const restoredPreviewFilters =
+                (restoredPreviewState.filters || {}) as PreviewFilterState;
+              setPreviewFilters(restoredPreviewFilters);
+              setSearchQuery(restoredPreviewState.search ?? "");
+              const dv = restoredPreviewState.displayValues;
+              if (dv) {
+                setCustomerDisplayValue(dv.customer_code ?? null);
+                setOriginDisplayValue(dv.origin_code ?? null);
+                setDestinationDisplayValue(dv.destination_code ?? null);
+              }
+              setFilters({
+                customer_code: restoredPreviewFilters.customer_name || null,
+                sales_person: restoredPreviewFilters.sales_person || null,
+                origin_code: restoredPreviewFilters.origin_name || null,
+                destination_code:
+                  restoredPreviewFilters.destination_name || null,
+                enquiry_received_date:
+                  restoredPreviewFilters.enquiry_received_date || null,
+                enquiry_received_date_to:
+                  restoredPreviewFilters.enquiry_received_date_to || null,
+                service: restoredPreviewFilters.service || null,
+                trade: restoredPreviewFilters.trade || null,
+                status: restoredPreviewFilters.status || "ACTIVE",
+                enquiry_id: restoredPreviewFilters.enquiry_id || null,
+                reference_no: restoredPreviewFilters.reference_no || null,
               });
-
-              // Restore preview filters from store if they exist
-              if (hasActivePreviewFilters) {
-                const restoredPreviewFilters = restoredPreviewState.filters as PreviewFilterState;
-                console.log("📥 [refreshData - Detailed] Restoring filters from store:", restoredPreviewFilters);
-                setPreviewFilters(restoredPreviewFilters);
-
-                // Sync shared summary filters + dates so both views see the same filters
-                setFilters({
-                  customer_code: restoredPreviewFilters.customer_name || null,
-                  sales_person: restoredPreviewFilters.sales_person || null,
-                  origin_code: restoredPreviewFilters.origin_name || null,
-                  destination_code: restoredPreviewFilters.destination_name || null,
-                  enquiry_received_date:
-                    restoredPreviewFilters.enquiry_received_date || null,
-                  enquiry_received_date_to:
-                    restoredPreviewFilters.enquiry_received_date_to || null,
-                  service: restoredPreviewFilters.service || null,
-                  trade: restoredPreviewFilters.trade || null,
-                  status: restoredPreviewFilters.status || "ACTIVE",
-                  enquiry_id: restoredPreviewFilters.enquiry_id || null,
-                  reference_no: restoredPreviewFilters.reference_no || null,
-                });
-                setFromDate(restoredPreviewFilters.enquiry_received_date || null);
-                setToDate(restoredPreviewFilters.enquiry_received_date_to || null);
-              }
-
-              // Restore search from store if it exists
-              if (hasActivePreviewSearch) {
-                console.log("📥 [refreshData - Detailed] Restoring search from store:", restoredPreviewState.search);
-                setSearchQuery(restoredPreviewState.search);
-              }
-
-              // Wait for state updates to flush before calling API
-              await new Promise((resolve) => setTimeout(resolve, 250));
-            }
-
-            // Determine if we should fetch filtered data
-            const finalPreviewState = useListFilterStore.getState().getState(DETAILED_LIST_KEY);
-            const finalHasActivePreviewFilters = finalPreviewState?.filters && Object.keys(finalPreviewState.filters).length > 0;
-            const finalHasActivePreviewSearch = finalPreviewState?.search && finalPreviewState.search.trim() !== "";
-
-            // Check if preview filters state has actual filter values
-            const currentPreviewFilters = previewFilters;
-            const hasPreviewFilterValues = Boolean(
-              currentPreviewFilters.customer_name ||
-                currentPreviewFilters.sales_person ||
-                currentPreviewFilters.origin_name ||
-                currentPreviewFilters.destination_name ||
-                currentPreviewFilters.service ||
-                currentPreviewFilters.trade ||
-                currentPreviewFilters.terms_of_shipment ||
-              (currentPreviewFilters.status && currentPreviewFilters.status !== "ALL") ||
-                currentPreviewFilters.enquiry_id ||
-                currentPreviewFilters.reference_no ||
-              (currentPreviewFilters.enquiry_received_date && currentPreviewFilters.enquiry_received_date_to)
-            );
-
-            if (previewFiltersApplied || finalHasActivePreviewFilters || finalHasActivePreviewSearch || hasPreviewFilterValues) {
-              console.log("✅ [refreshData - Detailed] Fetching filtered data");
+              setFromDate(
+                restoredPreviewFilters.enquiry_received_date || null,
+              );
+              setToDate(
+                restoredPreviewFilters.enquiry_received_date_to || null,
+              );
               setPreviewFiltersApplied(true);
-              await refetchPreview();
-              setIsRefreshingData(false);
-            } else {
-              console.log("🔄 [refreshData - Detailed] Fetching initial data");
-              await refetchInitialPreview();
-              setIsRefreshingData(false);
             }
-          } else {
-            // Check if we have filters or search from store
-            const restoredState = useListFilterStore.getState().getState(LIST_KEY);
-            const hasActiveFilters = restoredState?.filters && Object.keys(restoredState.filters).length > 0;
-            const hasActiveSearch = restoredState?.search && restoredState.search.trim() !== "";
 
-            // If we have filters/search in store, restore them first
-            if (restoredState && (hasActiveFilters || hasActiveSearch)) {
-              console.log("🔄 Restoring filters/search from store:", {
-                hasActiveFilters,
-                hasActiveSearch,
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            console.log("✅ [refreshData - Detailed] Fetching preview data with restored/current state");
+            await refetchPreview();
+            setIsRefreshingData(false);
+          } else {
+            // Summary view: restore from store when we have saved state (returned from sub-page)
+            const restoredState = useListFilterStore
+              .getState()
+              .getState(LIST_KEY);
+
+            if (restoredState) {
+              console.log("🔄 [refreshData] Restoring filters/search from store:", {
                 filters: restoredState.filters,
                 search: restoredState.search,
               });
 
-              // Restore filters from store if they exist
-              if (hasActiveFilters) {
-                const restoredFilters = restoredState.filters as FilterState;
-                console.log("📥 [refreshData] Restoring filters from store:", restoredFilters);
-                setFilters(restoredFilters);
-                // Restore date range from filters
-                if (restoredFilters.enquiry_received_date) {
-                  setFromDate(restoredFilters.enquiry_received_date);
-                }
-                if (restoredFilters.enquiry_received_date_to) {
-                  setToDate(restoredFilters.enquiry_received_date_to);
-                }
-                console.log("📥 [refreshData] Restored filter values:", {
-                  customer_code: restoredFilters.customer_code,
-                  sales_person: restoredFilters.sales_person,
-                  origin_code: restoredFilters.origin_code,
-                  destination_code: restoredFilters.destination_code,
-                  service: restoredFilters.service,
-                  trade: restoredFilters.trade,
-                  status: restoredFilters.status,
-                  enquiry_id: restoredFilters.enquiry_id,
-                  reference_no: restoredFilters.reference_no,
-                  dates: {
-                    from: restoredFilters.enquiry_received_date,
-                    to: restoredFilters.enquiry_received_date_to,
-                  },
-                });
+              const restoredFilters = (restoredState.filters || {}) as FilterState;
+              setFilters(restoredFilters);
+              if (restoredFilters.enquiry_received_date != null) {
+                setFromDate(restoredFilters.enquiry_received_date);
               }
-
-              // Restore search from store if it exists
-              if (hasActiveSearch) {
-                console.log("📥 [refreshData] Restoring search from store:", restoredState.search);
-                setSearchQuery(restoredState.search);
+              if (restoredFilters.enquiry_received_date_to != null) {
+                setToDate(restoredFilters.enquiry_received_date_to);
               }
-
-              // Wait for state updates to flush before calling API
-              // Use a longer delay to ensure React state updates are complete
-              await new Promise((resolve) => setTimeout(resolve, 250));
-            }
-
-            // Determine if we should fetch filtered data
-            // Check both store and current state to be safe
-            const finalState = useListFilterStore.getState().getState(LIST_KEY);
-            const finalHasActiveFilters = finalState?.filters && Object.keys(finalState.filters).length > 0;
-            const finalHasActiveSearch = finalState?.search && finalState.search.trim() !== "";
-
-            // Also check if filters state has actual filter values (not just dates)
-            // Use a function to get current filters state (captured after state update)
-            const getCurrentFilters = () => filters;
-            const currentFilters = getCurrentFilters();
-            const hasFilterValues = Boolean(
-              currentFilters.customer_code ||
-                currentFilters.sales_person ||
-                currentFilters.origin_code ||
-                currentFilters.destination_code ||
-                currentFilters.service ||
-                currentFilters.trade ||
-                currentFilters.enquiry_id ||
-                currentFilters.reference_no ||
-                (currentFilters.status && currentFilters.status !== "ALL")
-            );
-
-            // Build payload to verify what will be sent
-            const testPayload = buildFilterPayload();
-            console.log("🔍 [refreshData] Verification before API call:", {
-              filtersApplied,
-              finalHasActiveFilters,
-              finalHasActiveSearch,
-              hasFilterValues,
-              currentFiltersState: currentFilters,
-              searchQueryState: searchQuery,
-              fromDateState: fromDate,
-              toDateState: toDate,
-              payloadToBeSent: testPayload,
-            });
-
-            if (filtersApplied || finalHasActiveFilters || finalHasActiveSearch || hasFilterValues) {
-              console.log("✅ [refreshData] Fetching filtered data");
+              setSearchQuery(restoredState.search ?? "");
               setFiltersApplied(true);
-              const result = await refetchSummary();
-              if (result.data && Array.isArray(result.data)) {
-                await new Promise((resolve) => setTimeout(resolve, 50));
+              // Restore display labels so SearchableSelects show label (e.g. "Chennai (INMAA)") not code
+              const dv = restoredState.displayValues;
+              if (dv) {
+                setCustomerDisplayValue(dv.customer_code ?? null);
+                setOriginDisplayValue(dv.origin_code ?? null);
+                setDestinationDisplayValue(dv.destination_code ?? null);
               }
-              setIsRefreshingData(false);
-            } else if (fromDate && toDate) {
-              console.log("🔄 [refreshData] Fetching default data with dates only");
-              await refetchSummary();
-              setIsRefreshingData(false);
-            } else {
-              console.log("⚠️ [refreshData] No filters/search/dates - skipping API call");
-              setIsRefreshingData(false);
+
+              // Build payload from stored state so the next refetch uses exact saved filters
+              const payload: Record<string, unknown> = {};
+              if (restoredFilters.enquiry_received_date && restoredFilters.enquiry_received_date_to) {
+                payload.enquiry_received_date_from = dayjs(restoredFilters.enquiry_received_date).format("YYYY-MM-DD");
+                payload.enquiry_received_date_to = dayjs(restoredFilters.enquiry_received_date_to).format("YYYY-MM-DD");
+              }
+              if (restoredFilters.customer_code) payload.customer_code = restoredFilters.customer_code;
+              if (restoredFilters.sales_person) payload.sales_person = restoredFilters.sales_person;
+              if (restoredFilters.origin_code) payload.origin_code = restoredFilters.origin_code;
+              if (restoredFilters.destination_code) payload.destination_code = restoredFilters.destination_code;
+              if (restoredFilters.service) payload.service = restoredFilters.service;
+              if (restoredFilters.trade) payload.trade = restoredFilters.trade;
+              if (restoredFilters.enquiry_id) payload.enquiry_id = restoredFilters.enquiry_id;
+              if (restoredFilters.reference_no) payload.reference_no = restoredFilters.reference_no;
+              if (restoredFilters.status && restoredFilters.status !== "ALL") {
+                payload.status = restoredFilters.status;
+              } else {
+                payload.status = "";
+              }
+              const searchStr = (restoredState.search ?? "").trim();
+              if (searchStr) payload.search = searchStr;
+              restorePayloadRef.current = payload;
             }
+
+            // Wait for state updates to flush, then refetch (queryFn will use restorePayloadRef if set)
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            console.log("✅ [refreshData] Fetching summary data with restored/current state");
+            const result = await refetchSummary();
+            if (result.data && Array.isArray(result.data)) {
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            setIsRefreshingData(false);
           }
         } catch (error) {
           console.error("Error refreshing data:", error);
@@ -1773,8 +1776,8 @@ function EnquiryMaster() {
     if (debouncedSearch.trim() !== "") {
       // Search exists - trigger filtered API (search will be merged with filters in buildFilterPayload)
       refetchSummary()
-        .then(()=>{
-          setFiltersApplied(true)
+        .then(() => {
+          setFiltersApplied(true);
         })
         .then(() => {
           // API completed - data is set, hide loader
@@ -1790,8 +1793,8 @@ function EnquiryMaster() {
       if (filtersApplied) {
         // Filters still applied - refetch with filters only (no search)
         refetchSummary()
-          .then(()=>{
-            setFiltersApplied(true)
+          .then(() => {
+            setFiltersApplied(true);
           })
           .then(() => {
             setIsRefreshingData(false);
@@ -1898,7 +1901,9 @@ function EnquiryMaster() {
       return;
     }
 
-    const restoredState = useListFilterStore.getState().getState(DETAILED_LIST_KEY);
+    const restoredState = useListFilterStore
+      .getState()
+      .getState(DETAILED_LIST_KEY);
 
     const performPreviewRestore = async () => {
       if (!restoredState) {
@@ -1913,9 +1918,16 @@ function EnquiryMaster() {
 
       // 1️⃣ Restore preview filters
       let hasPreviewFilters = false;
-      const restoredPreviewFilters = restoredState.filters as PreviewFilterState;
-      if (restoredPreviewFilters && Object.keys(restoredPreviewFilters).length > 0) {
-        console.log("📥 [Detailed View] Restoring filters from store:", restoredPreviewFilters);
+      const restoredPreviewFilters =
+        restoredState.filters as PreviewFilterState;
+      if (
+        restoredPreviewFilters &&
+        Object.keys(restoredPreviewFilters).length > 0
+      ) {
+        console.log(
+          "📥 [Detailed View] Restoring filters from store:",
+          restoredPreviewFilters,
+        );
         setPreviewFilters(restoredPreviewFilters);
 
         // Keep shared summary filters + dates in sync so the single filter section reflects them
@@ -1936,6 +1948,12 @@ function EnquiryMaster() {
         });
         setFromDate(restoredPreviewFilters.enquiry_received_date || null);
         setToDate(restoredPreviewFilters.enquiry_received_date_to || null);
+        const dv = restoredState.displayValues;
+        if (dv) {
+          setCustomerDisplayValue(dv.customer_code ?? null);
+          setOriginDisplayValue(dv.origin_code ?? null);
+          setDestinationDisplayValue(dv.destination_code ?? null);
+        }
 
         // Check if any filters exist
         hasPreviewFilters = Boolean(
@@ -1946,38 +1964,42 @@ function EnquiryMaster() {
             restoredPreviewFilters.service ||
             restoredPreviewFilters.trade ||
             restoredPreviewFilters.terms_of_shipment ||
-          (restoredPreviewFilters.status && restoredPreviewFilters.status !== "ALL") ||
+            (restoredPreviewFilters.status &&
+              restoredPreviewFilters.status !== "ALL") ||
             restoredPreviewFilters.enquiry_id ||
             restoredPreviewFilters.reference_no ||
-          (restoredPreviewFilters.enquiry_received_date && restoredPreviewFilters.enquiry_received_date_to)
+            (restoredPreviewFilters.enquiry_received_date &&
+              restoredPreviewFilters.enquiry_received_date_to),
         );
       }
 
       // 2️⃣ Restore search
       let hasPreviewSearch = false;
-      if (typeof restoredState.search === "string" && restoredState.search.trim()) {
-        console.log("📥 [Detailed View] Restoring search from store:", restoredState.search);
+      if (
+        typeof restoredState.search === "string" &&
+        restoredState.search.trim()
+      ) {
+        console.log(
+          "📥 [Detailed View] Restoring search from store:",
+          restoredState.search,
+        );
         setSearchQuery(restoredState.search);
         hasPreviewSearch = true;
       }
 
-      // Wait for state updates to flush
+      // Wait for state updates to flush, then defer refetch so queryFn sees restored state
       await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // 3️⃣ Fetch data based on restored state
+      setIsRefreshingData(true);
       if (hasPreviewFilters || hasPreviewSearch) {
-        setIsRefreshingData(true);
         setPreviewFiltersApplied(true);
-        await refetchPreview();
-        setIsRefreshingData(false);
-      } else {
-        // No filters/search - load initial data
-        setIsRefreshingData(true);
-        await refetchInitialPreview();
-        setIsRefreshingData(false);
       }
+      await refetchPreview();
+      setIsRefreshingData(false);
     };
-    if(restoredState?.shouldRestore){
+    if (restoredState?.shouldRestore) {
       performPreviewRestore();
       useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, false);
       hasRestoredFromStore.current = true;
@@ -2006,9 +2028,11 @@ function EnquiryMaster() {
     // This ensures API is only called when user changes page/size with active filters/search
     if (filtersApplied || debouncedSearch.trim() !== "") {
       setIsRefreshingData(true);
-      refetchSummary().then(()=>{
-          setFiltersApplied(true)
-        }).then(() => setIsRefreshingData(false));
+      refetchSummary()
+        .then(() => {
+          setFiltersApplied(true);
+        })
+        .then(() => setIsRefreshingData(false));
     } else if (fromDate && toDate) {
       // No filters, no search, but dates exist - use default query for pagination
       setIsRefreshingData(true);
@@ -2063,7 +2087,10 @@ function EnquiryMaster() {
         setIsRefreshingData(false);
       })
       .catch((error) => {
-        console.error("Error fetching preview data on pagination change:", error);
+        console.error(
+          "Error fetching preview data on pagination change:",
+          error,
+        );
         setIsRefreshingData(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2231,9 +2258,8 @@ function EnquiryMaster() {
                   <UnstyledButton
                     onClick={() => {
                       setMenuOpened(false);
-                      // Preserve filters and search in store before navigation
                       saveFiltersToStore();
-                      // Preserve current filter state when navigating to edit
+                      if (showPreviewTable) savePreviewFiltersToStore();
                       const currentFilterState = {
                         filters,
                         filtersApplied,
@@ -2245,10 +2271,14 @@ function EnquiryMaster() {
                           destination_code: destinationDisplayValue,
                         },
                       };
-                      if(showPreviewTable){
-                        useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
-                      }else{
-                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                      if (showPreviewTable) {
+                        useListFilterStore
+                          .getState()
+                          .setShouldRestore(DETAILED_LIST_KEY, true);
+                      } else {
+                        useListFilterStore
+                          .getState()
+                          .setShouldRestore(LIST_KEY, true);
                       }
                       navigate("/enquiry-create", {
                         state: {
@@ -2260,18 +2290,18 @@ function EnquiryMaster() {
                     }}
                     style={{
                       opacity: ["GAINED", "LOST", "QUOTE CREATED"].includes(
-                        (row.original.status || "").toUpperCase()
+                        (row.original.status || "").toUpperCase(),
                       )
                         ? 0.5
                         : 1,
                       cursor: ["GAINED", "LOST", "QUOTE CREATED"].includes(
-                        (row.original.status || "").toUpperCase()
+                        (row.original.status || "").toUpperCase(),
                       )
                         ? "not-allowed"
                         : "pointer",
                     }}
                     disabled={["GAINED", "LOST", "QUOTE CREATED"].includes(
-                      (row.original.status || "").toUpperCase()
+                      (row.original.status || "").toUpperCase(),
                     )}
                   >
                     <Group gap={"sm"}>
@@ -2283,7 +2313,7 @@ function EnquiryMaster() {
                 <Menu.Divider />
                 {/* Edit Quotation - Only show for gained, lost, quote created */}
                 {["GAINED", "LOST", "QUOTE CREATED"].includes(
-                  (row.original.status || "").toUpperCase()
+                  (row.original.status || "").toUpperCase(),
                 ) && (
                   <>
                     <Box px={10} py={5}>
@@ -2297,7 +2327,7 @@ function EnquiryMaster() {
                             };
                             const response = await apiCallProtected.post(
                               `${URL.quotationFilter}`,
-                              filterPayload
+                              filterPayload,
                             );
                             const data = response as any;
                             if (
@@ -2305,11 +2335,9 @@ function EnquiryMaster() {
                               Array.isArray(data.data) &&
                               data.data.length > 0
                             ) {
-                              // Get the first quotation (most recent)
                               const quotationData = data.data[0];
-                              // Preserve filters and search in store before navigation
                               saveFiltersToStore();
-                              // Preserve current filter state
+                              if (showPreviewTable) savePreviewFiltersToStore();
                               const currentFilterState = {
                                 filters,
                                 filtersApplied,
@@ -2321,10 +2349,14 @@ function EnquiryMaster() {
                                   destination_code: destinationDisplayValue,
                                 },
                               };
-                              if(showPreviewTable){
-                                useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
-                              }else{
-                                useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                              if (showPreviewTable) {
+                                useListFilterStore
+                                  .getState()
+                                  .setShouldRestore(DETAILED_LIST_KEY, true);
+                              } else {
+                                useListFilterStore
+                                  .getState()
+                                  .setShouldRestore(LIST_KEY, true);
                               }
                               // Navigate to quotation-create in edit mode
                               navigate("/quotation-create", {
@@ -2362,9 +2394,8 @@ function EnquiryMaster() {
                   <UnstyledButton
                     onClick={() => {
                       setMenuOpened(false);
-                      // Preserve filters and search in store before navigation
                       saveFiltersToStore();
-                      // Preserve current filter state when navigating to get rate
+                      if (showPreviewTable) savePreviewFiltersToStore();
                       const currentFilterState = {
                         filters,
                         filtersApplied,
@@ -2376,10 +2407,14 @@ function EnquiryMaster() {
                           destination_code: destinationDisplayValue,
                         },
                       };
-                      if(showPreviewTable){
-                        useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
-                      }else{
-                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                      if (showPreviewTable) {
+                        useListFilterStore
+                          .getState()
+                          .setShouldRestore(DETAILED_LIST_KEY, true);
+                      } else {
+                        useListFilterStore
+                          .getState()
+                          .setShouldRestore(LIST_KEY, true);
                       }
                       navigate("/get-rate", {
                         state: {
@@ -2405,9 +2440,8 @@ function EnquiryMaster() {
                         <UnstyledButton
                           onClick={() => {
                             setMenuOpened(false);
-                            // Preserve filters and search in store before navigation
                             saveFiltersToStore();
-                            // Preserve current filter state when navigating to edit
+                            if (showPreviewTable) savePreviewFiltersToStore();
                             const currentFilterState = {
                               filters,
                               filtersApplied,
@@ -2419,10 +2453,14 @@ function EnquiryMaster() {
                                 destination_code: destinationDisplayValue,
                               },
                             };
-                            if(showPreviewTable){
-                              useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
-                            }else{
-                              useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                            if (showPreviewTable) {
+                              useListFilterStore
+                                .getState()
+                                .setShouldRestore(DETAILED_LIST_KEY, true);
+                            } else {
+                              useListFilterStore
+                                .getState()
+                                .setShouldRestore(LIST_KEY, true);
                             }
                             navigate("/enquiry-create", {
                               state: {
@@ -2489,7 +2527,7 @@ function EnquiryMaster() {
       customerDisplayValue,
       originDisplayValue,
       destinationDisplayValue,
-    ]
+    ],
   );
 
   const table = useMantineReactTable({
@@ -2869,7 +2907,9 @@ function EnquiryMaster() {
                         // which will update store and trigger API
                         setSearchQuery("");
                         // Clear search from store immediately (use correct LIST_KEY based on view)
-                        const currentListKey = showPreviewTable ? DETAILED_LIST_KEY : LIST_KEY;
+                        const currentListKey = showPreviewTable
+                          ? DETAILED_LIST_KEY
+                          : LIST_KEY;
                         clearStoreSearch(currentListKey);
                         // Reset search ref to current debouncedSearch value
                         // This ensures the useEffect will detect the change when debouncedSearch becomes ""
@@ -2889,10 +2929,12 @@ function EnquiryMaster() {
                             previewFilters.service ||
                             previewFilters.trade ||
                             previewFilters.terms_of_shipment ||
-                            (previewFilters.status && previewFilters.status !== "ALL") ||
+                            (previewFilters.status &&
+                              previewFilters.status !== "ALL") ||
                             previewFilters.enquiry_id ||
                             previewFilters.reference_no ||
-                            (previewFilters.enquiry_received_date && previewFilters.enquiry_received_date_to);
+                            (previewFilters.enquiry_received_date &&
+                              previewFilters.enquiry_received_date_to);
                           if (!hasOtherPreviewFilters) {
                             setPreviewFiltersApplied(false);
                           }
@@ -3012,8 +3054,8 @@ function EnquiryMaster() {
                   },
                 }}
                 onClick={() => {
-                  // Preserve filters and search in store before navigation
                   saveFiltersToStore();
+                  if (showPreviewTable) savePreviewFiltersToStore();
                   const currentFilterState = {
                     filters,
                     filtersApplied,
@@ -3025,10 +3067,14 @@ function EnquiryMaster() {
                       destination_code: destinationDisplayValue,
                     },
                   };
-                  if(showPreviewTable){
-                    useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true)
-                  }else{
-                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);  
+                  if (showPreviewTable) {
+                    useListFilterStore
+                      .getState()
+                      .setShouldRestore(DETAILED_LIST_KEY, true);
+                  } else {
+                    useListFilterStore
+                      .getState()
+                      .setShouldRestore(LIST_KEY, true);
                   }
                   navigate("/enquiry-create", {
                     state: {
@@ -3085,365 +3131,355 @@ function EnquiryMaster() {
             </Group>
 
             <>
-                <Grid gutter="md" px="md">
-                  {/* Row 1 */}
-                  <Grid.Col span={2}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Customer Name"
-                      placeholder="Select Service"
-                      apiEndpoint={URL.customer}
-                      searchFields={["customer_code", "customer_name"]}
-                      displayFormat={(item: any) => ({
-                        value: String(item.customer_code),
-                        label: String(item.customer_name),
-                      })}
-                      value={filters.customer_code}
-                      displayValue={customerDisplayValue}
-                      onChange={(value, selectedData) => {
-                        updateFilter("customer_code", value || null);
-                        setCustomerDisplayValue(selectedData?.label || null);
-                        // Keep detailed-view filter state in sync when in Detailed view
-                        if (showPreviewTable) {
-                          updatePreviewFilter("customer_name", value || null);
-                          setPreviewCustomerDisplayValue(
-                            selectedData?.label || null
-                          );
-                        }
-                      }}
-                      minSearchLength={3}
-                      className="filter-searchable-select"
-                    />
-                  </Grid.Col>
+              <Grid gutter="md" px="md">
+                {/* Row 1 */}
+                <Grid.Col span={2}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Customer Name"
+                    placeholder="Select Service"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_code", "customer_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={filters.customer_code}
+                    displayValue={customerDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updateFilter("customer_code", value || null);
+                      setCustomerDisplayValue(selectedData?.label || null);
+                      // Keep detailed-view filter state in sync when in Detailed view
+                      if (showPreviewTable) {
+                        updatePreviewFilter("customer_name", value || null);
+                        setPreviewCustomerDisplayValue(
+                          selectedData?.label || null,
+                        );
+                      }
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+                  />
+                </Grid.Col>
 
-                  <Grid.Col span={2}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Origin"
-                      placeholder="Type Origin Code"
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_code", "port_name"]}
-                      displayFormat={(item: any) => ({
-                        value: String(item.port_code),
-                        label: `${item.port_name} (${item.port_code})`,
-                      })}
-                      value={filters.origin_code}
-                      displayValue={originDisplayValue}
-                      onChange={(value, selectedData) => {
-                        updateFilter("origin_code", value || null);
-                        setOriginDisplayValue(selectedData?.label || null);
-                        if (showPreviewTable) {
-                          updatePreviewFilter("origin_name", value || null);
-                          setPreviewOriginDisplayValue(
-                            selectedData?.label || null
-                          );
-                        }
-                      }}
-                      minSearchLength={3}
-                      className="filter-searchable-select"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={2}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Destination"
-                      placeholder="Type destination code"
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_code", "port_name"]}
-                      displayFormat={(item: any) => ({
-                        value: String(item.port_code),
-                        label: `${item.port_name} (${item.port_code})`,
-                      })}
-                      value={filters.destination_code}
-                      displayValue={destinationDisplayValue}
-                      onChange={(value, selectedData) => {
-                        updateFilter("destination_code", value || null);
-                        setDestinationDisplayValue(selectedData?.label || null);
-                        if (showPreviewTable) {
-                          updatePreviewFilter("destination_name", value || null);
-                          setPreviewDestinationDisplayValue(
-                            selectedData?.label || null
-                          );
-                        }
-                      }}
-                      minSearchLength={3}
-                      className="filter-searchable-select"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={4}>
-                    <DateRangeInput
-                      fromDate={fromDate}
-                      toDate={toDate}
-                      onFromDateChange={(date) => {
-                        setFromDate(date);
-                        if (showPreviewTable) {
-                          updatePreviewFilter("enquiry_received_date", date);
-                        }
-                      }}
-                      onToDateChange={(date) => {
-                        setToDate(date);
-                        if (showPreviewTable) {
-                          updatePreviewFilter("enquiry_received_date_to", date);
-                        }
-                      }}
-                      fromLabel="From Date"
-                      toLabel="To Date"
-                      size="xs"
-                      allowDeselection={true}
-                      showRangeInCalendar={false}
-                      inputWidth={260}
-                    />
-                  </Grid.Col>
+                <Grid.Col span={2}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Origin"
+                    placeholder="Type Origin Code"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={filters.origin_code}
+                    displayValue={originDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updateFilter("origin_code", value || null);
+                      setOriginDisplayValue(selectedData?.label || null);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("origin_name", value || null);
+                        setPreviewOriginDisplayValue(
+                          selectedData?.label || null,
+                        );
+                      }
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Destination"
+                    placeholder="Type destination code"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: any) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={filters.destination_code}
+                    displayValue={destinationDisplayValue}
+                    onChange={(value, selectedData) => {
+                      updateFilter("destination_code", value || null);
+                      setDestinationDisplayValue(selectedData?.label || null);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("destination_name", value || null);
+                        setPreviewDestinationDisplayValue(
+                          selectedData?.label || null,
+                        );
+                      }
+                    }}
+                    minSearchLength={3}
+                    className="filter-searchable-select"
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <DateRangeInput
+                    fromDate={fromDate}
+                    toDate={toDate}
+                    onFromDateChange={(date) => {
+                      setFromDate(date);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("enquiry_received_date", date);
+                      }
+                    }}
+                    onToDateChange={(date) => {
+                      setToDate(date);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("enquiry_received_date_to", date);
+                      }
+                    }}
+                    fromLabel="From Date"
+                    toLabel="To Date"
+                    size="xs"
+                    allowDeselection={true}
+                    showRangeInCalendar={false}
+                    inputWidth={260}
+                  />
+                </Grid.Col>
 
-                  {/* Row 2 */}
-                  <Grid.Col span={2}>
-                    <Select
-                      key={`sales-person-${filters.sales_person}`}
-                      label="Sales Person"
-                      placeholder={
-                        salespersonsLoading
-                          ? "Loading salespersons..."
-                          : "Select Service"
+                {/* Row 2 */}
+                <Grid.Col span={2}>
+                  <Select
+                    key={`sales-person-${filters.sales_person}`}
+                    label="Sales Person"
+                    placeholder={
+                      salespersonsLoading
+                        ? "Loading salespersons..."
+                        : "Select Service"
+                    }
+                    searchable
+                    clearable
+                    size="xs"
+                    data={salespersonOptions}
+                    disabled={salespersonsLoading}
+                    value={filters.sales_person}
+                    onChange={(value) => {
+                      updateFilter("sales_person", value || null);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("sales_person", value || null);
                       }
-                      searchable
-                      clearable
-                      size="xs"
-                      data={salespersonOptions}
-                      disabled={salespersonsLoading}
-                      value={filters.sales_person}
-                      onChange={(value) =>
-                        {
-                          updateFilter("sales_person", value || null);
-                          if (showPreviewTable) {
-                            updatePreviewFilter("sales_person", value || null);
-                          }
-                        }
+                    }}
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
                       }
-                      onFocus={(event) => {
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "13px", height: "36px" },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#000000",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={2}>
-                    <Select
-                      key={`service-${filters.service}`}
-                      label="Service"
-                      placeholder="Select Service"
-                      searchable
-                      clearable
-                      size="xs"
-                      data={serviceOptions}
-                      value={filters.service}
-                      onChange={(value) =>
-                        {
-                          updateFilter("service", value || null);
-                          if (showPreviewTable) {
-                            updatePreviewFilter("service", value || null);
-                          }
-                        }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <Select
+                    key={`service-${filters.service}`}
+                    label="Service"
+                    placeholder="Select Service"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={serviceOptions}
+                    value={filters.service}
+                    onChange={(value) => {
+                      updateFilter("service", value || null);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("service", value || null);
                       }
-                      onFocus={(event) => {
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "13px", height: "36px" },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#000000",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={2}>
-                    <Select
-                      key={`trade-${filters.trade}`}
-                      label="Trade"
-                      placeholder="Select Service"
-                      searchable
-                      clearable
-                      size="xs"
-                      data={tradeOptions}
-                      value={filters.trade}
-                      onChange={(value) => {
-                        updateFilter("trade", value || null);
-                        if (showPreviewTable) {
-                          updatePreviewFilter("trade", value || null);
-                        }
-                      }}
-                      onFocus={(event) => {
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "13px", height: "36px" },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#000000",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={2}>
-                    <Select
-                      key={`status-${filters.status}`}
-                      label="Status"
-                      placeholder="Active"
-                      searchable
-                      clearable
-                      size="xs"
-                      data={statusOptions}
-                      value={filters.status}
-                      onChange={(value) =>
-                        {
-                          updateFilter("status", value || "all");
-                          if (showPreviewTable) {
-                            updatePreviewFilter("status", value || "all");
-                          }
-                        }
+                    }}
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
                       }
-                      onFocus={(event) => {
-                        const input = event.target as HTMLInputElement;
-                        if (input && input.value) {
-                          input.select();
-                        }
-                      }}
-                      styles={{
-                        input: { fontSize: "13px", height: "36px" },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#000000",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={2}>
-                    <TextInput
-                      label="Enquiry ID"
-                      placeholder="Placeholder"
-                      size="xs"
-                      value={filters.enquiry_id || ""}
-                      onChange={(e) =>
-                        {
-                          const val = e.currentTarget.value || null;
-                          updateFilter("enquiry_id", val);
-                          if (showPreviewTable) {
-                            updatePreviewFilter("enquiry_id", val);
-                          }
-                        }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <Select
+                    key={`trade-${filters.trade}`}
+                    label="Trade"
+                    placeholder="Select Service"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={tradeOptions}
+                    value={filters.trade}
+                    onChange={(value) => {
+                      updateFilter("trade", value || null);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("trade", value || null);
                       }
-                      styles={{
-                        input: { fontSize: "13px", height: "36px" },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#000000",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={2}>
-                    <TextInput
-                      label="Reference No"
-                      placeholder="Placeholder"
-                      size="xs"
-                      value={filters.reference_no || ""}
-                      onChange={(e) =>
-                        {
-                          const val = e.currentTarget.value || null;
-                          updateFilter("reference_no", val);
-                          if (showPreviewTable) {
-                            updatePreviewFilter("reference_no", val);
-                          }
-                        }
+                    }}
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
                       }
-                      styles={{
-                        input: { fontSize: "13px", height: "36px" },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#000000",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                </Grid>
-                <Group
-                  justify="flex-end"
-                  mt="lg"
-                  gap="sm"
-                  style={{ margin: "8px 8px" }}
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <Select
+                    key={`status-${filters.status}`}
+                    label="Status"
+                    placeholder="Active"
+                    searchable
+                    clearable
+                    size="xs"
+                    data={statusOptions}
+                    value={filters.status}
+                    onChange={(value) => {
+                      updateFilter("status", value || "all");
+                      if (showPreviewTable) {
+                        updatePreviewFilter("status", value || "all");
+                      }
+                    }}
+                    onFocus={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      if (input && input.value) {
+                        input.select();
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <TextInput
+                    label="Enquiry ID"
+                    placeholder="Placeholder"
+                    size="xs"
+                    value={filters.enquiry_id || ""}
+                    onChange={(e) => {
+                      const val = e.currentTarget.value || null;
+                      updateFilter("enquiry_id", val);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("enquiry_id", val);
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <TextInput
+                    label="Reference No"
+                    placeholder="Placeholder"
+                    size="xs"
+                    value={filters.reference_no || ""}
+                    onChange={(e) => {
+                      const val = e.currentTarget.value || null;
+                      updateFilter("reference_no", val);
+                      if (showPreviewTable) {
+                        updatePreviewFilter("reference_no", val);
+                      }
+                    }}
+                    styles={{
+                      input: { fontSize: "13px", height: "36px" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#000000",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+              </Grid>
+              <Group
+                justify="flex-end"
+                mt="lg"
+                gap="sm"
+                style={{ margin: "8px 8px" }}
+              >
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={clearAllFilters}
+                  styles={{
+                    root: {
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      fontWeight: 600,
+                      height: "36px",
+                      border: "1px solid #D0D1D4",
+                      color: "#444955",
+                    },
+                  }}
                 >
-                  <Button
-                    size="sm"
-                    variant="default"
-                    onClick={clearAllFilters}
-                    styles={{
-                      root: {
-                        borderRadius: "4px",
-                        fontSize: "14px",
-                        fontFamily: "Inter",
-                        fontWeight: 600,
-                        height: "36px",
-                        border: "1px solid #D0D1D4",
-                        color: "#444955",
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={applyFilters}
+                  loading={tableLoading}
+                  disabled={tableLoading}
+                  styles={{
+                    root: {
+                      backgroundColor: "#105476",
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      fontWeight: 600,
+                      height: "36px",
+                      "&:hover": {
+                        backgroundColor: "#0d4261",
                       },
-                    }}
-                  >
-                    Clear
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={applyFilters}
-                    loading={tableLoading}
-                    disabled={tableLoading}
-                    styles={{
-                      root: {
-                        backgroundColor: "#105476",
-                        borderRadius: "4px",
-                        fontSize: "14px",
-                        fontFamily: "Inter",
-                        fontWeight: 600,
-                        height: "36px",
-                        "&:hover": {
-                          backgroundColor: "#0d4261",
-                        },
-                      },
-                    }}
-                  >
-                    Apply
-                  </Button>
-                </Group>
+                    },
+                  }}
+                >
+                  Apply
+                </Button>
+              </Group>
             </>
           </Box>
         )}
@@ -3555,7 +3591,7 @@ function EnquiryMaster() {
                               (previewCurrentPage - 1) * previewPageSize + 1;
                             const end = Math.min(
                               previewCurrentPage * previewPageSize,
-                              total
+                              total,
                             );
                             return `${start}–${end} of ${total}`;
                           })()}
@@ -3593,7 +3629,7 @@ function EnquiryMaster() {
                               (previewCurrentPage - 1) * previewPageSize + 1;
                             const end = Math.min(
                               previewCurrentPage * previewPageSize,
-                              total
+                              total,
                             );
                             return `${start}–${end} of ${total}`;
                           })()}
@@ -3605,7 +3641,7 @@ function EnquiryMaster() {
                       size="sm"
                       onClick={() =>
                         handlePreviewPageChange(
-                          Math.max(1, previewCurrentPage - 1)
+                          Math.max(1, previewCurrentPage - 1),
                         )
                       }
                       disabled={previewCurrentPage === 1}
@@ -3620,8 +3656,8 @@ function EnquiryMaster() {
                       {Math.max(
                         1,
                         Math.ceil(
-                          (tablePreviewData?.total || 0) / previewPageSize
-                        )
+                          (tablePreviewData?.total || 0) / previewPageSize,
+                        ),
                       )}
                     </Text>
                     <ActionIcon
@@ -3631,19 +3667,19 @@ function EnquiryMaster() {
                         const totalPages = Math.max(
                           1,
                           Math.ceil(
-                            (tablePreviewData?.total || 0) / previewPageSize
-                          )
+                            (tablePreviewData?.total || 0) / previewPageSize,
+                          ),
                         );
                         handlePreviewPageChange(
-                          Math.min(totalPages, previewCurrentPage + 1)
+                          Math.min(totalPages, previewCurrentPage + 1),
                         );
                       }}
                       disabled={(() => {
                         const totalPages = Math.max(
                           1,
                           Math.ceil(
-                            (tablePreviewData?.total || 0) / previewPageSize
-                          )
+                            (tablePreviewData?.total || 0) / previewPageSize,
+                          ),
                         );
                         return previewCurrentPage >= totalPages;
                       })()}
@@ -3662,9 +3698,7 @@ function EnquiryMaster() {
                 <Stack align="center" gap="md">
                   <Loader size="lg" color="#105476" />
                   <Text c="dimmed">
-                    {isRefreshingData
-                      ? "Fetching data..."
-                      : "Loading data..."}
+                    {isRefreshingData ? "Fetching data..." : "Loading data..."}
                   </Text>
                 </Stack>
               </Center>
@@ -3733,7 +3767,7 @@ function EnquiryMaster() {
                         const start = (listCurrentPage - 1) * listPageSize + 1;
                         const end = Math.min(
                           listCurrentPage * listPageSize,
-                          total
+                          total,
                         );
                         return `${start}–${end} of ${total}`;
                       })()}
@@ -3768,7 +3802,7 @@ function EnquiryMaster() {
                         const start = (listCurrentPage - 1) * listPageSize + 1;
                         const end = Math.min(
                           listCurrentPage * listPageSize,
-                          total
+                          total,
                         );
                         return `${start}–${end} of ${total}`;
                       })()}
@@ -3797,14 +3831,14 @@ function EnquiryMaster() {
                   onClick={() => {
                     const totalPages = Math.max(
                       1,
-                      Math.ceil(listTotalRecords / listPageSize)
+                      Math.ceil(listTotalRecords / listPageSize),
                     );
                     handlePageChange(Math.min(totalPages, listCurrentPage + 1));
                   }}
                   disabled={(() => {
                     const totalPages = Math.max(
                       1,
-                      Math.ceil(listTotalRecords / listPageSize)
+                      Math.ceil(listTotalRecords / listPageSize),
                     );
                     return listCurrentPage >= totalPages;
                   })()}
