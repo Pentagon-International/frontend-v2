@@ -22,6 +22,7 @@ import {
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
+  IconCopy,
   IconDownload,
   IconInfoCircle,
   IconPlus,
@@ -59,6 +60,7 @@ import { apiCallProtected } from "../../api/axios";
 import { toTitleCase } from "../../utils/textFormatter";
 import useAuthStore from "../../store/authStore";
 import CustomerDataDrawer from "../../components/CustomerDataDrawer/CustomerDataDrawer";
+import LastEnquiriesList from "./LastEnquiriesList";
 
 // Type definitions
 
@@ -574,7 +576,7 @@ const fetchOtherServices = async () => {
 
 function EnquiryCreate() {
   const location = useLocation();
-  const [enq] = useState(location.state || null);
+  const [enq, setEnq] = useState(location.state || null);
   // Initialize active step based on targetStep from navigation or default to 0
   const [active, setActive] = useState((enq as any)?.targetStep ?? 0);
   // Initialize showQuotation based on actionType for edit quotation and create quote flows
@@ -2078,6 +2080,11 @@ function EnquiryCreate() {
     { open: openCustomerDataDrawer, close: closeCustomerDataDrawer },
   ] = useDisclosure(false);
 
+  const [
+    lastEnquiriesDrawerOpened,
+    { open: openLastEnquiriesDrawer, close: closeLastEnquiriesDrawer },
+  ] = useDisclosure(false);
+
   // Customer data state
   const [customerQuotationData, setCustomerQuotationData] = useState<
     QuotationData[]
@@ -2291,10 +2298,12 @@ function EnquiryCreate() {
           enq?.sales_coordinator || ""
         );
         customerForm.setFieldValue("sales_person", enq?.sales_person || "");
-        customerForm.setFieldValue(
-          "enquiry_received_date",
-          enq?.enquiry_received_date || dayjs().format("YYYY-MM-DD")
-        );
+        if (!(enq as any)?.prefillFromLastEnquiries) {
+          customerForm.setFieldValue(
+            "enquiry_received_date",
+            enq?.enquiry_received_date || dayjs().format("YYYY-MM-DD")
+          );
+        }
         customerForm.setFieldValue("reference_no", enq?.reference_no || "");
         customerForm.setFieldValue(
           "customer_address",
@@ -3908,30 +3917,72 @@ function EnquiryCreate() {
 
                           {customerForm.values.customer_code && (
                             <div style={{ flex: 0.25 }}>
-                              <Button
-                                size="xs"
-                                mb={4}
-                                color="#105476"
-                                // variant="outline"
-                                onClick={() => {
-                                  const customerCode =
-                                    customerForm.values.customer_code;
-                                  if (customerCode) {
-                                    fetchCustomerData(
-                                      customerCode,
-                                      customerDataFromDate,
-                                      customerDataToDate
-                                    );
-                                    openCustomerDataDrawer();
-                                  }
-                                }}
-                              >
-                                {/* {customerForm.values.customer_code} */}
-                                <IconInfoCircle size={16} />
-                              </Button>
+                              <Group gap={6}>
+                                <Button
+                                  size="xs"
+                                  mb={4}
+                                  color="#105476"
+                                  onClick={() => {
+                                    const customerCode =
+                                      customerForm.values.customer_code;
+                                    if (customerCode) {
+                                      fetchCustomerData(
+                                        customerCode,
+                                        customerDataFromDate,
+                                        customerDataToDate
+                                      );
+                                      openCustomerDataDrawer();
+                                    }
+                                  }}
+                                >
+                                  <IconInfoCircle size={16} />
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  mb={4}
+                                  color="#105476"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const customerCode =
+                                      customerForm.values.customer_code;
+                                    if (!customerCode) return;
+                                    openLastEnquiriesDrawer();
+                                  }}
+                                >
+                                  <IconCopy size={16} />
+                                </Button>
+                              </Group>
                             </div>
                           )}
                         </Flex>
+                        <Drawer
+                          opened={lastEnquiriesDrawerOpened}
+                          onClose={() => {
+                            closeLastEnquiriesDrawer();
+                          }}
+                          position="right"
+                          size="70%"
+                          title="Last Enquiries"
+                          titleProps={{
+                            style: {
+                              fontWeight: "bold",
+                            }
+                          }}
+                        >
+                          <LastEnquiriesList
+                            customerCode={customerForm.values.customer_code}
+                            onRowSelect={(row) => {
+                              closeLastEnquiriesDrawer();
+                              setEnq({
+                                ...(row as any),
+                                actionType: "createEnquiry",
+                                id: undefined,
+                                enquiry_id: undefined,
+                                prefillFromLastEnquiries: true,
+                              });
+                            }}
+                          />
+                        </Drawer>
                         <CustomerDataDrawer
                           opened={customerDataDrawer}
                           onClose={() => {
@@ -7801,8 +7852,27 @@ function EnquiryCreate() {
                         </Button>
 
                         {/* Show Next button for edit/create quotation flow, Submit button otherwise */}
-                        {enq?.actionType === "editQuotation" ||
-                        enq?.actionType === "createQuote" ? (
+                        {enq?.fromLastEnquiries ? (
+                                               <Button
+                            rightSection={
+                              isSubmitting ? (
+                                <Loader size={16} color="white" />
+                              ) : null
+                            }
+                            onClick={() => handleNext()}
+                            size="sm"
+                            style={{
+                              backgroundColor: "#105476",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            }}
+                            disabled={isSubmitting}
+                          >
+                            {isSubmitting ? "Submitting..." : "Submit"}
+                          </Button>
+                        ) : enq?.actionType === "editQuotation" ||
+                          enq?.actionType === "createQuote" ? (
                           <>
                             <Button
                               rightSection={
