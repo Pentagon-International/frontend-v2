@@ -104,6 +104,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/SeaExport")) {
       setActiveNav("Transportation");
       setActiveSubNav("FCL Export Generation"); // Default to FCL
+    } else if (path.startsWith("/supplier-invoice/reversal")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Supplier Invoice Reverse");
+    } else if (path.startsWith("/supplier-invoice")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Supplier Invoice");
     } else if (path.startsWith("/receipt/reversal")) {
       setActiveNav("Desk");
       setActiveSubNav("Receipt Reversal");

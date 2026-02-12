@@ -1,4 +1,4 @@
-import ReceiptCreate from "./ReceiptCreate";
+import ReceiptCreate from "../receipt/ReceiptCreate";
 
 /**
  * Receipt Reversal page: same form and fields as Receipt Create.

@@ -26,9 +26,9 @@ import {
   IconEye,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
-import { URL } from "../../api/serverUrls";
+import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
-import { apiCallProtected } from "../../api/axios";
+import { apiCallProtected } from "../../../api/axios";
 
 type ReceiptRow = Record<string, unknown> & {
   id?: number | string;

@@ -124,10 +124,13 @@ import DemoPage from "../pages/dashboard/DemoPage";
 import EnquiryCreate from "../pages/dashboard/EnquiryCreate";
 import GetRate from "../pages/dashboard/GetRate";
 import EnquiryMaster from "../pages/dashboard/EnquiryMaster";
-import ReceiptMaster from "../pages/accounts/ReceiptMaster";
-import ReceiptCreate from "../pages/accounts/ReceiptCreate";
-import ReceiptReversal from "../pages/accounts/ReceiptReversal";
-import ReceiptReversalMaster from "../pages/accounts/ReceiptReversalMaster";
+import ReceiptMaster from "../pages/accounts/receipt/ReceiptMaster";
+import ReceiptCreate from "../pages/accounts/receipt/ReceiptCreate";
+import ReceiptReversal from "../pages/accounts/reverse-receipt/ReceiptReversal";
+import ReceiptReversalMaster from "../pages/accounts/reverse-receipt/ReceiptReversalMaster";
+import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
+import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
+import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
@@ -262,6 +265,11 @@ const NavigationRoutes = () => {
         <Route path="/receipt/reversal/view" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/edit" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/create" element={<ReceiptReversal />} />
+        <Route path="/supplier-invoice" element={<SupplierInvoiceMaster />} />
+        <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/view" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/edit" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
         <Route path="/lead-create" element={<CreateLead />} />
