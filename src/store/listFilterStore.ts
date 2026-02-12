@@ -2,10 +2,14 @@ import { create } from "zustand";
 
 type FilterState = Record<string, any>;
 
+type DisplayValues = Record<string, string | null>;
+
 type ListFilterState = {
   filters: FilterState;
   search: string;
-  shouldRestore?: boolean; // ✅ NEW (optional, backward safe)
+  shouldRestore?: boolean;
+  /** Labels for SearchableSelect fields (e.g. origin_code -> "Chennai (INMAA)") so UI shows label after restore */
+  displayValues?: DisplayValues;
 };
 
 type ListFilterStore = {
@@ -13,6 +17,7 @@ type ListFilterStore = {
 
   setFilters: (key: string, filters: FilterState) => void;
   setSearch: (key: string, search: string) => void;
+  setDisplayValues: (key: string, displayValues: DisplayValues) => void;
 
   clearFilters: (key: string) => void;
   clearSearch: (key: string) => void;
@@ -36,6 +41,21 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
           filters,
           search: state.registry[key]?.search || "",
           shouldRestore: state.registry[key]?.shouldRestore ?? false,
+          displayValues: state.registry[key]?.displayValues,
+        },
+      },
+    }));
+  },
+
+  setDisplayValues: (key, displayValues) => {
+    set((state) => ({
+      registry: {
+        ...state.registry,
+        [key]: {
+          filters: state.registry[key]?.filters || {},
+          search: state.registry[key]?.search || "",
+          shouldRestore: state.registry[key]?.shouldRestore ?? false,
+          displayValues,
         },
       },
     }));
@@ -49,6 +69,7 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
           filters: state.registry[key]?.filters || {},
           search,
           shouldRestore: state.registry[key]?.shouldRestore ?? false,
+          displayValues: state.registry[key]?.displayValues,
         },
       },
     }));
@@ -62,6 +83,7 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
           filters: {},
           search: state.registry[key]?.search || "",
           shouldRestore: false,
+          displayValues: state.registry[key]?.displayValues,
         },
       },
     }));
@@ -75,6 +97,7 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
           filters: state.registry[key]?.filters || {},
           search: "",
           shouldRestore: false,
+          displayValues: state.registry[key]?.displayValues,
         },
       },
     }));
@@ -107,6 +130,7 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
           filters: state.registry[key]?.filters || {},
           search: state.registry[key]?.search || "",
           shouldRestore: value,
+          displayValues: state.registry[key]?.displayValues,
         },
       },
     }));

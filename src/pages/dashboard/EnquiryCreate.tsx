@@ -1219,16 +1219,8 @@ function EnquiryCreate() {
             navigate("/quotation", { state: { refreshData: true } });
           }
         } else {
-          // Default: navigate to enquiry list
-          if (preserveFilters) {
-            navigate("/enquiry", {
-              state: {
-                //               refreshData: true,
-              },
-            });
-          } else {
-            navigate("/enquiry", { state: { refreshData: true } });
-          }
+          // Default: navigate to enquiry list (always pass refreshData so list restores filters from store)
+          navigate("/enquiry", { state: { refreshData: true } });
         }
       }
     } catch (err: any) {
