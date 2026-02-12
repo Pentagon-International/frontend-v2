@@ -1809,6 +1809,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   };
 
   const handleSendEmailClick = () => {
+    console.log("RRR:",user?.screen_permissions)
     if (currentQuotation) {
       // Set default email from customer_email field (if available)
       const enquiryId = currentQuotation.enquiry_id || "";
@@ -1847,7 +1848,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         // Fallback to old format if no quotation services
         subject = `Quotation - ${enquiryId}`;
       }
-
+console.log("currentQuotation: ", currentQuotation);
       setEmailForm({
         to_email: currentQuotation.customer_email || "",
         cc_email: currentQuotation.salesperson_email || "",
@@ -1859,10 +1860,16 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   };
 
   const handleSendEmail = async () => {
-    if (!currentQuotation || !pdfBlob) {
+    const includeQuotationBody = Boolean(
+      user?.screen_permissions?.include_quotation_body,
+    );
+
+    if (!currentQuotation || (!includeQuotationBody && !pdfBlob)) {
       ToastNotification({
         type: "error",
-        message: "Quotation or PDF not available",
+        message: includeQuotationBody
+          ? "Quotation not available"
+          : "Quotation or PDF not available",
       });
       return;
     }
@@ -1940,32 +1947,43 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
     setSendingEmail(true);
     try {
-      // Convert blob URL to File
-      const response = await fetch(pdfBlob);
-      const blob = await response.blob();
-      const pdfFile = new File(
-        [blob],
-        `Quotation_${currentQuotation.enquiry_id}.pdf`,
-        { type: "application/pdf" }
-      );
+      if (includeQuotationBody) {
+        await apiCallProtected.post(URL.quotationSendEmail, {
+          quotation_id: currentQuotation.id,
+          to_email: JSON.stringify(toEmailArray),
+          cc_email: JSON.stringify(ccEmailArray),
+          subject: emailForm.subject,
+          message: emailForm.message,
+          include_quotation_body: true,
+        });
+      } else {
+        // Convert blob URL to File
+        const response = await fetch(pdfBlob!);
+        const blob = await response.blob();
+        const pdfFile = new File(
+          [blob],
+          `Quotation_${currentQuotation.enquiry_id}.pdf`,
+          { type: "application/pdf" }
+        );
 
-      // Create FormData
-      const formData = new FormData();
-      // Send email arrays as JSON strings
-      formData.append("to_email", JSON.stringify(toEmailArray));
-      if (ccEmailArray.length > 0) {
-        formData.append("cc_email", JSON.stringify(ccEmailArray));
+        // Create FormData
+        const formData = new FormData();
+        // Send email arrays as JSON strings
+        formData.append("to_email", JSON.stringify(toEmailArray));
+        if (ccEmailArray.length > 0) {
+          formData.append("cc_email", JSON.stringify(ccEmailArray));
+        }
+        formData.append("subject", emailForm.subject);
+        formData.append("message", emailForm.message);
+        formData.append("pdf_file", pdfFile);
+
+        // Send email
+        await apiCallProtected.post(URL.quotationSendEmail, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
       }
-      formData.append("subject", emailForm.subject);
-      formData.append("message", emailForm.message);
-      formData.append("pdf_file", pdfFile);
-
-      // Send email
-      await apiCallProtected.post(URL.quotationSendEmail, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
 
       ToastNotification({
         type: "success",

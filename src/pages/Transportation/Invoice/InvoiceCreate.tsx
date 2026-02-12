@@ -255,6 +255,7 @@ type InvoiceDataFromApi = {
     id?: number;
     charge_id?: number;
     charge_name?: string;
+    unit_id?: string;
     unit_code?: string;
     no_of_unit?: string | number;
     currency_code?: string;
@@ -291,6 +292,9 @@ function InvoiceCreate() {
       : "";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [invoiceDataFromApi, setInvoiceDataFromApi] = useState<InvoiceDataFromApi | null>(
+    null,
+  );
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
     customer_id?: number;
@@ -506,6 +510,11 @@ function InvoiceCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultBranchCurrency]);
 
+  const isReverseInvoiceNavigation = Boolean(
+    (location.state as { invoiceData?: { reverse_invoice_id?: number | string } } | null)
+      ?.invoiceData?.reverse_invoice_id,
+  );
+
   // When user currency and billing currency are the same, set top-level ROE to 1
   useEffect(() => {
     const billingCurrency = form.values.currency?.trim().toUpperCase();
@@ -558,7 +567,8 @@ function InvoiceCreate() {
         // Set shipper name in Bill To field (customer name for payload and validation)
         if (firstHawb.shipper_name) {
           setBillToDisplayName(firstHawb.shipper_name);
-          form.setFieldValue("bill_to", firstHawb.shipper_name);
+          // form.setFieldValue("bill_to", firstHawb.shipper_name);
+          form.setFieldValue("bill_to", firstHawb.shipper_code);
         }
 
         // State from housing is set after state API loads (see useEffect below)
@@ -707,9 +717,39 @@ function InvoiceCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount
 
+  // When opening invoice view screen from Accounts table (route has :id), fetch latest invoice details
+  const { data: invoiceViewFetchRes, isFetching: invoiceViewFetchLoading } = useQuery({
+    queryKey: [
+      "invoice-view",
+      invoiceId,
+      isReverseInvoiceNavigation ? "reverse_invoice_id" : "invoice_id",
+    ],
+    enabled: Boolean(isEditOrViewMode && invoiceId),
+    queryFn: async () =>
+      getAPICall(
+        `${URL.invoice}${invoiceId}`,
+        API_HEADER,
+      ),
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
+  });
+
+  useEffect(() => {
+    if (!isEditOrViewMode || !invoiceId) return;
+    const payload = invoiceViewFetchRes as any;
+    const data = payload?.data?.data ?? payload?.data ?? payload;
+    if (data && typeof data === "object") {
+      setInvoiceDataFromApi(data as InvoiceDataFromApi);
+    } else {
+      setInvoiceDataFromApi(null);
+    }
+  }, [invoiceId, isEditOrViewMode, invoiceViewFetchRes]);
+
   // Populate form from invoice data when navigating from Accounts (edit/view)
   useEffect(() => {
-    const invoiceData = location.state?.invoiceData as
+    const invoiceData = (invoiceDataFromApi ??
+      (location.state?.invoiceData as InvoiceDataFromApi | undefined)) as
       | InvoiceDataFromApi
       | undefined;
     if (!invoiceData || !isEditOrViewMode) return;
@@ -749,6 +789,21 @@ function InvoiceCreate() {
               id: c.id != null ? Number(c.id) : null,
               charge_id: c.charge_id != null ? Number(c.charge_id) : null,
               charge_name: c.charge_name ?? "",
+              unit_id:
+                c.unit_id != null && String(c.unit_id).trim() !== ""
+                  ? String(c.unit_id)
+                  : (() => {
+                      const unitCode = String(c.unit_code ?? "").trim();
+                      if (!unitCode) return "";
+                      const opt = unitOptions.find(
+                        (o) =>
+                          String(o.value).trim().toUpperCase() ===
+                            unitCode.toUpperCase() ||
+                          String(o.label).trim().toUpperCase() ===
+                            unitCode.toUpperCase(),
+                      );
+                      return opt?.value ?? "";
+                    })(),
               unit_code: c.unit_code ?? "",
               no_of_unit:
                 c.no_of_unit != null
@@ -756,6 +811,21 @@ function InvoiceCreate() {
                     ? parseFloat(c.no_of_unit)
                     : c.no_of_unit
                   : null,
+              currency_id:
+                c.currency_id != null && String(c.currency_id).trim() !== ""
+                  ? String(c.currency_id)
+                  : (() => {
+                      const code = String(c.currency_code ?? "").trim();
+                      if (!code) return "";
+                      const opt = currencyOptions.find(
+                        (o) =>
+                          String(o.label).trim().toUpperCase() ===
+                            code.toUpperCase() ||
+                          String(o.value).trim().toUpperCase() ===
+                            code.toUpperCase(),
+                      );
+                      return opt?.value ?? "";
+                    })(),
               currency: c.currency_code ?? "",
               roe:
                 c.roe != null
@@ -797,6 +867,7 @@ function InvoiceCreate() {
                   charge_id: null,
                   charge_name: "",
                   unit_code: "",
+                  unit_id: "",
                   no_of_unit: null,
                   currency: "",
                   billing_currency: null,
@@ -811,7 +882,7 @@ function InvoiceCreate() {
               ],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceId, isEditOrViewMode, location.state?.invoiceData]);
+  }, [invoiceId, isEditOrViewMode, location.state?.invoiceData, invoiceDataFromApi]);
 
   // Set state from housing shipper_state_id once state API has loaded
   // Use hawbDetails first, then fallback to job.housing_details (from API) when passed house has no shipper_state_id
@@ -1579,7 +1650,7 @@ function InvoiceCreate() {
   return (
     <Box p="md" style={{ position: "relative" }}>
       {/* Full-page loader overlay when saving or posting */}
-      {(isSubmitting || isPosting) && (
+      {(isSubmitting || isPosting || invoiceViewFetchLoading) && (
         <Box
           style={{
             position: "fixed",
@@ -1594,7 +1665,11 @@ function InvoiceCreate() {
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
-              {isPosting ? "Posting invoice..." : "Saving invoice..."}
+              {invoiceViewFetchLoading
+                ? "Loading invoice..."
+                : isPosting
+                  ? "Posting invoice..."
+                  : "Saving invoice..."}
             </Text>
           </Stack>
         </Box>
@@ -1682,7 +1757,7 @@ function InvoiceCreate() {
                 apiEndpoint={URL.customer}
                 searchFields={["customer_name", "customer_code"]}
                 displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_name),
+                  value: String(item.customer_code),
                   label: String(item.customer_name),
                 })}
                 value={form.values.bill_to}

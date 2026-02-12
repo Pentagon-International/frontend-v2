@@ -309,6 +309,10 @@ function HouseCreate() {
   const editData = location.state?.editData;
   const isEditMode = editIndex !== undefined && editData !== undefined;
 
+  useEffect(() => {
+    if (!isEditMode && active === 4) setActive(0);
+  }, [active, isEditMode]);
+
   // Unit and currency masters - fetch early for charge loading when in edit mode
   const { data: unitDataRaw = [] } = useQuery({
     queryKey: ["unitMaster", "SEA"],
@@ -1739,9 +1743,11 @@ function HouseCreate() {
           <Tabs.Tab value="3" style={{ textAlign: "center", padding: "6px 14px", backgroundColor: active === 3 ? "#105476" : "transparent", color: active === 3 ? "white" : "#105476", fontWeight: active === 3 ? 600 : 400, borderRadius: "4px", borderBottom: "none" }}>
             Charges
           </Tabs.Tab>
-          <Tabs.Tab value="4" style={{ textAlign: "center", padding: "6px 14px", backgroundColor: active === 4 ? "#105476" : "transparent", color: active === 4 ? "white" : "#105476", fontWeight: active === 4 ? 600 : 400, borderRadius: "4px", borderBottom: "none" }}>
-            Accounts
-          </Tabs.Tab>
+          {isEditMode && (
+            <Tabs.Tab value="4" style={{ textAlign: "center", padding: "6px 14px", backgroundColor: active === 4 ? "#105476" : "transparent", color: active === 4 ? "white" : "#105476", fontWeight: active === 4 ? 600 : 400, borderRadius: "4px", borderBottom: "none" }}>
+              Accounts
+            </Tabs.Tab>
+          )}
         </Tabs.List>
 
         <Tabs.Panel value="0">
@@ -3045,87 +3051,88 @@ function HouseCreate() {
           </Box>
         </Tabs.Panel>
 
-        <Tabs.Panel value="4">
-          <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
-              Accounts
-            </Text>
-            {invoiceListLoading ? (
-              <Center py="xl">
-                <Loader color="#105476" size="lg" />
-              </Center>
-            ) : (
-              <ScrollArea>
-                <Table withTableBorder withColumnBorders striped highlightOnHover style={{ minWidth: 700 }}>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Daybook</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice number</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Date</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Total</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Status</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Actions</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {invoiceList.length === 0 ? (
+        {isEditMode && (
+          <Tabs.Panel value="4">
+            <Box mt="md">
+              <Text size="lg" fw={600} c="#105476" mb="md">
+                Accounts
+              </Text>
+              {invoiceListLoading ? (
+                <Center py="xl">
+                  <Loader color="#105476" size="lg" />
+                </Center>
+              ) : (
+                <ScrollArea>
+                  <Table withTableBorder withColumnBorders striped highlightOnHover style={{ minWidth: 700 }}>
+                    <Table.Thead>
                       <Table.Tr>
-                        <Table.Td colSpan={6}>
-                          <Center py="xl">
-                            <Text c="dimmed">No invoices to display</Text>
-                          </Center>
-                        </Table.Td>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Daybook</Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice number</Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Date</Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Total</Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Status</Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Actions</Table.Th>
                       </Table.Tr>
-                    ) : (
-                      invoiceList.map((row, idx) => {
-                        const statusUpper = (row.status ?? "").toUpperCase();
-                        const isPosted = statusUpper === "POSTED" || row.status === "posted";
-                        const isUnposted = statusUpper === "UNPOSTED" || row.status === "unpost";
-                        const isReversed =
-                          statusUpper === "PARTIALLY REVERSED" ||
-                          statusUpper === "FULLY REVERSED";
-                        const rowKey = `${row.id}-${idx}`;
-                        const isExpanded = expandedInvoiceRowId === rowKey;
-                        const reverseInvoices = row.reverse_invoices ?? [];
-                        const hasReverseInvoices = reverseInvoices.length > 0;
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {invoiceList.length === 0 ? (
+                        <Table.Tr>
+                          <Table.Td colSpan={6}>
+                            <Center py="xl">
+                              <Text c="dimmed">No invoices to display</Text>
+                            </Center>
+                          </Table.Td>
+                        </Table.Tr>
+                      ) : (
+                        invoiceList.map((row, idx) => {
+                          const statusUpper = (row.status ?? "").toUpperCase();
+                          const isPosted = statusUpper === "POSTED" || row.status === "posted";
+                          const isUnposted = statusUpper === "UNPOSTED" || row.status === "unpost";
+                          const isReversed =
+                            statusUpper === "PARTIALLY REVERSED" ||
+                            statusUpper === "FULLY REVERSED";
+                          const rowKey = `${row.id}-${idx}`;
+                          const isExpanded = expandedInvoiceRowId === rowKey;
+                          const reverseInvoices = row.reverse_invoices ?? [];
+                          const hasReverseInvoices = reverseInvoices.length > 0;
 
-                        const invoiceViewId = row.invoice_id ?? row.id;
-                        return (
-                          <Fragment key={rowKey}>
-                            <Table.Tr
-                              style={isReversed ? { cursor: "pointer" } : undefined}
-                              onClick={(e) => {
-                                if (
-                                  (e.target as HTMLElement).closest(
-                                    "[data-menu-dropdown],[button]"
+                          const invoiceViewId = row.invoice_id ?? row.id;
+                          return (
+                            <Fragment key={rowKey}>
+                              <Table.Tr
+                                style={isReversed ? { cursor: "pointer" } : undefined}
+                                onClick={(e) => {
+                                  if (
+                                    (e.target as HTMLElement).closest(
+                                      "[data-menu-dropdown],[button]",
+                                    )
                                   )
-                                )
-                                  return;
+                                    return;
 
-                                if (!isReversed) {
-                                  setExpandedInvoiceRowId(null);
-                                  return;
-                                }
+                                  if (!isReversed) {
+                                    setExpandedInvoiceRowId(null);
+                                    return;
+                                  }
 
-                                setExpandedInvoiceRowId((prev) =>
-                                  prev === rowKey ? null : rowKey
-                                );
-                              }}
-                            >
-                              <Table.Td style={{ fontSize: "13px", width: "20%" }}>
-                                <Group gap="xs" wrap="nowrap">
-                                  {isReversed && (
-                                    <Box component="span" style={{ display: "inline-flex" }}>
-                                      {isExpanded ? (
-                                        <IconChevronUp size={14} color="#105476" />
-                                      ) : (
-                                        <IconChevronDown size={14} color="#105476" />
-                                      )}
-                                    </Box>
-                                  )}
-                                  {row.day_book_name ?? "-"}
-                                </Group>
-                              </Table.Td>
+                                  setExpandedInvoiceRowId((prev) =>
+                                    prev === rowKey ? null : rowKey,
+                                  );
+                                }}
+                              >
+                                <Table.Td style={{ fontSize: "13px", width: "20%" }}>
+                                  <Group gap="xs" wrap="nowrap">
+                                    {isReversed && (
+                                      <Box component="span" style={{ display: "inline-flex" }}>
+                                        {isExpanded ? (
+                                          <IconChevronUp size={14} color="#105476" />
+                                        ) : (
+                                          <IconChevronDown size={14} color="#105476" />
+                                        )}
+                                      </Box>
+                                    )}
+                                    {row.day_book_name ?? "-"}
+                                  </Group>
+                                </Table.Td>
                               <Table.Td style={{ fontSize: "13px", width: "20%" }}>
                                 {row.document_no ?? "-"}
                               </Table.Td>
@@ -3254,7 +3261,7 @@ function HouseCreate() {
                                           },
                                         }}
                                         onClick={() =>
-                                          navigate(`/SeaExport/import-job/invoice/edit/${row.id}`, {
+                                          navigate(`/SeaExport/import-job/invoice/edit/${row.invoice_id}`, {
                                             state: {
                                               invoiceData: row,
                                               ...(location.state?.job && { job: location.state.job }),
@@ -3506,6 +3513,7 @@ function HouseCreate() {
             )}
           </Box>
         </Tabs.Panel>
+        )}
       </Tabs>
 
       <Group justify="space-between" mt="xl">

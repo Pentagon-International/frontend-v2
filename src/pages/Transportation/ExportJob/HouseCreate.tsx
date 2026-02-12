@@ -304,6 +304,10 @@ function HouseCreate() {
   const editData = location.state?.editData;
   const isEditMode = editIndex !== undefined && editData !== undefined;
 
+  useEffect(() => {
+    if (!isEditMode && active === 4) setActive(0);
+  }, [active, isEditMode]);
+
   // Unit and currency masters - fetch early for charge loading when in edit mode
   const { data: unitDataRaw = [] } = useQuery({
     queryKey: ["unitMaster", "SEA"],
@@ -1720,20 +1724,22 @@ function HouseCreate() {
           >
             Charges
           </Tabs.Tab>
-          <Tabs.Tab
-            value="4"
-            style={{
-              textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 4 ? "#105476" : "transparent",
-              color: active === 4 ? "white" : "#105476",
-              fontWeight: active === 4 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
-            }}
-          >
-            Accounts
-          </Tabs.Tab>
+          {isEditMode && (
+            <Tabs.Tab
+              value="4"
+              style={{
+                textAlign: "center",
+                padding: "6px 14px",
+                backgroundColor: active === 4 ? "#105476" : "transparent",
+                color: active === 4 ? "white" : "#105476",
+                fontWeight: active === 4 ? 600 : 400,
+                borderRadius: "4px",
+                borderBottom: "none",
+              }}
+            >
+              Accounts
+            </Tabs.Tab>
+          )}
         </Tabs.List>
 
         <Tabs.Panel value="0">
@@ -3059,28 +3065,29 @@ function HouseCreate() {
           </Box>
         </Tabs.Panel>
 
-        <Tabs.Panel value="4">
-          <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
-              Accounts
-            </Text>
-            {invoiceListLoading ? (
-              <Center py="xl">
-                <Loader color="#105476" size="lg" />
-              </Center>
-            ) : (
-              <ScrollArea>
-                <Table
-                  withTableBorder
-                  withColumnBorders
-                  striped
-                  highlightOnHover
-                  style={{ minWidth: 700 }}
-                >
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Daybook</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice number</Table.Th>
+        {isEditMode && (
+          <Tabs.Panel value="4">
+            <Box mt="md">
+              <Text size="lg" fw={600} c="#105476" mb="md">
+                Accounts
+              </Text>
+              {invoiceListLoading ? (
+                <Center py="xl">
+                  <Loader color="#105476" size="lg" />
+                </Center>
+              ) : (
+                <ScrollArea>
+                  <Table
+                    withTableBorder
+                    withColumnBorders
+                    striped
+                    highlightOnHover
+                    style={{ minWidth: 700 }}
+                  >
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Daybook</Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice number</Table.Th>
                       <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Date</Table.Th>
                       <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Total</Table.Th>
                       <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Status</Table.Th>
@@ -3274,7 +3281,7 @@ function HouseCreate() {
                                           },
                                         }}
                                         onClick={() =>
-                                          navigate(`/SeaExport/export-job/invoice/edit/${row.id}`, {
+                                          navigate(`/SeaExport/export-job/invoice/edit/${row.invoice_id}`, {
                                             state: {
                                               invoiceData: row,
                                               ...(location.state?.job && { job: location.state.job }),
@@ -3526,6 +3533,7 @@ function HouseCreate() {
             )}
           </Box>
         </Tabs.Panel>
+        )}
       </Tabs>
 
       <Group justify="space-between" mt="xl">
