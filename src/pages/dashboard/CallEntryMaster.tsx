@@ -449,7 +449,107 @@ function CallEntry() {
     location.state?.fromDashboard,
   ]);
 
-  // Note: Filter and search restoration is now handled via listFilterStore, not location.state
+  // Apply filters when navigated from call entry dashboard (drill level badge click)
+  // Dashboard passes initialFilters + restoreFilters in location.state; listFilterStore is only used when returning from edit.
+  useEffect(() => {
+    if (initialFiltersProcessed.current) return;
+    const state = location.state as {
+      fromDashboard?: boolean;
+      restoreFilters?: {
+        filters: Partial<FilterState>;
+        displayValues?: { customer?: string | null };
+        fromDate?: Date | null;
+        toDate?: Date | null;
+        filtersApplied?: boolean;
+      };
+      initialFilters?: {
+        sales_person?: string | null;
+        customer?: string | null;
+        status?: string | null;
+        date_from?: string;
+        date_to?: string;
+      };
+    } | null;
+    if (!state?.fromDashboard) return;
+    const restoreFilters = state.restoreFilters;
+    const initialFilters = state.initialFilters;
+    if (!restoreFilters && !initialFilters) return;
+
+    initialFiltersProcessed.current = true;
+    isProcessingInitialFilters.current = true;
+
+    const filters = restoreFilters?.filters ?? {
+      sales_person: initialFilters?.sales_person ?? null,
+      customer: initialFilters?.customer ?? null,
+      status: initialFilters?.status ?? null,
+      call_date: null,
+      call_mode: null,
+      followup_date: null,
+      city: null,
+      area: null,
+    };
+    const displayValues = restoreFilters?.displayValues ?? {};
+    const fromDateVal = restoreFilters?.fromDate ?? (initialFilters?.date_from ? new Date(initialFilters.date_from) : null);
+    const toDateVal = restoreFilters?.toDate ?? (initialFilters?.date_to ? new Date(initialFilters.date_to) : null);
+    const dateFromStr = initialFilters?.date_from ?? (fromDateVal ? dayjs(fromDateVal).format("YYYY-MM-DD") : null);
+    const dateToStr = initialFilters?.date_to ?? (toDateVal ? dayjs(toDateVal).format("YYYY-MM-DD") : null);
+
+    filterForm.setValues({
+      customer: filters.customer ?? null,
+      call_date: filters.call_date ?? null,
+      call_mode: filters.call_mode ?? null,
+      followup_date: filters.followup_date ?? null,
+      status: filters.status ?? null,
+      sales_person: filters.sales_person ?? null,
+      city: filters.city ?? null,
+      area: filters.area ?? null,
+      date_from: dateFromStr,
+      date_to: dateToStr,
+    });
+
+    if (fromDateVal) setFromDate(fromDateVal);
+    if (toDateVal) setToDate(toDateVal);
+    setCustomerDisplayValue(displayValues.customer ?? (filters.customer ? String(filters.customer) : null));
+
+    setAppliedFilters({
+      customer: filters.customer ?? null,
+      call_date: filters.call_date ?? null,
+      call_mode: filters.call_mode ?? null,
+      followup_date: filters.followup_date ?? null,
+      status: filters.status ?? null,
+      sales_person: filters.sales_person ?? null,
+      city: filters.city ?? null,
+      area: filters.area ?? null,
+      date_from: dateFromStr,
+      date_to: dateToStr,
+    });
+    setFiltersApplied(true);
+
+    // Persist to listFilterStore so back-navigation and refresh behave consistently
+    setStoreFilters(LIST_KEY, {
+      ...filters,
+      date_from: dateFromStr,
+      date_to: dateToStr,
+    });
+    if (displayValues.customer != null) {
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, { customer: displayValues.customer });
+    }
+
+    // Clear initial filters from state so we don't re-apply on re-render; keep dashboard return state
+    navigate(location.pathname, {
+      replace: true,
+      state: {
+        returnToDashboard: returnToDashboardRef.current,
+        dashboardState: dashboardStateRef.current,
+        fromDashboard: fromDashboardRef.current,
+      },
+    });
+
+    isProcessingInitialFilters.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.fromDashboard, location.state?.restoreFilters, location.state?.initialFilters, location.pathname]);
+
+  // Note: Filter and search restoration from listFilterStore runs when shouldRestore (e.g. return from edit). Dashboard filters applied above.
 
   // Load data on mount with default dates - API only hits on Apply Filters button
   // Date changes don't trigger API automatically - only Apply Filters button does
