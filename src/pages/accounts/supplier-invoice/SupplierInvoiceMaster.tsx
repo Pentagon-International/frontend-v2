@@ -36,6 +36,7 @@ import { apiCallProtected } from "../../../api/axios";
 type SupplierInvoiceRow = Record<string, unknown> & {
   id?: number | string;
   sno?: number;
+  crj_number?: string;
   Inv_Crn_no?: string;
   agent_name?: string;
   date?: string;
@@ -141,9 +142,11 @@ export default function SupplierInvoiceMaster() {
         Cell: ({ row }) => row.original?.sno ?? index + row.index + 1,
       },
       {
-        accessorKey: "Inv_Crn_no",
+        id: "invoice_no",
         header: "Invoice No",
         size: 160,
+        accessorFn: (row) =>
+          (row.crj_number ?? "") as string,
       },
       {
         accessorKey: "agent_name",

@@ -365,6 +365,7 @@ export default function SupplierInvoiceCreate({
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
     crj_number?: string;
+    reverse_crj_number?: string;
     Inv_Crn_no?: string;
     status?: string;
   } | null>(null);
@@ -431,7 +432,10 @@ export default function SupplierInvoiceCreate({
           narration: "",
           shipment_no: "",
           charge_id: null,
-          currency_id: null,
+          currency_id:
+            defaultBranchCurrencyId
+              ? Number(defaultBranchCurrencyId)
+              : null,
           roe: null,
           amount: null,
           amount_in_local: null,
@@ -648,7 +652,9 @@ export default function SupplierInvoiceCreate({
     const data = invoiceFromState as Record<string, unknown>;
     const chargesArray = Array.isArray(data.charges)
       ? (data.charges as ApiCharge[])
-      : [];
+      : Array.isArray(data.charges_data)
+        ? (data.charges_data as ApiCharge[])
+        : [];
     let mappedCharges =
       chargesArray.length > 0 ? mapApiChargesToRows(chargesArray) : [];
     // Supplier Invoice: header "Dr", charges "Cr". Reverse: header "Cr", charges "Dr"
@@ -664,18 +670,25 @@ export default function SupplierInvoiceCreate({
           : "";
 
     // Reversal create: Credit Journal Voucher date and Agent INV/CRN Detail due_date auto-set to today
+    // List API returns date/due_date as DD-MM-YYYY; use parseDDMMYYYY so they display in edit/view
     const dateValue = runForReversalCreate
       ? new Date()
-      : normalizeDate((data.date as string) ?? null);
+      : parseDDMMYYYY((data.date as string) ?? undefined) ??
+        normalizeDate((data.date as string) ?? null);
     const dueDateValue = runForReversalCreate
       ? new Date()
-      : normalizeDate((data.due_date as string) ?? null);
+      : parseDDMMYYYY((data.due_date as string) ?? undefined) ??
+        normalizeDate((data.due_date as string) ?? null);
 
     // Reversal create: do not set saveResponse so daybook and date stay editable; saveResponse set after POST
     if (!runForReversalCreate) {
       setSaveResponse({
         id: data.id != null ? Number(data.id) : undefined,
         crj_number: data.crj_number != null ? String(data.crj_number) : "",
+        reverse_crj_number:
+          data.reverse_crj_number != null
+            ? String(data.reverse_crj_number)
+            : "",
         Inv_Crn_no: data.Inv_Crn_no != null ? String(data.Inv_Crn_no) : "",
         status: data.status != null ? String(data.status) : "UNPOSTED",
       });
@@ -726,7 +739,9 @@ export default function SupplierInvoiceCreate({
         data.difference_amount != null
           ? parseFloat(String(data.difference_amount))
           : null,
-      status: (data.status ?? "UNPOSTED") as string,
+      status: (runForReversalCreate
+        ? "UNPOSTED"
+        : (data.status ?? "UNPOSTED")) as string,
       Dr_Cr: headerDrCr,
       charges_data: mappedCharges,
     });
@@ -739,6 +754,7 @@ export default function SupplierInvoiceCreate({
     values: SupplierInvoiceFormValues,
     statusOverride?: string,
   ) => {
+    const isCreate = saveResponse?.id == null;
     const chargesPayload = values.charges_data.map((c) => {
       const base = {
         account_code: c.account_code || "",
@@ -754,7 +770,8 @@ export default function SupplierInvoiceCreate({
         tax_code: c.tax_code || "",
         Dr_Cr: c.Dr_Cr,
       };
-      if (c.id != null) return { ...base, id: c.id };
+      // Create: do not include id in charges; Update: include id when charge exists
+      if (!isCreate && c.id != null) return { ...base, id: c.id };
       return base;
     });
     return {
@@ -786,7 +803,9 @@ export default function SupplierInvoiceCreate({
       due_date: values.due_date
         ? formatDDMMYYYY(new Date(values.due_date))
         : "",
-      status: statusOverride ?? values.status ?? "UNPOSTED",
+      status:
+        statusOverride ??
+        (isCreate && isReversal ? "UNPOSTED" : values.status ?? "UNPOSTED"),
       Dr_Cr: values.Dr_Cr,
       charges_data: chargesPayload,
     };
@@ -859,10 +878,18 @@ export default function SupplierInvoiceCreate({
     try {
       const payload = buildPayload(values);
       const isEdit = saveResponse?.id != null;
+      // Reversal create: include source invoice's crj_number (required by API)
+      if (isReversal && !isEdit && invoiceFromState) {
+        const sourceCrj = (invoiceFromState as Record<string, unknown>)
+          .crj_number;
+        if (sourceCrj != null && sourceCrj !== "")
+          (payload as Record<string, unknown>).crj_number = String(sourceCrj);
+      }
       const reversalUrl = isReversal ? URL.reverseSupplierInvoice : URL.supplierInvoice;
+      // putAPICall appends payload.id/ to the URL, so pass base URL only for reversal to avoid .../10/10/
       const reversalEditUrl =
         isReversal && saveResponse?.id != null
-          ? `${URL.reverseSupplierInvoice}${saveResponse.id}/`
+          ? URL.reverseSupplierInvoice
           : null;
 
       if (isEdit) {
@@ -892,9 +919,14 @@ export default function SupplierInvoiceCreate({
             }
           | undefined;
         if (data) {
+          const dataWithReverse = data as { reverse_crj_number?: string };
           setSaveResponse({
             id: data.id ?? saveResponse?.id,
             crj_number: data.crj_number ?? saveResponse?.crj_number ?? "",
+            reverse_crj_number:
+              dataWithReverse.reverse_crj_number ??
+              saveResponse?.reverse_crj_number ??
+              "",
             Inv_Crn_no: data.Inv_Crn_no ?? saveResponse?.Inv_Crn_no ?? "",
             status:
               data.status != null
@@ -947,9 +979,11 @@ export default function SupplierInvoiceCreate({
             }
           | undefined;
         if (data) {
+          const dataWithReverse = data as { reverse_crj_number?: string };
           setSaveResponse({
             id: data.id,
             crj_number: data.crj_number ?? "",
+            reverse_crj_number: dataWithReverse.reverse_crj_number ?? "",
             Inv_Crn_no: data.Inv_Crn_no ?? "",
             status: data.status != null ? String(data.status) : "UNPOSTED",
           });
@@ -998,8 +1032,9 @@ export default function SupplierInvoiceCreate({
     setIsSubmitting(true);
     try {
       const payload = buildPayload(form.values, "POSTED");
+      // putAPICall appends payload.id/ to the URL, so pass base URL only
       const postUrl = isReversal
-        ? `${URL.reverseSupplierInvoice}${saveResponse.id}/`
+        ? URL.reverseSupplierInvoice
         : URL.supplierInvoice;
       const raw = (await putAPICall(postUrl, payload, API_HEADER)) as
         | {
@@ -1049,15 +1084,16 @@ export default function SupplierInvoiceCreate({
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
   const isReadOnly =
     isViewMode || (saveResponse != null && statusUpper === "POSTED");
-  // Reversal: only daybook and date editable (same as ReceiptCreate)
+  // Reversal create/edit: only daybook and date editable; rest non-editable. Once posted, full read-only.
   const reversalFormDisabled = isReversal;
   const effectiveInputStyles = isReadOnly
     ? readOnlyFieldStyles
     : isReversal
       ? reversalNonEditableStyles
       : inputStyles;
-  // Daybook and date: editable when !isReadOnly (create flow and reversal create)
+  // Daybook and date: editable in reversal create/edit when !isReadOnly; read-only when posted or view
   const daybookAndDateStyles = isReadOnly ? readOnlyFieldStyles : inputStyles;
+  const daybookDateDisabled = isReadOnly;
 
   const addChargeRow = () => {
     const currencyIdStr =
@@ -1111,11 +1147,13 @@ export default function SupplierInvoiceCreate({
       <Stack gap="md">
         <Group justify="space-between" wrap="nowrap">
           <Text size="xl" fw={600} c="#105476">
-            {pathname.includes("/reversal/create")
+            {pathname.includes("/reversal/create") && saveResponse?.id == null
               ? "Create Supplier Invoice Reverse"
-              : pathname.includes("/reversal/edit")
+              : pathname.includes("/reversal/create") && saveResponse?.id != null
                 ? "Edit Supplier Invoice Reverse"
-                : pathname.includes("/reversal/view")
+                : pathname.includes("/reversal/edit")
+                  ? "Edit Supplier Invoice Reverse"
+                  : pathname.includes("/reversal/view")
                   ? "View Supplier Invoice Reverse"
                   : titleOverride ??
                       (isEditMode
@@ -1137,7 +1175,14 @@ export default function SupplierInvoiceCreate({
                     color="#105476"
                     styles={{ root: { textTransform: "none" } }}
                   >
-                    {saveResponse.crj_number || saveResponse.Inv_Crn_no || "—"}
+                    {isReversal
+                      ? (saveResponse.reverse_crj_number ??
+                        saveResponse.crj_number ??
+                        saveResponse.Inv_Crn_no ??
+                        "—")
+                      : (saveResponse.crj_number ??
+                        saveResponse.Inv_Crn_no ??
+                        "—")}
                   </Badge>
                 </Group>
                 <Group gap="xs" wrap="nowrap">
@@ -1222,7 +1267,7 @@ export default function SupplierInvoiceCreate({
                 searchable
                 withAsterisk
                 error={form.errors.day_book_id}
-                disabled={isDaybookLoading || isReadOnly}
+                disabled={isDaybookLoading || daybookDateDisabled}
                 styles={daybookAndDateStyles}
               />
             </Grid.Col>
@@ -1237,7 +1282,7 @@ export default function SupplierInvoiceCreate({
                 }}
                 withAsterisk
                 error={form.errors.date ? String(form.errors.date) : undefined}
-                disabled={isReadOnly}
+                disabled={daybookDateDisabled}
               />
             </Grid.Col>
             <Grid.Col span={1.5}>

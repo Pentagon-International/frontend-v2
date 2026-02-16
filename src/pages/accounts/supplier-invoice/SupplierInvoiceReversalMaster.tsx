@@ -33,6 +33,7 @@ import { apiCallProtected } from "../../../api/axios";
 type SupplierInvoiceReversalRow = Record<string, unknown> & {
   id?: number | string;
   sno?: number;
+  reverse_crj_number?: string;
   Inv_Crn_no?: string;
   reverse_invoice_no?: string;
   agent_name?: string;
@@ -149,10 +150,10 @@ export default function SupplierInvoiceReversalMaster() {
       },
       {
         id: "reverse_invoice_no",
-        header: "Reverse Invoice No",
+        header: "Invoice No",
         size: 160,
         accessorFn: (row) =>
-          (row.reverse_invoice_no ?? row.Inv_Crn_no ?? "") as string,
+          (row.reverse_crj_number ?? "") as string,
       },
       {
         accessorKey: "agent_name",
