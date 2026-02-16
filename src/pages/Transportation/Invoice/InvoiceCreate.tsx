@@ -988,10 +988,8 @@ function InvoiceCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceDataFromApi, isEditOrViewMode]);
 
-  // In Edit mode, fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
+  // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
-    if (!isEditMode) return;
-
     const stateId = form.values.state ? Number(form.values.state) : null;
     if (!stateId || Number.isNaN(stateId)) return;
 
@@ -1055,7 +1053,7 @@ function InvoiceCreate() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditMode, form.values.state, form.values.charges]);
+  }, [form.values.state, form.values.charges]);
 
   // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit
   const chargeAmountPerUnits = form.values.charges
