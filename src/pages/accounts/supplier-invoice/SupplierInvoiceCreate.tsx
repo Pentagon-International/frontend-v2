@@ -19,7 +19,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -54,9 +54,11 @@ const fetchStateMaster = async () => {
   }
 };
 
-const fetchDaybook = async () => {
+const fetchDaybookByType = async (
+  documentType: "CRJ" | "CRJREV",
+): Promise<unknown[]> => {
   try {
-    const payload = { filters: { document_type: "CRJ" } };
+    const payload = { filters: { document_type: documentType } };
     const response = await postAPICall(URL.daybook, payload, API_HEADER);
     return (response as { data?: unknown[] })?.data ?? [];
   } catch (error) {
@@ -162,7 +164,6 @@ type SupplierInvoiceFormValues = {
   cbp_number: string;
   cost_center: string;
   day_book_id: string;
-  crj_number: string;
   date: Date | null;
   due_date: Date | null;
   creditor_agent: string;
@@ -185,7 +186,7 @@ type SupplierInvoiceFormValues = {
   approved_amount: number | null;
   difference_amount: number | null;
   status: string;
-  Dr_Cr: "Cr" | "Dr"; // Sent in payload; no UI field (default "Dr")
+  Dr_Cr: "Cr" | "Dr"; // Sent in payload; no UI field. Supplier Invoice = "Dr", Reverse = "Cr"
   charges_data: ChargeRow[];
 };
 
@@ -196,13 +197,21 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+const AMOUNT_MAX = 9999999999999.99; // 13 digits + 2 decimals = 15 digits max
+
 function clampAmount(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value))
     return value === undefined ? null : value;
-  const rounded = Math.round(value * 1000) / 1000;
-  const maxVal = 999999999.999;
-  if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
+  const rounded = Math.round(value * 100) / 100;
+  if (Math.abs(rounded) > AMOUNT_MAX)
+    return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
   return rounded;
+}
+
+function formatAmountToTwoDecimals(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "0.00";
+  const clamped = clampAmount(value);
+  return clamped == null ? "0.00" : clamped.toFixed(2);
 }
 
 function formatDDMMYYYY(d: Date): string {
@@ -212,9 +221,23 @@ function formatDDMMYYYY(d: Date): string {
   return `${day}-${month}-${year}`;
 }
 
+function parseDDMMYYYY(s: string | null | undefined): Date | null {
+  if (s == null || String(s).trim() === "") return null;
+  const p = String(s).trim().split("-");
+  if (p.length !== 3) return null;
+  const d = parseInt(p[0], 10);
+  const m = parseInt(p[1], 10) - 1;
+  const y = parseInt(p[2], 10);
+  if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y))
+    return null;
+  const date = new Date(y, m, d);
+  return isNaN(date.getTime()) ? null : date;
+}
+
 type ApiCharge = {
   id?: number;
   account_code?: string;
+  gl_account_code?: string; // list API may return either
   subledger_code?: string;
   CRN?: string;
   narration?: string;
@@ -227,22 +250,41 @@ type ApiCharge = {
   tax_code?: string;
   Dr_Cr?: string;
 };
+
+/** Invoice row from list API (filter/supplier-invoice) — used for View/Edit from list. Same shape as list response item. */
+type SupplierInvoiceListItem = Record<string, unknown> & {
+  id?: number;
+  charges?: ApiCharge[];
+};
+
 function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   if (!Array.isArray(charges)) return [];
   return charges.map((c) => ({
     id: c.id,
-    account_code: c.account_code ?? "",
+    account_code: String(c.account_code ?? c.gl_account_code ?? "").trim(),
     subledger_code: c.subledger_code ?? "",
     CRN: c.CRN ?? "",
     narration: c.narration ?? "",
-    shipment_no: c.shipment_no ?? "",
+    shipment_no: String(c.shipment_no ?? "").trim(),
     charge_id: c.charge_id ?? null,
     currency_id: c.currency_id ?? null,
-    roe: typeof c.roe === "string" ? parseFloat(c.roe) || null : (c.roe ?? null),
-    amount: typeof c.amount === "string" ? parseFloat(c.amount) || null : (c.amount ?? null),
-    amount_in_local: typeof c.amount_in_local === "string" ? parseFloat(c.amount_in_local) || null : (c.amount_in_local ?? null),
+    roe:
+      typeof c.roe === "string" ? parseFloat(c.roe) || null : (c.roe ?? null),
+    amount:
+      typeof c.amount === "string"
+        ? parseFloat(c.amount) || null
+        : (c.amount ?? null),
+    amount_in_local:
+      typeof c.amount_in_local === "string"
+        ? parseFloat(c.amount_in_local) || null
+        : (c.amount_in_local ?? null),
     tax_code: c.tax_code ?? "",
-    Dr_Cr: (c.Dr_Cr === "Dr" || c.Dr_Cr === "Cr" ? c.Dr_Cr : "Dr") as "Dr" | "Cr",
+    Dr_Cr: (() => {
+      const v = (c.Dr_Cr ?? "").toString().toUpperCase();
+      return (v === "CR" || v === "DR" ? (v === "CR" ? "Cr" : "Dr") : "Dr") as
+        | "Dr"
+        | "Cr";
+    })(),
   }));
 }
 
@@ -270,6 +312,21 @@ const readOnlyFieldStyles = {
   label: inputStyles.label,
 };
 
+// Reversal: non-editable via styling (only daybook and date editable) — same idea as ReceiptCreate
+const reversalNonEditableStyles = {
+  root: { opacity: 1, pointerEvents: "none" as const },
+  input: {
+    fontSize: "13px",
+    fontFamily: "Inter",
+    height: "36px",
+    backgroundColor: "#f5f5f5",
+    cursor: "default",
+    opacity: 1,
+    pointerEvents: "none" as const,
+  },
+  label: inputStyles.label,
+};
+
 type SupplierInvoiceCreateProps = {
   isReversal?: boolean;
   titleOverride?: string;
@@ -282,9 +339,18 @@ export default function SupplierInvoiceCreate({
   backPath = "/supplier-invoice",
 }: SupplierInvoiceCreateProps = {}) {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuthStore((state) => state.user);
+  const pathname = location.pathname;
+  const isViewMode = pathname.includes("/view");
+  const isEditMode = pathname.includes("/edit");
+  const isReversalCreate =
+    isReversal && pathname.includes("/reversal/create");
+  // Load from list: state is invoice row (Supplier Invoice list) — same pattern as ReceiptCreate
+  const invoiceFromState =
+    location.state as SupplierInvoiceListItem | null | undefined;
 
-  // Reversal mode: header Dr_Cr = "Cr", charges Dr_Cr = "Dr" (enforced on mount)
+  // Reversal mode: header "Cr", charges "Dr" (opposite of Supplier Invoice: header "Dr", charges "Cr")
   useEffect(() => {
     if (isReversal) {
       form.setFieldValue("Dr_Cr", "Cr");
@@ -294,6 +360,7 @@ export default function SupplierInvoiceCreate({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReversal]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
@@ -333,7 +400,6 @@ export default function SupplierInvoiceCreate({
       cbp_number: "",
       cost_center: "",
       day_book_id: "",
-      crj_number: "",
       date: new Date(),
       due_date: new Date(),
       creditor_agent: "",
@@ -356,12 +422,12 @@ export default function SupplierInvoiceCreate({
       approved_amount: null,
       difference_amount: null,
       status: "UNPOSTED",
-      Dr_Cr: "Dr", // Header Dr_Cr: sent in payload only (no UI field)
+      Dr_Cr: "Dr", // Header: Supplier Invoice = "Dr", Reverse = "Cr" (sent in payload only, no UI field)
       charges_data: [
         {
           account_code: "",
           subledger_code: "",
-          CRN: "",
+          CRN: "Cost",
           narration: "",
           shipment_no: "",
           charge_id: null,
@@ -370,7 +436,7 @@ export default function SupplierInvoiceCreate({
           amount: null,
           amount_in_local: null,
           tax_code: "",
-          Dr_Cr: "Dr",
+          Dr_Cr: "Cr", // Charges: Supplier Invoice = "Cr", Reverse = "Dr"
         },
       ],
     },
@@ -395,9 +461,10 @@ export default function SupplierInvoiceCreate({
     staleTime: Infinity,
   });
 
+  const daybookDocumentType = isReversal ? "CRJREV" : "CRJ";
   const { data: daybookData = [], isLoading: isDaybookLoading } = useQuery({
-    queryKey: ["daybook", "INV"],
-    queryFn: fetchDaybook,
+    queryKey: ["daybook", daybookDocumentType],
+    queryFn: () => fetchDaybookByType(daybookDocumentType),
     staleTime: Infinity,
   });
 
@@ -469,12 +536,14 @@ export default function SupplierInvoiceCreate({
     const data = chartOfAccountsData as {
       gl_account_code?: string;
       account_name?: string;
+      sl_code?: string;
     }[];
     if (!Array.isArray(data)) return [];
     return data
       .map((item) => ({
         value: String(item.gl_account_code ?? ""),
         label: item.account_name ?? item.gl_account_code ?? "",
+        sl_code: item.sl_code ?? "",
       }))
       .filter((o) => o.value);
   }, [chartOfAccountsData]);
@@ -528,22 +597,30 @@ export default function SupplierInvoiceCreate({
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
 
   useEffect(() => {
-    if (defaultBranchCurrencyId) {
-      if (!form.values.currency_id) {
-        form.setFieldValue("currency_id", defaultBranchCurrencyId);
-      }
-      // Set local currency on charge rows that don't have currency_id
-      const charges = form.values.charges_data;
-      const next = charges.map((c) =>
-        c.currency_id == null
-          ? { ...c, currency_id: Number(defaultBranchCurrencyId) }
-          : c,
-      );
-      if (next.some((c, i) => c.currency_id !== charges[i]?.currency_id)) {
-        form.setFieldValue("charges_data", next);
-      }
+    const effectiveCurrency =
+      form.values.currency_id || defaultBranchCurrencyId || "";
+    if (!effectiveCurrency) return;
+    if (!form.values.currency_id) {
+      form.setFieldValue("currency_id", defaultBranchCurrencyId);
     }
-  }, [defaultBranchCurrencyId]);
+    // Don't overwrite charges_data in view/edit — they were loaded from list state
+    if (isViewMode || isEditMode) return;
+    // Set local currency on charge rows that don't have currency_id (including first row)
+    const charges = form.values.charges_data;
+    const next = charges.map((c) =>
+      c.currency_id == null
+        ? { ...c, currency_id: Number(effectiveCurrency) }
+        : c,
+    );
+    if (next.some((c, i) => c.currency_id !== charges[i]?.currency_id)) {
+      form.setFieldValue("charges_data", next);
+    }
+  }, [
+    defaultBranchCurrencyId,
+    form.values.currency_id,
+    isViewMode,
+    isEditMode,
+  ]);
 
   // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes
   const chargesAmountRoeKey = form.values.charges_data
@@ -562,7 +639,106 @@ export default function SupplierInvoiceCreate({
     if (changed) form.setFieldValue("charges_data", next);
   }, [chargesAmountRoeKey]);
 
-  const buildPayload = (values: SupplierInvoiceFormValues, statusOverride?: string) => {
+  // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
+  useEffect(() => {
+    const runForViewEdit = isViewMode || isEditMode;
+    const runForReversalCreate = isReversalCreate && invoiceFromState?.id != null;
+    if (!runForViewEdit && !runForReversalCreate) return;
+    if (!invoiceFromState || invoiceFromState.id == null) return;
+    const data = invoiceFromState as Record<string, unknown>;
+    const chargesArray = Array.isArray(data.charges)
+      ? (data.charges as ApiCharge[])
+      : [];
+    let mappedCharges =
+      chargesArray.length > 0 ? mapApiChargesToRows(chargesArray) : [];
+    // Supplier Invoice: header "Dr", charges "Cr". Reverse: header "Cr", charges "Dr"
+    const headerDrCr = isReversal ? ("Cr" as const) : ("Dr" as const);
+    const chargeDrCr = isReversal ? ("Dr" as const) : ("Cr" as const);
+    mappedCharges = mappedCharges.map((c) => ({ ...c, Dr_Cr: chargeDrCr }));
+    // Reversal create: daybook empty so user selects; date and due_date auto-set to today
+    const daybookId =
+      runForReversalCreate
+        ? ""
+        : data.day_book_id != null
+          ? String(data.day_book_id)
+          : "";
+
+    // Reversal create: Credit Journal Voucher date and Agent INV/CRN Detail due_date auto-set to today
+    const dateValue = runForReversalCreate
+      ? new Date()
+      : normalizeDate((data.date as string) ?? null);
+    const dueDateValue = runForReversalCreate
+      ? new Date()
+      : normalizeDate((data.due_date as string) ?? null);
+
+    // Reversal create: do not set saveResponse so daybook and date stay editable; saveResponse set after POST
+    if (!runForReversalCreate) {
+      setSaveResponse({
+        id: data.id != null ? Number(data.id) : undefined,
+        crj_number: data.crj_number != null ? String(data.crj_number) : "",
+        Inv_Crn_no: data.Inv_Crn_no != null ? String(data.Inv_Crn_no) : "",
+        status: data.status != null ? String(data.status) : "UNPOSTED",
+      });
+    }
+    setAgentDisplayName(
+      (data.creditor_agent ?? data.agent_name ?? null) as string | null,
+    );
+    form.setValues({
+      cbp_number: (data.cbp_number ?? "") as string,
+      cost_center: (data.cost_center ?? "") as string,
+      day_book_id: daybookId,
+      date: dateValue,
+      due_date: dueDateValue,
+      creditor_agent: (data.creditor_agent ?? "") as string,
+      agent_code: (data.agent_code ?? "") as string,
+      state_id: data.state_id != null ? String(data.state_id) : "",
+      tds_section_code: (data.tds_section_code ?? "") as string,
+      note: (data.note ?? "") as string,
+      narration: (data.narration ?? "") as string,
+      customer_gst_no: (data.customer_gst_no ?? "") as string,
+      location_gst_no: (data.location_gst_no ?? "") as string,
+      Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
+      Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
+      currency_id: data.currency_id != null ? String(data.currency_id) : "",
+      taxable_amount:
+        data.taxable_amount != null
+          ? parseFloat(String(data.taxable_amount))
+          : null,
+      non_taxable_amount:
+        data.non_taxable_amount != null
+          ? parseFloat(String(data.non_taxable_amount))
+          : null,
+      cgst_amount:
+        data.cgst_amount != null ? parseFloat(String(data.cgst_amount)) : null,
+      sgst_amount:
+        data.sgst_amount != null ? parseFloat(String(data.sgst_amount)) : null,
+      igst_amount:
+        data.igst_amount != null ? parseFloat(String(data.igst_amount)) : null,
+      Inv_crn_amount:
+        data.Inv_crn_amount != null
+          ? parseFloat(String(data.Inv_crn_amount))
+          : null,
+      approved_amount:
+        data.approved_amount != null
+          ? parseFloat(String(data.approved_amount))
+          : null,
+      difference_amount:
+        data.difference_amount != null
+          ? parseFloat(String(data.difference_amount))
+          : null,
+      status: (data.status ?? "UNPOSTED") as string,
+      Dr_Cr: headerDrCr,
+      charges_data: mappedCharges,
+    });
+    // Force charges to apply (same as ReceiptCreate: setFieldValue after setValues so list array is always shown)
+    form.setFieldValue("charges_data", mappedCharges);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceFromState?.id, isViewMode, isEditMode, isReversalCreate, isReversal]);
+
+  const buildPayload = (
+    values: SupplierInvoiceFormValues,
+    statusOverride?: string,
+  ) => {
     const chargesPayload = values.charges_data.map((c) => {
       const base = {
         account_code: c.account_code || "",
@@ -573,8 +749,8 @@ export default function SupplierInvoiceCreate({
         charge_id: c.charge_id ?? 0,
         currency_id: c.currency_id ?? 0,
         roe: String(c.roe ?? 0),
-        amount: String(clampAmount(c.amount ?? 0) ?? 0),
-        amount_in_local: String(clampAmount(c.amount_in_local ?? 0) ?? 0),
+        amount: formatAmountToTwoDecimals(c.amount ?? 0),
+        amount_in_local: formatAmountToTwoDecimals(c.amount_in_local ?? 0),
         tax_code: c.tax_code || "",
         Dr_Cr: c.Dr_Cr,
       };
@@ -583,12 +759,8 @@ export default function SupplierInvoiceCreate({
     });
     return {
       ...(saveResponse?.id != null ? { id: saveResponse.id } : {}),
-      cbp_number: values.cbp_number || "",
-      cost_center: values.cost_center || "",
       day_book_id: values.day_book_id ? Number(values.day_book_id) : null,
-      crj_number: values.crj_number || "",
       date: values.date ? formatDDMMYYYY(new Date(values.date)) : "",
-      creditor_agent: values.creditor_agent || "",
       agent_code: values.agent_code || "",
       state_id: values.state_id ? Number(values.state_id) : null,
       tds_section_code: values.tds_section_code || "",
@@ -599,17 +771,17 @@ export default function SupplierInvoiceCreate({
       Inv_Crn_note: values.Inv_Crn_note || "",
       Inv_Crn_no: values.Inv_Crn_no || "",
       currency_id: values.currency_id ? Number(values.currency_id) : null,
-      taxable_amount: String(clampAmount(values.taxable_amount ?? 0) ?? 0),
-      non_taxable_amount: String(
-        clampAmount(values.non_taxable_amount ?? 0) ?? 0,
+      taxable_amount: formatAmountToTwoDecimals(values.taxable_amount ?? 0),
+      non_taxable_amount: formatAmountToTwoDecimals(
+        values.non_taxable_amount ?? 0,
       ),
-      cgst_amount: String(clampAmount(values.cgst_amount ?? 0) ?? 0),
-      sgst_amount: String(clampAmount(values.sgst_amount ?? 0) ?? 0),
-      igst_amount: String(clampAmount(values.igst_amount ?? 0) ?? 0),
-      Inv_crn_amount: String(clampAmount(values.Inv_crn_amount ?? 0) ?? 0),
-      approved_amount: String(clampAmount(values.approved_amount ?? 0) ?? 0),
-      difference_amount: String(
-        clampAmount(values.difference_amount ?? 0) ?? 0,
+      cgst_amount: formatAmountToTwoDecimals(values.cgst_amount ?? 0),
+      sgst_amount: formatAmountToTwoDecimals(values.sgst_amount ?? 0),
+      igst_amount: formatAmountToTwoDecimals(values.igst_amount ?? 0),
+      Inv_crn_amount: formatAmountToTwoDecimals(values.Inv_crn_amount ?? 0),
+      approved_amount: formatAmountToTwoDecimals(values.approved_amount ?? 0),
+      difference_amount: formatAmountToTwoDecimals(
+        values.difference_amount ?? 0,
       ),
       due_date: values.due_date
         ? formatDDMMYYYY(new Date(values.due_date))
@@ -620,41 +792,160 @@ export default function SupplierInvoiceCreate({
     };
   };
 
+  const applyReverseInvoiceResponseToForm = (
+    data: Record<string, unknown> & {
+      charges_data?: ApiCharge[];
+      charges?: ApiCharge[];
+    },
+  ) => {
+    const charges =
+      Array.isArray(data.charges_data) ? data.charges_data : (Array.isArray(data.charges) ? data.charges : []);
+    const mappedCharges = mapApiChargesToRows(charges as ApiCharge[]);
+    form.setValues({
+      cbp_number: (data.cbp_number ?? "") as string,
+      cost_center: (data.cost_center ?? "") as string,
+      day_book_id: data.day_book_id != null ? String(data.day_book_id) : "",
+      date: parseDDMMYYYY(data.date as string) ?? form.values.date,
+      due_date: parseDDMMYYYY(data.due_date as string) ?? form.values.due_date,
+      creditor_agent: (data.creditor_agent ?? "") as string,
+      agent_code: (data.agent_code ?? "") as string,
+      state_id: data.state_id != null ? String(data.state_id) : "",
+      tds_section_code: (data.tds_section_code ?? "") as string,
+      note: (data.note ?? "") as string,
+      narration: (data.narration ?? "") as string,
+      customer_gst_no: (data.customer_gst_no ?? "") as string,
+      location_gst_no: (data.location_gst_no ?? "") as string,
+      Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
+      Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
+      currency_id: data.currency_id != null ? String(data.currency_id) : "",
+      taxable_amount:
+        data.taxable_amount != null
+          ? parseFloat(String(data.taxable_amount))
+          : null,
+      non_taxable_amount:
+        data.non_taxable_amount != null
+          ? parseFloat(String(data.non_taxable_amount))
+          : null,
+      cgst_amount:
+        data.cgst_amount != null ? parseFloat(String(data.cgst_amount)) : null,
+      sgst_amount:
+        data.sgst_amount != null ? parseFloat(String(data.sgst_amount)) : null,
+      igst_amount:
+        data.igst_amount != null ? parseFloat(String(data.igst_amount)) : null,
+      Inv_crn_amount:
+        data.Inv_crn_amount != null
+          ? parseFloat(String(data.Inv_crn_amount))
+          : null,
+      approved_amount:
+        data.approved_amount != null
+          ? parseFloat(String(data.approved_amount))
+          : null,
+      difference_amount:
+        data.difference_amount != null
+          ? parseFloat(String(data.difference_amount))
+          : null,
+      status: (data.status ?? "UNPOSTED") as string,
+      Dr_Cr: (data.Dr_Cr ?? "Cr") as "Cr" | "Dr",
+      charges_data: mappedCharges,
+    });
+    form.setFieldValue("charges_data", mappedCharges);
+    setAgentDisplayName(
+      (data.creditor_agent ?? data.agent_name ?? null) as string | null,
+    );
+  };
+
   const handleSubmit = async (values: SupplierInvoiceFormValues) => {
     setIsSubmitting(true);
     try {
       const payload = buildPayload(values);
       const isEdit = saveResponse?.id != null;
+      const reversalUrl = isReversal ? URL.reverseSupplierInvoice : URL.supplierInvoice;
+      const reversalEditUrl =
+        isReversal && saveResponse?.id != null
+          ? `${URL.reverseSupplierInvoice}${saveResponse.id}/`
+          : null;
 
       if (isEdit) {
-        const raw = (await putAPICall(
-          URL.supplierInvoice,
-          payload,
-          API_HEADER,
-        )) as { data?: { id?: number; crj_number?: string; status?: unknown; charges?: ApiCharge[] } } | { id?: number; crj_number?: string; status?: unknown } | undefined;
-        const data = (raw && "data" in raw && raw.data != null ? raw.data : raw) as { id?: number; crj_number?: string; status?: unknown; charges?: ApiCharge[]; Inv_Crn_no?: string } | undefined;
+        const url = reversalEditUrl ?? URL.supplierInvoice;
+        const raw = (await putAPICall(url, payload, API_HEADER)) as
+          | {
+              data?: {
+                id?: number;
+                crj_number?: string;
+                status?: unknown;
+                charges?: ApiCharge[];
+                charges_data?: ApiCharge[];
+              };
+            }
+          | { id?: number; crj_number?: string; status?: unknown }
+          | undefined;
+        const data = (
+          raw && "data" in raw && raw.data != null ? raw.data : raw
+        ) as
+          | {
+              id?: number;
+              crj_number?: string;
+              status?: unknown;
+              charges?: ApiCharge[];
+              charges_data?: ApiCharge[];
+              Inv_Crn_no?: string;
+            }
+          | undefined;
         if (data) {
           setSaveResponse({
             id: data.id ?? saveResponse?.id,
             crj_number: data.crj_number ?? saveResponse?.crj_number ?? "",
             Inv_Crn_no: data.Inv_Crn_no ?? saveResponse?.Inv_Crn_no ?? "",
-            status: data.status != null ? String(data.status) : (saveResponse?.status ?? "UNPOSTED"),
+            status:
+              data.status != null
+                ? String(data.status)
+                : (saveResponse?.status ?? "UNPOSTED"),
           });
-          if (Array.isArray(data.charges)) {
-            form.setFieldValue("charges_data", mapApiChargesToRows(data.charges));
+          if (isReversal) {
+            applyReverseInvoiceResponseToForm(
+              data as Record<string, unknown> & {
+                charges_data?: ApiCharge[];
+                charges?: ApiCharge[];
+              },
+            );
+          } else if (Array.isArray(data.charges)) {
+            form.setFieldValue(
+              "charges_data",
+              mapApiChargesToRows(data.charges),
+            );
           }
           ToastNotification({
-            message: "Supplier invoice updated successfully",
+            message: isReversal
+              ? "Supplier invoice reverse updated successfully"
+              : "Supplier invoice updated successfully",
             type: "success",
           });
         }
       } else {
-        const raw = (await postAPICall(
-          URL.supplierInvoice,
-          payload,
-          API_HEADER,
-        )) as { data?: { id?: number; crj_number?: string; status?: unknown; charges?: ApiCharge[] } } | { id?: number; crj_number?: string; status?: unknown } | undefined;
-        const data = (raw && "data" in raw && raw.data != null ? raw.data : raw) as { id?: number; crj_number?: string; status?: unknown; charges?: ApiCharge[]; Inv_Crn_no?: string } | undefined;
+        const raw = (await postAPICall(reversalUrl, payload, API_HEADER)) as
+          | {
+              data?: {
+                id?: number;
+                crj_number?: string;
+                status?: unknown;
+                charges?: ApiCharge[];
+                charges_data?: ApiCharge[];
+              };
+            }
+          | { id?: number; crj_number?: string; status?: unknown }
+          | undefined;
+        const data = (
+          raw && "data" in raw && raw.data != null ? raw.data : raw
+        ) as
+          | {
+              id?: number;
+              crj_number?: string;
+              status?: unknown;
+              charges?: ApiCharge[];
+              charges_data?: ApiCharge[];
+              Inv_Crn_no?: string;
+            }
+          | undefined;
         if (data) {
           setSaveResponse({
             id: data.id,
@@ -662,11 +953,23 @@ export default function SupplierInvoiceCreate({
             Inv_Crn_no: data.Inv_Crn_no ?? "",
             status: data.status != null ? String(data.status) : "UNPOSTED",
           });
-          if (Array.isArray(data.charges)) {
-            form.setFieldValue("charges_data", mapApiChargesToRows(data.charges));
+          if (isReversal) {
+            applyReverseInvoiceResponseToForm(
+              data as Record<string, unknown> & {
+                charges_data?: ApiCharge[];
+                charges?: ApiCharge[];
+              },
+            );
+          } else if (Array.isArray(data.charges)) {
+            form.setFieldValue(
+              "charges_data",
+              mapApiChargesToRows(data.charges),
+            );
           }
           ToastNotification({
-            message: "Supplier invoice created successfully",
+            message: isReversal
+              ? "Supplier invoice reverse created successfully"
+              : "Supplier invoice created successfully",
             type: "success",
           });
         }
@@ -695,20 +998,35 @@ export default function SupplierInvoiceCreate({
     setIsSubmitting(true);
     try {
       const payload = buildPayload(form.values, "POSTED");
-      const raw = (await putAPICall(
-        URL.supplierInvoice,
-        payload,
-        API_HEADER,
-      )) as { data?: { id?: number; crj_number?: string; status?: unknown; charges?: ApiCharge[] } } | { id?: number; status?: unknown } | undefined;
+      const postUrl = isReversal
+        ? `${URL.reverseSupplierInvoice}${saveResponse.id}/`
+        : URL.supplierInvoice;
+      const raw = (await putAPICall(postUrl, payload, API_HEADER)) as
+        | {
+            data?: {
+              id?: number;
+              crj_number?: string;
+              status?: unknown;
+              charges?: ApiCharge[];
+            };
+          }
+        | { id?: number; status?: unknown }
+        | undefined;
       const data = raw && "data" in raw && raw.data != null ? raw.data : raw;
       if (data) {
-        const statusStr = (data as { status?: unknown }).status != null ? String((data as { status?: unknown }).status) : "POSTED";
+        const statusStr =
+          (data as { status?: unknown }).status != null
+            ? String((data as { status?: unknown }).status)
+            : "POSTED";
         setSaveResponse((prev) =>
           prev ? { ...prev, status: statusStr } : null,
         );
         form.setFieldValue("status", "POSTED");
         if (Array.isArray((data as { charges?: ApiCharge[] }).charges)) {
-          form.setFieldValue("charges_data", mapApiChargesToRows((data as { charges: ApiCharge[] }).charges));
+          form.setFieldValue(
+            "charges_data",
+            mapApiChargesToRows((data as { charges: ApiCharge[] }).charges),
+          );
         }
         ToastNotification({
           message: "Supplier invoice posted successfully",
@@ -729,8 +1047,17 @@ export default function SupplierInvoiceCreate({
   };
 
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
-  const isReadOnly = saveResponse != null && statusUpper === "POSTED";
-  const effectiveInputStyles = isReadOnly ? readOnlyFieldStyles : inputStyles;
+  const isReadOnly =
+    isViewMode || (saveResponse != null && statusUpper === "POSTED");
+  // Reversal: only daybook and date editable (same as ReceiptCreate)
+  const reversalFormDisabled = isReversal;
+  const effectiveInputStyles = isReadOnly
+    ? readOnlyFieldStyles
+    : isReversal
+      ? reversalNonEditableStyles
+      : inputStyles;
+  // Daybook and date: editable when !isReadOnly (create flow and reversal create)
+  const daybookAndDateStyles = isReadOnly ? readOnlyFieldStyles : inputStyles;
 
   const addChargeRow = () => {
     const currencyIdStr =
@@ -741,7 +1068,7 @@ export default function SupplierInvoiceCreate({
     form.insertListItem("charges_data", {
       account_code: "",
       subledger_code: "",
-      CRN: "",
+      CRN: "Cost",
       narration: "",
       shipment_no: "",
       charge_id: null,
@@ -755,7 +1082,7 @@ export default function SupplierInvoiceCreate({
       amount: null,
       amount_in_local: null,
       tax_code: "",
-      Dr_Cr: "Dr",
+      Dr_Cr: isReversal ? "Dr" : "Cr",
     });
   };
 
@@ -784,7 +1111,18 @@ export default function SupplierInvoiceCreate({
       <Stack gap="md">
         <Group justify="space-between" wrap="nowrap">
           <Text size="xl" fw={600} c="#105476">
-            {titleOverride ?? "Create Supplier Invoice"}
+            {pathname.includes("/reversal/create")
+              ? "Create Supplier Invoice Reverse"
+              : pathname.includes("/reversal/edit")
+                ? "Edit Supplier Invoice Reverse"
+                : pathname.includes("/reversal/view")
+                  ? "View Supplier Invoice Reverse"
+                  : titleOverride ??
+                      (isEditMode
+                        ? "Edit Supplier Invoice"
+                        : isViewMode
+                          ? "View Supplier Invoice"
+                          : "Create Supplier Invoice")}
           </Text>
           <Group gap="md" wrap="nowrap">
             {saveResponse && (
@@ -810,7 +1148,8 @@ export default function SupplierInvoiceCreate({
                     size="sm"
                     variant="light"
                     color={
-                      String(saveResponse.status ?? "").toUpperCase() === "UNPOSTED"
+                      String(saveResponse.status ?? "").toUpperCase() ===
+                      "UNPOSTED"
                         ? "gray"
                         : "green"
                     }
@@ -847,7 +1186,7 @@ export default function SupplierInvoiceCreate({
             Credit Journal Voucher
           </Text>
           <Grid mb="md">
-            {/* <Grid.Col span={2}>
+            {/* <Grid.Col span={1}>
               <TextInput
                 label="CBP Number"
                 placeholder="CBP Number"
@@ -856,10 +1195,10 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("cbp_number", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <TextInput
                 label="Cost Center"
                 placeholder="Cost Center"
@@ -868,10 +1207,10 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("cost_center", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col> */}
-            <Grid.Col span={2}>
+            <Grid.Col span={1.25}>
               <Dropdown
                 label="Day Book"
                 placeholder={
@@ -884,21 +1223,10 @@ export default function SupplierInvoiceCreate({
                 withAsterisk
                 error={form.errors.day_book_id}
                 disabled={isDaybookLoading || isReadOnly}
-                styles={effectiveInputStyles}
+                styles={daybookAndDateStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
-              <TextInput
-                label="CRJ Number"
-                placeholder="CRJ Number"
-                value={form.values.crj_number}
-                onChange={(e) =>
-                  form.setFieldValue("crj_number", e.target.value)
-                }
-                styles={effectiveInputStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1.25}>
               <SingleDateInput
                 label="Date"
                 placeholder="Select date"
@@ -912,48 +1240,37 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly}
               />
             </Grid.Col>
-
-            <Grid.Col span={2}>
-              <TextInput
-                label="Creditor/Agent"
-                placeholder="Creditor Agent"
-                value={form.values.creditor_agent}
-                onChange={(e) =>
-                  form.setFieldValue("creditor_agent", e.target.value)
-                }
-                styles={effectiveInputStyles}
-                disabled={isReadOnly}
-              />
-            </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1.5}>
               <SearchableSelect
-                label="Agent"
-                disabled={isReadOnly}
-                placeholder="Type agent name or code"
-                apiEndpoint={URL.agent}
+                label="Vendor/Supplier"
+                disabled={isReadOnly || reversalFormDisabled}
+                placeholder="Type supplier name"
+                apiEndpoint={URL.supplierByType}
                 searchFields={["customer_name", "customer_code"]}
                 displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(
-                    item.customer_code ?? item.agent_code ?? item.id ?? "",
-                  ),
-                  label: String(
-                    item.customer_name ??
-                      item.agent_name ??
-                      item.customer_code ??
-                      "",
-                  ),
+                  value: String(item.customer_code ?? item.id ?? ""),
+                  label: String(item.customer_name ?? item.customer_code ?? ""),
                 })}
                 value={form.values.agent_code || null}
                 displayValue={agentDisplayName ?? undefined}
-                onChange={(value, selectedData) => {
+                returnOriginalData
+                onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("agent_code", value ?? "");
                   setAgentDisplayName(selectedData?.label ?? null);
+                  const addresses =
+                    (originalData?.addresses_data as
+                      | Array<{ state_id?: number }>
+                      | undefined) ?? [];
+                  const primary = addresses[0];
+                  if (primary?.state_id != null) {
+                    form.setFieldValue("state_id", String(primary.state_id));
+                  }
                 }}
                 dropdownZIndex={1000}
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1.25}>
               <Dropdown
                 label="State"
                 placeholder={isStateLoading ? "Loading..." : "Select state"}
@@ -963,14 +1280,14 @@ export default function SupplierInvoiceCreate({
                 searchable
                 withAsterisk
                 error={form.errors.state_id}
-                disabled={isStateLoading || isReadOnly}
+                disabled={isStateLoading || isReadOnly || reversalFormDisabled}
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1.25}>
               <TextInput
                 label="TDS Section Code"
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
                 placeholder="TDS Section Code"
                 value={form.values.tds_section_code}
                 onChange={(e) =>
@@ -979,7 +1296,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={3}>
+            <Grid.Col span={1.25}>
               <TextInput
                 label="Customer GST No"
                 placeholder="Customer GST No"
@@ -988,10 +1305,10 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("customer_gst_no", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
-            <Grid.Col span={3}>
+            <Grid.Col span={1.25}>
               <TextInput
                 label="Location GST No"
                 placeholder="Location GST No"
@@ -1000,10 +1317,10 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("location_gst_no", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
-            <Grid.Col span={6}>
+            <Grid.Col span={1.25}>
               <Textarea
                 label="Note"
                 placeholder="Note"
@@ -1011,10 +1328,10 @@ export default function SupplierInvoiceCreate({
                 onChange={(e) => form.setFieldValue("note", e.target.value)}
                 rows={2}
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
-            <Grid.Col span={6}>
+            <Grid.Col span={1.25}>
               <Textarea
                 label="Narration"
                 placeholder="Narration"
@@ -1024,7 +1341,7 @@ export default function SupplierInvoiceCreate({
                 }
                 rows={2}
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
           </Grid>
@@ -1034,7 +1351,7 @@ export default function SupplierInvoiceCreate({
             Agent INV/CRN Detail
           </Text>
           <Grid mb="md">
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <TextInput
                 label="Inv/Crn Note"
                 placeholder="Inv/Crn Note"
@@ -1043,10 +1360,10 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("Inv_Crn_note", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <TextInput
                 label="Inv/Crn No"
                 placeholder="Inv/Crn No"
@@ -1055,10 +1372,10 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("Inv_Crn_no", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={0.75}>
               <Dropdown
                 label="Currency"
                 placeholder={
@@ -1070,103 +1387,103 @@ export default function SupplierInvoiceCreate({
                 searchable
                 withAsterisk
                 error={form.errors.currency_id}
-                disabled={isCurrencyLoading || isReadOnly}
+                disabled={isCurrencyLoading || isReadOnly || reversalFormDisabled}
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
 
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <NumberInput
                 label="Inv/Crn Amount"
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
                 placeholder="0"
                 value={form.values.Inv_crn_amount ?? undefined}
                 onChange={(v) =>
                   form.setFieldValue(
                     "Inv_crn_amount",
-                    typeof v === "number" ? v : null,
+                    typeof v === "number" ? clampAmount(v) : null,
                   )
                 }
                 min={0}
-                decimalScale={3}
+                decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
 
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <NumberInput
                 label="Taxable Amount"
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
                 placeholder="0"
                 value={form.values.taxable_amount ?? undefined}
                 onChange={(v) =>
                   form.setFieldValue(
                     "taxable_amount",
-                    typeof v === "number" ? v : null,
+                    typeof v === "number" ? clampAmount(v) : null,
                   )
                 }
                 min={0}
-                decimalScale={3}
+                decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1.15}>
               <NumberInput
                 label="Non Taxable Amount"
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
                 placeholder="0"
                 value={form.values.non_taxable_amount ?? undefined}
                 onChange={(v) =>
                   form.setFieldValue(
                     "non_taxable_amount",
-                    typeof v === "number" ? v : null,
+                    typeof v === "number" ? clampAmount(v) : null,
                   )
                 }
                 min={0}
-                decimalScale={3}
+                decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={0.85}>
               <NumberInput
                 label="CGST Amount"
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
                 placeholder="0"
                 value={form.values.cgst_amount ?? undefined}
                 onChange={(v) =>
                   form.setFieldValue(
                     "cgst_amount",
-                    typeof v === "number" ? v : null,
+                    typeof v === "number" ? clampAmount(v) : null,
                   )
                 }
                 min={0}
-                decimalScale={3}
+                decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <NumberInput
                 label="SGST Amount"
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
                 placeholder="0"
                 value={form.values.sgst_amount ?? undefined}
                 onChange={(v) =>
                   form.setFieldValue(
                     "sgst_amount",
-                    typeof v === "number" ? v : null,
+                    typeof v === "number" ? clampAmount(v) : null,
                   )
                 }
                 min={0}
-                decimalScale={3}
+                decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <NumberInput
                 label="IGST Amount"
                 placeholder="0"
@@ -1174,53 +1491,53 @@ export default function SupplierInvoiceCreate({
                 onChange={(v) =>
                   form.setFieldValue(
                     "igst_amount",
-                    typeof v === "number" ? v : null,
+                    typeof v === "number" ? clampAmount(v) : null,
                   )
                 }
                 min={0}
-                decimalScale={3}
+                decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
 
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <NumberInput
                 label="Approved Amount"
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
                 placeholder="0"
                 value={form.values.approved_amount ?? undefined}
                 onChange={(v) =>
                   form.setFieldValue(
                     "approved_amount",
-                    typeof v === "number" ? v : null,
+                    typeof v === "number" ? clampAmount(v) : null,
                   )
                 }
                 min={0}
-                decimalScale={3}
+                decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1}>
               <NumberInput
                 label="Difference Amount"
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
                 placeholder="0"
                 value={form.values.difference_amount ?? undefined}
                 onChange={(v) =>
                   form.setFieldValue(
                     "difference_amount",
-                    typeof v === "number" ? v : null,
+                    typeof v === "number" ? clampAmount(v) : null,
                   )
                 }
-                decimalScale={3}
+                decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
+            <Grid.Col span={1.25}>
               <SingleDateInput
                 label="Due Date"
                 placeholder="Select due date"
@@ -1232,15 +1549,15 @@ export default function SupplierInvoiceCreate({
                     ? String(form.errors.due_date)
                     : undefined
                 }
-                disabled={isReadOnly}
+                disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
           </Grid>
 
           {/* Charges Section — span 12, grid form like InvoiceCreate */}
-          <Grid mt="md">
+          <Grid mt={"sm"}>
             <Grid.Col span={12}>
-              <Group justify="space-between" align="center" mb="sm">
+              <Group justify="space-between" align="center">
                 <Text size="sm" fw={600} c="#105476">
                   Charges
                 </Text>
@@ -1255,7 +1572,7 @@ export default function SupplierInvoiceCreate({
                 Add Charge
               </Button> */}
               </Group>
-              <Box mb="sm" mt="md">
+              <Box mb="sm" mt="sm">
                 <Grid
                   w="100%"
                   gutter="sm"
@@ -1269,6 +1586,9 @@ export default function SupplierInvoiceCreate({
                     color: "#105476",
                   }}
                 >
+                  <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
+                    Shipment No
+                  </Grid.Col>
                   <Grid.Col span={1} style={{ fontSize: "13px" }}>
                     Account
                   </Grid.Col>
@@ -1280,9 +1600,6 @@ export default function SupplierInvoiceCreate({
                   </Grid.Col>
                   <Grid.Col span={1} style={{ fontSize: "13px" }}>
                     Narration
-                  </Grid.Col>
-                  <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
-                    Shipment No
                   </Grid.Col>
                   <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
                     Charge
@@ -1317,20 +1634,26 @@ export default function SupplierInvoiceCreate({
                     gutter="sm"
                     mt={index !== 0 ? "sm" : 0}
                   >
-                    <Grid.Col span={1}>
+                    <Grid.Col span={1.25}>
                       <Dropdown
-                        placeholder="Account Code"
-                        data={accountOptions}
-                        value={row.account_code || null}
-                        onChange={(v) =>
+                        placeholder="Shipment No"
+                        data={shipmentOptions}
+                        value={row.shipment_no || null}
+                        disabled={isReadOnly || reversalFormDisabled}
+                        onChange={(v) => {
+                          const shipmentNo = v ?? "";
                           form.setFieldValue(
-                            `charges_data.${index}.account_code`,
-                            v ?? "",
-                          )
-                        }
+                            `charges_data.${index}.shipment_no`,
+                            shipmentNo,
+                          );
+                          fetchSacForChargeRow(
+                            index,
+                            row.charge_id,
+                            shipmentNo,
+                          );
+                        }}
                         searchable
                         clearable
-                        disabled={isReadOnly}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1341,27 +1664,42 @@ export default function SupplierInvoiceCreate({
                       />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <SearchableSelect
-                        placeholder="Subledger"
-                        disabled={isReadOnly}
-                        apiEndpoint={URL.customer}
-                        searchFields={["customer_name", "customer_code"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.customer_code ?? item.id ?? ""),
-                          label: String(
-                            item.customer_name ?? item.customer_code ?? "",
-                          ),
-                        })}
-                        value={row.subledger_code || null}
-                        displayValue={row.subledger_code || undefined}
-                        onChange={(value) =>
+                      <Dropdown
+                        placeholder="Account Code"
+                        data={accountOptions}
+                        value={row.account_code || null}
+                        onChange={(v) => {
+                          const code = v ?? "";
+                          form.setFieldValue(
+                            `charges_data.${index}.account_code`,
+                            code,
+                          );
+                          const opt = accountOptions.find(
+                            (o) => o.value === code,
+                          ) as { sl_code?: string } | undefined;
                           form.setFieldValue(
                             `charges_data.${index}.subledger_code`,
-                            value ?? "",
-                          )
-                        }
-                        dropdownZIndex={1000}
-                        minSearchLength={2}
+                            opt?.sl_code ?? "",
+                          );
+                        }}
+                        searchable
+                        clearable
+                        disabled={isReadOnly || reversalFormDisabled}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <TextInput
+                        placeholder="Subledger"
+                        value={row.subledger_code}
+                        readOnly
+                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1382,7 +1720,7 @@ export default function SupplierInvoiceCreate({
                             v ?? "",
                           )
                         }
-                        disabled={isReadOnly}
+                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1402,36 +1740,7 @@ export default function SupplierInvoiceCreate({
                             e.target.value,
                           )
                         }
-                        disabled={isReadOnly}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={1.25}>
-                      <Dropdown
-                        placeholder="Shipment No"
-                        data={shipmentOptions}
-                        value={row.shipment_no || null}
-                        disabled={isReadOnly}
-                        onChange={(v) => {
-                          const shipmentNo = v ?? "";
-                          form.setFieldValue(
-                            `charges_data.${index}.shipment_no`,
-                            shipmentNo,
-                          );
-                          fetchSacForChargeRow(
-                            index,
-                            row.charge_id,
-                            shipmentNo,
-                          );
-                        }}
-                        searchable
-                        clearable
+                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1464,7 +1773,7 @@ export default function SupplierInvoiceCreate({
                         }}
                         searchable
                         clearable
-                        disabled={isChargeLoading || isReadOnly}
+                        disabled={isChargeLoading || isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1500,7 +1809,7 @@ export default function SupplierInvoiceCreate({
                         }}
                         searchable
                         clearable
-                        disabled={isCurrencyLoading || isReadOnly}
+                        disabled={isCurrencyLoading || isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1523,7 +1832,7 @@ export default function SupplierInvoiceCreate({
                         min={0}
                         decimalScale={4}
                         hideControls
-                        disabled={isReadOnly}
+                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1540,13 +1849,13 @@ export default function SupplierInvoiceCreate({
                         onChange={(v) =>
                           form.setFieldValue(
                             `charges_data.${index}.amount`,
-                            typeof v === "number" ? v : null,
+                            typeof v === "number" ? clampAmount(v) : null,
                           )
                         }
                         min={0}
                         decimalScale={2}
                         hideControls
-                        disabled={isReadOnly}
+                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1557,31 +1866,31 @@ export default function SupplierInvoiceCreate({
                       />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                    <NumberInput
-                      placeholder="0"
-                      value={row.amount_in_local ?? undefined}
-                      onChange={(v) =>
-                        form.setFieldValue(
-                          `charges_data.${index}.amount_in_local`,
-                          typeof v === "number" ? v : null,
-                        )
-                      }
-                      min={0}
-                      decimalScale={2}
-                      hideControls
-                      disabled={isReadOnly}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={0.75}>
-                    <TextInput
-                      placeholder="SAC Code"
+                      <NumberInput
+                        placeholder="0"
+                        value={row.amount_in_local ?? undefined}
+                        onChange={(v) =>
+                          form.setFieldValue(
+                            `charges_data.${index}.amount_in_local`,
+                            typeof v === "number" ? clampAmount(v) : null,
+                          )
+                        }
+                        min={0}
+                        decimalScale={2}
+                        hideControls
+                        disabled={isReadOnly || reversalFormDisabled}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={0.75}>
+                      <TextInput
+                        placeholder="SAC Code"
                         value={row.tax_code}
                         readOnly
                         styles={{
@@ -1606,7 +1915,7 @@ export default function SupplierInvoiceCreate({
                             (v === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
                           )
                         }
-                        disabled={isReadOnly}
+                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -1618,33 +1927,37 @@ export default function SupplierInvoiceCreate({
                     </Grid.Col>
                     <Grid.Col span={0.5}>
                       <Group gap="xs">
-                        {!isReadOnly && form.values.charges_data.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="light"
-                            color="red"
-                            size="sm"
-                            px={12}
-                            onClick={() =>
-                              form.removeListItem("charges_data", index)
-                            }
-                          >
-                            <IconTrash size={16} />
-                          </Button>
-                        )}
-                        {!isReadOnly && form.values.charges_data.length - 1 === index && (
-                          <Button
-                            type="button"
-                            radius="sm"
-                            px={12}
-                            size="sm"
-                            variant="light"
-                            color="#105476"
-                            onClick={addChargeRow}
-                          >
-                            <IconPlus size={16} />
-                          </Button>
-                        )}
+                        {!isReadOnly &&
+                          !reversalFormDisabled &&
+                          form.values.charges_data.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="light"
+                              color="red"
+                              size="sm"
+                              px={12}
+                              onClick={() =>
+                                form.removeListItem("charges_data", index)
+                              }
+                            >
+                              <IconTrash size={16} />
+                            </Button>
+                          )}
+                        {!isReadOnly &&
+                          form.values.charges_data.length - 1 === index && (
+                            <Button
+                              type="button"
+                              radius="sm"
+                              px={12}
+                              size="sm"
+                              variant="light"
+                              color="#105476"
+                              onClick={addChargeRow}
+                              disabled={reversalFormDisabled}
+                            >
+                              <IconPlus size={16} />
+                            </Button>
+                          )}
                       </Group>
                     </Grid.Col>
                   </Grid>
@@ -1655,24 +1968,30 @@ export default function SupplierInvoiceCreate({
 
           {!isReadOnly && (
             <Group justify="flex-end" mt="lg" gap="sm">
-              {saveResponse?.id != null && statusUpper === "UNPOSTED" && (
-                <Button
-                  type="button"
-                  color="green"
-                  loading={isSubmitting}
-                  onClick={handlePost}
-                >
-                  Post
-                </Button>
-              )}
               <Button
                 type="submit"
                 color="#105476"
                 rightSection={<IconChevronRight size={16} />}
                 loading={isSubmitting}
               >
-                {saveResponse?.id != null ? "Update Supplier Invoice" : "Save Supplier Invoice"}
+                {saveResponse?.id != null
+                  ? isReversal
+                    ? "Update"
+                    : "Update Supplier Invoice"
+                  : isReversal
+                    ? "Create Supplier Invoice Reverse"
+                    : "Save Supplier Invoice"}
               </Button>
+              {saveResponse?.id != null && statusUpper === "UNPOSTED" && (
+                <Button
+                  type="button"
+                  color="black"
+                  loading={isSubmitting}
+                  onClick={handlePost}
+                >
+                  Post
+                </Button>
+              )}
             </Group>
           )}
         </Box>

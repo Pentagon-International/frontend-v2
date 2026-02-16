@@ -132,6 +132,7 @@ import ReceiptReversalMaster from "../pages/accounts/reverse-receipt/ReceiptReve
 import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
 import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
+import SupplierInvoiceReversalMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceReversalMaster";
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
@@ -270,6 +271,9 @@ const NavigationRoutes = () => {
         <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/view" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/edit" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/reversal" element={<SupplierInvoiceReversalMaster />} />
+        <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
+        <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
