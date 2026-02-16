@@ -193,9 +193,12 @@ type HousingDetail = {
   origin_agent_name: string;
   origin_agent_address: string;
   origin_agent_email: string;
+  shipper_code: string;
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
+  shipper_state_id: string;
+  consignee_code: string;
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
@@ -502,11 +505,20 @@ function ImportJobCreate() {
               shipper_name: house.shipper_name
                 ? String(house.shipper_name)
                 : "",
+              shipper_code: house.shipper_code
+                ? String(house.shipper_code)
+                : "",
               shipper_address: house.shipper_address
                 ? String(house.shipper_address)
                 : "",
               shipper_email: house.shipper_email
                 ? String(house.shipper_email)
+                : "",
+              shipper_state_id: house.shipper_state_id
+                ? String(house.shipper_state_id)
+                : "",
+              consignee_code: house.consignee_code
+                ? String(house.consignee_code)
                 : "",
               consignee_name: house.consignee_name
                 ? String(house.consignee_name)
@@ -1840,9 +1852,12 @@ function ImportJobCreate() {
           origin_agent_name: house.origin_agent_name,
           origin_agent_address: house.origin_agent_address || "",
           origin_agent_email: house.origin_agent_email || "",
+          shipper_code: house.shipper_code || "",
           shipper_name: house.shipper_name,
           shipper_address: house.shipper_address || "",
           shipper_email: house.shipper_email || "",
+          shipper_state_id: house.shipper_state_id || "",
+          consignee_code: house.consignee_code || "",
           consignee_name: house.consignee_name,
           consignee_address: house.consignee_address || "",
           consignee_email: house.consignee_email || "",

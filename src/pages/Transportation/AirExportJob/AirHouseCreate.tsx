@@ -358,7 +358,7 @@ function HouseCreate() {
       origin_agent_name: editData?.origin_agent_name || "",
       origin_agent_address: editData?.origin_agent_address || "",
       origin_agent_email: editData?.origin_agent_email || "",
-      shipper_code: "", // Will be set when user selects from SearchableSelect
+      shipper_code: editData?.shipper_code || "", // Will be set when user selects from SearchableSelect
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
@@ -366,7 +366,7 @@ function HouseCreate() {
       editData?.shipper_state_id != null
         ? String(editData.shipper_state_id)
         : "",
-      consignee_code: "", // Will be set when user selects from SearchableSelect
+      consignee_code: editData?.consignee_code || "", // Will be set when user selects from SearchableSelect
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
@@ -421,7 +421,7 @@ function HouseCreate() {
   useEffect(() => {
     if (active !== 4) return;
     setInvoiceListLoading(true);
-    postAPICall(URL.invoiceCombined, { filters: {} }, API_HEADER)
+    postAPICall(URL.invoiceCombined, { filters: {"shipment_no": editData?.shipment_id } }, API_HEADER)
       .then((res: unknown) => {
         const data = (res as { data?: InvoiceListItem[] })?.data;
         setInvoiceList(Array.isArray(data) ? data : []);
@@ -1218,6 +1218,7 @@ function HouseCreate() {
       origin_agent_name: v.origin_agent_name,
       origin_agent_address: v.origin_agent_address,
       origin_agent_email: v.origin_agent_email,
+      shipper_code: v.shipper_code,
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
@@ -1234,6 +1235,7 @@ function HouseCreate() {
     shipment_id:
       (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: v.consignee_name,
+      consignee_code: v.consignee_code,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
       notify_customer1_name: v.notify_customer1_name,
@@ -1278,6 +1280,7 @@ function HouseCreate() {
       origin_agent_name: currentFormValues.origin_agent_name,
       origin_agent_address: currentFormValues.origin_agent_address,
       origin_agent_email: currentFormValues.origin_agent_email,
+      shipper_code: currentFormValues.shipper_code,
       shipper_name: currentFormValues.shipper_name,
       shipper_address: currentFormValues.shipper_address,
       shipper_email: currentFormValues.shipper_email,
@@ -1291,6 +1294,7 @@ function HouseCreate() {
     shipment_id:
       (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: currentFormValues.consignee_name,
+      consignee_code: currentFormValues.consignee_code,
       consignee_address: currentFormValues.consignee_address,
       consignee_email: currentFormValues.consignee_email,
       notify_customer1_name: currentFormValues.notify_customer1_name,
@@ -1367,9 +1371,11 @@ function HouseCreate() {
         origin_agent_name: form.values.origin_agent_name,
         origin_agent_address: form.values.origin_agent_address,
         origin_agent_email: form.values.origin_agent_email,
+        shipper_code: form.values.shipper_code,
         shipper_name: form.values.shipper_name,
         shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
+        consignee_code: form.values.consignee_code,
         consignee_name: form.values.consignee_name,
         consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,

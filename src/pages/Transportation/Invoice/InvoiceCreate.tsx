@@ -21,7 +21,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -38,6 +38,32 @@ import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
 
 // Fetch functions
+
+type GstRatesBySacResponse = {
+  igst?: number | string | null;
+  cgst?: number | string | null;
+  sgst?: number | string | null;
+  IGST?: number | string | null;
+  CGST?: number | string | null;
+  SGST?: number | string | null;
+};
+
+type GstRates = {
+  igst: number | null;
+  cgst: number | null;
+  sgst: number | null;
+};
+
+const fetchGstRatesByStateSac = async (payload: {
+  state_id: number;
+  sac_code: string;
+}) => {
+  return postAPICall(
+    "invoice/gst-rates-by-state-sac/",
+    payload,
+    API_HEADER,
+  );
+};
 const fetchCurrencyMaster = async () => {
   try {
     const response = await getAPICall(`${URL.currencyMaster}`, API_HEADER);
@@ -139,7 +165,7 @@ const fetchGetEffectiveSac = async (
 
 // Fetch GST breakup for invoice: POST body { customer_id, invoice_id }
 const fetchInvoiceCalculateGstBreakup = async (payload: {
-  customer_id: number;
+  // customer_id: number;
   invoice_id: number;
 }) => {
   try {
@@ -218,8 +244,33 @@ type InvoiceFormData = {
 function normalizeDate(value: Date | string | null | undefined): Date | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value;
-  const d = new Date(value as string);
-  return isNaN(d.getTime()) ? null : d;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // Try native parsing first (works for ISO, RFC, etc.)
+  const native = new Date(raw);
+  if (!isNaN(native.getTime())) return native;
+
+  // Handle common backend formats like:
+  // - "DD-MM-YYYY"
+  // - "DD/MM/YYYY"
+  // - "DD-MM-YYYY HH:mm" / "DD/MM/YYYY HH:mm"
+  const m = raw.match(
+    /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  );
+  if (m) {
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = Number(m[3]);
+    const hours = m[4] != null ? Number(m[4]) : 0;
+    const minutes = m[5] != null ? Number(m[5]) : 0;
+    const seconds = m[6] != null ? Number(m[6]) : 0;
+    const d = new Date(year, month - 1, day, hours, minutes, seconds);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  return null;
 }
 
 // Clamp amount to max 10 digits including decimals, max 2 decimal places (e.g. 99999999.99)
@@ -236,6 +287,7 @@ type InvoiceDataFromApi = {
   id?: number;
   customer_id?: number;
   bill_to?: string;
+  bill_to_name?: string;
   address?: string;
   gstn?: string;
   shipment_no?: string;
@@ -275,6 +327,7 @@ function InvoiceCreate() {
   const user = useAuthStore((state) => state.user);
 
   const isViewMode = location.pathname.includes("/view/");
+  const isEditMode = location.pathname.includes("/edit/");
   const isEditOrViewMode = Boolean(
     invoiceId &&
       (location.pathname.includes("/edit/") ||
@@ -331,6 +384,13 @@ function InvoiceCreate() {
     total?: string;
   } | null>(null);
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
+
+  const [gstRatesByChargeIndex, setGstRatesByChargeIndex] = useState<
+    Record<number, GstRates | null>
+  >({});
+  const gstRatesCacheRef = useRef<Map<string, GstRates>>(new Map());
+  const lastGstRatesFetchKeyRef = useRef<string>("");
+
   const [isPosting, setIsPosting] = useState(false);
   const [invoiceIsPosted, setInvoiceIsPosted] = useState(false);
   const [addressOptions, setAddressOptions] = useState<
@@ -464,6 +524,30 @@ function InvoiceCreate() {
     }));
   }, [stateData]);
 
+  // State from housing is set after state API loads
+  useEffect(() => {
+    if (isStateLoading) return;
+    const hawbDetails =
+      location.state?.hawbDetails || location.state?.housingDetails || [];
+    const firstHawb =
+      Array.isArray(hawbDetails) && hawbDetails.length > 0
+        ? hawbDetails[0]
+        : null;
+    const jobHousing = (
+      location.state?.job as {
+        housing_details?: Array<{ shipper_state_id?: number | null }>;
+      }
+    )?.housing_details;
+    const shipperStateId =
+      firstHawb?.shipper_state_id != null
+        ? firstHawb.shipper_state_id
+        : (jobHousing?.[0]?.shipper_state_id ?? null);
+    if (shipperStateId != null && String(shipperStateId) !== form.values.state) {
+      form.setFieldValue("state", String(shipperStateId));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStateLoading, stateData]);
+
   // Format daybook options: id = value, name = label (value is daybook_id)
   const daybookOptions = useMemo(() => {
     const data = daybookData as { id?: number; name?: string }[];
@@ -564,11 +648,19 @@ function InvoiceCreate() {
           form.setFieldValue("address", firstHawb.shipper_address);
         }
 
-        // Set shipper name in Bill To field (customer name for payload and validation)
+        // Bill To should be shipper_code from HAWB/Housing.
+        console.log("firstHawb", firstHawb);
+        const shipperCode = String(firstHawb.shipper_code || "").trim();
+        if (shipperCode) {
+          form.setFieldValue("bill_to", shipperCode);
+        } 
+        // else if (firstHawb.shipper_name) {
+        //   // Fallback to keep bill_to non-empty and avoid clearing address/state
+        //   form.setFieldValue("bill_to", String(firstHawb.shipper_name));
+        // }
+
         if (firstHawb.shipper_name) {
-          setBillToDisplayName(firstHawb.shipper_name);
-          // form.setFieldValue("bill_to", firstHawb.shipper_name);
-          form.setFieldValue("bill_to", firstHawb.shipper_code);
+          setBillToDisplayName(String(firstHawb.shipper_name || firstHawb.bill_to_name));
         }
 
         // State from housing is set after state API loads (see useEffect below)
@@ -723,8 +815,9 @@ function InvoiceCreate() {
       "invoice-view",
       invoiceId,
       isReverseInvoiceNavigation ? "reverse_invoice_id" : "invoice_id",
+      location.key,
     ],
-    enabled: Boolean(isEditOrViewMode && invoiceId),
+    enabled: Boolean(isEditOrViewMode && invoiceId && location.key),
     queryFn: async () =>
       getAPICall(
         `${URL.invoice}${invoiceId}`,
@@ -754,7 +847,10 @@ function InvoiceCreate() {
       | undefined;
     if (!invoiceData || !isEditOrViewMode) return;
 
-    setBillToDisplayName(invoiceData.bill_to ?? null);
+    const documentDate = normalizeDate(invoiceData.document_date ?? null);
+    const dueDate = normalizeDate(invoiceData.due_date ?? null) ?? documentDate;
+
+    setBillToDisplayName(invoiceData.bill_to_name ?? null);
     // Set saveResponse so Update Invoice is shown and PUT is used when editing
     setSaveResponse({
       id: invoiceData.id,
@@ -772,8 +868,8 @@ function InvoiceCreate() {
       shipment_no: invoiceData.shipment_no ?? "",
       daybook_id:
         invoiceData.day_book_id != null ? String(invoiceData.day_book_id) : "",
-      document_date: normalizeDate(invoiceData.document_date ?? null),
-      due_date: normalizeDate(invoiceData.due_date ?? null),
+      document_date: documentDate,
+      due_date: dueDate,
       currency: invoiceData.currency_code ?? "",
       roe:
         invoiceData.roe != null
@@ -870,77 +966,88 @@ function InvoiceCreate() {
                   unit_id: "",
                   no_of_unit: null,
                   currency: "",
-                  billing_currency: null,
+                  currency_id: "",
                   roe: null,
                   amount_per_unit: null,
                   amount: null,
                   header_amount: null,
                   amount_in_local: null,
                   tax_code: "",
-                  dr_cr: "Cr" as const,
+                  dr_cr: "Cr",
                 },
               ],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceId, isEditOrViewMode, location.state?.invoiceData, invoiceDataFromApi]);
+  }, [invoiceDataFromApi, isEditOrViewMode]);
 
-  // Set state from housing shipper_state_id once state API has loaded
-  // Use hawbDetails first, then fallback to job.housing_details (from API) when passed house has no shipper_state_id
+  // In Edit mode, fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
-    if (isStateLoading || !stateData?.length) return;
-    const hawbDetails =
-      location.state?.hawbDetails || location.state?.housingDetails || [];
-    const firstHawb =
-      Array.isArray(hawbDetails) && hawbDetails.length > 0
-        ? hawbDetails[0]
-        : null;
-    const jobHousing = (
-      location.state?.job as {
-        housing_details?: Array<{ shipper_state_id?: number | null }>;
-      }
-    )?.housing_details;
-    const shipperStateId =
-      firstHawb?.shipper_state_id != null
-        ? firstHawb.shipper_state_id
-        : (jobHousing?.[0]?.shipper_state_id ?? null);
-    if (shipperStateId != null) {
-      form.setFieldValue("state", String(shipperStateId));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStateLoading, stateData]);
+    if (!isEditMode) return;
 
-  // Auto-set ROE when currency changes
-  const chargeCurrencies = form.values.charges.map((c) => c.currency).join(",");
+    const stateId = form.values.state ? Number(form.values.state) : null;
+    if (!stateId || Number.isNaN(stateId)) return;
 
-  useEffect(() => {
-    const updatedCharges = form.values.charges.map((charge) => {
-      // Auto-set ROE if currency is selected but ROE is not set
-      let roe = charge.roe;
-      if (charge.currency && !roe) {
-        roe = getRoeValue(charge.currency);
-      }
+    const sacs = (form.values.charges || [])
+      .map((c, idx) => ({ idx, sac: String(c.tax_code || "").trim() }))
+      .filter((x) => x.sac !== "");
 
-      // Only update ROE, don't touch amount
-      if (roe !== charge.roe) {
-        return {
-          ...charge,
-          roe: roe || null,
-        };
-      }
+    if (sacs.length === 0) return;
 
-      return charge;
+    const fetchKey = JSON.stringify({
+      stateId,
+      sacs: sacs.map((s) => s.sac),
+    });
+    if (fetchKey === lastGstRatesFetchKeyRef.current) return;
+    lastGstRatesFetchKeyRef.current = fetchKey;
+
+    let cancelled = false;
+
+    Promise.all(
+      sacs.map(async ({ idx, sac }) => {
+        const cacheKey = `${stateId}:${sac}`;
+        const cached = gstRatesCacheRef.current.get(cacheKey);
+        if (cached) return { idx, rates: cached };
+
+        try {
+          const res = (await fetchGstRatesByStateSac({
+            state_id: stateId,
+            sac_code: sac,
+          })) as any;
+          const payload = res?.data?.data ?? res?.data ?? res;
+          const data = payload as GstRatesBySacResponse | null | undefined;
+
+          const igstRaw = data?.igst_percent;
+          const cgstRaw = data?.cgst_percent;
+          const sgstRaw = data?.sgst_percent;
+
+          const rates: GstRates = {
+            igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+            cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+            sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+          };
+
+          gstRatesCacheRef.current.set(cacheKey, rates);
+          return { idx, rates };
+        } catch {
+          return { idx, rates: null };
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      setGstRatesByChargeIndex((prev) => {
+        const next = { ...prev };
+        results.forEach(({ idx, rates }) => {
+          next[idx] = rates;
+        });
+        return next;
+      });
     });
 
-    // Only update if there are actual changes to ROE
-    const hasChanges = updatedCharges.some(
-      (charge, index) => charge.roe !== form.values.charges[index]?.roe,
-    );
-
-    if (hasChanges) {
-      form.setFieldValue("charges", updatedCharges);
-    }
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCurrencies, getRoeValue]);
+  }, [isEditMode, form.values.state, form.values.charges]);
 
   // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit
   const chargeAmountPerUnits = form.values.charges
@@ -1108,11 +1215,16 @@ function InvoiceCreate() {
 
   // When Tax tab is active and we have invoice_id and customer_id from save response, fetch GST breakup
   useEffect(() => {
+    // if (
+    //   chargesTabActive !== "tax" ||
+    //   !saveResponse?.id ||
+    //   saveResponse?.customer_id == null
+    // )
     if (
       chargesTabActive !== "tax" ||
-      !saveResponse?.id ||
-      saveResponse?.customer_id == null
-    ) {
+      !saveResponse?.id
+    )
+     {
       return;
     }
     let cancelled = false;
@@ -1348,10 +1460,14 @@ function InvoiceCreate() {
           // Merge returned charge ids into form (e.g. new charges created by this PUT)
           const res = response as { charges?: Array<{ id?: number }> };
           if (res.charges && Array.isArray(res.charges)) {
-            const updatedCharges = form.values.charges.map((c, i) => ({
-              ...c,
-              id: res.charges![i]?.id ?? c.id,
-            }));
+            const updatedCharges = form.values.charges.map((c, i) => {
+              const chargeRes = res.charges?.[i];
+              const id = chargeRes?.id;
+              return {
+                ...c,
+                id: id != null ? Number(id) : c.id,
+              };
+            });
             form.setFieldValue("charges", updatedCharges);
           }
           ToastNotification({
@@ -1378,10 +1494,14 @@ function InvoiceCreate() {
           // Merge returned charge ids into form so Update (PUT) sends id for existing charges
           const res = response as { charges?: Array<{ id?: number }> };
           if (res.charges && Array.isArray(res.charges)) {
-            const updatedCharges = form.values.charges.map((c, i) => ({
-              ...c,
-              id: res.charges![i]?.id ?? c.id,
-            }));
+            const updatedCharges = form.values.charges.map((c, i) => {
+              const chargeRes = res.charges?.[i];
+              const id = chargeRes?.id;
+              return {
+                ...c,
+                id: id != null ? Number(id) : c.id,
+              };
+            });
             form.setFieldValue("charges", updatedCharges);
           }
           ToastNotification({
@@ -1402,7 +1522,8 @@ function InvoiceCreate() {
   };
 
   const handlePostInvoice = async () => {
-    if (!saveResponse?.id || saveResponse?.customer_id == null) {
+    // if (!saveResponse?.id || saveResponse?.customer_id == null) {
+        if (!saveResponse?.id) {
       ToastNotification({
         message: "Save the invoice first and ensure customer_id is available.",
         type: "error",
@@ -1445,8 +1566,8 @@ function InvoiceCreate() {
       let breakupData = gstBreakup;
       if (!breakupData?.sac_wise_totals?.length) {
         breakupData = await fetchInvoiceCalculateGstBreakup({
-          customer_id: saveResponse.customer_id,
-          invoice_id: saveResponse.id,
+          customer_id: saveResponse.customer_id as number,
+          invoice_id: saveResponse.id as number,
         }) as typeof gstBreakup;
       }
       const sacWiseTotals = breakupData?.sac_wise_totals ?? [];
@@ -2290,6 +2411,28 @@ function InvoiceCreate() {
                             },
                           }}
                         />
+
+                        <TextInput
+                          mt={4}
+                          placeholder="IGST"
+                          value={
+                            (() => {
+                              const rate = gstRatesByChargeIndex[index]?.igst;
+                              const localAmount = charge.amount_in_local;
+                              if (rate == null || localAmount == null) return "";
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return amount != null ? String(amount) : "";
+                            })()
+                          }
+                          disabled
+                          styles={{
+                            input: {
+                              fontSize: "11px",
+                              fontFamily: "Inter",
+                              height: "28px",
+                            },
+                          }}
+                        />
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <Dropdown
@@ -2312,6 +2455,28 @@ function InvoiceCreate() {
                               fontSize: "13px",
                               fontFamily: "Inter",
                               height: "36px",
+                            },
+                          }}
+                        />
+
+                        <TextInput
+                          mt={4}
+                          placeholder="CGST"
+                          value={
+                            (() => {
+                              const rate = gstRatesByChargeIndex[index]?.cgst;
+                              const localAmount = charge.amount_in_local;
+                              if (rate == null || localAmount == null) return "";
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return amount != null ? String(amount) : "";
+                            })()
+                          }
+                          disabled
+                          styles={{
+                            input: {
+                              fontSize: "11px",
+                              fontFamily: "Inter",
+                              height: "28px",
                             },
                           }}
                         />
@@ -2371,6 +2536,28 @@ function InvoiceCreate() {
                               fontSize: "13px",
                               fontFamily: "Inter",
                               height: "36px",
+                            },
+                          }}
+                        />
+
+                        <TextInput
+                          mt={4}
+                          placeholder="SGST"
+                          value={
+                            (() => {
+                              const rate = gstRatesByChargeIndex[index]?.sgst;
+                              const localAmount = charge.amount_in_local;
+                              if (rate == null || localAmount == null) return "";
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return amount != null ? String(amount) : "";
+                            })()
+                          }
+                          disabled
+                          styles={{
+                            input: {
+                              fontSize: "11px",
+                              fontFamily: "Inter",
+                              height: "28px",
                             },
                           }}
                         />
@@ -2764,6 +2951,86 @@ function InvoiceCreate() {
                     </Grid>
                   ))}
                 </Box>
+
+                {/* Totals Section */}
+                <Box
+                  mt="xl"
+                  p="md"
+                  style={{
+                    backgroundColor: "#f8f9fa",
+                    borderRadius: 8,
+                    border: "1px solid #dee2e6",
+                  }}
+                >
+                  <Grid gutter="md">
+                    <Grid.Col span={3}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          Local Amount Total
+                        </Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {form.values.charges
+                            .reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0)
+                            .toFixed(2)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={3}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          IGST Total
+                        </Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {form.values.charges
+                            .reduce((sum, c, idx) => {
+                              const rate = gstRatesByChargeIndex[idx]?.igst;
+                              const localAmount = c.amount_in_local;
+                              if (rate == null || localAmount == null) return sum;
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return sum + (amount ?? 0);
+                            }, 0)
+                            .toFixed(2)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={3}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          CGST Total
+                        </Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {form.values.charges
+                            .reduce((sum, c, idx) => {
+                              const rate = gstRatesByChargeIndex[idx]?.cgst;
+                              const localAmount = c.amount_in_local;
+                              if (rate == null || localAmount == null) return sum;
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return sum + (amount ?? 0);
+                            }, 0)
+                            .toFixed(2)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={3}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          SGST Total
+                        </Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {form.values.charges
+                            .reduce((sum, c, idx) => {
+                              const rate = gstRatesByChargeIndex[idx]?.sgst;
+                              const localAmount = c.amount_in_local;
+                              if (rate == null || localAmount == null) return sum;
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return sum + (amount ?? 0);
+                            }, 0)
+                            .toFixed(2)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                  </Grid>
+                </Box>
               </Tabs.Panel>
 
               {saveResponse && (
@@ -2871,7 +3138,8 @@ function InvoiceCreate() {
                   )}
                   {chargesTabActive === "tax" &&
                     saveResponse &&
-                    (!saveResponse.id || saveResponse.customer_id == null) && (
+                    // (!saveResponse.id || saveResponse.customer_id == null) && (
+                      (!saveResponse.id) && (
                       <Text size="sm" c="dimmed" py="md">
                         Save the invoice to load GST breakup (customer_id from
                         response is required).
