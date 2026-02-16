@@ -748,14 +748,22 @@ function InvoiceCreate() {
           const jobServiceIdForSac =
             (location.state as { job?: { service_id?: number } })?.job?.service_id ?? null;
           if (jobServiceIdForSac && mappedCharges.some((c: ChargeItem) => c.charge_id != null)) {
-            const items = mappedCharges
-              .filter((c: ChargeItem) => c.charge_id != null)
-              .map((c: ChargeItem) => ({ charge_id: c.charge_id!, service_id: jobServiceIdForSac }));
+            // Keep track of original indices when filtering
+            const chargesWithIds = mappedCharges
+              .map((c, idx) => ({ charge: c, originalIdx: idx }))
+              .filter(({ charge }) => charge.charge_id != null);
+            
+            const items = chargesWithIds.map(({ charge }) => ({
+              charge_id: charge.charge_id!,
+              service_id: jobServiceIdForSac
+            }));
+            
             fetchGetEffectiveSac(items).then((data) => {
-              data.forEach((item) => {
-                const idx = mappedCharges.findIndex((c: ChargeItem) => c.charge_id === item.charge_id);
-                if (idx >= 0 && item.sac_code != null && item.sac_code !== "") {
-                  form.setFieldValue(`charges.${idx}.tax_code`, item.sac_code);
+              // Map response by index order (API returns in same order as request)
+              data.forEach((item, responseIdx) => {
+                const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
+                if (originalIdx !== undefined && item.sac_code != null && item.sac_code !== "") {
+                  form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
                 }
               });
             });
@@ -2383,9 +2391,8 @@ function InvoiceCreate() {
                                   service_id: jobServiceId,
                                 },
                               ]).then((data) => {
-                                const item = data.find(
-                                  (x) => x.charge_id === chargeId,
-                                );
+                                // Since we're sending only one item, response will have one item at index 0
+                                const item = data[0];
                                 if (
                                   item?.sac_code != null &&
                                   item.sac_code !== ""
