@@ -23,6 +23,7 @@ interface SearchableSelectProps {
   required?: boolean;
   withAsterisk?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
   error?: string;
   className?: string;
   minSearchLength?: number; // Minimum characters before triggering search
@@ -45,6 +46,7 @@ export default function SearchableSelect({
   required = false,
   withAsterisk = false,
   disabled = false,
+  readOnly = false,
   error,
   className,
   minSearchLength = 3, // Default to 3 characters
@@ -350,6 +352,7 @@ export default function SearchableSelect({
         onSearchChange={handleSearchChange}
         onChange={handleChange}
         size={size}
+        readOnly={readOnly}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown") {
             event.preventDefault();

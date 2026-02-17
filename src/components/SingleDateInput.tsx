@@ -14,6 +14,7 @@ export interface SingleDateInputProps {
   allowDeselection?: boolean;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   disabled?: boolean;
+  readOnly?: boolean;
   minDate?: Date;
   maxDate?: Date;
   error?: string;
@@ -28,6 +29,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
   allowDeselection = true,
   size = "sm",
   disabled = false,
+  readOnly = false,
   minDate,
   maxDate,
   error,
@@ -154,6 +156,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       clearable
       hideOutsideDates
       disabled={disabled}
+      readOnly={readOnly}
       minDate={minDate}
       maxDate={maxDate}
       error={error}

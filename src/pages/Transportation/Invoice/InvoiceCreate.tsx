@@ -1951,7 +1951,8 @@ function InvoiceCreate() {
                 returnOriginalData={true}
                 withAsterisk
                 dropdownZIndex={1000}
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={
                   form.errors.bill_to ? String(form.errors.bill_to) : undefined
                 }
@@ -1981,7 +1982,8 @@ function InvoiceCreate() {
                 searchable
                 withAsterisk
                 error={form.errors.state || undefined}
-                disabled={isStateLoading || isReadOnly}
+                readOnly={isStateLoading || isReadOnly}
+                // disabled={isStateLoading || isReadOnly}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -2005,7 +2007,8 @@ function InvoiceCreate() {
                 value={form.values.gstn}
                 onChange={(e) => form.setFieldValue("gstn", e.target.value)}
                 error={form.errors.gstn}
-                disabled={isReadOnly}
+                readOnly={isReadOnly}
+                // disabled={isReadOnly}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -2026,7 +2029,8 @@ function InvoiceCreate() {
               <TextInput
                 label="Shipment No"
                 placeholder="Enter shipment number"
-                disabled={isReadOnly}
+                readOnly={isReadOnly}
+                // disabled={isReadOnly}
                 value={form.values.shipment_no}
                 onChange={(e) =>
                   form.setFieldValue("shipment_no", e.target.value)
@@ -2062,7 +2066,8 @@ function InvoiceCreate() {
                 searchable
                 withAsterisk
                 error={form.errors.daybook_id}
-                disabled={isDaybookLoading || isReadOnly}
+                readOnly={isDaybookLoading || isReadOnly}
+                // disabled={isDaybookLoading || isReadOnly}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -2088,7 +2093,8 @@ function InvoiceCreate() {
                   form.setFieldValue("due_date", date);
                 }}
                 withAsterisk
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={
                   form.errors.document_date
                     ? typeof form.errors.document_date === "string"
@@ -2107,7 +2113,8 @@ function InvoiceCreate() {
                 value={normalizeDate(form.values.due_date)}
                 onChange={(date) => form.setFieldValue("due_date", date)}
                 withAsterisk
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={
                   form.errors.due_date
                     ? typeof form.errors.due_date === "string"
@@ -2159,7 +2166,8 @@ function InvoiceCreate() {
                     ? String(form.errors.currency)
                     : undefined
                 }
-                disabled={isCurrencyLoading || isReadOnly}
+                // disabled={isCurrencyLoading || isReadOnly}
+                readOnly={isCurrencyLoading || isReadOnly}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -2211,7 +2219,8 @@ function InvoiceCreate() {
                   form.setFieldValue("charges", updatedCharges);
                 }}
                 withAsterisk
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={form.errors.roe ? String(form.errors.roe) : undefined}
                 min={0}
                 decimalScale={4}
@@ -2239,7 +2248,8 @@ function InvoiceCreate() {
                 value={form.values.irn_no}
                 onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
                 error={form.errors.irn_no}
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 styles={{
                   input: {
                     fontSize: "13px",
@@ -2268,7 +2278,8 @@ function InvoiceCreate() {
                   }
                   searchable
                   withAsterisk
-                  disabled={isReadOnly}
+                  // disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   error={
                     form.errors.address
                       ? String(form.errors.address)
@@ -2296,7 +2307,8 @@ function InvoiceCreate() {
                     form.setFieldValue("address", e.target.value)
                   }
                   withAsterisk
-                  disabled={isReadOnly}
+                  // disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   error={
                     form.errors.address
                       ? String(form.errors.address)
@@ -2328,7 +2340,8 @@ function InvoiceCreate() {
                   form.setFieldValue("narration", e.target.value)
                 }
                 error={form.errors.narration}
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 rows={2}
                 styles={{
                   input: {
@@ -2462,7 +2475,8 @@ function InvoiceCreate() {
                             }
                           }}
                           withAsterisk
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           error={chargeErrors[index]?.charge_name}
                           minSearchLength={2}
                           dropdownZIndex={1000}
@@ -2483,7 +2497,8 @@ function InvoiceCreate() {
                           searchable
                           data={unitOptions}
                           value={charge.unit_id || charge.unit_code || null}
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           onChange={(value) => {
                             const v = value ?? "";
                             form.setFieldValue(`charges.${index}.unit_id`, v);
@@ -2629,7 +2644,8 @@ function InvoiceCreate() {
                                   return amount != null ? String(amount) : "";
                                 })()
                               }
-                              disabled
+                              // disabled
+                              readOnly
                               rightSection={
                                 (() => {
                                   const rate = gstRatesByChargeIndex[index]?.sgst;
@@ -2767,7 +2783,7 @@ function InvoiceCreate() {
                               },
                             }}
                           >
-                            Fetch
+                            GST Rates
                           </Button>
                          </Group>
                       </Grid.Col>
@@ -2777,7 +2793,8 @@ function InvoiceCreate() {
                           min={0}
                           hideControls
                           withAsterisk
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           value={charge.roe || undefined}
                           onChange={(value) => {
                             const roe = value as number | null;
@@ -2840,7 +2857,8 @@ function InvoiceCreate() {
                           placeholder="No of Unit"
                           min={0}
                           hideControls
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           value={charge.no_of_unit || undefined}
                           onChange={(value) => {
                             const noOfUnit = value as number | null;
@@ -2893,7 +2911,8 @@ function InvoiceCreate() {
                           min={0}
                           decimalScale={2}
                           hideControls
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           value={charge.amount_per_unit || undefined}
                           onChange={(value) => {
                             const amountPerUnit = clampAmount(value as number | null);
@@ -2947,7 +2966,8 @@ function InvoiceCreate() {
                           decimalScale={2}
                           hideControls
                           withAsterisk
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           value={charge.amount || undefined}
                           onChange={(value) => {
                             const currencyAmount = clampAmount(value as number | null);
@@ -3005,7 +3025,8 @@ function InvoiceCreate() {
                           min={0}
                           decimalScale={2}
                           hideControls
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           value={charge.header_amount || undefined}
                           onChange={(value) => {
                             form.setFieldValue(
@@ -3029,7 +3050,8 @@ function InvoiceCreate() {
                           decimalScale={2}
                           hideControls
                           withAsterisk
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           value={charge.amount_in_local || undefined}
                           onChange={(value) => {
                             const clampedLocal = clampAmount(value as number | null);
@@ -3061,7 +3083,8 @@ function InvoiceCreate() {
                         <TextInput
                           placeholder="SAC Code"
                           withAsterisk
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           value={charge.tax_code}
                           rightSection={
                             gstRatesLoadingByIndex[index] &&
@@ -3086,7 +3109,8 @@ function InvoiceCreate() {
                             { value: "Dr", label: "Dr" },
                           ]}
                           value={charge.dr_cr ?? "Cr"}
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           onChange={(value) =>
                             form.setFieldValue(
                               `charges.${index}.dr_cr`,
