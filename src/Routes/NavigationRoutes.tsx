@@ -129,6 +129,8 @@ import ReceiptMaster from "../pages/accounts/receipt/ReceiptMaster";
 import ReceiptCreate from "../pages/accounts/receipt/ReceiptCreate";
 import ReceiptReversal from "../pages/accounts/reverse-receipt/ReceiptReversal";
 import ReceiptReversalMaster from "../pages/accounts/reverse-receipt/ReceiptReversalMaster";
+import PaymentMaster from "../pages/accounts/payment/PaymentMaster";
+import PaymentCreate from "../pages/accounts/payment/PaymentCreate";
 import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
 import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
@@ -267,6 +269,10 @@ const NavigationRoutes = () => {
         <Route path="/receipt/reversal/view" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/edit" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/create" element={<ReceiptReversal />} />
+        <Route path="/payment" element={<PaymentMaster />} />
+        <Route path="/payment/view" element={<PaymentCreate />} />
+        <Route path="/payment/edit" element={<PaymentCreate />} />
+        <Route path="/payment/create" element={<PaymentCreate />} />
         <Route path="/supplier-invoice" element={<SupplierInvoiceMaster />} />
         <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/view" element={<SupplierInvoiceCreate />} />

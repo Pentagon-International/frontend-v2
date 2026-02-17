@@ -121,6 +121,8 @@ export const URL = {
   reverseReceiptFilter: "filter/reverse-receipt/",
   receipt: "receipt/",
   reverseReceipt: "reverse-receipt/",
+  paymentFilter: "filter/payment/",
+  payment: "payment/",
   supplierInvoiceFilter: "filter/supplier-invoice/",
   supplierInvoice: "supplier-invoice/",
   reverseSupplierInvoiceFilter: "filter/reverse-supplier-invoice/",
