@@ -3158,6 +3158,24 @@ function InvoiceCreate() {
                                 size="sm"
                                 px={12}
                                 onClick={() => {
+                                  setGstRatesByChargeIndex((prev) => {
+                                    const next: Record<number, GstRates | null> = {};
+                                    Object.entries(prev).forEach(([key, value]) => {
+                                      const idx = Number(key);
+                                      if (Number.isNaN(idx) || idx === index) return;
+                                      next[idx > index ? idx - 1 : idx] = value;
+                                    });
+                                    return next;
+                                  });
+                                  setGstRatesLoadingByIndex((prev) => {
+                                    const next: Record<number, boolean> = {};
+                                    Object.entries(prev).forEach(([key, value]) => {
+                                      const idx = Number(key);
+                                      if (Number.isNaN(idx) || idx === index) return;
+                                      next[idx > index ? idx - 1 : idx] = value;
+                                    });
+                                    return next;
+                                  });
                                   form.removeListItem("charges", index);
                                 }}
                               >
