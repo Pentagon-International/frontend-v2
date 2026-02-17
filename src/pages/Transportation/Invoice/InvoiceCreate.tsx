@@ -46,12 +46,17 @@ type GstRatesBySacResponse = {
   IGST?: number | string | null;
   CGST?: number | string | null;
   SGST?: number | string | null;
+  igst_percent?: number | string | null;
+  cgst_percent?: number | string | null;
+  sgst_percent?: number | string | null;
+  same_state?: boolean;
 };
 
 type GstRates = {
   igst: number | null;
   cgst: number | null;
   sgst: number | null;
+  same_state: boolean;
 };
 
 const fetchGstRatesByStateSac = async (payload: {
@@ -387,6 +392,9 @@ function InvoiceCreate() {
 
   const [gstRatesByChargeIndex, setGstRatesByChargeIndex] = useState<
     Record<number, GstRates | null>
+  >({});
+  const [gstRatesLoadingByIndex, setGstRatesLoadingByIndex] = useState<
+    Record<number, boolean>
   >({});
   const gstRatesCacheRef = useRef<Map<string, GstRates>>(new Map());
   const lastGstRatesFetchKeyRef = useRef<string>("");
@@ -991,28 +999,62 @@ function InvoiceCreate() {
   // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
     const stateId = form.values.state ? Number(form.values.state) : null;
-    if (!stateId || Number.isNaN(stateId)) return;
+    if (!stateId || Number.isNaN(stateId)) {
+      // Clear loading states if no state is selected
+      setGstRatesLoadingByIndex({});
+      return;
+    }
 
     const sacs = (form.values.charges || [])
-      .map((c, idx) => ({ idx, sac: String(c.tax_code || "").trim() }))
+      .map((c, idx) => ({ 
+        idx, 
+        sac: String(c.tax_code || "").trim(),
+        localAmount: c.amount_in_local
+      }))
       .filter((x) => x.sac !== "");
 
-    if (sacs.length === 0) return;
+    if (sacs.length === 0) {
+      // Clear loading states if no SAC codes are present
+      setGstRatesLoadingByIndex({});
+      return;
+    }
 
     const fetchKey = JSON.stringify({
       stateId,
-      sacs: sacs.map((s) => s.sac),
+      sacs: sacs.map((s) => ({ sac: s.sac, localAmount: s.localAmount })),
     });
     if (fetchKey === lastGstRatesFetchKeyRef.current) return;
     lastGstRatesFetchKeyRef.current = fetchKey;
 
     let cancelled = false;
 
+    // Set loading state only for indices that need fetching (not in cache and don't have rates yet)
+    const indicesToFetch: number[] = [];
+    sacs.forEach(({ idx, sac }) => {
+      const cacheKey = `${stateId}:${sac}`;
+      const hasCache = gstRatesCacheRef.current.has(cacheKey);
+      const hasRates = gstRatesByChargeIndex[idx] != null;
+      
+      if (!hasCache && !hasRates) {
+        indicesToFetch.push(idx);
+      }
+    });
+
+    if (indicesToFetch.length > 0) {
+      setGstRatesLoadingByIndex((prev) => {
+        const next = { ...prev };
+        indicesToFetch.forEach((idx) => {
+          next[idx] = true;
+        });
+        return next;
+      });
+    }
+
     Promise.all(
       sacs.map(async ({ idx, sac }) => {
         const cacheKey = `${stateId}:${sac}`;
         const cached = gstRatesCacheRef.current.get(cacheKey);
-        if (cached) return { idx, rates: cached };
+        if (cached) return { idx, rates: cached, fromCache: true };
 
         try {
           const res = (await fetchGstRatesByStateSac({
@@ -1025,17 +1067,19 @@ function InvoiceCreate() {
           const igstRaw = data?.igst_percent;
           const cgstRaw = data?.cgst_percent;
           const sgstRaw = data?.sgst_percent;
+          const sameState = data?.same_state ?? false;
 
           const rates: GstRates = {
             igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
             cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
             sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+            same_state: sameState,
           };
 
           gstRatesCacheRef.current.set(cacheKey, rates);
-          return { idx, rates };
+          return { idx, rates, fromCache: false };
         } catch {
-          return { idx, rates: null };
+          return { idx, rates: null, fromCache: false };
         }
       }),
     ).then((results) => {
@@ -1047,6 +1091,20 @@ function InvoiceCreate() {
         });
         return next;
       });
+      // Clear loading state only for indices that were fetched (not from cache)
+      const indicesToClear = results
+        .filter((r) => !r.fromCache)
+        .map((r) => r.idx);
+      
+      if (indicesToClear.length > 0) {
+        setGstRatesLoadingByIndex((prev) => {
+          const next = { ...prev };
+          indicesToClear.forEach((idx) => {
+            next[idx] = false;
+          });
+          return next;
+        });
+      }
     });
 
     return () => {
@@ -2417,27 +2475,7 @@ function InvoiceCreate() {
                           }}
                         />
 
-                        <TextInput
-                          mt={4}
-                          placeholder="IGST"
-                          value={
-                            (() => {
-                              const rate = gstRatesByChargeIndex[index]?.igst;
-                              const localAmount = charge.amount_in_local;
-                              if (rate == null || localAmount == null) return "";
-                              const amount = clampAmount((localAmount * rate) / 100);
-                              return amount != null ? String(amount) : "";
-                            })()
-                          }
-                          disabled
-                          styles={{
-                            input: {
-                              fontSize: "11px",
-                              fontFamily: "Inter",
-                              height: "28px",
-                            },
-                          }}
-                        />
+
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <Dropdown
@@ -2464,27 +2502,7 @@ function InvoiceCreate() {
                           }}
                         />
 
-                        <TextInput
-                          mt={4}
-                          placeholder="CGST"
-                          value={
-                            (() => {
-                              const rate = gstRatesByChargeIndex[index]?.cgst;
-                              const localAmount = charge.amount_in_local;
-                              if (rate == null || localAmount == null) return "";
-                              const amount = clampAmount((localAmount * rate) / 100);
-                              return amount != null ? String(amount) : "";
-                            })()
-                          }
-                          disabled
-                          styles={{
-                            input: {
-                              fontSize: "11px",
-                              fontFamily: "Inter",
-                              height: "28px",
-                            },
-                          }}
-                        />
+
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <Dropdown
@@ -2493,7 +2511,8 @@ function InvoiceCreate() {
                           searchable
                           data={currencyOptions}
                           value={charge.currency_id || charge.currency || null}
-                          disabled={isReadOnly}
+                          readOnly={isReadOnly}
+                          // disabled={isReadOnly}
                           onChange={(value) => {
                             const v = value ?? "";
                             form.setFieldValue(`charges.${index}.currency_id`, v);
@@ -2545,27 +2564,212 @@ function InvoiceCreate() {
                           }}
                         />
 
-                        <TextInput
-                          mt={4}
-                          placeholder="SGST"
-                          value={
-                            (() => {
-                              const rate = gstRatesByChargeIndex[index]?.sgst;
-                              const localAmount = charge.amount_in_local;
-                              if (rate == null || localAmount == null) return "";
-                              const amount = clampAmount((localAmount * rate) / 100);
-                              return amount != null ? String(amount) : "";
-                            })()
-                          }
-                          disabled
-                          styles={{
-                            input: {
-                              fontSize: "11px",
-                              fontFamily: "Inter",
-                              height: "28px",
-                            },
-                          }}
-                        />
+
+                         <Group
+                           gap={4}
+                           align="center"
+                           wrap="nowrap"
+                           style={{
+                            width: "100%",
+                            flexDirection: "row",
+                            flexWrap: "nowrap",
+                            alignItems: "center",
+                           }}
+                         >
+                         {gstRatesByChargeIndex[index]?.same_state === true && (
+                          <TextInput
+                            mt={4}
+                            placeholder="CGST"
+                            value={
+                              (() => {
+                                const rate = gstRatesByChargeIndex[index]?.cgst;
+                                const localAmount = charge.amount_in_local;
+                                if (rate == null || localAmount == null) return "";
+                                const amount = clampAmount((localAmount * rate) / 100);
+                                return amount != null ? String(amount) : "";
+                              })()
+                            }
+                            readOnly
+                            // disabled
+                            rightSection={
+                              (() => {
+                                const rate = gstRatesByChargeIndex[index]?.cgst;
+                                const localAmount = charge.amount_in_local;
+                                const amount =
+                                  rate == null || localAmount == null
+                                    ? null
+                                    : clampAmount((localAmount * rate) / 100);
+                                const display = amount != null ? String(amount) : "";
+                                return gstRatesLoadingByIndex[index] && display === "" ? (
+                                  <Loader size="xs" color="#105476" />
+                                ) : null;
+                              })()
+                            }
+                            styles={{
+                              root: { flex: "0 0 88px" },
+                              input: {
+                                fontSize: "11px",
+                                fontFamily: "Inter",
+                                height: "28px",
+                              },
+                            }}
+                          />
+                        )}
+
+{gstRatesByChargeIndex[index]?.same_state === true && (
+                            <TextInput
+                              mt={4}
+                              placeholder="SGST"
+                              value={
+                                (() => {
+                                  const rate = gstRatesByChargeIndex[index]?.sgst;
+                                  const localAmount = charge.amount_in_local;
+                                  if (rate == null || localAmount == null) return "";
+                                  const amount = clampAmount((localAmount * rate) / 100);
+                                  return amount != null ? String(amount) : "";
+                                })()
+                              }
+                              disabled
+                              rightSection={
+                                (() => {
+                                  const rate = gstRatesByChargeIndex[index]?.sgst;
+                                  const localAmount = charge.amount_in_local;
+                                  const amount =
+                                    rate == null || localAmount == null
+                                      ? null
+                                      : clampAmount((localAmount * rate) / 100);
+                                  const display = amount != null ? String(amount) : "";
+                                  return gstRatesLoadingByIndex[index] && display === "" ? (
+                                    <Loader size="xs" color="#105476" />
+                                  ) : null;
+                                })()
+                              }
+                              styles={{
+                                root: { flex: "0 0 88px" },
+                                input: {
+                                  fontSize: "11px",
+                                  fontFamily: "Inter",
+                                  height: "28px",
+                                },
+                              }}
+                            />
+
+                        )}
+
+                         {gstRatesByChargeIndex[index]?.same_state === false && (
+                          <TextInput
+                            mt={4}
+                            placeholder="IGST"
+                            value={
+                              (() => {
+                                const rate = gstRatesByChargeIndex[index]?.igst;
+                                const localAmount = charge.amount_in_local;
+                                if (rate == null || localAmount == null) return "";
+                                const amount = clampAmount((localAmount * rate) / 100);
+                                return amount != null ? String(amount) : "";
+                              })()
+                            }
+                            readOnly
+                            rightSection={
+                              (() => {
+                                const rate = gstRatesByChargeIndex[index]?.igst;
+                                const localAmount = charge.amount_in_local;
+                                const amount =
+                                  rate == null || localAmount == null
+                                    ? null
+                                    : clampAmount((localAmount * rate) / 100);
+                                const display = amount != null ? String(amount) : "";
+                                return gstRatesLoadingByIndex[index] && display === "" ? (
+                                  <Loader size="xs" color="#105476" />
+                                ) : null;
+                              })()
+                            }
+                            styles={{
+                              root: { flex: "0 0 88px" },
+                              input: {
+                                fontSize: "11px",
+                                fontFamily: "Inter",
+                                height: "28px",
+                              },
+                            }}
+                          />
+                        )}
+                         <Button
+                              mt={4}
+                              size="xs"
+                              variant="light"
+                              color="#105476"
+                              disabled={isReadOnly}
+                              onClick={async () => {
+                              const stateId = form.values.state ? Number(form.values.state) : null;
+                              const sacCode = charge.tax_code?.trim();
+                              
+                              if (!stateId || !sacCode) {
+                                ToastNotification({
+                                  message: "Please ensure State and SAC Code are filled",
+                                  type: "error",
+                                });
+                                return;
+                              }
+
+                              try {
+                                const res = (await fetchGstRatesByStateSac({
+                                  state_id: stateId,
+                                  sac_code: sacCode,
+                                })) as any;
+                                const payload = res?.data?.data ?? res?.data ?? res;
+                                const data = payload as GstRatesBySacResponse | null | undefined;
+
+                                const igstRaw = data?.igst_percent;
+                                const cgstRaw = data?.cgst_percent;
+                                const sgstRaw = data?.sgst_percent;
+                                const sameState = data?.same_state ?? false;
+
+                                const rates: GstRates = {
+                                  igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+                                  cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+                                  sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+                                  same_state: sameState,
+                                };
+
+                                // Cache the result
+                                const cacheKey = `${stateId}:${sacCode}`;
+                                gstRatesCacheRef.current.set(cacheKey, rates);
+
+                                // Update the rates for this index
+                                setGstRatesByChargeIndex((prev) => ({
+                                  ...prev,
+                                  [index]: rates,
+                                }));
+
+                                ToastNotification({
+                                  message: "GST rates fetched successfully",
+                                  type: "success",
+                                });
+                              } catch (error) {
+                                console.error("Error fetching GST rates:", error);
+                                ToastNotification({
+                                  message: "Failed to fetch GST rates",
+                                  type: "error",
+                                });
+                                setGstRatesByChargeIndex((prev) => ({
+                                  ...prev,
+                                  [index]: null,
+                                }));
+                              }
+                            }}
+                            styles={{
+                              root: {
+                                height: "28px",
+                                minHeight: "28px",
+                                padding: "0 6px",
+                                flexShrink: 0,
+                              },
+                            }}
+                          >
+                            Fetch
+                          </Button>
+                         </Group>
                       </Grid.Col>
                       <Grid.Col span={0.75}>
                         <NumberInput
@@ -2859,6 +3063,12 @@ function InvoiceCreate() {
                           withAsterisk
                           disabled={isReadOnly}
                           value={charge.tax_code}
+                          rightSection={
+                            gstRatesLoadingByIndex[index] &&
+                            (!charge.tax_code || charge.tax_code.trim() === "") ? (
+                              <Loader size="xs" color="#105476" />
+                            ) : null
+                          }
                           styles={{
                             input: {
                               fontSize: "13px",
