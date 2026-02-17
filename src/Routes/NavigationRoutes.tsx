@@ -125,10 +125,16 @@ import EnquiryCreate from "../pages/dashboard/EnquiryCreate";
 import GetRate from "../pages/dashboard/GetRate";
 import EnquiryMaster from "../pages/dashboard/EnquiryMaster";
 import LastEnquiriesList from "../pages/dashboard/LastEnquiriesList";
-import ReceiptMaster from "../pages/accounts/ReceiptMaster";
-import ReceiptCreate from "../pages/accounts/ReceiptCreate";
-import ReceiptReversal from "../pages/accounts/ReceiptReversal";
-import ReceiptReversalMaster from "../pages/accounts/ReceiptReversalMaster";
+import ReceiptMaster from "../pages/accounts/receipt/ReceiptMaster";
+import ReceiptCreate from "../pages/accounts/receipt/ReceiptCreate";
+import ReceiptReversal from "../pages/accounts/reverse-receipt/ReceiptReversal";
+import ReceiptReversalMaster from "../pages/accounts/reverse-receipt/ReceiptReversalMaster";
+import PaymentMaster from "../pages/accounts/payment/PaymentMaster";
+import PaymentCreate from "../pages/accounts/payment/PaymentCreate";
+import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
+import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
+import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
+import SupplierInvoiceReversalMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceReversalMaster";
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
@@ -263,6 +269,18 @@ const NavigationRoutes = () => {
         <Route path="/receipt/reversal/view" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/edit" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/create" element={<ReceiptReversal />} />
+        <Route path="/payment" element={<PaymentMaster />} />
+        <Route path="/payment/view" element={<PaymentCreate />} />
+        <Route path="/payment/edit" element={<PaymentCreate />} />
+        <Route path="/payment/create" element={<PaymentCreate />} />
+        <Route path="/supplier-invoice" element={<SupplierInvoiceMaster />} />
+        <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/view" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/edit" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/reversal" element={<SupplierInvoiceReversalMaster />} />
+        <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
+        <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
+        <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
         <Route path="/lead-create" element={<CreateLead />} />

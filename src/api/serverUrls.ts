@@ -16,6 +16,7 @@ export const URL = {
   customerFilter: "filter/customer_master/customer-master/",
   consignee: "customer_master/customer-master/consignee/",
   agent: "customer_master/customer-master/agent/",
+  supplierByType: "customer_master/customer-master/by-type/Supplier/",
   shipper: "customer_master/customer-master/shipper/",
   forwarder: "customer_master/customer-master/forwarder/",
   cha: "customer_master/customer-master/cha/",
@@ -120,6 +121,12 @@ export const URL = {
   reverseReceiptFilter: "filter/reverse-receipt/",
   receipt: "receipt/",
   reverseReceipt: "reverse-receipt/",
+  paymentFilter: "filter/payment/",
+  payment: "payment/",
+  supplierInvoiceFilter: "filter/supplier-invoice/",
+  supplierInvoice: "supplier-invoice/",
+  reverseSupplierInvoiceFilter: "filter/reverse-supplier-invoice/",
+  reverseSupplierInvoice: "reverse-supplier-invoice/",
   invoiceCombined: "invoice/combined/",
 
   // Dashboard APIs

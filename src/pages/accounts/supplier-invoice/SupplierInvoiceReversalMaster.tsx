@@ -8,7 +8,6 @@ import {
   ActionIcon,
   Badge,
   Box,
-  Button,
   Card,
   Center,
   Group,
@@ -25,42 +24,41 @@ import {
   IconDotsVertical,
   IconEdit,
   IconEye,
-  IconPlus,
-  IconReceiptRefund,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
-import { URL } from "../../api/serverUrls";
+import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
-import { apiCallProtected } from "../../api/axios";
+import { apiCallProtected } from "../../../api/axios";
 
-type ReceiptRow = Record<string, unknown> & {
+type SupplierInvoiceReversalRow = Record<string, unknown> & {
   id?: number | string;
   sno?: number;
-  day_book_name?: string;
-  receipt_no?: string;
-  type?: string;
+  reverse_crj_number?: string;
+  Inv_Crn_no?: string;
+  reverse_invoice_no?: string;
+  agent_name?: string;
+  date?: string;
+  Inv_crn_amount?: number | string;
   status?: string;
-  amount?: number | string;
   [key: string]: unknown;
 };
 
-type ReceiptFilterResponse = {
+type SupplierInvoiceReversalFilterResponse = {
   status?: boolean;
   message?: string;
   index?: number;
   limit?: number;
   total?: number;
-  data?: ReceiptRow[];
+  data?: SupplierInvoiceReversalRow[];
 };
 
-type ReceiptListResult = {
-  list: ReceiptRow[];
+type SupplierInvoiceReversalListResult = {
+  list: SupplierInvoiceReversalRow[];
   total: number;
 };
 
-export default function ReceiptMaster() {
+export default function SupplierInvoiceReversalMaster() {
   const navigate = useNavigate();
-  // 1-based current page and page size, same as EnquiryMaster
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
   const [search] = useState("");
@@ -77,25 +75,30 @@ export default function ReceiptMaster() {
   };
 
   const {
-    data: receiptResult,
-    isLoading: receiptLoading,
-    isFetching: receiptFetching,
-    error: receiptError,
+    data: listResult,
+    isLoading: listLoading,
+    isFetching: listFetching,
+    error: listError,
   } = useQuery({
-    queryKey: ["receipt", listCurrentPage, listPageSize, search],
-    queryFn: async (): Promise<ReceiptListResult> => {
+    queryKey: [
+      "supplier-invoice-reversal",
+      listCurrentPage,
+      listPageSize,
+      search,
+    ],
+    queryFn: async (): Promise<SupplierInvoiceReversalListResult> => {
       try {
         const payload = { filters: {} as Record<string, unknown> };
         if (search?.trim()) {
           payload.filters.search = search.trim();
         }
         const response = await apiCallProtected.post(
-          `${URL.receiptFilter}?index=${index}&limit=${listPageSize}`,
+          `${URL.reverseSupplierInvoiceFilter}?index=${index}&limit=${listPageSize}`,
           payload,
         );
         const body =
           response?.data != null
-            ? (response.data as ReceiptFilterResponse)
+            ? (response.data as SupplierInvoiceReversalFilterResponse)
             : null;
         if (!body) {
           return { list: [], total: 0 };
@@ -103,9 +106,10 @@ export default function ReceiptMaster() {
         const list = Array.isArray(body.data)
           ? body.data
           : Array.isArray(body)
-            ? (body as unknown as ReceiptRow[])
+            ? (body as unknown as SupplierInvoiceReversalRow[])
             : [];
-        const total = body.total != null ? Number(body.total) : list.length;
+        const total =
+          body.total != null ? Number(body.total) : list.length;
         return { list, total };
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response
@@ -113,7 +117,7 @@ export default function ReceiptMaster() {
         if (status === 404) {
           return { list: [], total: 0 };
         }
-        console.error("Error fetching receipt data:", err);
+        console.error("Error fetching supplier invoice reversal data:", err);
         return { list: [], total: 0 };
       }
     },
@@ -122,16 +126,18 @@ export default function ReceiptMaster() {
     refetchOnMount: "always",
   });
 
-  const isLoading = receiptFetching || receiptLoading;
-  const tableData = receiptResult?.list ?? [];
-  const listTotalRecords = receiptResult?.total ?? 0;
+  const isLoading = listFetching || listLoading;
+  const tableData = listResult?.list ?? [];
+  const listTotalRecords = listResult?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(listTotalRecords / listPageSize));
   const pagination = {
     pageIndex: listCurrentPage - 1,
     pageSize: listPageSize,
   };
 
-  const columns = useMemo<MRT_ColumnDef<ReceiptRow>[]>(
+  const columns = useMemo<
+    MRT_ColumnDef<SupplierInvoiceReversalRow>[]
+  >(
     () => [
       {
         id: "sno",
@@ -139,25 +145,28 @@ export default function ReceiptMaster() {
         size: 70,
         enableColumnFilter: false,
         enableSorting: false,
-        Cell: ({ row }) => row.original?.sno ?? index + row.index + 1,
+        Cell: ({ row }) =>
+          row.original?.sno ?? index + row.index + 1,
       },
       {
-        accessorKey: "day_book_name",
-        header: "Day Book",
+        id: "reverse_invoice_no",
+        header: "Invoice No",
         size: 160,
+        accessorFn: (row) =>
+          (row.reverse_crj_number ?? "") as string,
       },
       {
-        accessorKey: "receipt_no",
-        header: "Receipt No",
-        size: 160,
+        accessorKey: "agent_name",
+        header: "Agent / Supplier",
+        size: 200,
       },
       {
-        accessorKey: "type",
-        header: "Type",
-        size: 100,
+        accessorKey: "date",
+        header: "Date",
+        size: 140,
       },
       {
-        accessorKey: "amount",
+        accessorKey: "Inv_crn_amount",
         header: "Amount",
         size: 120,
         Cell: ({ cell }) => {
@@ -199,7 +208,6 @@ export default function ReceiptMaster() {
         size: 80,
         Cell: ({ row }) => {
           const status = String(row.original?.status ?? "").toUpperCase();
-          const isPosted = status === "POSTED";
           const isUnposted = status === "UNPOSTED";
           return (
             <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
@@ -212,7 +220,9 @@ export default function ReceiptMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/receipt/view", { state: row.original })
+                      navigate("/supplier-invoice/reversal/view", {
+                        state: row.original,
+                      })
                     }
                   >
                     <Group gap="sm">
@@ -230,7 +240,9 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/edit", { state: row.original })
+                        navigate("/supplier-invoice/reversal/edit", {
+                          state: row.original,
+                        })
                       }
                     >
                       <Group gap="sm">
@@ -240,30 +252,6 @@ export default function ReceiptMaster() {
                           style={{ fontFamily: "Inter, sans-serif" }}
                         >
                           Edit
-                        </Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                )}
-                {isPosted && (
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() =>
-                        navigate("/receipt/reversal/create", {
-                          state: row.original,
-                        })
-                      }
-                    >
-                      <Group gap="sm">
-                        <IconReceiptRefund
-                          size={16}
-                          style={{ color: "#105476" }}
-                        />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          Create Receipt Reversal
                         </Text>
                       </Group>
                     </UnstyledButton>
@@ -402,31 +390,8 @@ export default function ReceiptMaster() {
             c="#444955"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
-            Receipt List
+            Supplier Invoice Reversal List
           </Text>
-
-          <Group gap="xs" wrap="nowrap">
-            <Button
-              leftSection={<IconPlus size={16} />}
-              size="sm"
-              styles={{
-                root: {
-                  backgroundColor: "#105476",
-                  borderRadius: "4px",
-                  color: "#FFFFFF",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontstyle: "semibold",
-                  "&:hover": {
-                    backgroundColor: "#105476",
-                  },
-                },
-              }}
-              onClick={() => navigate("/receipt/create")}
-            >
-              Create New
-            </Button>
-          </Group>
         </Group>
       </Box>
 
@@ -434,21 +399,23 @@ export default function ReceiptMaster() {
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
-            <Text c="dimmed">Loading receipt data...</Text>
+            <Text c="dimmed">
+              Loading supplier invoice reversal data...
+            </Text>
           </Stack>
         </Center>
-      ) : receiptError ? (
+      ) : listError ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
             <Text c="dimmed">
-              Error loading receipt data. Please try refreshing the page.
+              Error loading supplier invoice reversal data. Please try
+              refreshing the page.
             </Text>
           </Stack>
         </Center>
       ) : (
         <>
           <MantineReactTable table={table} />
-          {/* Pagination bar: same layout as EnquiryMaster – left: rows per page + range; right: page nav */}
           <Group
             w="100%"
             justify="space-between"
@@ -470,14 +437,19 @@ export default function ReceiptMaster() {
                   handlePageSizeChange(Number(val));
                 }}
                 w={110}
-                styles={{ input: { fontSize: 12, height: 30 } } as any}
+                styles={
+                  { input: { fontSize: 12, height: 30 } } as Record<
+                    string,
+                    unknown
+                  >
+                }
               />
               <Text size="sm" c="dimmed">
                 {listTotalRecords === 0
                   ? "0–0 of 0"
                   : `${(listCurrentPage - 1) * listPageSize + 1}–${Math.min(
                       listCurrentPage * listPageSize,
-                      listTotalRecords,
+                      listTotalRecords
                     )} of ${listTotalRecords}`}
               </Text>
             </Group>
