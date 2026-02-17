@@ -628,6 +628,19 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Accounts"
+                    label="Payment Reversal"
+                    icon={IconReceiptTax}
+                    path="/payment/reversal"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Accounts"
                     label="Supplier Invoice"
                     icon={IconReceiptTax}
                     path="/supplier-invoice"

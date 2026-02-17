@@ -8,14 +8,12 @@ import {
   ActionIcon,
   Badge,
   Box,
-  Button,
   Card,
   Center,
   Group,
   Loader,
   Menu,
   Select,
-  type SelectProps,
   Stack,
   Text,
   UnstyledButton,
@@ -26,40 +24,39 @@ import {
   IconDotsVertical,
   IconEdit,
   IconEye,
-  IconPlus,
-  IconReceiptRefund,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 
-type PaymentRow = Record<string, unknown> & {
+type PaymentReversalRow = Record<string, unknown> & {
   id?: number | string;
   sno?: number;
   day_book_name?: string;
   payment_no?: string;
+  reverse_payment_no?: string;
   type?: string;
   status?: string;
   amount?: number | string;
   [key: string]: unknown;
 };
 
-type PaymentFilterResponse = {
+type PaymentReversalFilterResponse = {
   status?: boolean;
   message?: string;
   index?: number;
   limit?: number;
   total?: number;
-  data?: PaymentRow[];
+  data?: PaymentReversalRow[];
 };
 
-type PaymentListResult = {
-  list: PaymentRow[];
+type PaymentReversalListResult = {
+  list: PaymentReversalRow[];
   total: number;
 };
 
-export default function PaymentMaster() {
+export default function PaymentReversalMaster() {
   const navigate = useNavigate();
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
@@ -77,25 +74,25 @@ export default function PaymentMaster() {
   };
 
   const {
-    data: paymentResult,
-    isLoading: paymentLoading,
-    isFetching: paymentFetching,
-    error: paymentError,
+    data: listResult,
+    isLoading: listLoading,
+    isFetching: listFetching,
+    error: listError,
   } = useQuery({
-    queryKey: ["payment", listCurrentPage, listPageSize, search],
-    queryFn: async (): Promise<PaymentListResult> => {
+    queryKey: ["payment-reversal", listCurrentPage, listPageSize, search],
+    queryFn: async (): Promise<PaymentReversalListResult> => {
       try {
         const payload = { filters: {} as Record<string, unknown> };
         if (search?.trim()) {
           payload.filters.search = search.trim();
         }
         const response = await apiCallProtected.post(
-          `${URL.paymentFilter}?index=${index}&limit=${listPageSize}`,
+          `${URL.reversePaymentFilter}?index=${index}&limit=${listPageSize}`,
           payload,
         );
         const body =
           response?.data != null
-            ? (response.data as PaymentFilterResponse)
+            ? (response.data as PaymentReversalFilterResponse)
             : null;
         if (!body) {
           return { list: [], total: 0 };
@@ -103,9 +100,10 @@ export default function PaymentMaster() {
         const list = Array.isArray(body.data)
           ? body.data
           : Array.isArray(body)
-            ? (body as unknown as PaymentRow[])
+            ? (body as unknown as PaymentReversalRow[])
             : [];
-        const total = body.total != null ? Number(body.total) : list.length;
+        const total =
+          body.total != null ? Number(body.total) : list.length;
         return { list, total };
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response
@@ -113,7 +111,7 @@ export default function PaymentMaster() {
         if (status === 404) {
           return { list: [], total: 0 };
         }
-        console.error("Error fetching payment data:", err);
+        console.error("Error fetching payment reversal data:", err);
         return { list: [], total: 0 };
       }
     },
@@ -122,16 +120,16 @@ export default function PaymentMaster() {
     refetchOnMount: "always",
   });
 
-  const isLoading = paymentFetching || paymentLoading;
-  const tableData = paymentResult?.list ?? [];
-  const listTotalRecords = paymentResult?.total ?? 0;
+  const isLoading = listFetching || listLoading;
+  const tableData = listResult?.list ?? [];
+  const listTotalRecords = listResult?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(listTotalRecords / listPageSize));
   const pagination = {
     pageIndex: listCurrentPage - 1,
     pageSize: listPageSize,
   };
 
-  const columns = useMemo<MRT_ColumnDef<PaymentRow>[]>(
+  const columns = useMemo<MRT_ColumnDef<PaymentReversalRow>[]>(
     () => [
       {
         id: "sno",
@@ -147,9 +145,11 @@ export default function PaymentMaster() {
         size: 160,
       },
       {
-        accessorKey: "payment_no",
-        header: "Payment No",
+        id: "reverse_payment_no",
+        header: "Reverse Payment No",
         size: 160,
+        accessorFn: (row) =>
+          (row.reverse_payment_no ?? row.payment_no ?? "") as string,
       },
       {
         accessorKey: "type",
@@ -200,7 +200,6 @@ export default function PaymentMaster() {
         Cell: ({ row }) => {
           const status = String(row.original?.status ?? "").toUpperCase();
           const isUnposted = status === "UNPOSTED";
-          const isPosted = status === "POSTED";
           return (
             <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
               <Menu.Target>
@@ -212,15 +211,14 @@ export default function PaymentMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/payment/view", { state: row.original })
+                      navigate("/payment/reversal/view", {
+                        state: row.original,
+                      })
                     }
                   >
                     <Group gap="sm">
                       <IconEye size={16} style={{ color: "#105476" }} />
-                      <Text
-                        size="sm"
-                        style={{ fontFamily: "Inter, sans-serif" }}
-                      >
+                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
                         View
                       </Text>
                     </Group>
@@ -230,40 +228,15 @@ export default function PaymentMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/payment/edit", { state: row.original })
-                      }
-                    >
-                      <Group gap="sm">
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          Edit
-                        </Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                )}
-                {isPosted && (
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() =>
-                        navigate("/payment/reversal/create", {
+                        navigate("/payment/reversal/edit", {
                           state: row.original,
                         })
                       }
                     >
                       <Group gap="sm">
-                        <IconReceiptRefund
-                          size={16}
-                          style={{ color: "#105476" }}
-                        />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          Create payment reversal
+                        <IconEdit size={16} style={{ color: "#105476" }} />
+                        <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                          Edit
                         </Text>
                       </Group>
                     </UnstyledButton>
@@ -402,31 +375,8 @@ export default function PaymentMaster() {
             c="#444955"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
-            Payment List
+            Payment Reversal List
           </Text>
-
-          <Group gap="xs" wrap="nowrap">
-            <Button
-              leftSection={<IconPlus size={16} />}
-              size="sm"
-              styles={{
-                root: {
-                  backgroundColor: "#105476",
-                  borderRadius: "4px",
-                  color: "#FFFFFF",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontstyle: "semibold",
-                  "&:hover": {
-                    backgroundColor: "#105476",
-                  },
-                },
-              }}
-              onClick={() => navigate("/payment/create")}
-            >
-              Create New
-            </Button>
-          </Group>
         </Group>
       </Box>
 
@@ -434,14 +384,14 @@ export default function PaymentMaster() {
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
-            <Text c="dimmed">Loading payment data...</Text>
+            <Text c="dimmed">Loading payment reversal data...</Text>
           </Stack>
         </Center>
-      ) : paymentError ? (
+      ) : listError ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
             <Text c="dimmed">
-              Error loading payment data. Please try refreshing the page.
+              Error loading payment reversal data. Please try refreshing the page.
             </Text>
           </Stack>
         </Center>
@@ -469,7 +419,7 @@ export default function PaymentMaster() {
                   handlePageSizeChange(Number(val));
                 }}
                 w={110}
-                styles={{ input: { fontSize: 12, height: 30 } } as SelectProps["styles"]}
+                styles={{ input: { fontSize: 12, height: 30 } } as Record<string, unknown>}
               />
               <Text size="sm" c="dimmed">
                 {listTotalRecords === 0

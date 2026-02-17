@@ -116,6 +116,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/receipt")) {
       setActiveNav("Desk");
       setActiveSubNav("Receipt");
+    } else if (path.startsWith("/payment/reversal")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Payment Reversal");
     } else if (path.startsWith("/payment")) {
       setActiveNav("Desk");
       setActiveSubNav("Payment");

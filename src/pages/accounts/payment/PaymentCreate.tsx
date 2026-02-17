@@ -23,7 +23,7 @@ import {
   IconTrash,
   IconFileInvoice,
 } from "@tabler/icons-react";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -96,6 +96,18 @@ const fetchDaybookCRJ = async () => {
     return (response as { data?: unknown[] })?.data ?? [];
   } catch (error) {
     console.error("Error fetching daybook (CRJ):", error);
+    return [];
+  }
+};
+
+// Payment reversal header daybook: document_type PMTREV
+const fetchDaybookPMTREV = async () => {
+  try {
+    const payload = { filters: { document_type: "PMTREV" } };
+    const response = await postAPICall(URL.daybook, payload, API_HEADER);
+    return (response as { data?: unknown[] })?.data ?? [];
+  } catch (error) {
+    console.error("Error fetching daybook (PMTREV):", error);
     return [];
   }
 };
@@ -380,17 +392,27 @@ function formatDocumentDateDisplay(value: string | null | undefined): string {
 type PaymentCreateProps = {
   titleOverride?: string;
   backPath?: string;
+  isReversal?: boolean;
 };
 
 export default function PaymentCreate({
   titleOverride = "Create Payment",
   backPath = "/payment",
+  isReversal: _isReversal = false,
 }: PaymentCreateProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
+  const sourcePaymentNoRef = useRef<string>("");
+  const [reversePaymentSaveResponse, setReversePaymentSaveResponse] =
+    useState<{
+      id?: number;
+      payment_no?: string;
+      reverse_payment_no?: string;
+      status?: string;
+    } | null>(null);
 
   const defaultBranch =
     user?.branches?.find((b) => b.is_default) || user?.branches?.[0];
@@ -461,6 +483,13 @@ export default function PaymentCreate({
     staleTime: Infinity,
   });
 
+  const { data: daybookDataPMTREV = [] } = useQuery({
+    queryKey: ["daybook", "PMTREV"],
+    queryFn: fetchDaybookPMTREV,
+    staleTime: Infinity,
+    enabled: _isReversal,
+  });
+
   const { data: daybookDataForAdjustments = [] } = useQuery({
     queryKey: ["daybook", "CRJ"],
     queryFn: fetchDaybookCRJ,
@@ -495,13 +524,16 @@ export default function PaymentCreate({
   }, [currencyData]);
 
   const daybookOptions = useMemo(() => {
-    const data = daybookDataPMT as { id?: number; name?: string }[];
+    const data = (_isReversal ? daybookDataPMTREV : daybookDataPMT) as {
+      id?: number;
+      name?: string;
+    }[];
     if (!Array.isArray(data)) return [];
     return data.map((item) => ({
       value: String(item.id ?? ""),
       label: item.name ?? "",
     }));
-  }, [daybookDataPMT]);
+  }, [_isReversal, daybookDataPMT, daybookDataPMTREV]);
 
   const daybookAdjustmentOptions = useMemo(() => {
     const data = daybookDataForAdjustments as { id?: number; name?: string }[];
@@ -537,8 +569,13 @@ export default function PaymentCreate({
 
   const paymentFromState = location.state as PaymentListItem | null | undefined;
   const pathname = location.pathname;
+  const isReversalEditOrView =
+    _isReversal &&
+    (pathname.includes("/reversal/edit") || pathname.includes("/reversal/view"));
+  const isReversalCreate =
+    _isReversal && pathname.includes("/reversal/create");
 
-  // Load edit/view data from payment list (state passed when navigating from PaymentMaster)
+  // Load from list: state is payment row (Payment Master or Reversal list) or source payment (reversal create from Payment Master)
   useEffect(() => {
     if (!paymentFromState || paymentFromState.id == null || !localCurrency) {
       if (!paymentFromState) setLoadedDetails(null);
@@ -652,9 +689,11 @@ export default function PaymentCreate({
     setLoadedDetails(details);
     form.setValues({
       daybook_id:
-        paymentFromState.day_book_id != null
-          ? String(paymentFromState.day_book_id)
-          : "",
+        isReversalCreate
+          ? ""
+          : paymentFromState.day_book_id != null
+            ? String(paymentFromState.day_book_id)
+            : "",
       type: (paymentFromState.type ?? "CASH").toString().trim(),
       date: dateVal ?? new Date(),
       currency: (paymentFromState.currency_code ?? localCurrency)
@@ -675,17 +714,41 @@ export default function PaymentCreate({
 
     const docNo = (
       paymentFromState.payment_no ??
+      (paymentFromState as { reverse_payment_no?: string }).reverse_payment_no ??
       (paymentFromState as { document_no?: string }).document_no ??
       ""
     ).toString();
-    setSaveResponse({
-      id: Number(paymentFromState.id),
-      payment_no: docNo,
-      document_no: docNo,
-      status: (paymentFromState.status ?? "UNPOSTED").toString(),
-    });
+
+    if (_isReversal) {
+      if (isReversalEditOrView) {
+        setReversePaymentSaveResponse({
+          id: Number(paymentFromState.id),
+          payment_no: docNo,
+          reverse_payment_no: docNo,
+          status: (paymentFromState.status ?? "UNPOSTED").toString(),
+        });
+        sourcePaymentNoRef.current = "";
+      } else {
+        sourcePaymentNoRef.current = (
+          paymentFromState.payment_no ?? ""
+        ).toString();
+      }
+    } else {
+      setSaveResponse({
+        id: Number(paymentFromState.id),
+        payment_no: docNo,
+        document_no: docNo,
+        status: (paymentFromState.status ?? "UNPOSTED").toString(),
+      });
+    }
     // Re-run when state changes (e.g. navigating from list to edit/view with different row)
-  }, [paymentFromState, localCurrency]);
+  }, [
+    paymentFromState,
+    localCurrency,
+    _isReversal,
+    isReversalEditOrView,
+    isReversalCreate,
+  ]);
 
   const userCountryCode = user?.country?.country_code;
 
@@ -1016,6 +1079,75 @@ export default function PaymentCreate({
     return base;
   };
 
+  /** Build payload for reverse-payment API. Header dr_cr = "Dr". For create: payment_no from source. */
+  const buildReversalPayload = (
+    values: PaymentFormValues,
+    options?: {
+      reversalId?: number;
+      paymentNo?: string;
+      status?: string;
+      detailsOverride?: DetailRow[];
+    },
+  ) => {
+    const dayBookId = Number(values.daybook_id) || 0;
+    const currencyId =
+      currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
+    const paymentNo =
+      options?.paymentNo ?? sourcePaymentNoRef.current ?? "";
+    const isUpdate = options?.reversalId != null && options.reversalId > 0;
+    const details = options?.detailsOverride ?? values.details ?? [];
+    const source = paymentFromState as Record<string, unknown> | null | undefined;
+    const base: Record<string, unknown> = {
+      payment_no: paymentNo,
+      date: formatDateDDMMYYYY(values.date),
+      day_book_id: dayBookId,
+      type: (values.type ?? "CASH").toString().toUpperCase(),
+      currency_id: currencyId,
+      roe: values.roe ?? 0,
+      account_code: (source?.account_code ?? "").toString(),
+      received_from: (source?.received_from ?? "").toString(),
+      amount: values.amount ?? 0,
+      local_amount: values.local_amount ?? 0,
+      narration: values.narration ?? "",
+      note: (source?.note ?? "").toString(),
+      bank: values.bank ?? "",
+      branch: values.branch ?? "",
+      cheque_no: values.cheque_no ?? "",
+      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      dr_cr: "Dr",
+      parties: details.map((d) => ({
+        subledger_code: d.customer_code ?? "",
+        narration: d.narration ?? "",
+        currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
+        roe: d.roe ?? 0,
+        amount: d.amount ?? 0,
+        local_amount: d.local_amount ?? 0,
+        dr_cr: (d.dr_cr ?? "Cr").toString(),
+      })),
+      allocations: (values.adjustments ?? []).map((a) => ({
+        location: a.location ?? "",
+        subledger_code: a.subledger ?? a.subledger_display ?? "",
+        day_book_id: Number(a.daybook_id) || 0,
+        type: a.type ?? "",
+        document_no: a.document_no ?? "",
+        document_date: formatDateDDMMYYYY(a.doc_date),
+        currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
+        ...(a.invoice_id != null && a.invoice_id > 0
+          ? { supplier_invoice_id: a.invoice_id }
+          : {}),
+        adj_curr_amount: a.adj_curr_amount ?? 0,
+        adj_local_amount: a.adj_local_amount ?? 0,
+      })),
+    };
+    if (isUpdate && options?.reversalId != null) {
+      base.id = options.reversalId;
+    }
+    if (options?.status != null) {
+      base.status = options.status.toString().toUpperCase();
+    }
+    return base;
+  };
+
   const handleSubmit = async (values: PaymentFormValues) => {
     const partyLocalTotal =
       (values.details ?? []).reduce(
@@ -1045,6 +1177,120 @@ export default function PaymentCreate({
     }
     setIsSubmitting(true);
     try {
+      if (_isReversal) {
+        const isReversalUpdate =
+          reversePaymentSaveResponse?.id != null &&
+          reversePaymentSaveResponse.id > 0;
+        const detailsForPayload =
+          loadedDetails &&
+          loadedDetails.length === (values.details ?? []).length
+            ? loadedDetails
+            : (values.details ?? []);
+
+        if (isReversalUpdate) {
+          const payload = buildReversalPayload(values, {
+            reversalId: reversePaymentSaveResponse.id,
+            paymentNo: reversePaymentSaveResponse.payment_no ?? "",
+            status: "UNPOSTED",
+            detailsOverride: detailsForPayload,
+          });
+          const raw = await putAPICall(
+            URL.reversePayment,
+            payload,
+            API_HEADER,
+          );
+          const wrap = raw as {
+            data?: {
+              id?: number;
+              payment_no?: string;
+              reverse_payment_no?: string;
+              status?: string;
+            };
+          };
+          const res = wrap?.data;
+          if (res?.id != null) {
+            setReversePaymentSaveResponse((prev) => ({
+              ...prev!,
+              id: prev!.id,
+              payment_no: res.payment_no ?? prev?.payment_no ?? "",
+              reverse_payment_no:
+                res.reverse_payment_no ?? prev?.reverse_payment_no ?? "",
+              status: res.status != null ? String(res.status) : "UNPOSTED",
+            }));
+            await queryClient.invalidateQueries({ queryKey: ["payment"] });
+            await queryClient.invalidateQueries({
+              queryKey: ["payment-reversal"],
+            });
+            ToastNotification({
+              type: "success",
+              message: "Payment reversal updated successfully.",
+            });
+          }
+        } else {
+          const payload = buildReversalPayload(values, {
+            detailsOverride: detailsForPayload,
+          });
+          const raw = await postAPICall(
+            URL.reversePayment,
+            payload,
+            API_HEADER,
+          );
+          const wrap = raw as {
+            data?: {
+              id?: number;
+              payment_no?: string;
+              reverse_payment_no?: string;
+              status?: string;
+              parties?: Array<{ id?: number }>;
+              allocations?: Array<{ id?: number }>;
+            };
+          };
+          const data = wrap?.data;
+          if (data?.id != null) {
+            setReversePaymentSaveResponse({
+              id: Number(data.id),
+              payment_no: data.payment_no ?? "",
+              reverse_payment_no: data.reverse_payment_no ?? "",
+              status: data.status != null ? String(data.status) : "UNPOSTED",
+            });
+            if (
+              data.parties &&
+              Array.isArray(data.parties) &&
+              data.parties.length === form.values.details.length
+            ) {
+              const updatedDetails = form.values.details.map((d, i) => ({
+                ...d,
+                id: data.parties![i]?.id ?? d.id,
+              }));
+              form.setFieldValue("details", updatedDetails);
+            }
+            if (
+              data.allocations &&
+              Array.isArray(data.allocations) &&
+              data.allocations.length === form.values.adjustments.length
+            ) {
+              const updatedAdjustments = form.values.adjustments.map(
+                (a, i) => ({
+                  ...a,
+                  id: data.allocations![i]?.id ?? a.id,
+                }),
+              );
+              form.setFieldValue("adjustments", updatedAdjustments);
+            }
+            await queryClient.invalidateQueries({ queryKey: ["payment"] });
+            await queryClient.invalidateQueries({
+              queryKey: ["payment-reversal"],
+            });
+            ToastNotification({
+              type: "success",
+              message: "Payment reversal created successfully.",
+            });
+          }
+        }
+        setIsSubmitting(false);
+        return;
+      }
+
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
       const payload = isUpdate
         ? buildPaymentPayload(values, { status: "UNPOSTED" })
@@ -1143,6 +1389,67 @@ export default function PaymentCreate({
   };
 
   const handlePostPayment = async () => {
+    if (_isReversal) {
+      if (!reversePaymentSaveResponse?.id) {
+        ToastNotification({
+          type: "error",
+          message: "Save the payment reversal first before posting.",
+        });
+        return;
+      }
+      setIsPosting(true);
+      try {
+        const payload = buildReversalPayload(form.values, {
+          reversalId: reversePaymentSaveResponse.id,
+          paymentNo: reversePaymentSaveResponse.payment_no ?? "",
+          status: "POSTED",
+        });
+        const raw = await putAPICall(
+          URL.reversePayment,
+          payload,
+          API_HEADER,
+        );
+        const wrap = raw as {
+          data?: {
+            id?: number;
+            payment_no?: string;
+            reverse_payment_no?: string;
+            status?: string;
+          };
+        };
+        const res = wrap?.data;
+        if (res?.id != null) {
+          setReversePaymentSaveResponse((prev) => ({
+            ...prev!,
+            id: prev!.id,
+            payment_no: res.payment_no ?? prev?.payment_no ?? "",
+            reverse_payment_no:
+              res.reverse_payment_no ?? prev?.reverse_payment_no ?? "",
+            status: res.status != null ? String(res.status) : "POSTED",
+          }));
+          await queryClient.invalidateQueries({ queryKey: ["payment"] });
+          await queryClient.invalidateQueries({
+            queryKey: ["payment-reversal"],
+          });
+          ToastNotification({
+            type: "success",
+            message: "Payment reversal posted successfully.",
+          });
+        }
+      } catch (err) {
+        console.error("Post payment reversal error:", err);
+        ToastNotification({
+          type: "error",
+          message:
+            (err as { response?: { data?: { message?: string } } })?.response
+              ?.data?.message ?? "Failed to post payment reversal.",
+        });
+      } finally {
+        setIsPosting(false);
+      }
+      return;
+    }
+
     if (!saveResponse?.id) {
       ToastNotification({
         type: "error",
@@ -1198,36 +1505,52 @@ export default function PaymentCreate({
   };
 
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
+  const reversalStatusUpper = String(
+    reversePaymentSaveResponse?.status ?? "",
+  ).toUpperCase();
   const isViewRoute = pathname.includes("/view");
-  const isReadOnly = isViewRoute || statusUpper === "POSTED";
-  const inputStyles = isReadOnly ? readOnlyFieldStyles : fieldStyles;
+  const isReadOnly =
+    isViewRoute ||
+    (!_isReversal && statusUpper === "POSTED") ||
+    (_isReversal && reversalStatusUpper === "POSTED");
+  const reversalFormDisabled = _isReversal;
+  const inputStyles =
+    isReadOnly || reversalFormDisabled ? readOnlyFieldStyles : fieldStyles;
   const headerDateDisabled = isReadOnly;
-  const headerOtherDisabled = isReadOnly;
-  const useNonEditableStyleOnly = isReadOnly;
+  const headerOtherDisabled = isReadOnly || reversalFormDisabled;
+  const useNonEditableStyleOnly = isReadOnly || _isReversal;
   const headerFieldStyles = headerOtherDisabled
     ? useNonEditableStyleOnly
       ? reversalNonEditableStyles
       : readOnlyFieldStyles
     : fieldStyles;
-  const partyFieldStyles = headerOtherDisabled
-    ? useNonEditableStyleOnly
-      ? reversalNonEditableStyles
-      : readOnlyFieldStyles
-    : fieldStyles;
+  const partyFieldStyles =
+    headerOtherDisabled
+      ? useNonEditableStyleOnly
+        ? reversalNonEditableStyles
+        : readOnlyFieldStyles
+      : fieldStyles;
   const adjustmentFieldStyles = reversalNonEditableStyles;
-  const headerDaybookStyles = isReadOnly
-    ? useNonEditableStyleOnly
+  const isHeaderDaybookEditable = _isReversal && !isReadOnly;
+  const headerDaybookStyles = isHeaderDaybookEditable
+    ? fieldStyles
+    : useNonEditableStyleOnly
       ? reversalNonEditableStyles
-      : readOnlyFieldStyles
-    : inputStyles;
+      : inputStyles;
 
-  const pageTitle = pathname.includes("/payment/view")
-    ? "View Payment"
-    : pathname.includes("/payment/edit")
-      ? "Edit Payment"
-      : pathname.includes("/payment/create")
-        ? "Create Payment"
-        : titleOverride;
+  const pageTitle = pathname.includes("/payment/reversal/view")
+    ? "View Payment Reversal"
+    : pathname.includes("/payment/reversal/edit")
+      ? "Edit Payment Reversal"
+      : pathname.includes("/payment/reversal/create")
+        ? "Create Payment Reversal"
+        : pathname.includes("/payment/view")
+          ? "View Payment"
+          : pathname.includes("/payment/edit")
+            ? "Edit Payment"
+            : pathname.includes("/payment/create")
+              ? "Create Payment"
+              : titleOverride;
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -1247,10 +1570,16 @@ export default function PaymentCreate({
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
               {isPosting
-                ? "Updating payment..."
-                : saveResponse?.id
-                  ? "Updating payment..."
-                  : "Saving payment..."}
+                ? _isReversal
+                  ? "Updating payment reversal..."
+                  : "Updating payment..."
+                : _isReversal
+                  ? reversePaymentSaveResponse?.id
+                    ? "Updating payment reversal..."
+                    : "Saving payment reversal..."
+                  : saveResponse?.id
+                    ? "Updating payment..."
+                    : "Saving payment..."}
             </Text>
           </Stack>
         </Box>
@@ -1261,7 +1590,7 @@ export default function PaymentCreate({
             {pageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
-            {saveResponse && (
+            {saveResponse && !_isReversal && (
               <Group gap="sm" wrap="nowrap">
                 <Group gap="xs" wrap="nowrap">
                   <Text size="sm" fw={500} c="dimmed">
@@ -1302,6 +1631,53 @@ export default function PaymentCreate({
                 </Group>
               </Group>
             )}
+            {_isReversal &&
+              (reversePaymentSaveResponse ||
+                (isReversalEditOrView && paymentFromState)) && (
+              <Group gap="sm" wrap="nowrap">
+                <Group gap="xs" wrap="nowrap">
+                  <Text size="sm" fw={500} c="dimmed">
+                    Reverse Payment No:
+                  </Text>
+                  <Badge
+                    size="sm"
+                    variant="light"
+                    color="#105476"
+                    styles={{ root: { textTransform: "none" } }}
+                  >
+                    {(reversePaymentSaveResponse?.reverse_payment_no ??
+                      reversePaymentSaveResponse?.payment_no ??
+                      (paymentFromState as { reverse_payment_no?: string })
+                        ?.reverse_payment_no ??
+                      (paymentFromState as { payment_no?: string })?.payment_no ??
+                      (reversePaymentSaveResponse?.id != null
+                        ? String(reversePaymentSaveResponse.id)
+                        : paymentFromState?.id != null
+                          ? String(paymentFromState.id)
+                          : "")) || "—"}
+                  </Badge>
+                </Group>
+                <Group gap="xs" wrap="nowrap">
+                  <Text size="sm" fw={500} c="dimmed">
+                    Status:
+                  </Text>
+                  <Badge
+                    size="sm"
+                    variant="light"
+                    color={
+                      reversalStatusUpper === "UNPOSTED"
+                        ? "gray"
+                        : reversalStatusUpper === "POSTED"
+                          ? "green"
+                          : "#105476"
+                    }
+                    styles={{ root: { textTransform: "none" } }}
+                  >
+                    {reversalStatusUpper || "—"}
+                  </Badge>
+                </Group>
+              </Group>
+            )}
             <Button
               variant="outline"
               color="#105476"
@@ -1332,7 +1708,11 @@ export default function PaymentCreate({
                 withAsterisk
                 error={form.errors.daybook_id}
                 styles={headerDaybookStyles}
-                disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                disabled={
+                  isHeaderDaybookEditable || useNonEditableStyleOnly
+                    ? false
+                    : isReadOnly
+                }
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -1775,7 +2155,7 @@ export default function PaymentCreate({
                               size="sm"
                               onClick={addDetailRow}
                               title="Add row"
-                              disabled={isReadOnly}
+                              disabled={isReadOnly || _isReversal}
                             >
                               <IconPlus size={18} />
                             </Button>
@@ -1799,6 +2179,7 @@ export default function PaymentCreate({
                               title="Get supplier invoice details"
                               disabled={
                                 isReadOnly ||
+                                _isReversal ||
                                 (invoiceModalDetailRowIndex === idx &&
                                   (filterSupplierInvoiceLoading ||
                                     filterSupplierInvoiceFetching)) ||
@@ -1995,9 +2376,11 @@ export default function PaymentCreate({
                           decimalScale={2}
                           max={AMOUNT_MAX}
                           styles={
-                            isReadOnly ? adjustmentFieldStyles : fieldStyles
+                            isReadOnly || _isReversal
+                              ? adjustmentFieldStyles
+                              : fieldStyles
                           }
-                          disabled={isReadOnly}
+                          disabled={isReadOnly || _isReversal}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -2023,7 +2406,7 @@ export default function PaymentCreate({
                             size="sm"
                             onClick={addAdjustmentRow}
                             title="Add row"
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || _isReversal}
                           >
                             <IconPlus size={18} />
                           </Button>
@@ -2150,19 +2533,39 @@ export default function PaymentCreate({
                     isSubmitting ? null : <IconChevronRight size={16} />
                   }
                 >
-                  {saveResponse?.id ? "Update Payment" : "Save Payment"}
+                  {_isReversal
+                    ? reversePaymentSaveResponse?.id
+                      ? "Update Payment Reversal"
+                      : "Save Payment Reversal"
+                    : saveResponse?.id
+                      ? "Update Payment"
+                      : "Save Payment"}
                 </Button>
-                {saveResponse && statusUpper === "UNPOSTED" && (
-                  <Button
-                    type="button"
-                    color="black"
-                    variant="filled"
-                    loading={isPosting}
-                    onClick={handlePostPayment}
-                  >
-                    Post Payment
-                  </Button>
-                )}
+                {_isReversal
+                  ? reversePaymentSaveResponse &&
+                    reversalStatusUpper === "UNPOSTED" && (
+                    <Button
+                      type="button"
+                      color="black"
+                      variant="filled"
+                      loading={isPosting}
+                      onClick={handlePostPayment}
+                    >
+                      Post Payment Reversal
+                    </Button>
+                  )
+                  : saveResponse &&
+                    statusUpper === "UNPOSTED" && (
+                    <Button
+                      type="button"
+                      color="black"
+                      variant="filled"
+                      loading={isPosting}
+                      onClick={handlePostPayment}
+                    >
+                      Post Payment
+                    </Button>
+                  )}
               </>
             )}
           </Group>
