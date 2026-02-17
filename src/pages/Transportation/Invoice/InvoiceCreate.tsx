@@ -1832,6 +1832,10 @@ function InvoiceCreate() {
     }
   };
 
+  const headerSameState = Object.values(gstRatesByChargeIndex).find(
+    (rates) => rates?.same_state !== undefined,
+  )?.same_state;
+
   return (
     <Box p="md" style={{ position: "relative" }}>
       {/* Full-page loader overlay when saving or posting */}
@@ -2376,10 +2380,10 @@ function InvoiceCreate() {
 
               <Tabs.Panel value="charges">
                 {/* Dynamic Charges Rows */}
-                <Box mb="sm" mt="md">
+                {/* <Box mb="sm" mt="md"> */}
                   <Grid
                     w="100%"
-                    gutter="sm"
+                    // gutter="sm"
                     py="sm"
                     style={{
                       position: "sticky",
@@ -2393,17 +2397,26 @@ function InvoiceCreate() {
                     <Grid.Col span={1.5} style={{ fontSize: "13px" }}>Charge</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency</Grid.Col>
-                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>ROE</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>No of Unit</Grid.Col>
+                    <Grid.Col span={0.45} style={{ fontSize: "13px" }}>ROE</Grid.Col>
+                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>No of Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Amount per Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>
                       Amount in {form.values.currency ? form.values.currency.toUpperCase() : "()"}
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
-                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>Dr/Cr</Grid.Col>
-                    <Grid.Col span={0.5} style={{ fontSize: "13px" }}>Actions</Grid.Col>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
+                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>Dr/Cr</Grid.Col>
+                    {headerSameState === true && (
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>CGST</Grid.Col>
+                    )}
+                    {headerSameState === true && (
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>SGST</Grid.Col>
+                    )}
+                    {headerSameState === false && (
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>IGST</Grid.Col>
+                    )}
+                    {!isReadOnly && <Grid.Col span={0.5} style={{ fontSize: "13px" }}>Actions</Grid.Col>}
                   </Grid>
 
                   {form.values.charges.map((charge, index) => (
@@ -2580,7 +2593,7 @@ function InvoiceCreate() {
                         />
 
 
-                         <Group
+                         {/* <Group
                            gap={4}
                            align="center"
                            wrap="nowrap"
@@ -2591,125 +2604,7 @@ function InvoiceCreate() {
                             alignItems: "center",
                            }}
                          >
-                         {gstRatesByChargeIndex[index]?.same_state === true && (
-                          <TextInput
-                            mt={4}
-                            placeholder="CGST"
-                            value={
-                              (() => {
-                                const rate = gstRatesByChargeIndex[index]?.cgst;
-                                const localAmount = charge.amount_in_local;
-                                if (rate == null || localAmount == null) return "";
-                                const amount = clampAmount((localAmount * rate) / 100);
-                                return amount != null ? String(amount) : "";
-                              })()
-                            }
-                            readOnly
-                            // disabled
-                            rightSection={
-                              (() => {
-                                const rate = gstRatesByChargeIndex[index]?.cgst;
-                                const localAmount = charge.amount_in_local;
-                                const amount =
-                                  rate == null || localAmount == null
-                                    ? null
-                                    : clampAmount((localAmount * rate) / 100);
-                                const display = amount != null ? String(amount) : "";
-                                return gstRatesLoadingByIndex[index] && display === "" ? (
-                                  <Loader size="xs" color="#105476" />
-                                ) : null;
-                              })()
-                            }
-                            styles={{
-                              root: { flex: "0 0 88px" },
-                              input: {
-                                fontSize: "11px",
-                                fontFamily: "Inter",
-                                height: "28px",
-                              },
-                            }}
-                          />
-                        )}
-
-{gstRatesByChargeIndex[index]?.same_state === true && (
-                            <TextInput
-                              mt={4}
-                              placeholder="SGST"
-                              value={
-                                (() => {
-                                  const rate = gstRatesByChargeIndex[index]?.sgst;
-                                  const localAmount = charge.amount_in_local;
-                                  if (rate == null || localAmount == null) return "";
-                                  const amount = clampAmount((localAmount * rate) / 100);
-                                  return amount != null ? String(amount) : "";
-                                })()
-                              }
-                              // disabled
-                              readOnly
-                              rightSection={
-                                (() => {
-                                  const rate = gstRatesByChargeIndex[index]?.sgst;
-                                  const localAmount = charge.amount_in_local;
-                                  const amount =
-                                    rate == null || localAmount == null
-                                      ? null
-                                      : clampAmount((localAmount * rate) / 100);
-                                  const display = amount != null ? String(amount) : "";
-                                  return gstRatesLoadingByIndex[index] && display === "" ? (
-                                    <Loader size="xs" color="#105476" />
-                                  ) : null;
-                                })()
-                              }
-                              styles={{
-                                root: { flex: "0 0 88px" },
-                                input: {
-                                  fontSize: "11px",
-                                  fontFamily: "Inter",
-                                  height: "28px",
-                                },
-                              }}
-                            />
-
-                        )}
-
-                         {gstRatesByChargeIndex[index]?.same_state === false && (
-                          <TextInput
-                            mt={4}
-                            placeholder="IGST"
-                            value={
-                              (() => {
-                                const rate = gstRatesByChargeIndex[index]?.igst;
-                                const localAmount = charge.amount_in_local;
-                                if (rate == null || localAmount == null) return "";
-                                const amount = clampAmount((localAmount * rate) / 100);
-                                return amount != null ? String(amount) : "";
-                              })()
-                            }
-                            readOnly
-                            rightSection={
-                              (() => {
-                                const rate = gstRatesByChargeIndex[index]?.igst;
-                                const localAmount = charge.amount_in_local;
-                                const amount =
-                                  rate == null || localAmount == null
-                                    ? null
-                                    : clampAmount((localAmount * rate) / 100);
-                                const display = amount != null ? String(amount) : "";
-                                return gstRatesLoadingByIndex[index] && display === "" ? (
-                                  <Loader size="xs" color="#105476" />
-                                ) : null;
-                              })()
-                            }
-                            styles={{
-                              root: { flex: "0 0 88px" },
-                              input: {
-                                fontSize: "11px",
-                                fontFamily: "Inter",
-                                height: "28px",
-                              },
-                            }}
-                          />
-                        )}
+            
                          <Button
                               mt={4}
                               size="xs"
@@ -2785,9 +2680,9 @@ function InvoiceCreate() {
                           >
                             GST Rates
                           </Button>
-                         </Group>
+                         </Group> */}
                       </Grid.Col>
-                      <Grid.Col span={0.75}>
+                      <Grid.Col span={0.45}>
                         <NumberInput
                           placeholder="ROE"
                           min={0}
@@ -2852,7 +2747,7 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.65}>
                         <NumberInput
                           placeholder="No of Unit"
                           min={0}
@@ -3043,7 +2938,7 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <NumberInput
                           placeholder="Local Amount"
                           min={0}
@@ -3079,7 +2974,7 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <TextInput
                           placeholder="SAC Code"
                           withAsterisk
@@ -3101,7 +2996,7 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.75}>
+                      <Grid.Col span={0.55}>
                         <Dropdown
                           placeholder="Dr/Cr"
                           data={[
@@ -3126,6 +3021,133 @@ function InvoiceCreate() {
                           }}
                         />
                       </Grid.Col>
+                   {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
+                   {headerSameState === true && (
+                      <Grid.Col span={0.55}>
+                      {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
+                          <TextInput
+                            placeholder="CGST"
+                            value={
+                              (() => {
+                                const rate = gstRatesByChargeIndex[index]?.cgst;
+                                const localAmount = charge.amount_in_local;
+                                if (rate == null || localAmount == null) return "";
+                                const amount = clampAmount((localAmount * rate) / 100);
+                                return amount != null ? String(amount) : "";
+                              })()
+                            }
+                            readOnly
+                            // disabled
+                            rightSection={
+                              (() => {
+                                const rate = gstRatesByChargeIndex[index]?.cgst;
+                                const localAmount = charge.amount_in_local;
+                                const amount =
+                                  rate == null || localAmount == null
+                                    ? null
+                                    : clampAmount((localAmount * rate) / 100);
+                                const display = amount != null ? String(amount) : "";
+                                return gstRatesLoadingByIndex[index] && display === "" ? (
+                                  <Loader size="xs" color="#105476" />
+                                ) : null;
+                              })()
+                            }
+                            styles={{
+                              root: { flex: "0 0 88px" },
+                              input: {
+                                fontSize: "11px",
+                                fontFamily: "Inter",
+                                height: "28px",
+                              },
+                            }}
+                          />
+                         {/* )} */}
+                      </Grid.Col>
+                   )}
+                   {headerSameState === true && (
+                      <Grid.Col span={0.55}>
+                      {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
+                            <TextInput
+                              placeholder="SGST"
+                              value={
+                                (() => {
+                                  const rate = gstRatesByChargeIndex[index]?.sgst;
+                                  const localAmount = charge.amount_in_local;
+                                  if (rate == null || localAmount == null) return "";
+                                  const amount = clampAmount((localAmount * rate) / 100);
+                                  return amount != null ? String(amount) : "";
+                                })()
+                              }
+                              // disabled
+                              readOnly
+                              rightSection={
+                                (() => {
+                                  const rate = gstRatesByChargeIndex[index]?.sgst;
+                                  const localAmount = charge.amount_in_local;
+                                  const amount =
+                                    rate == null || localAmount == null
+                                      ? null
+                                      : clampAmount((localAmount * rate) / 100);
+                                  const display = amount != null ? String(amount) : "";
+                                  return gstRatesLoadingByIndex[index] && display === "" ? (
+                                    <Loader size="xs" color="#105476" />
+                                  ) : null;
+                                })()
+                              }
+                              styles={{
+                                root: { flex: "0 0 88px" },
+                                input: {
+                                  fontSize: "11px",
+                                  fontFamily: "Inter",
+                                  height: "28px",
+                                },
+                              }}
+                            />
+
+                          {/* )} */}
+                       </Grid.Col>
+                       )}
+                       {headerSameState === false && (
+                       <Grid.Col span={0.55}>
+                       {/* {gstRatesByChargeIndex[index]?.same_state === false && ( */}
+                          <TextInput
+                            placeholder="IGST"
+                            value={
+                              (() => {
+                                const rate = gstRatesByChargeIndex[index]?.igst;
+                                const localAmount = charge.amount_in_local;
+                                if (rate == null || localAmount == null) return "";
+                                const amount = clampAmount((localAmount * rate) / 100);
+                                return amount != null ? String(amount) : "";
+                              })()
+                            }
+                            readOnly
+                            rightSection={
+                              (() => {
+                                const rate = gstRatesByChargeIndex[index]?.igst;
+                                const localAmount = charge.amount_in_local;
+                                const amount =
+                                  rate == null || localAmount == null
+                                    ? null
+                                    : clampAmount((localAmount * rate) / 100);
+                                const display = amount != null ? String(amount) : "";
+                                return gstRatesLoadingByIndex[index] && display === "" ? (
+                                  <Loader size="xs" color="#105476" />
+                                ) : null;
+                              })()
+                            }
+                            styles={{
+                              root: { flex: "0 0 88px" },
+                              input: {
+                                fontSize: "11px",
+                                fontFamily: "Inter",
+                                height: "28px",
+                              },
+                            }}
+                          />
+                          {/* )} */}
+                       </Grid.Col>
+                       )}
                       <Grid.Col span={0.5}>
                         {!isReadOnly && (
                           <Group gap="xs">
@@ -3189,7 +3211,7 @@ function InvoiceCreate() {
                       </Grid.Col>
                     </Grid>
                   ))}
-                </Box>
+                {/* </Box> */}
 
                 {/* Totals Section */}
                 <Box
