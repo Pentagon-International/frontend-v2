@@ -11,6 +11,7 @@ import {
   Card,
   Badge,
   ActionIcon,
+  Menu,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -20,6 +21,8 @@ import {
   IconEdit,
   IconPlus,
   IconTrash,
+  IconDotsVertical,
+  IconFileInvoice,
 } from "@tabler/icons-react";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -1630,19 +1633,73 @@ function AirExportJobCreate() {
               : "Create Export Job"}
         </Text>
         {!isReadOnly && (
-          <Button
-            color="#105476"
-            variant={canCreateJob ? "filled" : "outline"}
-            onClick={handleSubmit}
-            loading={isSubmitting}
-            disabled={!canCreateJob}
-            leftSection={<IconPlus size={14} />}
-            style={{
-              cursor: canCreateJob ? "pointer" : "not-allowed",
-            }}
-          >
-            {mode === "edit" ? "Update" : "Create"}
-          </Button>
+          <Group gap="sm">
+            <Button
+              color="#105476"
+              variant={canCreateJob ? "filled" : "outline"}
+              onClick={handleSubmit}
+              loading={isSubmitting}
+              disabled={!canCreateJob}
+              leftSection={<IconPlus size={14} />}
+              style={{
+                cursor: canCreateJob ? "pointer" : "not-allowed",
+              }}
+            >
+              {mode === "edit" ? "Update" : "Create"}
+            </Button>
+            {hawbDetails.length > 0 && (
+              <Menu shadow="md" width={200}>
+                <Menu.Target>
+                  <ActionIcon variant="light" color="#105476" size="lg">
+                    <IconDotsVertical size={18} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {jobData?.id != null && (
+                    <Menu.Item
+                      leftSection={<IconFileInvoice size={14} />}
+                      onClick={() => {
+                        const allCollectCharges = hawbDetails.flatMap(
+                          (hawb) =>
+                            (hawb.charges ?? []).filter(
+                              (c) =>
+                                String(c.pp_cc ?? "").trim().toUpperCase() ===
+                                "CC"
+                            )
+                        );
+                        const firstHouse = hawbDetails[0];
+                        const housingDetailsForInvoice = [
+                          {
+                            ...firstHouse,
+                            charges: allCollectCharges,
+                          },
+                        ];
+                        navigate("/air/export-job/invoice", {
+                          state: {
+                            hawbDetails: housingDetailsForInvoice,
+                            housingDetails: housingDetailsForInvoice,
+                            is_agent: true,
+                            ...(jobData && { job: jobData }),
+                            ...(location.state?.mawbDetails && {
+                              mawbDetails: location.state.mawbDetails,
+                            }),
+                            ...(location.state?.carrierDetails && {
+                              carrierDetails: location.state.carrierDetails,
+                            }),
+                            ...(location.state?.routings && {
+                              routings: location.state.routings,
+                            }),
+                          },
+                        });
+                      }}
+                    >
+                      Create Invoice
+                    </Menu.Item>
+                  )}
+                </Menu.Dropdown>
+              </Menu>
+            )}
+          </Group>
         )}
       </Group>
 

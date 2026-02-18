@@ -2632,10 +2632,20 @@ function HouseCreate() {
                 variant="outline"
                 color="#105476"
                 onClick={() => {
+                  const fullDetail = getCurrentHousingDetail();
+                  const prepaidCharges = (fullDetail.charges ?? []).filter(
+                    (c: { pp_cc?: string }) =>
+                      String(c.pp_cc ?? "").trim().toUpperCase() === "PP"
+                  );
+                  const detailForInvoice = {
+                    ...fullDetail,
+                    charges: prepaidCharges,
+                  };
                   navigate("/SeaExport/import-job/invoice", {
                     state: {
-                      hawbDetails: [getCurrentHousingDetail()],
-                      housingDetails: [getCurrentHousingDetail()],
+                      hawbDetails: [detailForInvoice],
+                      housingDetails: [detailForInvoice],
+                      is_agent: false,
                       ...(location.state?.job && { job: location.state.job }),
                       ...(location.state?.mblDetails && {
                         mblDetails: location.state.mblDetails,

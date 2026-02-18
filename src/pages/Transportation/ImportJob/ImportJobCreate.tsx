@@ -29,6 +29,7 @@ import {
   IconEye,
   IconDownload,
   IconX,
+  IconFileInvoice,
 } from "@tabler/icons-react";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -2015,6 +2016,47 @@ function ImportJobCreate() {
                       Delivery Order - {housing.hbl_number || `HBL ${idx + 1}`}
                     </Menu.Item>
                   ))}
+                  {jobData?.id != null && (
+                    <Menu.Item
+                      leftSection={<IconFileInvoice size={14} />}
+                      onClick={() => {
+                        const allCollectCharges = housingDetails.flatMap(
+                          (house) =>
+                            (house.charges ?? []).filter(
+                              (c) =>
+                                String(c.pp_cc ?? "").trim().toUpperCase() ===
+                                "CC"
+                            )
+                        );
+                        const firstHouse = housingDetails[0];
+                        const housingDetailsForInvoice = [
+                          {
+                            ...firstHouse,
+                            charges: allCollectCharges,
+                          },
+                        ];
+                        navigate("/SeaExport/import-job/invoice", {
+                          state: {
+                            hawbDetails: housingDetailsForInvoice,
+                            housingDetails: housingDetailsForInvoice,
+                            is_agent: true,
+                            ...(jobData && { job: jobData }),
+                            ...(location.state?.mblDetails && {
+                              mblDetails: location.state.mblDetails,
+                            }),
+                            ...(location.state?.carrierDetails && {
+                              carrierDetails: location.state.carrierDetails,
+                            }),
+                            ...(location.state?.routings && {
+                              routings: location.state.routings,
+                            }),
+                          },
+                        });
+                      }}
+                    >
+                      Create Invoice
+                    </Menu.Item>
+                  )}
                 </Menu.Dropdown>
               </Menu>
             )}

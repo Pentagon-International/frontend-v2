@@ -63,11 +63,7 @@ const fetchGstRatesByStateSac = async (payload: {
   state_id: number;
   sac_code: string;
 }) => {
-  return postAPICall(
-    "invoice/gst-rates-by-state-sac/",
-    payload,
-    API_HEADER,
-  );
+  return postAPICall("invoice/gst-rates-by-state-sac/", payload, API_HEADER);
 };
 const fetchCurrencyMaster = async () => {
   try {
@@ -280,7 +276,8 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
 
 // Clamp amount to max 10 digits including decimals, max 2 decimal places (e.g. 99999999.99)
 function clampAmount(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value)) return value === undefined ? null : value;
+  if (value == null || !Number.isFinite(value))
+    return value === undefined ? null : value;
   const rounded = Math.round(value * 100) / 100;
   const maxVal = 99999999.99;
   if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
@@ -342,7 +339,9 @@ function InvoiceCreate() {
   // Default branch currency (active branch: is_default === true) for Billing Currency
   const defaultBranch = user?.branches?.find(
     (b: { is_default?: boolean }) => b.is_default === true,
-  ) as { currency?: { currency_id?: number; currency_code?: string } } | undefined;
+  ) as
+    | { currency?: { currency_id?: number; currency_code?: string } }
+    | undefined;
   const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
   const defaultBranchCurrencyId =
     defaultBranch?.currency?.currency_id != null
@@ -350,9 +349,8 @@ function InvoiceCreate() {
       : "";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [invoiceDataFromApi, setInvoiceDataFromApi] = useState<InvoiceDataFromApi | null>(
-    null,
-  );
+  const [invoiceDataFromApi, setInvoiceDataFromApi] =
+    useState<InvoiceDataFromApi | null>(null);
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
     customer_id?: number;
@@ -516,10 +514,12 @@ function InvoiceCreate() {
   const billingCurrencyOptions = useMemo(() => {
     const data = currencyData as any[];
     if (!Array.isArray(data)) return [];
-    return data.map((item: any) => {
-      const code = (item.currency_code ?? item.code ?? "").toString().trim();
-      return { value: code, label: code ? code.toUpperCase() : "" };
-    }).filter((o: { value: string }) => o.value !== "");
+    return data
+      .map((item: any) => {
+        const code = (item.currency_code ?? item.code ?? "").toString().trim();
+        return { value: code, label: code ? code.toUpperCase() : "" };
+      })
+      .filter((o: { value: string }) => o.value !== "");
   }, [currencyData]);
 
   // Format state options
@@ -550,7 +550,10 @@ function InvoiceCreate() {
       firstHawb?.shipper_state_id != null
         ? firstHawb.shipper_state_id
         : (jobHousing?.[0]?.shipper_state_id ?? null);
-    if (shipperStateId != null && String(shipperStateId) !== form.values.state) {
+    if (
+      shipperStateId != null &&
+      String(shipperStateId) !== form.values.state
+    ) {
       form.setFieldValue("state", String(shipperStateId));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -603,8 +606,11 @@ function InvoiceCreate() {
   }, [defaultBranchCurrency]);
 
   const isReverseInvoiceNavigation = Boolean(
-    (location.state as { invoiceData?: { reverse_invoice_id?: number | string } } | null)
-      ?.invoiceData?.reverse_invoice_id,
+    (
+      location.state as {
+        invoiceData?: { reverse_invoice_id?: number | string };
+      } | null
+    )?.invoiceData?.reverse_invoice_id,
   );
 
   // When user currency and billing currency are the same, set top-level ROE to 1
@@ -631,44 +637,62 @@ function InvoiceCreate() {
   useEffect(() => {
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
+    const isAgent =
+      (location.state as { is_agent?: boolean } | null)?.is_agent === true;
+    const job = (location.state as { job?: { agent_code?: string; agent_name?: string } } | null)
+      ?.job;
 
     if (Array.isArray(hawbDetails) && hawbDetails.length > 0) {
       // Get the first HAWB detail
       const firstHawb = hawbDetails[0];
 
       if (firstHawb) {
-        // Set billing currency (header) to user's active branch currency when coming from Air House
-        if (defaultBranchCurrency) {
-          form.setFieldValue("currency", defaultBranchCurrency);
-          const roe = getRoeValue(defaultBranchCurrency);
+        if (isAgent && job) {
+          // Agent invoice: default billing currency USD, Bill To = origin/destination agent
+          form.setFieldValue("currency", "USD");
+          const roe = getRoeValue("USD");
           if (roe !== null && roe !== undefined) {
             form.setFieldValue("roe", roe);
+          }
+          const agentCode = String(job.agent_code || "").trim();
+          if (agentCode) {
+            form.setFieldValue("bill_to", agentCode);
+          }
+          if (job.agent_name) {
+            setBillToDisplayName(String(job.agent_name));
+          }
+          const firstHawbAny = firstHawb as Record<string, unknown>;
+          const agentAddress =
+            firstHawbAny?.origin_agent_address ?? firstHawbAny?.agent_address;
+          if (agentAddress && typeof agentAddress === "string") {
+            form.setFieldValue("address", agentAddress);
+          }
+        } else {
+          // Customer invoice: branch currency, Bill To = shipper
+          if (defaultBranchCurrency) {
+            form.setFieldValue("currency", defaultBranchCurrency);
+            const roe = getRoeValue(defaultBranchCurrency);
+            if (roe !== null && roe !== undefined) {
+              form.setFieldValue("roe", roe);
+            }
+          }
+          if (firstHawb.shipper_address) {
+            form.setFieldValue("address", firstHawb.shipper_address);
+          }
+          const shipperCode = String(firstHawb.shipper_code || "").trim();
+          if (shipperCode) {
+            form.setFieldValue("bill_to", shipperCode);
+          }
+          if (firstHawb.shipper_name) {
+            setBillToDisplayName(
+              String(firstHawb.shipper_name || (firstHawb as { bill_to_name?: string }).bill_to_name),
+            );
           }
         }
 
         // Set shipment_id from housing to shipment_no field
         if (firstHawb.shipment_id) {
           form.setFieldValue("shipment_no", String(firstHawb.shipment_id));
-        }
-
-        // Set shipper address in the address field
-        if (firstHawb.shipper_address) {
-          form.setFieldValue("address", firstHawb.shipper_address);
-        }
-
-        // Bill To should be shipper_code from HAWB/Housing.
-        console.log("firstHawb", firstHawb);
-        const shipperCode = String(firstHawb.shipper_code || "").trim();
-        if (shipperCode) {
-          form.setFieldValue("bill_to", shipperCode);
-        } 
-        // else if (firstHawb.shipper_name) {
-        //   // Fallback to keep bill_to non-empty and avoid clearing address/state
-        //   form.setFieldValue("bill_to", String(firstHawb.shipper_name));
-        // }
-
-        if (firstHawb.shipper_name) {
-          setBillToDisplayName(String(firstHawb.shipper_name || firstHawb.bill_to_name));
         }
 
         // State from housing is set after state API loads (see useEffect below)
@@ -679,43 +703,99 @@ function InvoiceCreate() {
           Array.isArray(firstHawb.charges) &&
           firstHawb.charges.length > 0
         ) {
-          const billingCurrency = defaultBranchCurrency || form.values.currency || "";
-          const headerRoe = billingCurrency ? getRoeValue(billingCurrency) : null;
+          const billingCurrency = isAgent
+            ? "USD"
+            : defaultBranchCurrency || form.values.currency || "";
+          const headerRoe = billingCurrency
+            ? getRoeValue(billingCurrency)
+            : null;
 
           const mappedCharges = firstHawb.charges.map((charge: any) => {
-            const unitDetails = charge.unit_details as { unit_code?: string } | undefined;
+            const unitDetails = charge.unit_details as
+              | { unit_code?: string }
+              | undefined;
             const unitCode = String(
-              charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
+              charge.unit_code ??
+                charge.unit_input ??
+                unitDetails?.unit_code ??
+                "",
             ).trim();
-            const currencyDetails = charge.currency_details as { currency_code?: string } | undefined;
+            const currencyDetails = charge.currency_details as
+              | { currency_code?: string }
+              | undefined;
             const currency = String(
               charge.currency ?? currencyDetails?.currency_code ?? "",
             ).trim();
-            const unit_id = charge.unit_id != null ? String(charge.unit_id) : "";
-            const currency_id = charge.currency_id != null ? String(charge.currency_id) : "";
+            const unit_id =
+              charge.unit_id != null ? String(charge.unit_id) : "";
+            const currency_id =
+              charge.currency_id != null ? String(charge.currency_id) : "";
 
-            const noOfUnit = charge.no_of_unit != null ? (typeof charge.no_of_unit === "number" ? charge.no_of_unit : parseFloat(charge.no_of_unit)) : null;
-            const amountPerUnit = charge.amount_per_unit != null ? (typeof charge.amount_per_unit === "number" ? charge.amount_per_unit : parseFloat(charge.amount_per_unit)) : null;
-            const roeVal = charge.roe != null ? (typeof charge.roe === "number" ? charge.roe : parseFloat(charge.roe)) : (currency ? getRoeValue(currency) : null);
+            const noOfUnit =
+              charge.no_of_unit != null
+                ? typeof charge.no_of_unit === "number"
+                  ? charge.no_of_unit
+                  : parseFloat(charge.no_of_unit)
+                : null;
+            const amountPerUnit =
+              charge.amount_per_unit != null
+                ? typeof charge.amount_per_unit === "number"
+                  ? charge.amount_per_unit
+                  : parseFloat(charge.amount_per_unit)
+                : null;
+            const roeVal =
+              charge.roe != null
+                ? typeof charge.roe === "number"
+                  ? charge.roe
+                  : parseFloat(charge.roe)
+                : currency
+                  ? getRoeValue(currency)
+                  : null;
 
-            let amount: number | null = charge.amount != null ? (typeof charge.amount === "number" ? charge.amount : parseFloat(charge.amount)) : null;
-            let amountInLocal: number | null = charge.amount_in_local != null ? (typeof charge.amount_in_local === "number" ? charge.amount_in_local : parseFloat(charge.amount_in_local)) : null;
-            let headerAmt: number | null = (charge.amount_in_header ?? charge.header_amount) != null ? (typeof (charge.amount_in_header ?? charge.header_amount) === "number" ? (charge.amount_in_header ?? charge.header_amount) : parseFloat(String(charge.amount_in_header ?? charge.header_amount))) : null;
+            let amount: number | null =
+              charge.amount != null
+                ? typeof charge.amount === "number"
+                  ? charge.amount
+                  : parseFloat(charge.amount)
+                : null;
+            let amountInLocal: number | null =
+              charge.amount_in_local != null
+                ? typeof charge.amount_in_local === "number"
+                  ? charge.amount_in_local
+                  : parseFloat(charge.amount_in_local)
+                : null;
+            let headerAmt: number | null =
+              (charge.amount_in_header ?? charge.header_amount) != null
+                ? typeof (charge.amount_in_header ?? charge.header_amount) ===
+                  "number"
+                  ? (charge.amount_in_header ?? charge.header_amount)
+                  : parseFloat(
+                      String(charge.amount_in_header ?? charge.header_amount),
+                    )
+                : null;
 
             if (
-              noOfUnit != null && noOfUnit > 0 &&
-              amountPerUnit != null && amountPerUnit > 0
+              noOfUnit != null &&
+              noOfUnit > 0 &&
+              amountPerUnit != null &&
+              amountPerUnit > 0
             ) {
               const calcAmount = clampAmount(noOfUnit * amountPerUnit);
               if (calcAmount != null) amount = calcAmount;
-              if (amount != null && amount > 0 && roeVal != null && roeVal > 0) {
+              if (
+                amount != null &&
+                amount > 0 &&
+                roeVal != null &&
+                roeVal > 0
+              ) {
                 const calcLocal = clampAmount(amount * roeVal);
                 if (calcLocal != null) amountInLocal = calcLocal;
               }
             }
             // Amount in (billing currency): always compute when we have amount_in_local
             if (amountInLocal != null && amountInLocal > 0) {
-              const billCurr = billingCurrency || (form.values.currency ?? "").trim();
+              const billCurr =
+                billingCurrency || (form.values.currency ?? "").trim();
               const chargeCurr = currency.trim();
               if (billCurr && chargeCurr) {
                 if (billCurr.toUpperCase() === chargeCurr.toUpperCase()) {
@@ -745,7 +825,9 @@ function InvoiceCreate() {
               amount_per_unit: amountPerUnit,
               amount: Number.isFinite(amount) ? amount : null,
               header_amount: Number.isFinite(headerAmt) ? headerAmt : null,
-              amount_in_local: Number.isFinite(amountInLocal) ? amountInLocal : null,
+              amount_in_local: Number.isFinite(amountInLocal)
+                ? amountInLocal
+                : null,
               tax_code: charge.tax_code ? String(charge.tax_code) : "",
               dr_cr: (charge as any).dr_cr === "Dr" ? "Dr" : "Cr",
             };
@@ -754,34 +836,44 @@ function InvoiceCreate() {
 
           // Fetch SAC code for each charge that has charge_id (from house)
           const jobServiceIdForSac =
-            (location.state as { job?: { service_id?: number } })?.job?.service_id ?? null;
-          if (jobServiceIdForSac && mappedCharges.some((c: ChargeItem) => c.charge_id != null)) {
+            (location.state as { job?: { service_id?: number } })?.job
+              ?.service_id ?? null;
+          if (
+            jobServiceIdForSac &&
+            mappedCharges.some((c: ChargeItem) => c.charge_id != null)
+          ) {
             // Keep track of original indices when filtering
             const chargesWithIds = mappedCharges
               .map((c, idx) => ({ charge: c, originalIdx: idx }))
               .filter(({ charge }) => charge.charge_id != null);
-            
+
             const items = chargesWithIds.map(({ charge }) => ({
               charge_id: charge.charge_id!,
-              service_id: jobServiceIdForSac
+              service_id: jobServiceIdForSac,
             }));
-            
+
             fetchGetEffectiveSac(items).then((data) => {
               // Map response by index order (API returns in same order as request)
               data.forEach((item, responseIdx) => {
                 const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
-                if (originalIdx !== undefined && item.sac_code != null && item.sac_code !== "") {
-                  form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
+                if (
+                  originalIdx !== undefined &&
+                  item.sac_code != null &&
+                  item.sac_code !== ""
+                ) {
+                  form.setFieldValue(
+                    `charges.${originalIdx}.tax_code`,
+                    item.sac_code,
+                  );
                 }
               });
             });
           }
         } else {
-          const branchCurrency =
-            defaultBranchCurrency || form.values.currency || "";
-          const branchRoe = branchCurrency
-            ? getRoeValue(branchCurrency)
-            : null;
+          const branchCurrency = isAgent
+            ? "USD"
+            : defaultBranchCurrency || form.values.currency || "";
+          const branchRoe = branchCurrency ? getRoeValue(branchCurrency) : null;
           form.setFieldValue("charges", [
             {
               charge_id: null,
@@ -814,7 +906,7 @@ function InvoiceCreate() {
           billing_currency: null,
           roe: null,
           amount_per_unit: null,
-              amount: null,
+          amount: null,
           header_amount: null,
           amount_in_local: null,
           tax_code: "",
@@ -826,23 +918,20 @@ function InvoiceCreate() {
   }, []); // Run only once on mount
 
   // When opening invoice view screen from Accounts table (route has :id), fetch latest invoice details
-  const { data: invoiceViewFetchRes, isFetching: invoiceViewFetchLoading } = useQuery({
-    queryKey: [
-      "invoice-view",
-      invoiceId,
-      isReverseInvoiceNavigation ? "reverse_invoice_id" : "invoice_id",
-      location.key,
-    ],
-    enabled: Boolean(isEditOrViewMode && invoiceId && location.key),
-    queryFn: async () =>
-      getAPICall(
-        `${URL.invoice}${invoiceId}`,
-        API_HEADER,
-      ),
-    staleTime: 5 * 60 * 1000,
-    refetchOnMount: true,
-    refetchOnReconnect: true,
-  });
+  const { data: invoiceViewFetchRes, isFetching: invoiceViewFetchLoading } =
+    useQuery({
+      queryKey: [
+        "invoice-view",
+        invoiceId,
+        isReverseInvoiceNavigation ? "reverse_invoice_id" : "invoice_id",
+        location.key,
+      ],
+      enabled: Boolean(isEditOrViewMode && invoiceId && location.key),
+      queryFn: async () => getAPICall(`${URL.invoice}${invoiceId}`, API_HEADER),
+      staleTime: 5 * 60 * 1000,
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+    });
 
   useEffect(() => {
     if (!isEditOrViewMode || !invoiceId) return;
@@ -970,7 +1059,10 @@ function InvoiceCreate() {
                     : c.amount_in_local
                   : null,
               tax_code: c.tax_code ?? "",
-              dr_cr: (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr" ? "Dr" : "Cr",
+              dr_cr:
+                (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr"
+                  ? "Dr"
+                  : "Cr",
             }))
           : form.values.charges.length > 0
             ? form.values.charges
@@ -1006,10 +1098,10 @@ function InvoiceCreate() {
     }
 
     const sacs = (form.values.charges || [])
-      .map((c, idx) => ({ 
-        idx, 
+      .map((c, idx) => ({
+        idx,
         sac: String(c.tax_code || "").trim(),
-        localAmount: c.amount_in_local
+        localAmount: c.amount_in_local,
       }))
       .filter((x) => x.sac !== "");
 
@@ -1034,7 +1126,7 @@ function InvoiceCreate() {
       const cacheKey = `${stateId}:${sac}`;
       const hasCache = gstRatesCacheRef.current.has(cacheKey);
       const hasRates = gstRatesByChargeIndex[idx] != null;
-      
+
       if (!hasCache && !hasRates) {
         indicesToFetch.push(idx);
       }
@@ -1095,7 +1187,7 @@ function InvoiceCreate() {
       const indicesToClear = results
         .filter((r) => !r.fromCache)
         .map((r) => r.idx);
-      
+
       if (indicesToClear.length > 0) {
         setGstRatesLoadingByIndex((prev) => {
           const next = { ...prev };
@@ -1158,7 +1250,10 @@ function InvoiceCreate() {
 
   useEffect(() => {
     const billingCurrency = (form.values.currency ?? "").trim().toUpperCase();
-    const topRoe = form.values.roe != null && form.values.roe > 0 ? Number(form.values.roe) : null;
+    const topRoe =
+      form.values.roe != null && form.values.roe > 0
+        ? Number(form.values.roe)
+        : null;
 
     const updatedCharges = form.values.charges.map((charge) => {
       if (
@@ -1187,7 +1282,8 @@ function InvoiceCreate() {
           return {
             ...charge,
             amount_in_local: clamped,
-            header_amount: newHeaderAmount != null ? newHeaderAmount : charge.header_amount,
+            header_amount:
+              newHeaderAmount != null ? newHeaderAmount : charge.header_amount,
           };
         }
       }
@@ -1197,7 +1293,8 @@ function InvoiceCreate() {
 
     const hasChanges = updatedCharges.some(
       (charge, index) =>
-        charge.amount_in_local !== form.values.charges[index]?.amount_in_local ||
+        charge.amount_in_local !==
+          form.values.charges[index]?.amount_in_local ||
         charge.header_amount !== form.values.charges[index]?.header_amount,
     );
 
@@ -1284,11 +1381,7 @@ function InvoiceCreate() {
     //   !saveResponse?.id ||
     //   saveResponse?.customer_id == null
     // )
-    if (
-      chargesTabActive !== "tax" ||
-      !saveResponse?.id
-    )
-     {
+    if (chargesTabActive !== "tax" || !saveResponse?.id) {
       return;
     }
     let cancelled = false;
@@ -1450,7 +1543,10 @@ function InvoiceCreate() {
               state_id: stateId,
               sac_code: sacCode,
             })) as unknown;
-            const resObj = res as { data?: { data?: GstRatesBySacResponse; [k: string]: unknown }; [k: string]: unknown };
+            const resObj = res as {
+              data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+              [k: string]: unknown;
+            };
             const payload = resObj?.data?.data ?? resObj?.data ?? res;
             const gstData = payload as GstRatesBySacResponse | null | undefined;
             const igstRaw = gstData?.igst_percent;
@@ -1470,15 +1566,25 @@ function InvoiceCreate() {
       );
 
       const chargesPayload = values.charges.map((charge, idx) => {
-        const currencyDataArr = currencyData as { id?: number; code?: string; currency_code?: string }[];
+        const currencyDataArr = currencyData as {
+          id?: number;
+          code?: string;
+          currency_code?: string;
+        }[];
         const chargeCurrencyItem = charge.currency_id
           ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
           : currencyDataArr?.find(
-              (c) => (c.code || c.currency_code || "").toString() === charge.currency,
+              (c) =>
+                (c.code || c.currency_code || "").toString() ===
+                charge.currency,
             );
         const chargeCurrencyId =
           chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        const unitDataArr = unitData as { id?: number; unit_code?: string; code?: string }[];
+        const unitDataArr = unitData as {
+          id?: number;
+          unit_code?: string;
+          code?: string;
+        }[];
         const unitItem = charge.unit_id
           ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
           : unitDataArr?.find(
@@ -1598,7 +1704,11 @@ function InvoiceCreate() {
           });
         }
       } else {
-        const response = (await postAPICall(URL.invoice, payload, API_HEADER)) as
+        const response = (await postAPICall(
+          URL.invoice,
+          payload,
+          API_HEADER,
+        )) as
           | {
               id?: number;
               customer_id?: number;
@@ -1645,7 +1755,7 @@ function InvoiceCreate() {
 
   const handlePostInvoice = async () => {
     // if (!saveResponse?.id || saveResponse?.customer_id == null) {
-        if (!saveResponse?.id) {
+    if (!saveResponse?.id) {
       ToastNotification({
         message: "Save the invoice first and ensure customer_id is available.",
         type: "error",
@@ -1656,9 +1766,10 @@ function InvoiceCreate() {
     try {
       const values = form.values;
       const stateId = Number(values.state);
-      const currencyItem = (currencyData as { id?: number; code?: string; currency_code?: string }[])?.find(
-        (c) =>
-          (c.code || c.currency_code || "").toString() === values.currency,
+      const currencyItem = (
+        currencyData as { id?: number; code?: string; currency_code?: string }[]
+      )?.find(
+        (c) => (c.code || c.currency_code || "").toString() === values.currency,
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
@@ -1687,20 +1798,29 @@ function InvoiceCreate() {
       };
       let breakupData = gstBreakup;
       if (!breakupData?.sac_wise_totals?.length) {
-        breakupData = await fetchInvoiceCalculateGstBreakup({
+        breakupData = (await fetchInvoiceCalculateGstBreakup({
           customer_id: saveResponse.customer_id as number,
           invoice_id: saveResponse.id as number,
-        }) as typeof gstBreakup;
+        })) as typeof gstBreakup;
       }
       const sacWiseTotals = breakupData?.sac_wise_totals ?? [];
-      const topRoe = values.roe != null && values.roe > 0 ? Number(values.roe) : 1;
+      const topRoe =
+        values.roe != null && values.roe > 0 ? Number(values.roe) : 1;
       const taxes = sacWiseTotals.map((row) => ({
         tax_code: row.sac_code ?? "",
         rate: row.rate ?? 0,
         amount: row.total_amount ?? 0,
       }));
-      const currencyDataArr = currencyData as { id?: number; code?: string; currency_code?: string }[];
-      const unitDataArr = unitData as { id?: number; unit_code?: string; code?: string }[];
+      const currencyDataArr = currencyData as {
+        id?: number;
+        code?: string;
+        currency_code?: string;
+      }[];
+      const unitDataArr = unitData as {
+        id?: number;
+        unit_code?: string;
+        code?: string;
+      }[];
       // Resolve GST rates per charge for POST payload (same as Save)
       const gstRatesForPostCharges: (GstRates | null)[] = await Promise.all(
         values.charges.map(async (charge, idx) => {
@@ -1713,7 +1833,10 @@ function InvoiceCreate() {
               state_id: stateId,
               sac_code: sacCode,
             })) as unknown;
-            const resObj = res as { data?: { data?: GstRatesBySacResponse; [k: string]: unknown }; [k: string]: unknown };
+            const resObj = res as {
+              data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+              [k: string]: unknown;
+            };
             const payload = resObj?.data?.data ?? resObj?.data ?? res;
             const gstData = payload as GstRatesBySacResponse | null | undefined;
             const igstRaw = gstData?.igst_percent;
@@ -1735,11 +1858,14 @@ function InvoiceCreate() {
         const chargeCurrencyItem = charge.currency_id
           ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
           : currencyDataArr?.find(
-              (c) => (c.code || c.currency_code || "").toString() === charge.currency,
+              (c) =>
+                (c.code || c.currency_code || "").toString() ===
+                charge.currency,
             );
         let chargeCurrencyId =
           chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        if (chargeCurrencyId == null && currencyId != null) chargeCurrencyId = currencyId;
+        if (chargeCurrencyId == null && currencyId != null)
+          chargeCurrencyId = currencyId;
         const unitItem = charge.unit_id
           ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
           : unitDataArr?.find(
@@ -1915,17 +2041,21 @@ function InvoiceCreate() {
               unit_id: c.unit_id != null ? String(c.unit_id) : undefined,
               no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
               currency: c.currency_code ?? "",
-              currency_id: c.currency_id != null ? String(c.currency_id) : undefined,
+              currency_id:
+                c.currency_id != null ? String(c.currency_id) : undefined,
               roe: Number.isFinite(roe) ? roe : null,
               amount_per_unit: Number.isFinite(amountPerUnit)
                 ? amountPerUnit
                 : null,
               amount: Number.isFinite(amount) ? amount : null,
-              header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
+              header_amount: Number.isFinite(headerAmount)
+                ? headerAmount
+                : null,
               amount_in_local: Number.isFinite(amountInLocal)
                 ? amountInLocal
                 : null,
-              tax_code: c.tax_code ?? (c.tax_id != null ? String(c.tax_id) : ""),
+              tax_code:
+                c.tax_code ?? (c.tax_id != null ? String(c.tax_id) : ""),
               dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
             };
           });
@@ -1939,7 +2069,8 @@ function InvoiceCreate() {
     } catch (error: unknown) {
       console.error("Error posting invoice:", error);
       ToastNotification({
-        message: (error as { message?: string })?.message ?? "Failed to post invoice",
+        message:
+          (error as { message?: string })?.message ?? "Failed to post invoice",
         type: "error",
       });
     } finally {
@@ -2257,15 +2388,23 @@ function InvoiceCreate() {
                   // When billing currency === charge currency (e.g. both INR), header_amount = amount_in_local.
                   const headerRoe = form.values.roe;
                   const updatedCharges = form.values.charges.map((charge) => {
-                    if (charge.amount_in_local != null && charge.amount_in_local > 0 && newCurrency) {
-                      const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
+                    if (
+                      charge.amount_in_local != null &&
+                      charge.amount_in_local > 0 &&
+                      newCurrency
+                    ) {
+                      const chargeCurr = (charge.currency ?? "")
+                        .trim()
+                        .toUpperCase();
                       const billCurr = newCurrency.trim().toUpperCase();
                       let newHeader: number | null = null;
                       if (billCurr === chargeCurr) {
                         // Same currency (e.g. both INR): header amount = local amount
                         newHeader = charge.amount_in_local;
                       } else if (headerRoe != null && headerRoe > 0) {
-                        newHeader = clampAmount(charge.amount_in_local / headerRoe);
+                        newHeader = clampAmount(
+                          charge.amount_in_local / headerRoe,
+                        );
                       } else {
                         newHeader = charge.amount_in_local;
                       }
@@ -2276,7 +2415,11 @@ function InvoiceCreate() {
                     return charge;
                   });
                   // Apply currency and charges in one update so header_amount is not lost
-                  form.setValues({ ...form.values, currency: newCurrency, charges: updatedCharges });
+                  form.setValues({
+                    ...form.values,
+                    currency: newCurrency,
+                    charges: updatedCharges,
+                  });
                 }}
                 searchable
                 withAsterisk
@@ -2317,15 +2460,25 @@ function InvoiceCreate() {
                         : null;
                   form.setFieldValue("roe", numValue);
                   // Recalculate header_amount for all charges when header ROE changes
-                  const headerBillingCurrency = (form.values.currency ?? "").trim().toUpperCase();
+                  const headerBillingCurrency = (form.values.currency ?? "")
+                    .trim()
+                    .toUpperCase();
                   const updatedCharges = form.values.charges.map((charge) => {
-                    if (charge.amount_in_local != null && charge.amount_in_local > 0 && headerBillingCurrency) {
-                      const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
+                    if (
+                      charge.amount_in_local != null &&
+                      charge.amount_in_local > 0 &&
+                      headerBillingCurrency
+                    ) {
+                      const chargeCurr = (charge.currency ?? "")
+                        .trim()
+                        .toUpperCase();
                       let newHeader: number | null = null;
                       if (headerBillingCurrency === chargeCurr) {
                         newHeader = charge.amount_in_local;
                       } else if (numValue != null && numValue > 0) {
-                        newHeader = clampAmount(charge.amount_in_local / numValue);
+                        newHeader = clampAmount(
+                          charge.amount_in_local / numValue,
+                        );
                       } else {
                         newHeader = charge.amount_in_local;
                       }
@@ -2496,219 +2649,263 @@ function InvoiceCreate() {
               <Tabs.Panel value="charges">
                 {/* Dynamic Charges Rows */}
                 {/* <Box mb="sm" mt="md"> */}
-                  <Grid
-                    w="100%"
-                    // gutter="sm"
-                    py="sm"
-                    style={{
-                      position: "sticky",
-                      top: 45,
-                      zIndex: 100,
-                      backgroundColor: "white",
-                      fontWeight: 600,
-                      color: "#105476",
-                    }}
-                  >
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>Charge</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Unit</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency</Grid.Col>
-                    <Grid.Col span={0.45} style={{ fontSize: "13px" }}>ROE</Grid.Col>
-                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>No of Unit</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Amount per Unit</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                      Amount in {form.values.currency ? form.values.currency.toUpperCase() : "()"}
+                <Grid
+                  w="100%"
+                  // gutter="sm"
+                  py="sm"
+                  style={{
+                    position: "sticky",
+                    top: 45,
+                    zIndex: 100,
+                    backgroundColor: "white",
+                    fontWeight: 600,
+                    color: "#105476",
+                  }}
+                >
+                  <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    Charge
+                  </Grid.Col>
+                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    Unit
+                  </Grid.Col>
+                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    Currency
+                  </Grid.Col>
+                  <Grid.Col span={0.45} style={{ fontSize: "13px" }}>
+                    ROE
+                  </Grid.Col>
+                  <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                    No of Unit
+                  </Grid.Col>
+                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    Amount per Unit
+                  </Grid.Col>
+                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    Currency Amount
+                  </Grid.Col>
+                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    Amount in{" "}
+                    {form.values.currency
+                      ? form.values.currency.toUpperCase()
+                      : "()"}
+                  </Grid.Col>
+                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                    Local Amount
+                  </Grid.Col>
+                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                    SAC Code
+                  </Grid.Col>
+                  <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                    Dr/Cr
+                  </Grid.Col>
+                  {headerSameState === true && (
+                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                      CGST
                     </Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
-                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>Dr/Cr</Grid.Col>
-                    {headerSameState === true && (
-                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>CGST</Grid.Col>
-                    )}
-                    {headerSameState === true && (
-                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>SGST</Grid.Col>
-                    )}
-                    {headerSameState === false && (
-                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>IGST</Grid.Col>
-                    )}
-                    {!isReadOnly && <Grid.Col span={0.5} style={{ fontSize: "13px" }}>Actions</Grid.Col>}
-                  </Grid>
+                  )}
+                  {headerSameState === true && (
+                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                      SGST
+                    </Grid.Col>
+                  )}
+                  {headerSameState === false && (
+                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                      IGST
+                    </Grid.Col>
+                  )}
+                  {!isReadOnly && (
+                    <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                      Actions
+                    </Grid.Col>
+                  )}
+                </Grid>
 
-                  {form.values.charges.map((charge, index) => (
-                    <Grid
-                      key={index}
-                      w="100%"
-                      gutter="xs"
-                      mt={index !== 0 ? "sm" : 0}
-                    >
-                      <Grid.Col span={1.5}>
-                        <SearchableSelect
-                          placeholder="Type charge name"
-                          apiEndpoint={URL.chargeMaster}
-                          searchFields={["charge_name", "charge_code"]}
-                          displayFormat={(item: Record<string, unknown>) => ({
-                            value: String(item.id ?? ""),
-                            label: String(item.charge_name ?? ""),
-                          })}
-                          value={
-                            charge.charge_id != null
-                              ? String(charge.charge_id)
-                              : null
-                          }
-                          displayValue={charge.charge_name || undefined}
-                          onChange={(value, selectedData) => {
-                            const chargeId = value ? Number(value) : null;
-                            const chargeName = selectedData?.label ?? "";
-                            form.setFieldValue(
-                              `charges.${index}.charge_id`,
-                              chargeId,
-                            );
-                            form.setFieldValue(
-                              `charges.${index}.charge_name`,
-                              chargeName,
-                            );
-                            form.setFieldValue(`charges.${index}.tax_code`, "");
-                            if (chargeErrors[index]?.charge_name) {
-                              const newErrors = { ...chargeErrors };
-                              if (newErrors[index]) {
-                                delete newErrors[index].charge_name;
-                                if (
-                                  Object.keys(newErrors[index]).length === 0
-                                ) {
-                                  delete newErrors[index];
-                                }
+                {form.values.charges.map((charge, index) => (
+                  <Grid
+                    key={index}
+                    w="100%"
+                    gutter="xs"
+                    mt={index !== 0 ? "sm" : 0}
+                  >
+                    <Grid.Col span={1.5}>
+                      <SearchableSelect
+                        placeholder="Type charge name"
+                        apiEndpoint={URL.chargeMaster}
+                        searchFields={["charge_name", "charge_code"]}
+                        displayFormat={(item: Record<string, unknown>) => ({
+                          value: String(item.id ?? ""),
+                          label: String(item.charge_name ?? ""),
+                        })}
+                        value={
+                          charge.charge_id != null
+                            ? String(charge.charge_id)
+                            : null
+                        }
+                        displayValue={charge.charge_name || undefined}
+                        onChange={(value, selectedData) => {
+                          const chargeId = value ? Number(value) : null;
+                          const chargeName = selectedData?.label ?? "";
+                          form.setFieldValue(
+                            `charges.${index}.charge_id`,
+                            chargeId,
+                          );
+                          form.setFieldValue(
+                            `charges.${index}.charge_name`,
+                            chargeName,
+                          );
+                          form.setFieldValue(`charges.${index}.tax_code`, "");
+                          if (chargeErrors[index]?.charge_name) {
+                            const newErrors = { ...chargeErrors };
+                            if (newErrors[index]) {
+                              delete newErrors[index].charge_name;
+                              if (Object.keys(newErrors[index]).length === 0) {
+                                delete newErrors[index];
                               }
-                              setChargeErrors(newErrors);
                             }
-                            // Fetch effective SAC (tax code) when charge and service_id are set
-                            if (chargeId != null && jobServiceId != null) {
-                              fetchGetEffectiveSac([
-                                {
-                                  charge_id: chargeId,
-                                  service_id: jobServiceId,
-                                },
-                              ]).then((data) => {
-                                // Since we're sending only one item, response will have one item at index 0
-                                const item = data[0];
-                                if (
-                                  item?.sac_code != null &&
-                                  item.sac_code !== ""
-                                ) {
-                                  form.setFieldValue(
-                                    `charges.${index}.tax_code`,
-                                    item.sac_code,
-                                  );
-                                }
-                              });
-                            }
-                          }}
-                          withAsterisk
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          error={chargeErrors[index]?.charge_name}
-                          minSearchLength={2}
-                          dropdownZIndex={1000}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-
-
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <Dropdown
-                          placeholder="Select Unit"
-                          searchable
-                          data={unitOptions}
-                          value={charge.unit_id || charge.unit_code || null}
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          onChange={(value) => {
-                            const v = value ?? "";
-                            form.setFieldValue(`charges.${index}.unit_id`, v);
-                            const opt = unitOptions.find((o) => o.value === v);
-                            form.setFieldValue(
-                              `charges.${index}.unit_code`,
-                              opt ? String(opt.label || opt.value) : v,
-                            );
-                          }}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-
-
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <Dropdown
-                          placeholder="Select Currency"
-                          withAsterisk
-                          searchable
-                          data={currencyOptions}
-                          value={charge.currency_id || charge.currency || null}
-                          readOnly={isReadOnly}
-                          // disabled={isReadOnly}
-                          onChange={(value) => {
-                            const v = value ?? "";
-                            form.setFieldValue(`charges.${index}.currency_id`, v);
-                            const opt = currencyOptions.find((o) => o.value === v);
-                            const code = opt ? (opt.label ?? opt.value) : v;
-                            form.setFieldValue(`charges.${index}.currency`, code);
-                            const newRoe = code ? getRoeValue(code) : null;
-                            if (newRoe !== null) {
-                              form.setFieldValue(`charges.${index}.roe`, newRoe);
-                            }
-                            const currentCharge = form.values.charges[index];
-                            const amt = currentCharge.amount;
-                            if (amt != null && amt > 0 && newRoe != null && newRoe > 0) {
-                              const local = clampAmount(amt * newRoe);
-                              if (local != null) form.setFieldValue(`charges.${index}.amount_in_local`, local);
-                              const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
-                              const chargeCurr = (code ?? "").trim().toUpperCase();
-                              const headerRoe = form.values.roe;
-                              if (local != null && billingCurr && chargeCurr) {
-                                const headerAmt = billingCurr === chargeCurr
+                            setChargeErrors(newErrors);
+                          }
+                          // Fetch effective SAC (tax code) when charge and service_id are set
+                          if (chargeId != null && jobServiceId != null) {
+                            fetchGetEffectiveSac([
+                              {
+                                charge_id: chargeId,
+                                service_id: jobServiceId,
+                              },
+                            ]).then((data) => {
+                              // Since we're sending only one item, response will have one item at index 0
+                              const item = data[0];
+                              if (
+                                item?.sac_code != null &&
+                                item.sac_code !== ""
+                              ) {
+                                form.setFieldValue(
+                                  `charges.${index}.tax_code`,
+                                  item.sac_code,
+                                );
+                              }
+                            });
+                          }
+                        }}
+                        withAsterisk
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        error={chargeErrors[index]?.charge_name}
+                        minSearchLength={2}
+                        dropdownZIndex={1000}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <Dropdown
+                        placeholder="Select Unit"
+                        searchable
+                        data={unitOptions}
+                        value={charge.unit_id || charge.unit_code || null}
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        onChange={(value) => {
+                          const v = value ?? "";
+                          form.setFieldValue(`charges.${index}.unit_id`, v);
+                          const opt = unitOptions.find((o) => o.value === v);
+                          form.setFieldValue(
+                            `charges.${index}.unit_code`,
+                            opt ? String(opt.label || opt.value) : v,
+                          );
+                        }}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <Dropdown
+                        placeholder="Select Currency"
+                        withAsterisk
+                        searchable
+                        data={currencyOptions}
+                        value={charge.currency_id || charge.currency || null}
+                        readOnly={isReadOnly}
+                        // disabled={isReadOnly}
+                        onChange={(value) => {
+                          const v = value ?? "";
+                          form.setFieldValue(`charges.${index}.currency_id`, v);
+                          const opt = currencyOptions.find(
+                            (o) => o.value === v,
+                          );
+                          const code = opt ? (opt.label ?? opt.value) : v;
+                          form.setFieldValue(`charges.${index}.currency`, code);
+                          const newRoe = code ? getRoeValue(code) : null;
+                          if (newRoe !== null) {
+                            form.setFieldValue(`charges.${index}.roe`, newRoe);
+                          }
+                          const currentCharge = form.values.charges[index];
+                          const amt = currentCharge.amount;
+                          if (
+                            amt != null &&
+                            amt > 0 &&
+                            newRoe != null &&
+                            newRoe > 0
+                          ) {
+                            const local = clampAmount(amt * newRoe);
+                            if (local != null)
+                              form.setFieldValue(
+                                `charges.${index}.amount_in_local`,
+                                local,
+                              );
+                            const billingCurr = (form.values.currency ?? "")
+                              .trim()
+                              .toUpperCase();
+                            const chargeCurr = (code ?? "")
+                              .trim()
+                              .toUpperCase();
+                            const headerRoe = form.values.roe;
+                            if (local != null && billingCurr && chargeCurr) {
+                              const headerAmt =
+                                billingCurr === chargeCurr
                                   ? local
                                   : headerRoe != null && headerRoe > 0
                                     ? clampAmount(local / headerRoe)
                                     : local;
-                                if (headerAmt != null) form.setFieldValue(`charges.${index}.header_amount`, headerAmt);
+                              if (headerAmt != null)
+                                form.setFieldValue(
+                                  `charges.${index}.header_amount`,
+                                  headerAmt,
+                                );
+                            }
+                          }
+                          // Clear error when field is updated
+                          if (chargeErrors[index]?.currency) {
+                            const newErrors = { ...chargeErrors };
+                            if (newErrors[index]) {
+                              delete newErrors[index].currency;
+                              if (Object.keys(newErrors[index]).length === 0) {
+                                delete newErrors[index];
                               }
                             }
-                            // Clear error when field is updated
-                            if (chargeErrors[index]?.currency) {
-                              const newErrors = { ...chargeErrors };
-                              if (newErrors[index]) {
-                                delete newErrors[index].currency;
-                                if (
-                                  Object.keys(newErrors[index]).length === 0
-                                ) {
-                                  delete newErrors[index];
-                                }
-                              }
-                              setChargeErrors(newErrors);
-                            }
-                          }}
-                          error={chargeErrors[index]?.currency}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
+                            setChargeErrors(newErrors);
+                          }
+                        }}
+                        error={chargeErrors[index]?.currency}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
 
-
-                         {/* <Group
+                      {/* <Group
                            gap={4}
                            align="center"
                            wrap="nowrap"
@@ -2796,554 +2993,659 @@ function InvoiceCreate() {
                             GST Rates
                           </Button>
                          </Group> */}
-                      </Grid.Col>
-                      <Grid.Col span={0.45}>
-                        <NumberInput
-                          placeholder="ROE"
-                          min={0}
-                          hideControls
-                          withAsterisk
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          value={charge.roe || undefined}
-                          onChange={(value) => {
-                            const roe = value as number | null;
-                            const currentCharge = form.values.charges[index];
-                            let amount = currentCharge.amount;
-                            let amountInLocal = currentCharge.amount_in_local;
-                            let headerAmt = currentCharge.header_amount;
+                    </Grid.Col>
+                    <Grid.Col span={0.45}>
+                      <NumberInput
+                        placeholder="ROE"
+                        min={0}
+                        hideControls
+                        withAsterisk
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        value={charge.roe || undefined}
+                        onChange={(value) => {
+                          const roe = value as number | null;
+                          const currentCharge = form.values.charges[index];
+                          let amount = currentCharge.amount;
+                          let amountInLocal = currentCharge.amount_in_local;
+                          let headerAmt = currentCharge.header_amount;
 
-                            // Auto-calculate amount = amount_per_unit * no_of_unit
-                            if (
-                              currentCharge.amount_per_unit != null &&
-                              currentCharge.amount_per_unit > 0 &&
-                              currentCharge.no_of_unit != null &&
-                              currentCharge.no_of_unit > 0
-                            ) {
-                              amount = clampAmount(currentCharge.no_of_unit * currentCharge.amount_per_unit);
-                            }
-                            // Auto-calculate Local Amount = amount * roe, and header amount (same as local when billing === charge currency)
-                            if (amount != null && amount > 0 && roe != null && roe > 0) {
-                              amountInLocal = clampAmount(amount * roe);
-                              const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
-                              const chargeCurr = (currentCharge.currency ?? "").trim().toUpperCase();
-                              const headerRoe = form.values.roe;
-                              headerAmt =
-                                billingCurr === chargeCurr && amountInLocal != null
-                                  ? amountInLocal
-                                  : headerRoe != null && headerRoe > 0 && amountInLocal != null
-                                    ? clampAmount(amountInLocal / headerRoe)
-                                    : amountInLocal;
-                            }
-
-                            const updatedCharges = form.values.charges.map((c, i) =>
-                              i !== index
-                                ? c
-                                : { ...c, roe, amount, amount_in_local: amountInLocal, header_amount: headerAmt },
+                          // Auto-calculate amount = amount_per_unit * no_of_unit
+                          if (
+                            currentCharge.amount_per_unit != null &&
+                            currentCharge.amount_per_unit > 0 &&
+                            currentCharge.no_of_unit != null &&
+                            currentCharge.no_of_unit > 0
+                          ) {
+                            amount = clampAmount(
+                              currentCharge.no_of_unit *
+                                currentCharge.amount_per_unit,
                             );
-                            form.setFieldValue("charges", updatedCharges);
-
-                            if (chargeErrors[index]?.roe) {
-                              const newErrors = { ...chargeErrors };
-                              if (newErrors[index]) {
-                                delete newErrors[index].roe;
-                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
-                              }
-                              setChargeErrors(newErrors);
-                            }
-                          }}
-                          error={chargeErrors[index]?.roe}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={0.65}>
-                        <NumberInput
-                          placeholder="No of Unit"
-                          min={0}
-                          hideControls
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          value={charge.no_of_unit || undefined}
-                          onChange={(value) => {
-                            const noOfUnit = value as number | null;
-                            const currentCharge = form.values.charges[index];
-                            let amount = currentCharge.amount;
-                            let amountInLocal = currentCharge.amount_in_local;
-                            let headerAmt = currentCharge.header_amount;
-
-                            if (
-                              currentCharge.amount_per_unit != null &&
-                              currentCharge.amount_per_unit > 0 &&
-                              noOfUnit != null &&
-                              noOfUnit > 0
-                            ) {
-                              amount = clampAmount(noOfUnit * currentCharge.amount_per_unit);
-                              const roeVal = currentCharge.roe;
-                              if (amount != null && amount > 0 && roeVal != null && roeVal > 0) {
-                                amountInLocal = clampAmount(amount * roeVal);
-                                const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
-                                const chargeCurr = (currentCharge.currency ?? "").trim().toUpperCase();
-                                const headerRoe = form.values.roe;
-                                headerAmt =
-                                  billingCurr === chargeCurr && amountInLocal != null
-                                    ? amountInLocal
-                                    : headerRoe != null && headerRoe > 0 && amountInLocal != null
-                                      ? clampAmount(amountInLocal / headerRoe)
-                                      : amountInLocal;
-                              }
-                            }
-
-                            const updatedCharges = form.values.charges.map((c, i) =>
-                              i !== index
-                                ? c
-                                : { ...c, no_of_unit: noOfUnit, amount, amount_in_local: amountInLocal, header_amount: headerAmt },
-                            );
-                            form.setFieldValue("charges", updatedCharges);
-                          }}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <NumberInput
-                          placeholder="Per Unit"
-                          min={0}
-                          decimalScale={2}
-                          hideControls
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          value={charge.amount_per_unit || undefined}
-                          onChange={(value) => {
-                            const amountPerUnit = clampAmount(value as number | null);
-                            const currentCharge = form.values.charges[index];
-                            let amount = currentCharge.amount;
-                            let amountInLocal = currentCharge.amount_in_local;
-                            let headerAmt = currentCharge.header_amount;
-
-                            if (
-                              amountPerUnit != null &&
-                              amountPerUnit > 0 &&
-                              currentCharge.no_of_unit != null &&
-                              currentCharge.no_of_unit > 0
-                            ) {
-                              amount = clampAmount(currentCharge.no_of_unit * amountPerUnit);
-                              const roeVal = currentCharge.roe;
-                              if (amount != null && amount > 0 && roeVal != null && roeVal > 0) {
-                                amountInLocal = clampAmount(amount * roeVal);
-                                const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
-                                const chargeCurr = (currentCharge.currency ?? "").trim().toUpperCase();
-                                const headerRoe = form.values.roe;
-                                headerAmt =
-                                  billingCurr === chargeCurr && amountInLocal != null
-                                    ? amountInLocal
-                                    : headerRoe != null && headerRoe > 0 && amountInLocal != null
-                                      ? clampAmount(amountInLocal / headerRoe)
-                                      : amountInLocal;
-                              }
-                            }
-
-                            const updatedCharges = form.values.charges.map((c, i) =>
-                              i !== index
-                                ? c
-                                : { ...c, amount_per_unit: amountPerUnit, amount, amount_in_local: amountInLocal, header_amount: headerAmt },
-                            );
-                            form.setFieldValue("charges", updatedCharges);
-                          }}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <NumberInput
-                          placeholder="Currency Amount"
-                          min={0}
-                          decimalScale={2}
-                          hideControls
-                          withAsterisk
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          value={charge.amount || undefined}
-                          onChange={(value) => {
-                            const currencyAmount = clampAmount(value as number | null);
-                            const currentCharge = form.values.charges[index];
-                            let amountInLocal = currentCharge.amount_in_local;
-                            let headerAmt = currentCharge.header_amount;
-
-                            if (
-                              currencyAmount != null &&
-                              currencyAmount > 0 &&
-                              currentCharge.roe != null &&
-                              currentCharge.roe > 0
-                            ) {
-                              amountInLocal = clampAmount(currencyAmount * currentCharge.roe);
-                              const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
-                              const chargeCurr = (currentCharge.currency ?? "").trim().toUpperCase();
-                              const headerRoe = form.values.roe;
-                              headerAmt =
-                                billingCurr === chargeCurr && amountInLocal != null
-                                  ? amountInLocal
-                                  : headerRoe != null && headerRoe > 0 && amountInLocal != null
-                                    ? clampAmount(amountInLocal / headerRoe)
-                                    : amountInLocal;
-                            }
-
-                            const updatedCharges = form.values.charges.map((c, i) =>
-                              i !== index
-                                ? c
-                                : { ...c, amount: currencyAmount, amount_in_local: amountInLocal, header_amount: headerAmt },
-                            );
-                            form.setFieldValue("charges", updatedCharges);
-
-                            if (chargeErrors[index]?.amount) {
-                              const newErrors = { ...chargeErrors };
-                              if (newErrors[index]) {
-                                delete newErrors[index].amount;
-                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
-                              }
-                              setChargeErrors(newErrors);
-                            }
-                          }}
-                          error={chargeErrors[index]?.amount}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <NumberInput
-                          placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}`}
-                          min={0}
-                          decimalScale={2}
-                          hideControls
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          value={charge.header_amount || undefined}
-                          onChange={(value) => {
-                            form.setFieldValue(
-                              `charges.${index}.header_amount`,
-                              clampAmount(value as number | null),
-                            );
-                          }}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={0.8}>
-                        <NumberInput
-                          placeholder="Local Amount"
-                          min={0}
-                          decimalScale={2}
-                          hideControls
-                          withAsterisk
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          value={charge.amount_in_local || undefined}
-                          onChange={(value) => {
-                            const clampedLocal = clampAmount(value as number | null);
-                            const billingCurr = (form.values.currency ?? "").trim().toUpperCase();
-                            const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
-                            const sameCurrency = billingCurr === chargeCurr && billingCurr !== "";
-                            // Single atomic update: set amount_in_local and header_amount together when same currency
-                            const currentCharges = form.values.charges;
-                            const updatedCharges = currentCharges.map((c, i) => {
-                              if (i !== index) return c;
-                              return {
-                                ...c,
-                                amount_in_local: clampedLocal,
-                                header_amount: sameCurrency && clampedLocal != null ? clampedLocal : c.header_amount,
-                              };
-                            });
-                            form.setFieldValue("charges", updatedCharges);
-                          }}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={0.8}>
-                        <TextInput
-                          placeholder="SAC Code"
-                          withAsterisk
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          value={charge.tax_code}
-                          rightSection={
-                            gstRatesLoadingByIndex[index] &&
-                            (!charge.tax_code || charge.tax_code.trim() === "") ? (
-                              <Loader size="xs" color="#105476" />
-                            ) : null
                           }
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={0.55}>
-                        <Dropdown
-                          placeholder="Dr/Cr"
-                          data={[
-                            { value: "Cr", label: "Cr" },
-                            { value: "Dr", label: "Dr" },
-                          ]}
-                          value={charge.dr_cr ?? "Cr"}
-                          // disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          onChange={(value) =>
-                            form.setFieldValue(
-                              `charges.${index}.dr_cr`,
-                              (value === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
-                            )
+                          // Auto-calculate Local Amount = amount * roe, and header amount (same as local when billing === charge currency)
+                          if (
+                            amount != null &&
+                            amount > 0 &&
+                            roe != null &&
+                            roe > 0
+                          ) {
+                            amountInLocal = clampAmount(amount * roe);
+                            const billingCurr = (form.values.currency ?? "")
+                              .trim()
+                              .toUpperCase();
+                            const chargeCurr = (currentCharge.currency ?? "")
+                              .trim()
+                              .toUpperCase();
+                            const headerRoe = form.values.roe;
+                            headerAmt =
+                              billingCurr === chargeCurr &&
+                              amountInLocal != null
+                                ? amountInLocal
+                                : headerRoe != null &&
+                                    headerRoe > 0 &&
+                                    amountInLocal != null
+                                  ? clampAmount(amountInLocal / headerRoe)
+                                  : amountInLocal;
                           }
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
-                   {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
-                   {headerSameState === true && (
-                      <Grid.Col span={0.55}>
-                      {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
-                          <TextInput
-                            placeholder="CGST"
-                            value={
-                              (() => {
-                                const rate = gstRatesByChargeIndex[index]?.cgst;
-                                const localAmount = charge.amount_in_local;
-                                if (rate == null || localAmount == null) return "";
-                                const amount = clampAmount((localAmount * rate) / 100);
-                                return amount != null ? String(amount) : "";
-                              })()
-                            }
-                            readOnly
-                            // disabled
-                            rightSection={
-                              (() => {
-                                const rate = gstRatesByChargeIndex[index]?.cgst;
-                                const localAmount = charge.amount_in_local;
-                                const amount =
-                                  rate == null || localAmount == null
-                                    ? null
-                                    : clampAmount((localAmount * rate) / 100);
-                                const display = amount != null ? String(amount) : "";
-                                return gstRatesLoadingByIndex[index] && display === "" ? (
-                                  <Loader size="xs" color="#105476" />
-                                ) : null;
-                              })()
-                            }
-                            styles={{
-                              root: { flex: "0 0 88px" },
-                              input: {
-                                fontSize: "11px",
-                                fontFamily: "Inter",
-                                height: "28px",
-                              },
-                            }}
-                          />
-                         {/* )} */}
-                      </Grid.Col>
-                   )}
-                   {headerSameState === true && (
-                      <Grid.Col span={0.55}>
-                      {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
-                            <TextInput
-                              placeholder="SGST"
-                              value={
-                                (() => {
-                                  const rate = gstRatesByChargeIndex[index]?.sgst;
-                                  const localAmount = charge.amount_in_local;
-                                  if (rate == null || localAmount == null) return "";
-                                  const amount = clampAmount((localAmount * rate) / 100);
-                                  return amount != null ? String(amount) : "";
-                                })()
-                              }
-                              // disabled
-                              readOnly
-                              rightSection={
-                                (() => {
-                                  const rate = gstRatesByChargeIndex[index]?.sgst;
-                                  const localAmount = charge.amount_in_local;
-                                  const amount =
-                                    rate == null || localAmount == null
-                                      ? null
-                                      : clampAmount((localAmount * rate) / 100);
-                                  const display = amount != null ? String(amount) : "";
-                                  return gstRatesLoadingByIndex[index] && display === "" ? (
-                                    <Loader size="xs" color="#105476" />
-                                  ) : null;
-                                })()
-                              }
-                              styles={{
-                                root: { flex: "0 0 88px" },
-                                input: {
-                                  fontSize: "11px",
-                                  fontFamily: "Inter",
-                                  height: "28px",
-                                },
-                              }}
-                            />
 
-                          {/* )} */}
-                       </Grid.Col>
-                       )}
-                       {headerSameState === false && (
-                       <Grid.Col span={0.55}>
-                       {/* {gstRatesByChargeIndex[index]?.same_state === false && ( */}
-                          <TextInput
-                            placeholder="IGST"
-                            value={
-                              (() => {
-                                const rate = gstRatesByChargeIndex[index]?.igst;
-                                const localAmount = charge.amount_in_local;
-                                if (rate == null || localAmount == null) return "";
-                                const amount = clampAmount((localAmount * rate) / 100);
-                                return amount != null ? String(amount) : "";
-                              })()
-                            }
-                            readOnly
-                            rightSection={
-                              (() => {
-                                const rate = gstRatesByChargeIndex[index]?.igst;
-                                const localAmount = charge.amount_in_local;
-                                const amount =
-                                  rate == null || localAmount == null
-                                    ? null
-                                    : clampAmount((localAmount * rate) / 100);
-                                const display = amount != null ? String(amount) : "";
-                                return gstRatesLoadingByIndex[index] && display === "" ? (
-                                  <Loader size="xs" color="#105476" />
-                                ) : null;
-                              })()
-                            }
-                            styles={{
-                              root: { flex: "0 0 88px" },
-                              input: {
-                                fontSize: "11px",
-                                fontFamily: "Inter",
-                                height: "28px",
-                              },
-                            }}
-                          />
-                          {/* )} */}
-                       </Grid.Col>
-                       )}
-                      <Grid.Col span={0.5}>
-                        {!isReadOnly && (
-                          <Group gap="xs">
-                            {form.values.charges.length > 1 && (
-                              <Button
-                                variant="light"
-                                color="red"
-                                size="sm"
-                                px={12}
-                                onClick={() => {
-                                  setGstRatesByChargeIndex((prev) => {
-                                    const next: Record<number, GstRates | null> = {};
-                                    Object.entries(prev).forEach(([key, value]) => {
-                                      const idx = Number(key);
-                                      if (Number.isNaN(idx) || idx === index) return;
-                                      next[idx > index ? idx - 1 : idx] = value;
-                                    });
-                                    return next;
-                                  });
-                                  setGstRatesLoadingByIndex((prev) => {
-                                    const next: Record<number, boolean> = {};
-                                    Object.entries(prev).forEach(([key, value]) => {
-                                      const idx = Number(key);
-                                      if (Number.isNaN(idx) || idx === index) return;
-                                      next[idx > index ? idx - 1 : idx] = value;
-                                    });
-                                    return next;
-                                  });
-                                  form.removeListItem("charges", index);
-                                }}
-                              >
-                                <IconTrash size={16} />
-                              </Button>
-                            )}
-                            {form.values.charges.length - 1 === index && (
-                              <Button
-                                radius="sm"
-                                px={12}
-                                size="sm"
-                                variant="light"
-                                color="#105476"
-                                onClick={() => {
-                                  // New charge currency = local currency (active branch) from store, not billing currency
-                                  const newChargeCurrency = defaultBranchCurrency || "";
-                                  const roe = newChargeCurrency
-                                    ? getRoeValue(newChargeCurrency)
-                                    : null;
-                                  const newChargeCurrencyId =
-                                    defaultBranchCurrencyId ||
-                                    (currencyOptions.find(
-                                      (o) =>
-                                        (o.label || "").toUpperCase() ===
-                                        (newChargeCurrency || "").toUpperCase(),
-                                    )?.value ?? "");
-                                  form.insertListItem("charges", {
-                                    charge_id: null,
-                                    charge_name: "",
-                                    unit_code: "",
-                                    unit_id: "",
-                                    no_of_unit: null,
-                                    currency: newChargeCurrency,
-                                    currency_id: newChargeCurrencyId,
-                                    billing_currency: null,
+                          const updatedCharges = form.values.charges.map(
+                            (c, i) =>
+                              i !== index
+                                ? c
+                                : {
+                                    ...c,
                                     roe,
-                                    amount_per_unit: null,
-                                    amount: null,
-                                    header_amount: null,
-                                    amount_in_local: null,
-                                    tax_code: "",
-                                    dr_cr: "Cr",
-                                  });
-                                }}
-                              >
-                                <IconPlus size={16} />
-                              </Button>
-                            )}
-                          </Group>
-                        )}
+                                    amount,
+                                    amount_in_local: amountInLocal,
+                                    header_amount: headerAmt,
+                                  },
+                          );
+                          form.setFieldValue("charges", updatedCharges);
+
+                          if (chargeErrors[index]?.roe) {
+                            const newErrors = { ...chargeErrors };
+                            if (newErrors[index]) {
+                              delete newErrors[index].roe;
+                              if (Object.keys(newErrors[index]).length === 0)
+                                delete newErrors[index];
+                            }
+                            setChargeErrors(newErrors);
+                          }
+                        }}
+                        error={chargeErrors[index]?.roe}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={0.65}>
+                      <NumberInput
+                        placeholder="No of Unit"
+                        min={0}
+                        hideControls
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        value={charge.no_of_unit || undefined}
+                        onChange={(value) => {
+                          const noOfUnit = value as number | null;
+                          const currentCharge = form.values.charges[index];
+                          let amount = currentCharge.amount;
+                          let amountInLocal = currentCharge.amount_in_local;
+                          let headerAmt = currentCharge.header_amount;
+
+                          if (
+                            currentCharge.amount_per_unit != null &&
+                            currentCharge.amount_per_unit > 0 &&
+                            noOfUnit != null &&
+                            noOfUnit > 0
+                          ) {
+                            amount = clampAmount(
+                              noOfUnit * currentCharge.amount_per_unit,
+                            );
+                            const roeVal = currentCharge.roe;
+                            if (
+                              amount != null &&
+                              amount > 0 &&
+                              roeVal != null &&
+                              roeVal > 0
+                            ) {
+                              amountInLocal = clampAmount(amount * roeVal);
+                              const billingCurr = (form.values.currency ?? "")
+                                .trim()
+                                .toUpperCase();
+                              const chargeCurr = (currentCharge.currency ?? "")
+                                .trim()
+                                .toUpperCase();
+                              const headerRoe = form.values.roe;
+                              headerAmt =
+                                billingCurr === chargeCurr &&
+                                amountInLocal != null
+                                  ? amountInLocal
+                                  : headerRoe != null &&
+                                      headerRoe > 0 &&
+                                      amountInLocal != null
+                                    ? clampAmount(amountInLocal / headerRoe)
+                                    : amountInLocal;
+                            }
+                          }
+
+                          const updatedCharges = form.values.charges.map(
+                            (c, i) =>
+                              i !== index
+                                ? c
+                                : {
+                                    ...c,
+                                    no_of_unit: noOfUnit,
+                                    amount,
+                                    amount_in_local: amountInLocal,
+                                    header_amount: headerAmt,
+                                  },
+                          );
+                          form.setFieldValue("charges", updatedCharges);
+                        }}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <NumberInput
+                        placeholder="Per Unit"
+                        min={0}
+                        decimalScale={2}
+                        hideControls
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        value={charge.amount_per_unit || undefined}
+                        onChange={(value) => {
+                          const amountPerUnit = clampAmount(
+                            value as number | null,
+                          );
+                          const currentCharge = form.values.charges[index];
+                          let amount = currentCharge.amount;
+                          let amountInLocal = currentCharge.amount_in_local;
+                          let headerAmt = currentCharge.header_amount;
+
+                          if (
+                            amountPerUnit != null &&
+                            amountPerUnit > 0 &&
+                            currentCharge.no_of_unit != null &&
+                            currentCharge.no_of_unit > 0
+                          ) {
+                            amount = clampAmount(
+                              currentCharge.no_of_unit * amountPerUnit,
+                            );
+                            const roeVal = currentCharge.roe;
+                            if (
+                              amount != null &&
+                              amount > 0 &&
+                              roeVal != null &&
+                              roeVal > 0
+                            ) {
+                              amountInLocal = clampAmount(amount * roeVal);
+                              const billingCurr = (form.values.currency ?? "")
+                                .trim()
+                                .toUpperCase();
+                              const chargeCurr = (currentCharge.currency ?? "")
+                                .trim()
+                                .toUpperCase();
+                              const headerRoe = form.values.roe;
+                              headerAmt =
+                                billingCurr === chargeCurr &&
+                                amountInLocal != null
+                                  ? amountInLocal
+                                  : headerRoe != null &&
+                                      headerRoe > 0 &&
+                                      amountInLocal != null
+                                    ? clampAmount(amountInLocal / headerRoe)
+                                    : amountInLocal;
+                            }
+                          }
+
+                          const updatedCharges = form.values.charges.map(
+                            (c, i) =>
+                              i !== index
+                                ? c
+                                : {
+                                    ...c,
+                                    amount_per_unit: amountPerUnit,
+                                    amount,
+                                    amount_in_local: amountInLocal,
+                                    header_amount: headerAmt,
+                                  },
+                          );
+                          form.setFieldValue("charges", updatedCharges);
+                        }}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <NumberInput
+                        placeholder="Currency Amount"
+                        min={0}
+                        decimalScale={2}
+                        hideControls
+                        withAsterisk
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        value={charge.amount || undefined}
+                        onChange={(value) => {
+                          const currencyAmount = clampAmount(
+                            value as number | null,
+                          );
+                          const currentCharge = form.values.charges[index];
+                          let amountInLocal = currentCharge.amount_in_local;
+                          let headerAmt = currentCharge.header_amount;
+
+                          if (
+                            currencyAmount != null &&
+                            currencyAmount > 0 &&
+                            currentCharge.roe != null &&
+                            currentCharge.roe > 0
+                          ) {
+                            amountInLocal = clampAmount(
+                              currencyAmount * currentCharge.roe,
+                            );
+                            const billingCurr = (form.values.currency ?? "")
+                              .trim()
+                              .toUpperCase();
+                            const chargeCurr = (currentCharge.currency ?? "")
+                              .trim()
+                              .toUpperCase();
+                            const headerRoe = form.values.roe;
+                            headerAmt =
+                              billingCurr === chargeCurr &&
+                              amountInLocal != null
+                                ? amountInLocal
+                                : headerRoe != null &&
+                                    headerRoe > 0 &&
+                                    amountInLocal != null
+                                  ? clampAmount(amountInLocal / headerRoe)
+                                  : amountInLocal;
+                          }
+
+                          const updatedCharges = form.values.charges.map(
+                            (c, i) =>
+                              i !== index
+                                ? c
+                                : {
+                                    ...c,
+                                    amount: currencyAmount,
+                                    amount_in_local: amountInLocal,
+                                    header_amount: headerAmt,
+                                  },
+                          );
+                          form.setFieldValue("charges", updatedCharges);
+
+                          if (chargeErrors[index]?.amount) {
+                            const newErrors = { ...chargeErrors };
+                            if (newErrors[index]) {
+                              delete newErrors[index].amount;
+                              if (Object.keys(newErrors[index]).length === 0)
+                                delete newErrors[index];
+                            }
+                            setChargeErrors(newErrors);
+                          }
+                        }}
+                        error={chargeErrors[index]?.amount}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <NumberInput
+                        placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}`}
+                        min={0}
+                        decimalScale={2}
+                        hideControls
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        value={charge.header_amount || undefined}
+                        onChange={(value) => {
+                          form.setFieldValue(
+                            `charges.${index}.header_amount`,
+                            clampAmount(value as number | null),
+                          );
+                        }}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={0.8}>
+                      <NumberInput
+                        placeholder="Local Amount"
+                        min={0}
+                        decimalScale={2}
+                        hideControls
+                        withAsterisk
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        value={charge.amount_in_local || undefined}
+                        onChange={(value) => {
+                          const clampedLocal = clampAmount(
+                            value as number | null,
+                          );
+                          const billingCurr = (form.values.currency ?? "")
+                            .trim()
+                            .toUpperCase();
+                          const chargeCurr = (charge.currency ?? "")
+                            .trim()
+                            .toUpperCase();
+                          const sameCurrency =
+                            billingCurr === chargeCurr && billingCurr !== "";
+                          // Single atomic update: set amount_in_local and header_amount together when same currency
+                          const currentCharges = form.values.charges;
+                          const updatedCharges = currentCharges.map((c, i) => {
+                            if (i !== index) return c;
+                            return {
+                              ...c,
+                              amount_in_local: clampedLocal,
+                              header_amount:
+                                sameCurrency && clampedLocal != null
+                                  ? clampedLocal
+                                  : c.header_amount,
+                            };
+                          });
+                          form.setFieldValue("charges", updatedCharges);
+                        }}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={0.8}>
+                      <TextInput
+                        placeholder="SAC Code"
+                        withAsterisk
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        value={charge.tax_code}
+                        rightSection={
+                          gstRatesLoadingByIndex[index] &&
+                          (!charge.tax_code ||
+                            charge.tax_code.trim() === "") ? (
+                            <Loader size="xs" color="#105476" />
+                          ) : null
+                        }
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={0.55}>
+                      <Dropdown
+                        placeholder="Dr/Cr"
+                        data={[
+                          { value: "Cr", label: "Cr" },
+                          { value: "Dr", label: "Dr" },
+                        ]}
+                        value={charge.dr_cr ?? "Cr"}
+                        // disabled={isReadOnly}
+                        readOnly={isReadOnly}
+                        onChange={(value) =>
+                          form.setFieldValue(
+                            `charges.${index}.dr_cr`,
+                            (value === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
+                          )
+                        }
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
+                    {headerSameState === true && (
+                      <Grid.Col span={0.55}>
+                        {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
+                        <TextInput
+                          placeholder="CGST"
+                          value={(() => {
+                            const rate = gstRatesByChargeIndex[index]?.cgst;
+                            const localAmount = charge.amount_in_local;
+                            if (rate == null || localAmount == null) return "";
+                            const amount = clampAmount(
+                              (localAmount * rate) / 100,
+                            );
+                            return amount != null ? String(amount) : "";
+                          })()}
+                          readOnly
+                          // disabled
+                          rightSection={(() => {
+                            const rate = gstRatesByChargeIndex[index]?.cgst;
+                            const localAmount = charge.amount_in_local;
+                            const amount =
+                              rate == null || localAmount == null
+                                ? null
+                                : clampAmount((localAmount * rate) / 100);
+                            const display =
+                              amount != null ? String(amount) : "";
+                            return gstRatesLoadingByIndex[index] &&
+                              display === "" ? (
+                              <Loader size="xs" color="#105476" />
+                            ) : null;
+                          })()}
+                          styles={{
+                            root: { flex: "0 0 88px" },
+                            input: {
+                              fontSize: "11px",
+                              fontFamily: "Inter",
+                              height: "28px",
+                            },
+                          }}
+                        />
+                        {/* )} */}
                       </Grid.Col>
-                    </Grid>
-                  ))}
+                    )}
+                    {headerSameState === true && (
+                      <Grid.Col span={0.55}>
+                        {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
+                        <TextInput
+                          placeholder="SGST"
+                          value={(() => {
+                            const rate = gstRatesByChargeIndex[index]?.sgst;
+                            const localAmount = charge.amount_in_local;
+                            if (rate == null || localAmount == null) return "";
+                            const amount = clampAmount(
+                              (localAmount * rate) / 100,
+                            );
+                            return amount != null ? String(amount) : "";
+                          })()}
+                          // disabled
+                          readOnly
+                          rightSection={(() => {
+                            const rate = gstRatesByChargeIndex[index]?.sgst;
+                            const localAmount = charge.amount_in_local;
+                            const amount =
+                              rate == null || localAmount == null
+                                ? null
+                                : clampAmount((localAmount * rate) / 100);
+                            const display =
+                              amount != null ? String(amount) : "";
+                            return gstRatesLoadingByIndex[index] &&
+                              display === "" ? (
+                              <Loader size="xs" color="#105476" />
+                            ) : null;
+                          })()}
+                          styles={{
+                            root: { flex: "0 0 88px" },
+                            input: {
+                              fontSize: "11px",
+                              fontFamily: "Inter",
+                              height: "28px",
+                            },
+                          }}
+                        />
+
+                        {/* )} */}
+                      </Grid.Col>
+                    )}
+                    {headerSameState === false && (
+                      <Grid.Col span={0.55}>
+                        {/* {gstRatesByChargeIndex[index]?.same_state === false && ( */}
+                        <TextInput
+                          placeholder="IGST"
+                          value={(() => {
+                            const rate = gstRatesByChargeIndex[index]?.igst;
+                            const localAmount = charge.amount_in_local;
+                            if (rate == null || localAmount == null) return "";
+                            const amount = clampAmount(
+                              (localAmount * rate) / 100,
+                            );
+                            return amount != null ? String(amount) : "";
+                          })()}
+                          readOnly
+                          rightSection={(() => {
+                            const rate = gstRatesByChargeIndex[index]?.igst;
+                            const localAmount = charge.amount_in_local;
+                            const amount =
+                              rate == null || localAmount == null
+                                ? null
+                                : clampAmount((localAmount * rate) / 100);
+                            const display =
+                              amount != null ? String(amount) : "";
+                            return gstRatesLoadingByIndex[index] &&
+                              display === "" ? (
+                              <Loader size="xs" color="#105476" />
+                            ) : null;
+                          })()}
+                          styles={{
+                            root: { flex: "0 0 88px" },
+                            input: {
+                              fontSize: "11px",
+                              fontFamily: "Inter",
+                              height: "28px",
+                            },
+                          }}
+                        />
+                        {/* )} */}
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={0.5}>
+                      {!isReadOnly && (
+                        <Group gap="xs">
+                          {form.values.charges.length > 1 && (
+                            <Button
+                              variant="light"
+                              color="red"
+                              size="sm"
+                              px={12}
+                              onClick={() => {
+                                setGstRatesByChargeIndex((prev) => {
+                                  const next: Record<number, GstRates | null> =
+                                    {};
+                                  Object.entries(prev).forEach(
+                                    ([key, value]) => {
+                                      const idx = Number(key);
+                                      if (Number.isNaN(idx) || idx === index)
+                                        return;
+                                      next[idx > index ? idx - 1 : idx] = value;
+                                    },
+                                  );
+                                  return next;
+                                });
+                                setGstRatesLoadingByIndex((prev) => {
+                                  const next: Record<number, boolean> = {};
+                                  Object.entries(prev).forEach(
+                                    ([key, value]) => {
+                                      const idx = Number(key);
+                                      if (Number.isNaN(idx) || idx === index)
+                                        return;
+                                      next[idx > index ? idx - 1 : idx] = value;
+                                    },
+                                  );
+                                  return next;
+                                });
+                                form.removeListItem("charges", index);
+                              }}
+                            >
+                              <IconTrash size={16} />
+                            </Button>
+                          )}
+                          {form.values.charges.length - 1 === index && (
+                            <Button
+                              radius="sm"
+                              px={12}
+                              size="sm"
+                              variant="light"
+                              color="#105476"
+                              onClick={() => {
+                                // New charge currency = local currency (active branch) from store, not billing currency
+                                const newChargeCurrency =
+                                  defaultBranchCurrency || "";
+                                const roe = newChargeCurrency
+                                  ? getRoeValue(newChargeCurrency)
+                                  : null;
+                                const newChargeCurrencyId =
+                                  defaultBranchCurrencyId ||
+                                  (currencyOptions.find(
+                                    (o) =>
+                                      (o.label || "").toUpperCase() ===
+                                      (newChargeCurrency || "").toUpperCase(),
+                                  )?.value ??
+                                    "");
+                                form.insertListItem("charges", {
+                                  charge_id: null,
+                                  charge_name: "",
+                                  unit_code: "",
+                                  unit_id: "",
+                                  no_of_unit: null,
+                                  currency: newChargeCurrency,
+                                  currency_id: newChargeCurrencyId,
+                                  billing_currency: null,
+                                  roe,
+                                  amount_per_unit: null,
+                                  amount: null,
+                                  header_amount: null,
+                                  amount_in_local: null,
+                                  tax_code: "",
+                                  dr_cr: "Cr",
+                                });
+                              }}
+                            >
+                              <IconPlus size={16} />
+                            </Button>
+                          )}
+                        </Group>
+                      )}
+                    </Grid.Col>
+                  </Grid>
+                ))}
                 {/* </Box> */}
 
                 {/* Totals Section */}
@@ -3364,7 +3666,10 @@ function InvoiceCreate() {
                         </Text>
                         <Text size="lg" fw={600} c="#105476">
                           {form.values.charges
-                            .reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0)
+                            .reduce(
+                              (sum, c) => sum + (c.amount_in_local ?? 0),
+                              0,
+                            )
                             .toFixed(2)}
                         </Text>
                       </Box>
@@ -3379,8 +3684,11 @@ function InvoiceCreate() {
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.igst;
                               const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null) return sum;
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return sum;
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return sum + (amount ?? 0);
                             }, 0)
                             .toFixed(2)}
@@ -3397,8 +3705,11 @@ function InvoiceCreate() {
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.cgst;
                               const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null) return sum;
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return sum;
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return sum + (amount ?? 0);
                             }, 0)
                             .toFixed(2)}
@@ -3415,8 +3726,11 @@ function InvoiceCreate() {
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.sgst;
                               const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null) return sum;
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return sum;
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return sum + (amount ?? 0);
                             }, 0)
                             .toFixed(2)}
@@ -3481,26 +3795,28 @@ function InvoiceCreate() {
                             </Table.Tr>
                           </Table.Thead>
                           <Table.Tbody>
-                            {(gstBreakup.sac_wise_totals ?? []).map((row, idx) => (
-                              <Table.Tr key={idx}>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.sac_code ?? "—"}
-                                </Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.charge_name ?? "—"}
-                                </Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.rate != null && row.rate_type != null
-                                    ? `${row.rate}${row.rate_type}`
-                                    : "—"}
-                                </Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.total_amount != null
-                                    ? Number(row.total_amount)
-                                    : "—"}
-                                </Table.Td>
-                              </Table.Tr>
-                            ))}
+                            {(gstBreakup.sac_wise_totals ?? []).map(
+                              (row, idx) => (
+                                <Table.Tr key={idx}>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.sac_code ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.charge_name ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.rate != null && row.rate_type != null
+                                      ? `${row.rate}${row.rate_type}`
+                                      : "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.total_amount != null
+                                      ? Number(row.total_amount)
+                                      : "—"}
+                                  </Table.Td>
+                                </Table.Tr>
+                              ),
+                            )}
                           </Table.Tbody>
                           <Table.Tfoot>
                             <Table.Tr>
@@ -3533,7 +3849,7 @@ function InvoiceCreate() {
                   {chargesTabActive === "tax" &&
                     saveResponse &&
                     // (!saveResponse.id || saveResponse.customer_id == null) && (
-                      (!saveResponse.id) && (
+                    !saveResponse.id && (
                       <Text size="sm" c="dimmed" py="md">
                         Save the invoice to load GST breakup (customer_id from
                         response is required).
