@@ -178,6 +178,7 @@ function EnquiryMaster() {
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
   const [listTotalRecords, setListTotalRecords] = useState(0);
+  const [cancellingEnquiryId, setCancellingEnquiryId] = useState<number | null>(null);
 
   // Detailed view pagination (completely separate)
   const [previewCurrentPage, setPreviewCurrentPage] = useState(1);
@@ -1174,8 +1175,9 @@ function EnquiryMaster() {
   };
 
   const handleCancelEnquiry = async (enquiry: number) => {
+    const enquiryData = enquiry as any;
+    setCancellingEnquiryId(enquiryData.id ?? null);
     try {
-      const enquiryData = enquiry as any;
 
       // Build service payload to match edit flow (getEnquiryPayload in EnquiryCreate)
       const mapService = (service: any) => {
@@ -1367,6 +1369,8 @@ function EnquiryMaster() {
         type: "error",
         message: `Error while cancelling enquiry: ${err?.message || "Unknown error"}`,
       });
+    } finally {
+      setCancellingEnquiryId(null);
     }
   };
 
@@ -2653,14 +2657,18 @@ function EnquiryMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() => {
-                      // setMenuOpened(false);
                       handleCancelEnquiry(row.original);
                     }}
+                    disabled={cancellingEnquiryId === (row.original as { id?: number })?.id}
                   >
                     <Group gap={"sm"}>
-                      <IconX size={16} style={{ color: "red" }} />
+                      {cancellingEnquiryId === (row.original as { id?: number })?.id ? (
+                        <Loader size={16} color="red" />
+                      ) : (
+                        <IconX size={16} style={{ color: "red" }} />
+                      )}
                       <Text size="sm" c="red">
-                        Cancel
+                        {cancellingEnquiryId === (row.original as { id?: number })?.id ? "Cancelling..." : "Cancel"}
                       </Text>
                     </Group>
                   </UnstyledButton>
@@ -2674,6 +2682,7 @@ function EnquiryMaster() {
     [
       navigate,
       handleCancelEnquiry,
+      cancellingEnquiryId,
       filters,
       filtersApplied,
       fromDate,

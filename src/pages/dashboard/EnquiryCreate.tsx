@@ -2002,11 +2002,6 @@ function EnquiryCreate() {
     }
 
     if (active === 1) {
-      const serviceFormResult = serviceForm.validate();
-      if (serviceFormResult.hasErrors) validationPassed = false;
-
-      if (!validationPassed) return;
-
       // Check if this is from destination flow
       if (enq?.fromDestination && enq?.actionType === "createQuote") {
         // For destination flow, navigate to quotation step instead of submitting
@@ -2014,7 +2009,8 @@ function EnquiryCreate() {
         return;
       }
 
-      // Submit button always submits the form (no conditional navigation)
+      // Submit on step 1: always call handleFinalSubmit so it runs full validation and hits the API if valid.
+      // Do not gate on serviceForm.validate() here, or the create API is never called when validation fails.
       handleFinalSubmit();
       return;
     }
