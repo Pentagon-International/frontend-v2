@@ -29,6 +29,7 @@ import {
   IconX,
   IconChevronDown,
   IconDotsVertical,
+  IconFileInvoice,
 } from "@tabler/icons-react";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -1811,6 +1812,48 @@ function AirImportJobCreate() {
                   >
                     Deliver Order
                   </Menu.Item>
+                  {jobData?.id != null && (
+                    <Menu.Item
+                      leftSection={<IconFileInvoice size={14} />}
+                      onClick={() => {
+                        // Agent Invoice: collect all CC charges from all houses into one list
+                        // (invoice create page uses only first house's charges)
+                        const allCollectCharges = hawbDetails.flatMap((hawb) =>
+                          (hawb.charges ?? []).filter(
+                            (c) =>
+                              String(c.pp_cc ?? "").trim().toUpperCase() ===
+                              "CC"
+                          )
+                        );
+                        const firstHouse = hawbDetails[0];
+                        const housingDetailsForInvoice = [
+                          {
+                            ...firstHouse,
+                            charges: allCollectCharges,
+                          },
+                        ];
+                        navigate("/air/import-job/invoice", {
+                          state: {
+                            hawbDetails: housingDetailsForInvoice,
+                            housingDetails: housingDetailsForInvoice,
+                            is_agent: true,
+                            ...(jobData && { job: jobData }),
+                            ...(location.state?.mawbDetails && {
+                              mawbDetails: location.state.mawbDetails,
+                            }),
+                            ...(location.state?.carrierDetails && {
+                              carrierDetails: location.state.carrierDetails,
+                            }),
+                            ...(location.state?.routings && {
+                              routings: location.state.routings,
+                            }),
+                          },
+                        });
+                      }}
+                    >
+                      Create Invoice
+                    </Menu.Item>
+                  )}
                 </Menu.Dropdown>
               </Menu>
             )}

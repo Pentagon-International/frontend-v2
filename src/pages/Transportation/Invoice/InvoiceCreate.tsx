@@ -1438,7 +1438,38 @@ function InvoiceCreate() {
         return `${day}-${month}-${year}`;
       };
 
-      const chargesPayload = values.charges.map((charge) => {
+      // Resolve GST rates per charge (use cached or fetch from gst-rates-by-state-sac)
+      const gstRatesForCharges: (GstRates | null)[] = await Promise.all(
+        values.charges.map(async (charge, idx) => {
+          const cached = gstRatesByChargeIndex[idx];
+          if (cached) return cached;
+          const sacCode = (charge.tax_code ?? "").trim();
+          if (!sacCode || stateId <= 0) return null;
+          try {
+            const res = (await fetchGstRatesByStateSac({
+              state_id: stateId,
+              sac_code: sacCode,
+            })) as unknown;
+            const resObj = res as { data?: { data?: GstRatesBySacResponse; [k: string]: unknown }; [k: string]: unknown };
+            const payload = resObj?.data?.data ?? resObj?.data ?? res;
+            const gstData = payload as GstRatesBySacResponse | null | undefined;
+            const igstRaw = gstData?.igst_percent;
+            const cgstRaw = gstData?.cgst_percent;
+            const sgstRaw = gstData?.sgst_percent;
+            const sameState = gstData?.same_state ?? false;
+            return {
+              igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+              cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+              sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+              same_state: sameState,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      const chargesPayload = values.charges.map((charge, idx) => {
         const currencyDataArr = currencyData as { id?: number; code?: string; currency_code?: string }[];
         const chargeCurrencyItem = charge.currency_id
           ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
@@ -1454,6 +1485,24 @@ function InvoiceCreate() {
               (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
             );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
+        const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+        const rates = gstRatesForCharges[idx];
+        const igstRate = rates?.igst ?? 0;
+        const cgstRate = rates?.cgst ?? 0;
+        const sgstRate = rates?.sgst ?? 0;
+        const sameState = rates?.same_state ?? false;
+        const igstAmt =
+          !sameState && igstRate > 0
+            ? clampAmount(headerAmount * (Number(igstRate) / 100))
+            : 0;
+        const cgstAmt =
+          sameState && cgstRate > 0
+            ? clampAmount(headerAmount * (Number(cgstRate) / 100))
+            : 0;
+        const sgstAmt =
+          sameState && sgstRate > 0
+            ? clampAmount(headerAmount * (Number(sgstRate) / 100))
+            : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
           shipment_no: values.shipment_no,
@@ -1465,13 +1514,21 @@ function InvoiceCreate() {
           amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
           amount: clampAmount(charge.amount ?? 0) ?? 0,
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
-          amount_in_header: clampAmount(charge.header_amount ?? 0) ?? 0,
+          amount_in_header: headerAmount,
           tax_code: charge.tax_code ?? "",
           Dr_Cr: charge.dr_cr ?? "Cr",
+          igst_rate: igstRate,
+          cgst_rate: cgstRate,
+          sgst_rate: sgstRate,
+          igst: igstAmt,
+          cgst: cgstAmt,
+          sgst: sgstAmt,
         };
       });
 
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
+      const isAgent =
+        (location.state as { is_agent?: boolean } | null)?.is_agent === true;
 
       const payload = {
         ...(isUpdate ? { id: saveResponse.id } : {}),
@@ -1496,6 +1553,7 @@ function InvoiceCreate() {
         header_total,
         local_total,
         Dr_Cr: "Dr",
+        is_agent: isAgent,
         charges: chargesPayload,
       };
       console.log("payload---", payload);
@@ -1643,7 +1701,37 @@ function InvoiceCreate() {
       }));
       const currencyDataArr = currencyData as { id?: number; code?: string; currency_code?: string }[];
       const unitDataArr = unitData as { id?: number; unit_code?: string; code?: string }[];
-      const chargesPayload = values.charges.map((charge) => {
+      // Resolve GST rates per charge for POST payload (same as Save)
+      const gstRatesForPostCharges: (GstRates | null)[] = await Promise.all(
+        values.charges.map(async (charge, idx) => {
+          const cached = gstRatesByChargeIndex[idx];
+          if (cached) return cached;
+          const sacCode = (charge.tax_code ?? "").trim();
+          if (!sacCode || stateId <= 0) return null;
+          try {
+            const res = (await fetchGstRatesByStateSac({
+              state_id: stateId,
+              sac_code: sacCode,
+            })) as unknown;
+            const resObj = res as { data?: { data?: GstRatesBySacResponse; [k: string]: unknown }; [k: string]: unknown };
+            const payload = resObj?.data?.data ?? resObj?.data ?? res;
+            const gstData = payload as GstRatesBySacResponse | null | undefined;
+            const igstRaw = gstData?.igst_percent;
+            const cgstRaw = gstData?.cgst_percent;
+            const sgstRaw = gstData?.sgst_percent;
+            const sameState = gstData?.same_state ?? false;
+            return {
+              igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+              cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+              sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+              same_state: sameState,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      const chargesPayload = values.charges.map((charge, idx) => {
         const chargeCurrencyItem = charge.currency_id
           ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
           : currencyDataArr?.find(
@@ -1658,6 +1746,24 @@ function InvoiceCreate() {
               (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
             );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
+        const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+        const rates = gstRatesForPostCharges[idx];
+        const igstRate = rates?.igst ?? 0;
+        const cgstRate = rates?.cgst ?? 0;
+        const sgstRate = rates?.sgst ?? 0;
+        const sameState = rates?.same_state ?? false;
+        const igstAmt =
+          !sameState && igstRate > 0
+            ? clampAmount(headerAmount * (Number(igstRate) / 100))
+            : 0;
+        const cgstAmt =
+          sameState && cgstRate > 0
+            ? clampAmount(headerAmount * (Number(cgstRate) / 100))
+            : 0;
+        const sgstAmt =
+          sameState && sgstRate > 0
+            ? clampAmount(headerAmount * (Number(sgstRate) / 100))
+            : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
           shipment_no: values.shipment_no,
@@ -1669,9 +1775,15 @@ function InvoiceCreate() {
           amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
           amount: clampAmount(charge.amount ?? 0) ?? 0,
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
-          amount_in_header: clampAmount(charge.header_amount ?? 0) ?? 0,
+          amount_in_header: headerAmount,
           tax_code: charge.tax_code ?? "",
           Dr_Cr: charge.dr_cr ?? "Cr",
+          igst_rate: igstRate,
+          cgst_rate: cgstRate,
+          sgst_rate: sgstRate,
+          igst: igstAmt,
+          cgst: cgstAmt,
+          sgst: sgstAmt,
         };
       });
       // Append tax rows from sac_wise_totals: charge_id, currency_id, roe (top), amount (total_amount), amount_in_local & amount_in_header (total_amount * roe), tax_code from sac_code; other fields empty
@@ -1694,6 +1806,8 @@ function InvoiceCreate() {
         };
       });
       const allChargesPayload = [...chargesPayload, ...taxCharges];
+      const isAgentPost =
+        (location.state as { is_agent?: boolean } | null)?.is_agent === true;
       const payload = {
         id: saveResponse.id,
         bill_to: values.bill_to,
@@ -1717,6 +1831,7 @@ function InvoiceCreate() {
         header_total,
         local_total,
         Dr_Cr: "Dr",
+        is_agent: isAgentPost,
         charges: allChargesPayload,
         taxes,
       };
@@ -2423,7 +2538,7 @@ function InvoiceCreate() {
                     <Grid
                       key={index}
                       w="100%"
-                      gutter="sm"
+                      gutter="xs"
                       mt={index !== 0 ? "sm" : 0}
                     >
                       <Grid.Col span={1.5}>
