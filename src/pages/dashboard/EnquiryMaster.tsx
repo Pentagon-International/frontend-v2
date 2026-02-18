@@ -1177,43 +1177,171 @@ function EnquiryMaster() {
     try {
       const enquiryData = enquiry as any;
 
-      // Transform the payload: map _read fields to non-_read fields
+      // Build service payload to match edit flow (getEnquiryPayload in EnquiryCreate)
+      const mapService = (service: any) => {
+        const svc: any = {
+          service: service.service,
+          origin_code: service.origin_code_read || service.origin_code,
+          destination_code:
+            service.destination_code_read || service.destination_code,
+          pickup: service.pickup === true || service.pickup === "true",
+          delivery: service.delivery === true || service.delivery === "true",
+          pickup_location: service.pickup_location || "",
+          delivery_location: service.delivery_location || "",
+          hazardous_cargo: service.hazardous_cargo === true || service.hazardous_cargo === "Yes",
+          stackable: service.stackable === true || service.stackable === "Yes",
+          shipment_terms_code:
+            service.shipment_terms_code_read || service.shipment_terms_code || "",
+          icd: service.icd || "",
+          service_remark: service.service_remark || "",
+          commodity: service.commodity || "",
+        };
+        if (service.id != null) svc.id = service.id;
+        svc.un_no =
+          svc.hazardous_cargo === true ? (service.un_no ?? null) : null;
+        svc.class_name =
+          svc.hazardous_cargo === true ? (service.class_name ?? service.class ?? null) : null;
+        svc.pkg_group =
+          svc.hazardous_cargo === true ? (service.pkg_group ?? null) : null;
+        if (service.service === "OTHERS") {
+          svc.trade = null;
+          svc.service_name = service.service_name || "";
+          svc.service_code = service.service_code || "";
+        } else {
+          svc.trade = service.trade ?? null;
+        }
+        // FCL (or OTHERS with FCL structure) - only when there are actual container rows (don't add fcl_details: [] for OTHERS LCL)
+        if (
+          (service.service === "FCL" || service.service === "OTHERS") &&
+          service.fcl_details &&
+          Array.isArray(service.fcl_details) &&
+          service.fcl_details.length > 0
+        ) {
+          svc.fcl_details = service.fcl_details.map((fcl: any) => {
+            const item: any = {
+              container_type: fcl.container_type_code ?? fcl.container_type,
+              no_of_containers: Number(fcl.no_of_containers) || 0,
+              gross_weight:
+                fcl.gross_weight != null
+                  ? Number(fcl.gross_weight).toFixed(2)
+                  : "0.00",
+            };
+            if (fcl.id != null) item.id = fcl.id;
+            return item;
+          });
+        }
+        // AIR (or OTHERS with AIR structure)
+        if (
+          service.service === "AIR" ||
+          (service.service === "OTHERS" &&
+            (service.volume_weight != null || service.chargeable_weight != null))
+        ) {
+          svc.no_of_packages = service.no_of_packages != null ? Number(service.no_of_packages) : 0;
+          svc.gross_weight =
+            service.gross_weight != null
+              ? Number(service.gross_weight).toFixed(2)
+              : "0.00";
+          svc.volume_weight =
+            service.volume_weight != null
+              ? Math.round(Number(service.volume_weight) * 1000) / 1000
+              : 0;
+          svc.chargeable_weight =
+            service.chargeable_weight != null
+              ? Number(service.chargeable_weight).toFixed(2)
+              : "0.00";
+          if (
+            service.dimension_data &&
+            Array.isArray(service.dimension_data) &&
+            service.dimension_data.length > 0
+          ) {
+            svc.dimension_details = service.dimension_data.map((d: any) => ({
+              pieces: Number(d.pieces) || 0,
+              length: Number(d.length) || 0,
+              width: Number(d.width) || 0,
+              height: Number(d.height) || 0,
+              value: Number(d.value) || 0,
+              volume_weight: d.volume_weight != null ? Math.round(Number(d.volume_weight) * 1000) / 1000 : 0,
+              dimension_unit: d.dimension_unit || "",
+              ...(d.id != null && { id: d.id }),
+            }));
+          }
+        }
+        // LCL (or OTHERS with LCL structure)
+        if (
+          service.service === "LCL" ||
+          (service.service === "OTHERS" &&
+            !svc.fcl_details &&
+            (service.volume != null || service.chargeable_volume != null))
+        ) {
+          svc.no_of_packages = service.no_of_packages != null ? Number(service.no_of_packages) : 0;
+          svc.gross_weight =
+            service.gross_weight != null
+              ? Number(service.gross_weight).toFixed(2)
+              : "0.00";
+          svc.volume =
+            service.volume != null ? Number(service.volume).toFixed(3) : "0.000";
+          svc.chargeable_volume =
+            service.chargeable_volume != null
+              ? Number(service.chargeable_volume).toFixed(3)
+              : "0.000";
+          if (
+            service.dimension_data &&
+            Array.isArray(service.dimension_data) &&
+            service.dimension_data.length > 0
+          ) {
+            svc.dimension_details = service.dimension_data.map((d: any) => ({
+              pieces: Number(d.pieces) || 0,
+              length: Number(d.length) || 0,
+              width: Number(d.width) || 0,
+              height: Number(d.height) || 0,
+              value: Number(d.value) || 0,
+              volume_weight: d.volume_weight != null ? Math.round(Number(d.volume_weight) * 1000) / 1000 : 0,
+              dimension_unit: d.dimension_unit || "",
+              ...(d.id != null && { id: d.id }),
+            }));
+          }
+        }
+        return svc;
+      };
+
+      // Transform the payload: same shape as edit (getEnquiryPayload + editData) with status INACTIVE
       const payload: any = {
         id: enquiryData.id,
         customer_code:
           enquiryData.customer_code_read || enquiryData.customer_code,
         enquiry_received_date: enquiryData.enquiry_received_date,
-        sales_person: enquiryData.sales_person,
+        sales_person: enquiryData.sales_person ?? "",
         status: "INACTIVE",
         sales_coordinator: enquiryData.sales_coordinator || "",
         customer_services: enquiryData.customer_services || "",
         reference_no: enquiryData.reference_no || "",
-        services: (enquiryData.services || []).map((service: any) => ({
-          service: service.service,
-          trade: service.trade,
-          origin_code: service.origin_code_read || service.origin_code,
-          destination_code:
-            service.destination_code_read || service.destination_code,
-          pickup: service.pickup || false,
-          delivery: service.delivery || false,
-          pickup_location: service.pickup_location || "",
-          delivery_location: service.delivery_location || "",
-          hazardous_cargo: service.hazardous_cargo || false,
-          shipment_terms_code:
-            service.shipment_terms_code_read || service.shipment_terms_code,
-          service_remark: service.service_remark || "",
-          id: service.id,
-          no_of_packages: service.no_of_packages,
-          gross_weight: service.gross_weight,
-          volume: service.volume,
-          volume_weight: service.volume_weight,
-          chargeable_volume: service.chargeable_volume,
-          chargeable_weight: service.chargeable_weight,
-          stackable: service.stackable || false,
-        })),
+        customer_address: enquiryData.customer_address || "",
+        ...(enquiryData.call_entry_id != null && {
+          call_entry: enquiryData.call_entry_id,
+        }),
+        ...(enquiryData.documents_list?.length > 0 && {
+          documents_list: enquiryData.documents_list,
+        }),
+        ...(enquiryData.remark != null && enquiryData.remark !== "" && {
+          remark: enquiryData.remark,
+        }),
+        services: (enquiryData.services || []).map(mapService),
       };
 
-      const response = await putAPICall(`${URL.enquiry}`, payload, API_HEADER);
+      // Use FormData (same format as enquiry update flow) instead of raw JSON
+      const formData = new FormData();
+      formData.append("enquiry_data", JSON.stringify(payload));
+
+      const response = await apiCallProtected.put(
+        `${URL.enquiry}${enquiryData.id}/`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            ...API_HEADER.headers,
+          },
+        }
+      );
 
       if (response) {
         ToastNotification({
@@ -2209,6 +2337,33 @@ function EnquiryMaster() {
         header: "Enquiry Date",
       },
       {
+        id: "status",
+        accessorKey: "status",
+        header: "Status",
+        size: 180,
+        minSize: 120,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>();
+          const { label, color } = getStatusBadge(value ?? undefined);
+          return (
+            <Badge
+              size="sm"
+              variant="light"
+              color={color}
+              styles={{
+                root: {
+                  textTransform: "none",
+                  minWidth: "fit-content",
+                  whiteSpace: "nowrap",
+                },
+              }}
+            >
+              {label}
+            </Badge>
+          );
+        },
+      },
+      {
         id: "remark_list",
         accessorKey: "services",
         header: "Remark",
@@ -2637,7 +2792,7 @@ function EnquiryMaster() {
           break;
         case "status":
           extraStyles = {
-            minWidth: "80px",
+            minWidth: "120px",
           };
           break;
 
@@ -2723,7 +2878,7 @@ function EnquiryMaster() {
           break;
         case "status":
           extraStyles = {
-            minWidth: "80px",
+            minWidth: "120px",
           };
           break;
 
