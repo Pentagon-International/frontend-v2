@@ -305,6 +305,7 @@ type InvoiceDataFromApi = {
   day_book_id?: number;
   day_book_name?: string;
   status?: string;
+  is_agent?: boolean;
   charges?: Array<{
     id?: number;
     charge_id?: number;
@@ -408,6 +409,29 @@ function InvoiceCreate() {
 
   const isReadOnly = isViewMode || invoiceIsPosted;
 
+  // Ref for validate (state optional when agent invoice) — kept in sync with isAgentInvoice
+  const isAgentInvoiceRef = useRef(false);
+
+  // Agent invoice: hide SAC, IGST/CGST/SGST, Totals section, and Tax tab (customer invoice only)
+  const isAgentInvoice = useMemo(() => {
+    if ((location.state as { is_agent?: boolean } | null)?.is_agent === true)
+      return true;
+    const fromApi = (invoiceDataFromApi as { is_agent?: boolean } | null)
+      ?.is_agent;
+    if (fromApi === true) return true;
+    const fromState = (location.state?.invoiceData as { is_agent?: boolean }
+      | undefined)?.is_agent;
+    return fromState === true;
+  }, [
+    location.state?.is_agent,
+    location.state?.invoiceData,
+    invoiceDataFromApi,
+  ]);
+
+  useEffect(() => {
+    isAgentInvoiceRef.current = isAgentInvoice;
+  }, [isAgentInvoice]);
+
   // User's local currency code (for ROE = 1 when billing currency matches)
   const userLocalCurrency = useMemo(() => {
     const code = user?.country?.country_code;
@@ -454,7 +478,8 @@ function InvoiceCreate() {
     validate: {
       bill_to: (value) => (!value ? "Bill To is required" : null),
       address: (value) => (!value ? "Address is required" : null),
-      state: (value) => (!value ? "State is required" : null),
+      state: (value) =>
+        isAgentInvoiceRef.current ? null : !value ? "State is required" : null,
       shipment_no: (value) => (!value ? "Shipment No is required" : null),
       daybook_id: (value) => (!value ? "Daybook is required" : null),
       document_date: (value) => (!value ? "Document Date is required" : null),
@@ -1519,7 +1544,7 @@ function InvoiceCreate() {
       //   return;
       // }
 
-      const stateId = Number(values.state);
+      const stateId = values.state ? Number(values.state) : null;
       const currencyItem = (currencyData as any[])?.find(
         (c: any) =>
           (c.code || c.currency_code || "").toString() === values.currency,
@@ -1527,7 +1552,10 @@ function InvoiceCreate() {
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
 
-      if (!stateId || stateId <= 0) {
+      const isAgentInvoiceFlow =
+        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
+        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+      if (!isAgentInvoiceFlow && (!stateId || stateId <= 0)) {
         ToastNotification({
           message: "Please select a valid State",
           type: "error",
@@ -1569,7 +1597,7 @@ function InvoiceCreate() {
           const cached = gstRatesByChargeIndex[idx];
           if (cached) return cached;
           const sacCode = (charge.tax_code ?? "").trim();
-          if (!sacCode || stateId <= 0) return null;
+          if (!sacCode || stateId == null || stateId <= 0) return null;
           try {
             const res = (await fetchGstRatesByStateSac({
               state_id: stateId,
@@ -1666,13 +1694,14 @@ function InvoiceCreate() {
 
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
       const isAgent =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true;
+        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
+        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
 
       const payload = {
         ...(isUpdate ? { id: saveResponse.id } : {}),
         bill_to: values.bill_to,
         address: values.address,
-        state_id: stateId,
+        state_id: isAgent ? (stateId != null && stateId > 0 ? stateId : null) : stateId,
         gstn: values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
@@ -1797,7 +1826,7 @@ function InvoiceCreate() {
     setIsPosting(true);
     try {
       const values = form.values;
-      const stateId = Number(values.state);
+      const stateId = values.state ? Number(values.state) : null;
       const currencyItem = (
         currencyData as { id?: number; code?: string; currency_code?: string }[]
       )?.find(
@@ -1805,7 +1834,11 @@ function InvoiceCreate() {
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
-      if (!stateId || stateId <= 0 || currencyId == null || currencyId <= 0) {
+      const isAgentPost =
+        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
+        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+      const stateValid = stateId != null && stateId > 0;
+      if ((!isAgentPost && !stateValid) || currencyId == null || currencyId <= 0) {
         ToastNotification({
           message: "Please ensure State and Currency are valid.",
           type: "error",
@@ -1859,7 +1892,7 @@ function InvoiceCreate() {
           const cached = gstRatesByChargeIndex[idx];
           if (cached) return cached;
           const sacCode = (charge.tax_code ?? "").trim();
-          if (!sacCode || stateId <= 0) return null;
+          if (!sacCode || stateId == null || stateId <= 0) return null;
           try {
             const res = (await fetchGstRatesByStateSac({
               state_id: stateId,
@@ -1964,13 +1997,11 @@ function InvoiceCreate() {
         };
       });
       const allChargesPayload = [...chargesPayload, ...taxCharges];
-      const isAgentPost =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true;
       const payload = {
         id: saveResponse.id,
         bill_to: values.bill_to,
         address: values.address,
-        state_id: stateId,
+        state_id: isAgentPost ? (stateId != null && stateId > 0 ? stateId : null) : stateId,
         gstn: values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
@@ -2253,7 +2284,7 @@ function InvoiceCreate() {
               />
             </Grid.Col>
 
-            {/* State */}
+            {/* State - optional for agent invoice */}
             <Grid.Col span={2}>
               <Dropdown
                 label="State"
@@ -2262,7 +2293,7 @@ function InvoiceCreate() {
                 value={form.values.state ? form.values.state : null}
                 onChange={(value) => form.setFieldValue("state", value ?? "")}
                 searchable
-                withAsterisk
+                withAsterisk={!isAgentInvoice}
                 error={form.errors.state || undefined}
                 readOnly={isStateLoading || isReadOnly}
                 // disabled={isStateLoading || isReadOnly}
@@ -2672,7 +2703,7 @@ function InvoiceCreate() {
               onChange={(v) => setChargesTabActive(v ?? "charges")}
               defaultValue="charges"
             >
-              {saveResponse && (
+              {saveResponse && !isAgentInvoice && (
                 <Tabs.List>
                   <Tabs.Tab value="charges">Charges</Tabs.Tab>
                   <Tabs.Tab value="tax">Tax</Tabs.Tab>
@@ -2725,23 +2756,25 @@ function InvoiceCreate() {
                   <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                     Local Amount
                   </Grid.Col>
-                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
-                    SAC Code
-                  </Grid.Col>
+                  {!isAgentInvoice && (
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                      SAC Code
+                    </Grid.Col>
+                  )}
                   <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                     Dr/Cr
                   </Grid.Col>
-                  {headerSameState === true && (
+                  {!isAgentInvoice && headerSameState === true && (
                     <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                       CGST
                     </Grid.Col>
                   )}
-                  {headerSameState === true && (
+                  {!isAgentInvoice && headerSameState === true && (
                     <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                       SGST
                     </Grid.Col>
                   )}
-                  {headerSameState === false && (
+                  {!isAgentInvoice && headerSameState === false && (
                     <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                       IGST
                     </Grid.Col>
@@ -3414,29 +3447,31 @@ function InvoiceCreate() {
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
-                      <TextInput
-                        placeholder="SAC Code"
-                        withAsterisk
-                        // disabled={isReadOnly}
-                        readOnly={isReadOnly}
-                        value={charge.tax_code}
-                        rightSection={
-                          gstRatesLoadingByIndex[index] &&
-                          (!charge.tax_code ||
-                            charge.tax_code.trim() === "") ? (
-                            <Loader size="xs" color="#105476" />
-                          ) : null
-                        }
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
+                    {!isAgentInvoice && (
+                      <Grid.Col span={0.8}>
+                        <TextInput
+                          placeholder="SAC Code"
+                          withAsterisk
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
+                          value={charge.tax_code}
+                          rightSection={
+                            gstRatesLoadingByIndex[index] &&
+                            (!charge.tax_code ||
+                              charge.tax_code.trim() === "") ? (
+                              <Loader size="xs" color="#105476" />
+                            ) : null
+                          }
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                    )}
                     <Grid.Col span={0.55}>
                       <Dropdown
                         placeholder="Dr/Cr"
@@ -3463,7 +3498,7 @@ function InvoiceCreate() {
                       />
                     </Grid.Col>
                     {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
-                    {headerSameState === true && (
+                    {!isAgentInvoice && headerSameState === true && (
                       <Grid.Col span={0.55}>
                         {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
                         <TextInput
@@ -3505,7 +3540,7 @@ function InvoiceCreate() {
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {headerSameState === true && (
+                    {!isAgentInvoice && headerSameState === true && (
                       <Grid.Col span={0.55}>
                         {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
                         <TextInput
@@ -3548,7 +3583,7 @@ function InvoiceCreate() {
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {headerSameState === false && (
+                    {!isAgentInvoice && headerSameState === false && (
                       <Grid.Col span={0.55}>
                         {/* {gstRatesByChargeIndex[index]?.same_state === false && ( */}
                         <TextInput
@@ -3681,100 +3716,104 @@ function InvoiceCreate() {
                 ))}
                 {/* </Box> */}
 
-                {/* Totals Section */}
-                <Box
-                  mt="xl"
-                  p="md"
-                  style={{
-                    backgroundColor: "#f8f9fa",
-                    borderRadius: 8,
-                    border: "1px solid #dee2e6",
-                  }}
-                >
-                  <Grid gutter="md">
-                    <Grid.Col span={3}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          Local Amount Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {form.values.charges
-                            .reduce(
-                              (sum, c) => sum + (c.amount_in_local ?? 0),
-                              0,
-                            )
-                            .toFixed(2)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={3}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          IGST Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {form.values.charges
-                            .reduce((sum, c, idx) => {
-                              const rate = gstRatesByChargeIndex[idx]?.igst;
-                              const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null)
-                                return sum;
-                              const amount = clampAmount(
-                                (localAmount * rate) / 100,
-                              );
-                              return sum + (amount ?? 0);
-                            }, 0)
-                            .toFixed(2)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={3}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          CGST Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {form.values.charges
-                            .reduce((sum, c, idx) => {
-                              const rate = gstRatesByChargeIndex[idx]?.cgst;
-                              const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null)
-                                return sum;
-                              const amount = clampAmount(
-                                (localAmount * rate) / 100,
-                              );
-                              return sum + (amount ?? 0);
-                            }, 0)
-                            .toFixed(2)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={3}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          SGST Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {form.values.charges
-                            .reduce((sum, c, idx) => {
-                              const rate = gstRatesByChargeIndex[idx]?.sgst;
-                              const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null)
-                                return sum;
-                              const amount = clampAmount(
-                                (localAmount * rate) / 100,
-                              );
-                              return sum + (amount ?? 0);
-                            }, 0)
-                            .toFixed(2)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                  </Grid>
-                </Box>
+                {/* Totals Section - customer invoice only (hidden for agent invoice) */}
+                {!isAgentInvoice && (
+                  <Box
+                    mt="xl"
+                    p="md"
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRadius: 8,
+                      border: "1px solid #dee2e6",
+                    }}
+                  >
+                    <Grid gutter="md">
+                      <Grid.Col span={3}>
+                        <Box>
+                          <Text size="sm" fw={500} c="dimmed" mb={4}>
+                            Local Amount Total
+                          </Text>
+                          <Text size="lg" fw={600} c="#105476">
+                            {form.values.charges
+                              .reduce(
+                                (sum, c) => sum + (c.amount_in_local ?? 0),
+                                0,
+                              )
+                              .toFixed(2)}
+                          </Text>
+                        </Box>
+                      </Grid.Col>
+                      <Grid.Col span={3}>
+                        <Box>
+                          <Text size="sm" fw={500} c="dimmed" mb={4}>
+                            IGST Total
+                          </Text>
+                          <Text size="lg" fw={600} c="#105476">
+                            {form.values.charges
+                              .reduce((sum, c, idx) => {
+                                const rate = gstRatesByChargeIndex[idx]?.igst;
+                                const localAmount = c.amount_in_local;
+                                if (rate == null || localAmount == null)
+                                  return sum;
+                                const amount = clampAmount(
+                                  (localAmount * rate) / 100,
+                                );
+                                return sum + (amount ?? 0);
+                              }, 0)
+                              .toFixed(2)}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                      <Grid.Col span={3}>
+                        <Box>
+                          <Text size="sm" fw={500} c="dimmed" mb={4}>
+                            CGST Total
+                          </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {form.values.charges
+                                .reduce((sum, c, idx) => {
+                                  const rate =
+                                    gstRatesByChargeIndex[idx]?.cgst;
+                                  const localAmount = c.amount_in_local;
+                                  if (rate == null || localAmount == null)
+                                    return sum;
+                                  const amount = clampAmount(
+                                    (localAmount * rate) / 100,
+                                  );
+                                  return sum + (amount ?? 0);
+                                }, 0)
+                                .toFixed(2)}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                      <Grid.Col span={3}>
+                        <Box>
+                          <Text size="sm" fw={500} c="dimmed" mb={4}>
+                            SGST Total
+                          </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {form.values.charges
+                                  .reduce((sum, c, idx) => {
+                                    const rate =
+                                      gstRatesByChargeIndex[idx]?.sgst;
+                                    const localAmount = c.amount_in_local;
+                                    if (rate == null || localAmount == null)
+                                      return sum;
+                                    const amount = clampAmount(
+                                      (localAmount * rate) / 100,
+                                    );
+                                    return sum + (amount ?? 0);
+                                  }, 0)
+                                  .toFixed(2)}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                    </Grid>
+                  </Box>
+                )}
               </Tabs.Panel>
 
-              {saveResponse && (
+              {saveResponse && !isAgentInvoice && (
                 <Tabs.Panel value="tax">
                   {gstBreakupLoading && (
                     <Stack align="center" py="xl">
