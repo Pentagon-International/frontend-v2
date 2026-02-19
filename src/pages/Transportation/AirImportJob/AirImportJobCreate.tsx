@@ -53,6 +53,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import useAuthStore from "../../../store/authStore";
+import FormTextInput from "../../../components/FormTextInput";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -1764,7 +1765,7 @@ function AirImportJobCreate() {
   };
 
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Text size="xl" fw={600} c="#105476">
           {mode === "view"
@@ -2120,7 +2121,7 @@ function AirImportJobCreate() {
               </Grid.Col>
 
               <Grid.Col span={2}>
-                <TextInput
+                <FormTextInput
                   label="Flight Number"
                   required
                   placeholder="Enter Flight number"
@@ -2129,7 +2130,7 @@ function AirImportJobCreate() {
               </Grid.Col>
 
               <Grid.Col span={2}>
-                <TextInput
+                <FormTextInput
                   label="MAWB Number"
                   required
                   placeholder="Enter MAWB number"
@@ -2369,7 +2370,7 @@ function AirImportJobCreate() {
                         </Grid.Col>
 
                         <Grid.Col span={2}>
-                          <TextInput
+                          <FormTextInput
                             label="Vessel"
                             required
                             placeholder="Enter vessel name"
@@ -2391,7 +2392,7 @@ function AirImportJobCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={2.5}>
-                          <TextInput
+                          <FormTextInput
                             label="Voyage Number"
                             required
                             placeholder="Enter voyage number"
@@ -2441,7 +2442,7 @@ function AirImportJobCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={2.5}>
-                          <TextInput
+                          <FormTextInput
                             label="Flight Number"
                             required
                             placeholder="Enter flight number"
@@ -2491,7 +2492,7 @@ function AirImportJobCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={2.5}>
-                          <TextInput
+                          <FormTextInput
                             label="Truck Number"
                             required
                             placeholder="Enter truck number"
@@ -2506,7 +2507,7 @@ function AirImportJobCreate() {
                     {routing.transport_type === "Rail" && (
                       <>
                         <Grid.Col span={2}>
-                          <TextInput
+                          <FormTextInput
                             label="Carrier"
                             required
                             placeholder="Enter carrier name"
@@ -2533,7 +2534,7 @@ function AirImportJobCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={2.5}>
-                          <TextInput
+                          <FormTextInput
                             label="Rail Number"
                             required
                             placeholder="Enter rail number"

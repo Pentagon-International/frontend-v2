@@ -56,6 +56,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import { NumberInput } from "@mantine/core";
+import FormTextInput from "../../../components/FormTextInput";
 
 // Type definitions
 type HAWBDetailsForm = {
@@ -1699,8 +1700,24 @@ function HouseCreate() {
     }
   };
 
+  const RequiredLabel = ({ label, required }: { label: string; required: boolean }) => (
+    <Text
+      size="xs"
+      fw={500}
+      style={{
+        fontSize: "13px",
+        fontFamily: "Inter",
+      }}
+    >
+      {label}
+      {required && (
+        <span style={{ color: "red", fontWeight: 700 }}> *</span>
+      )}
+    </Text>
+  );
+
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box p="md" mx="auto">
       <Group justify="space-between" mb="lg">
         <Text size="xl" fw={600} c="#105476">
           {isEditMode ? "Edit HAWB Details" : "Create HAWB Details"}
@@ -1947,7 +1964,7 @@ function HouseCreate() {
           <Box mt="md">
             <Grid>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="HAWB Number"
                   required
                   placeholder="Enter HAWB Number"
@@ -2123,7 +2140,7 @@ function HouseCreate() {
                       error={form.errors.routed_by}
                     />
                   ) : (
-                    <TextInput
+                    <FormTextInput
                       label="Routed By"
                       required
                       placeholder="Enter routed by"
@@ -2151,7 +2168,7 @@ function HouseCreate() {
                     minSearchLength={2}
                   />
                 ) : (
-                  <TextInput
+                  <FormTextInput
                     label="Routed By"
                     required
                     placeholder="Enter routed by"
@@ -2161,7 +2178,7 @@ function HouseCreate() {
                 )}
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Customer Service"
                   placeholder="Enter Customer Service"
                   value={form.values.customer_service}
@@ -2264,7 +2281,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Shipper Email"
                   type="email"
                   placeholder="Enter Shipper Email"
@@ -2288,7 +2305,7 @@ function HouseCreate() {
                     error={form.errors.shipper_address}
                   />
                 ) : (
-                  <TextInput
+                  <FormTextInput
                     label="Shipper Address"
                     placeholder="Enter shipper address"
                     value={form.values.shipper_address || ""}
@@ -2373,7 +2390,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Consignee Email"
                   type="email"
                   placeholder="Enter Consignee Email"
@@ -2396,7 +2413,7 @@ function HouseCreate() {
                     error={form.errors.consignee_address}
                   />
                 ) : (
-                  <TextInput
+                  <FormTextInput
                     label="Consignee Address"
                     placeholder="Enter consignee address"
                     value={form.values.consignee_address || ""}
@@ -2480,7 +2497,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Notify Customer Email"
                   type="email"
                   placeholder="Enter Notify Customer Email"
@@ -2507,7 +2524,7 @@ function HouseCreate() {
                     error={form.errors.notify_customer1_address}
                   />
                 ) : (
-                  <TextInput
+                  <FormTextInput
                     label="Notify Customer Address"
                     placeholder="Enter Notify Customer Address"
                     minRows={2}
@@ -2592,7 +2609,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Origin Agent Email"
                   type="email"
                   placeholder="Enter Origin Agent Email"
@@ -2619,7 +2636,7 @@ function HouseCreate() {
                     error={form.errors.origin_agent_address}
                   />
                 ) : (
-                  <TextInput
+                  <FormTextInput
                     label="Origin Agent Address"
                     placeholder="Enter Origin Agent Address"
                     minRows={2}
@@ -2657,6 +2674,19 @@ function HouseCreate() {
                     form.setFieldValue("commodity_description", formattedValue);
                   }}
                   error={form.errors.commodity_description}
+                  styles={{
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                    },
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
@@ -2670,6 +2700,19 @@ function HouseCreate() {
                     form.setFieldValue("marks_no", formattedValue);
                   }}
                   error={form.errors.marks_no}
+                  styles={{
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                    input: {
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                    },
+                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -2684,32 +2727,31 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={1.5}>
-                  No of Packages{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                <Grid.Col span={2}>
+                  <RequiredLabel label="No of Packages" required={true} />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  Gross Weight (KG){" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Gross Weight (KG)" required={true} />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  Volume (KG){" "}
-                  <Text span c="red">
-                    *
+                  <RequiredLabel label="Volume (KG)" required={true} />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <RequiredLabel label="Chargeable Weight (KG)" required={false} />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <RequiredLabel label="Haz" required={false} />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <Text size="xs" fw={600}>
+                    Actions
                   </Text>
                 </Grid.Col>
-                <Grid.Col span={2}>Chargeable Weight (KG)</Grid.Col>
-                <Grid.Col span={1.5}>Haz</Grid.Col>
-                {/* <Grid.Col span={1.5}>Actions</Grid.Col> */}
               </Grid>
 
               {cargoDetails.map((cargo, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={2}>
                     <NumberInput
                       placeholder="Enter No of Packages"
                       min={0}
@@ -2735,6 +2777,20 @@ function HouseCreate() {
                         }
                       }}
                       error={cargoErrors[index]?.no_of_packages}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
@@ -2763,6 +2819,20 @@ function HouseCreate() {
                         }
                       }}
                       error={cargoErrors[index]?.gross_weight}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
@@ -2791,6 +2861,20 @@ function HouseCreate() {
                         }
                       }}
                       error={cargoErrors[index]?.volume}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
@@ -2801,13 +2885,22 @@ function HouseCreate() {
                       readOnly
                       disabled
                       styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
                         input: {
-                          backgroundColor: "#f5f5f5",
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
                         },
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={2}>
                     <Dropdown
                       placeholder="Select Haz"
                       searchable
@@ -2824,13 +2917,28 @@ function HouseCreate() {
                         };
                         setCargoDetails(updated);
                       }}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={2}>
                     <Group gap="xs">
                       {cargoDetails.length > 1 && (
                         <Button
-                          size="xs"
+                          size="sm"
+                          px={12}
                           variant="light"
                           color="red"
                           onClick={() => {
@@ -2845,7 +2953,8 @@ function HouseCreate() {
                       )}
                       {cargoDetails.length - 1 === index && (
                         <Button
-                          size="xs"
+                          size="sm"
+                          px={12}
                           variant="light"
                           color="#105476"
                           onClick={() => {
@@ -2931,39 +3040,29 @@ function HouseCreate() {
                 gutter="sm"
               >
                 <Grid.Col span={1.75}>
-                  Charge Name{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Charge Name" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.25}>
-                  PP/CC{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="PP/CC" required={true} />
                 </Grid.Col>
-                <Grid.Col span={1.25}>Unit</Grid.Col>
-                <Grid.Col span={1}>No of Unit</Grid.Col>
-                <Grid.Col span={1.5}>
-                  Currency{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                <Grid.Col span={1.25}>
+                  <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1}>
-                  ROE{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.5}>Amount Per Unit</Grid.Col>
                 <Grid.Col span={1.5}>
-                  Amount{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Currency" required={true} />
                 </Grid.Col>
-                {/* <Grid.Col span={1}>Actions</Grid.Col> */}
+                <Grid.Col span={1}>
+                  <RequiredLabel label="ROE" required={true} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Amount Per Unit" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Amount" required={true} />
+                </Grid.Col>
               </Grid>
 
               {chargesForm.values.charges.map((charge, index) => (
@@ -3043,6 +3142,20 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.pp_cc}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.25}>
@@ -3077,6 +3190,20 @@ function HouseCreate() {
                             noOfUnit,
                           );
                         }
+                      }}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
                       }}
                     />
                   </Grid.Col>
@@ -3124,6 +3251,20 @@ function HouseCreate() {
                           },
                         };
                       })()}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
@@ -3159,6 +3300,20 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.currency_id}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
@@ -3205,6 +3360,20 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.roe}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
@@ -3255,6 +3424,20 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.amount_per_unit}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
@@ -3281,6 +3464,20 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.amount}
+                      styles={{
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                        },
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col
@@ -3294,7 +3491,8 @@ function HouseCreate() {
                   >
                     {chargesForm.values.charges.length - 1 === index && (
                       <Button
-                        size="xs"
+                        size="sm"
+                        px={12}
                         variant="light"
                         color="#105476"
                         onClick={() => {
@@ -3316,7 +3514,8 @@ function HouseCreate() {
                     )}
                     {chargesForm.values.charges.length > 1 && (
                       <Button
-                        size="xs"
+                        size="sm"
+                        px={12}
                         variant="light"
                         color="red"
                         onClick={() => {

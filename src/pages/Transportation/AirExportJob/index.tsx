@@ -11,8 +11,10 @@ import {
   Card,
   Center,
   Stack,
+  Box,
   Menu,
   ActionIcon,
+  UnstyledButton,
   Select,
   Loader,
 } from "@mantine/core";
@@ -211,23 +213,29 @@ function AirExportJobMaster() {
         header: "Actions",
         size: 80,
         Cell: ({ row }) => (
-          <Menu shadow="md" width={120}>
+          <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
             <Menu.Target>
               <ActionIcon variant="subtle" color="gray">
                 <IconDotsVertical size={16} />
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<IconEdit size={14} />}
-                onClick={() => {
-                  navigate(`/air/export-job/edit`, {
-                    state: { job: row.original },
-                  });
-                }}
-              >
-                Edit
-              </Menu.Item>
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() => {
+                    navigate(`/air/export-job/edit`, {
+                      state: { job: row.original },
+                    });
+                  }}
+                >
+                  <Group gap="sm">
+                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                      Edit
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
             </Menu.Dropdown>
           </Menu>
         ),
@@ -256,7 +264,7 @@ function AirExportJobMaster() {
     columns,
     data: paginatedData,
     enableColumnFilters: false,
-    enablePagination: false, // Use custom pagination
+    enablePagination: false,
     enableTopToolbar: false,
     enableBottomToolbar: false,
     enableColumnActions: false,
@@ -278,33 +286,73 @@ function AirExportJobMaster() {
       shadow: "sm",
       p: "md",
       radius: "md",
-    },
-    mantineTableBodyCellProps: {
       style: {
-        padding: "8px 12px",
-        fontSize: "13px",
-        backgroundColor: "#ffffff",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
       },
     },
-    mantineTableHeadCellProps: {
-      style: {
-        padding: "6px 12px",
-        fontSize: "12px",
-        backgroundColor: "#ffffff",
-        top: 0,
-        zIndex: 3,
-        borderBottom: "1px solid #e9ecef",
-      },
+    mantineTableBodyCellProps: ({ column }) => {
+      const extraStyles =
+        column.id === "actions"
+          ? {
+              position: "sticky" as const,
+              right: 0,
+              minWidth: "30px",
+              zIndex: 2,
+              borderLeft: "1px solid #F3F3F3",
+              boxShadow: "1px -2px 4px 0px #00000040",
+            }
+          : {};
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          color: "#333740",
+          backgroundColor: "#ffffff",
+          ...extraStyles,
+        },
+      };
+    },
+    mantineTableHeadCellProps: ({ column }) => {
+      const extraStyles =
+        column.id === "actions"
+          ? {
+              position: "sticky" as const,
+              right: 0,
+              minWidth: "80px",
+              zIndex: 2,
+              backgroundColor: "#FBFBFB",
+              boxShadow: "0px -2px 4px 0px #00000040",
+            }
+          : {};
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
+          top: 0,
+          zIndex: 3,
+          borderBottom: "1px solid #F3F3F3",
+          ...extraStyles,
+        },
+      };
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
     renderEmptyRowsFallback: () => (
@@ -312,7 +360,7 @@ function AirExportJobMaster() {
         <td colSpan={columns.length}>
           <Center py="xl">
             <Stack align="center" gap="md">
-              <Text c="dimmed" size="lg" ta="center">
+              <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
                 No jobs to display
               </Text>
             </Stack>
@@ -323,134 +371,176 @@ function AirExportJobMaster() {
   });
 
   return (
-    <Card shadow="sm" padding="lg" radius="md" withBorder>
-      <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-        <Text size="md" fw={600} c="#105476">
-          Air Export Job List
-        </Text>
+    <Card
+      shadow="sm"
+      pt="md"
+      pb="sm"
+      px="lg"
+      radius="md"
+      withBorder
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        flex: 1,
+      }}
+    >
+      <Box mb="md">
+        <Group justify="space-between" align="center">
+          <Text
+            size="md"
+            fw={600}
+            c="#444955"
+            style={{ fontFamily: "Inter", fontSize: "16px" }}
+          >
+            Air Export Job List
+          </Text>
 
-        <Button
-          variant="filled"
-          leftSection={<IconPlus size={14} />}
-          size="xs"
-          color="#105476"
-          onClick={() => navigate("/air/export-job/create")}
-        >
-          Create New
-        </Button>
-      </Group>
+          <Button
+            leftSection={<IconPlus size={16} />}
+            size="sm"
+            styles={{
+              root: {
+                backgroundColor: "#105476",
+                borderRadius: "4px",
+                color: "#FFFFFF",
+                fontSize: "14px",
+                fontFamily: "Inter",
+                fontStyle: "semibold",
+                "&:hover": {
+                  backgroundColor: "#105476",
+                },
+              },
+            }}
+            onClick={() => navigate("/air/export-job/create")}
+          >
+            Create New
+          </Button>
+        </Group>
+      </Box>
 
       {isLoading ? (
         <Center py="xl">
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
-            <Text c="dimmed">Loading air export jobs...</Text>
+            <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+              Loading air export jobs...
+            </Text>
           </Stack>
         </Center>
       ) : (
-        <div style={{ position: "relative" }}>
-          {isFetching && (
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: "rgba(255, 255, 255, 0.8)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 10,
-                borderRadius: "8px",
-              }}
-            >
-              <Stack align="center" gap="md">
-                <Loader size="lg" color="#105476" />
-                <Text c="dimmed">Refreshing data...</Text>
-              </Stack>
-            </div>
-          )}
-          <MantineReactTable table={table} />
-        </div>
+        <>
+          <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            {isFetching && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                  borderRadius: "8px",
+                }}
+              >
+                <Stack align="center" gap="md">
+                  <Loader size="lg" color="#105476" />
+                  <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+                    Refreshing data...
+                  </Text>
+                </Stack>
+              </div>
+            )}
+            <MantineReactTable table={table} />
+          </div>
+
+          {/* Custom Pagination Bar - same layout as CallEntryMaster */}
+          <Group
+            w="100%"
+            justify="space-between"
+            align="center"
+            p="xs"
+            wrap="nowrap"
+            pt="md"
+          >
+            <Group gap="sm" align="center" wrap="nowrap">
+              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+                Rows per page
+              </Text>
+              <Select
+                size="xs"
+                data={["10", "25", "50"]}
+                value={String(pageSize)}
+                onChange={(val) => {
+                  if (!val) return;
+                  handlePageSizeChange(Number(val));
+                }}
+                w={110}
+                styles={
+                  {
+                    input: {
+                      fontSize: "13px",
+                      height: "36px",
+                      fontFamily: "Inter",
+                    },
+                  } as Record<string, unknown>
+                }
+              />
+              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+                {(() => {
+                  const total = totalRecords || 0;
+                  if (total === 0) return "0–0 of 0";
+                  const start = (currentPage - 1) * pageSize + 1;
+                  const end = Math.min(currentPage * pageSize, total);
+                  return `${start}–${end} of ${total}`;
+                })()}
+              </Text>
+            </Group>
+
+            <Group gap="xs" align="center" wrap="nowrap" pr={50}>
+              <ActionIcon
+                variant="default"
+                size="sm"
+                onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+              >
+                <IconChevronLeft size={16} />
+              </ActionIcon>
+              <Text size="sm" ta="center" style={{ width: 26, fontFamily: "Inter, sans-serif" }}>
+                {currentPage}
+              </Text>
+              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+                of {Math.max(1, Math.ceil(totalRecords / pageSize))}
+              </Text>
+              <ActionIcon
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  const totalPages = Math.max(
+                    1,
+                    Math.ceil(totalRecords / pageSize)
+                  );
+                  handlePageChange(Math.min(totalPages, currentPage + 1));
+                }}
+                disabled={(() => {
+                  const totalPages = Math.max(
+                    1,
+                    Math.ceil(totalRecords / pageSize)
+                  );
+                  return currentPage >= totalPages;
+                })()}
+              >
+                <IconChevronRight size={16} />
+              </ActionIcon>
+            </Group>
+          </Group>
+        </>
       )}
-
-      {/* Custom Pagination Bar */}
-      <Group
-        w="100%"
-        justify="space-between"
-        align="center"
-        p="xs"
-        wrap="nowrap"
-        pt="md"
-      >
-        {/* Rows per page and range */}
-        <Group gap="sm" align="center" wrap="nowrap">
-          <Text size="sm" c="dimmed">
-            Rows per page
-          </Text>
-          <Select
-            size="xs"
-            data={["10", "25", "50"]}
-            value={String(pageSize)}
-            onChange={(val) => {
-              if (!val) return;
-              handlePageSizeChange(Number(val));
-            }}
-            w={110}
-            styles={
-              { input: { fontSize: 12, height: 30 } } as Record<string, unknown>
-            }
-          />
-          <Text size="sm" c="dimmed">
-            {(() => {
-              const total = totalRecords || 0;
-              if (total === 0) return "0–0 of 0";
-              const start = (currentPage - 1) * pageSize + 1;
-              const end = Math.min(currentPage * pageSize, total);
-              return `${start}–${end} of ${total}`;
-            })()}
-          </Text>
-        </Group>
-
-        {/* Page controls */}
-        <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-          <ActionIcon
-            variant="default"
-            size="sm"
-            onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
-          >
-            <IconChevronLeft size={16} />
-          </ActionIcon>
-          <Text size="sm" ta="center" style={{ width: 26 }}>
-            {currentPage}
-          </Text>
-          <Text size="sm" c="dimmed">
-            of {Math.max(1, Math.ceil(totalRecords / pageSize))}
-          </Text>
-          <ActionIcon
-            variant="default"
-            size="sm"
-            onClick={() => {
-              const totalPages = Math.max(
-                1,
-                Math.ceil(totalRecords / pageSize)
-              );
-              handlePageChange(Math.min(totalPages, currentPage + 1));
-            }}
-            disabled={(() => {
-              const totalPages = Math.max(
-                1,
-                Math.ceil(totalRecords / pageSize)
-              );
-              return currentPage >= totalPages;
-            })()}
-          >
-            <IconChevronRight size={16} />
-          </ActionIcon>
-        </Group>
-      </Group>
     </Card>
   );
 }
