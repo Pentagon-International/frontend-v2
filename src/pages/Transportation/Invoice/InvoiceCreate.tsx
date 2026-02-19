@@ -598,9 +598,25 @@ function InvoiceCreate() {
     });
   }, [unitData]);
 
-  // Set Billing Currency from user's default branch when user is available and currency is still empty
+  // Agent invoice: force billing currency to USD on every navigation when is_agent is in state
+  // location.key changes on each navigation so effect runs when returning to invoice after back + create again
   useEffect(() => {
-    if (!defaultBranchCurrency || form.values.currency) return;
+    const isAgent =
+      (location.state as { is_agent?: boolean } | null)?.is_agent === true;
+    if (!isAgent) return;
+    form.setFieldValue("currency", "USD");
+    const roe = getRoeValue("USD");
+    if (roe !== null && roe !== undefined) {
+      form.setFieldValue("roe", roe);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.is_agent, location.key]);
+
+  // Set Billing Currency from user's default branch when user is available and currency is still empty (skip for agent invoice - use USD)
+  useEffect(() => {
+    const isAgent =
+      (location.state as { is_agent?: boolean } | null)?.is_agent === true;
+    if (isAgent || !defaultBranchCurrency || form.values.currency) return;
     form.setFieldValue("currency", defaultBranchCurrency);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultBranchCurrency]);
@@ -915,7 +931,12 @@ function InvoiceCreate() {
       ]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once on mount
+  }, [
+    location.state?.is_agent,
+    location.state?.job,
+    location.state?.hawbDetails,
+    location.state?.housingDetails,
+  ]);
 
   // When opening invoice view screen from Accounts table (route has :id), fetch latest invoice details
   const { data: invoiceViewFetchRes, isFetching: invoiceViewFetchLoading } =
@@ -2375,9 +2396,10 @@ function InvoiceCreate() {
               />
             </Grid.Col>
 
-            {/* Currency */}
+            {/* Currency - key forces re-mount so label stays in sync when set programmatically (e.g. agent invoice USD) */}
             <Grid.Col span={2}>
               <Dropdown
+                key={`billing-currency-${form.values.currency}-${location.key}`}
                 label="Billing Currency"
                 placeholder="Select currency"
                 data={billingCurrencyOptions}
