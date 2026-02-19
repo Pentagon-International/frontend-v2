@@ -1602,39 +1602,46 @@ function InvoiceCreate() {
         return `${day}-${month}-${year}`;
       };
 
-      // Resolve GST rates per charge (use cached or fetch from gst-rates-by-state-sac)
-      const gstRatesForCharges: (GstRates | null)[] = await Promise.all(
-        values.charges.map(async (charge, idx) => {
-          const cached = gstRatesByChargeIndex[idx];
-          if (cached) return cached;
-          const sacCode = (charge.tax_code ?? "").trim();
-          if (!sacCode || stateId == null || stateId <= 0) return null;
-          try {
-            const res = (await fetchGstRatesByStateSac({
-              state_id: stateId,
-              sac_code: sacCode,
-            })) as unknown;
-            const resObj = res as {
-              data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
-              [k: string]: unknown;
-            };
-            const payload = resObj?.data?.data ?? resObj?.data ?? res;
-            const gstData = payload as GstRatesBySacResponse | null | undefined;
-            const igstRaw = gstData?.igst_percent;
-            const cgstRaw = gstData?.cgst_percent;
-            const sgstRaw = gstData?.sgst_percent;
-            const sameState = gstData?.same_state ?? false;
-            return {
-              igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-              cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-              sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
-              same_state: sameState,
-            };
-          } catch {
-            return null;
-          }
-        }),
-      );
+      const isAgentSave =
+        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
+        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+
+      // Agent invoice: no tax integration — skip GST endpoint, use zeros for tax fields
+      // Customer invoice: resolve GST rates per charge (gst-rates-by-state-sac)
+      const gstRatesForCharges: (GstRates | null)[] = isAgentSave
+        ? values.charges.map(() => null)
+        : await Promise.all(
+            values.charges.map(async (charge, idx) => {
+              const cached = gstRatesByChargeIndex[idx];
+              if (cached) return cached;
+              const sacCode = (charge.tax_code ?? "").trim();
+              if (!sacCode || stateId == null || stateId <= 0) return null;
+              try {
+                const res = (await fetchGstRatesByStateSac({
+                  state_id: stateId,
+                  sac_code: sacCode,
+                })) as unknown;
+                const resObj = res as {
+                  data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+                  [k: string]: unknown;
+                };
+                const payload = resObj?.data?.data ?? resObj?.data ?? res;
+                const gstData = payload as GstRatesBySacResponse | null | undefined;
+                const igstRaw = gstData?.igst_percent;
+                const cgstRaw = gstData?.cgst_percent;
+                const sgstRaw = gstData?.sgst_percent;
+                const sameState = gstData?.same_state ?? false;
+                return {
+                  igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+                  cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+                  sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+                  same_state: sameState,
+                };
+              } catch {
+                return null;
+              }
+            }),
+          );
 
       const chargesPayload = values.charges.map((charge, idx) => {
         const currencyDataArr = currencyData as {
@@ -1872,21 +1879,28 @@ function InvoiceCreate() {
         const year = d.getFullYear();
         return `${day}-${month}-${year}`;
       };
-      let breakupData = gstBreakup;
-      if (!breakupData?.sac_wise_totals?.length) {
-        breakupData = (await fetchInvoiceCalculateGstBreakup({
-          customer_id: saveResponse.customer_id as number,
-          invoice_id: saveResponse.id as number,
-        })) as typeof gstBreakup;
+
+      // Agent invoice: no tax integration — do not hit fetchInvoiceCalculateGstBreakup or gst-rates-by-state-sac
+      let sacWiseTotals: Array<{ sac_code?: string; charge_id?: number; total_amount?: number; rate?: number }> = [];
+      let taxes: Array<{ tax_code: string; rate: number; amount: number }> = [];
+      if (!isAgentPost) {
+        let breakupData = gstBreakup;
+        if (!breakupData?.sac_wise_totals?.length) {
+          breakupData = (await fetchInvoiceCalculateGstBreakup({
+            customer_id: saveResponse.customer_id as number,
+            invoice_id: saveResponse.id as number,
+          })) as typeof gstBreakup;
+        }
+        sacWiseTotals = breakupData?.sac_wise_totals ?? [];
+        taxes = sacWiseTotals.map((row) => ({
+          tax_code: row.sac_code ?? "",
+          rate: row.rate ?? 0,
+          amount: row.total_amount ?? 0,
+        }));
       }
-      const sacWiseTotals = breakupData?.sac_wise_totals ?? [];
+
       const topRoe =
         values.roe != null && values.roe > 0 ? Number(values.roe) : 1;
-      const taxes = sacWiseTotals.map((row) => ({
-        tax_code: row.sac_code ?? "",
-        rate: row.rate ?? 0,
-        amount: row.total_amount ?? 0,
-      }));
       const currencyDataArr = currencyData as {
         id?: number;
         code?: string;
@@ -1897,39 +1911,42 @@ function InvoiceCreate() {
         unit_code?: string;
         code?: string;
       }[];
-      // Resolve GST rates per charge for POST payload (same as Save)
-      const gstRatesForPostCharges: (GstRates | null)[] = await Promise.all(
-        values.charges.map(async (charge, idx) => {
-          const cached = gstRatesByChargeIndex[idx];
-          if (cached) return cached;
-          const sacCode = (charge.tax_code ?? "").trim();
-          if (!sacCode || stateId == null || stateId <= 0) return null;
-          try {
-            const res = (await fetchGstRatesByStateSac({
-              state_id: stateId,
-              sac_code: sacCode,
-            })) as unknown;
-            const resObj = res as {
-              data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
-              [k: string]: unknown;
-            };
-            const payload = resObj?.data?.data ?? resObj?.data ?? res;
-            const gstData = payload as GstRatesBySacResponse | null | undefined;
-            const igstRaw = gstData?.igst_percent;
-            const cgstRaw = gstData?.cgst_percent;
-            const sgstRaw = gstData?.sgst_percent;
-            const sameState = gstData?.same_state ?? false;
-            return {
-              igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-              cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-              sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
-              same_state: sameState,
-            };
-          } catch {
-            return null;
-          }
-        }),
-      );
+
+      // Agent invoice: no GST fetch — use null rates so charge tax amounts are zero
+      const gstRatesForPostCharges: (GstRates | null)[] = isAgentPost
+        ? values.charges.map(() => null)
+        : await Promise.all(
+            values.charges.map(async (charge, idx) => {
+              const cached = gstRatesByChargeIndex[idx];
+              if (cached) return cached;
+              const sacCode = (charge.tax_code ?? "").trim();
+              if (!sacCode || stateId == null || stateId <= 0) return null;
+              try {
+                const res = (await fetchGstRatesByStateSac({
+                  state_id: stateId,
+                  sac_code: sacCode,
+                })) as unknown;
+                const resObj = res as {
+                  data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+                  [k: string]: unknown;
+                };
+                const payload = resObj?.data?.data ?? resObj?.data ?? res;
+                const gstData = payload as GstRatesBySacResponse | null | undefined;
+                const igstRaw = gstData?.igst_percent;
+                const cgstRaw = gstData?.cgst_percent;
+                const sgstRaw = gstData?.sgst_percent;
+                const sameState = gstData?.same_state ?? false;
+                return {
+                  igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+                  cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+                  sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+                  same_state: sameState,
+                };
+              } catch {
+                return null;
+              }
+            }),
+          );
       const chargesPayload = values.charges.map((charge, idx) => {
         const chargeCurrencyItem = charge.currency_id
           ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
@@ -1988,26 +2005,28 @@ function InvoiceCreate() {
           sgst: sgstAmt,
         };
       });
-      // Append tax rows from sac_wise_totals: charge_id, currency_id, roe (top), amount (total_amount), amount_in_local & amount_in_header (total_amount * roe), tax_code from sac_code; other fields empty
-      const taxCharges = sacWiseTotals.map((row) => {
-        const amt = clampAmount(row.total_amount ?? 0) ?? 0;
-        const amountInLocal = clampAmount(amt * topRoe) ?? 0;
-        return {
-          shipment_no: values.shipment_no,
-          charge_id: row.charge_id ?? null,
-          unit_id: null,
-          no_of_unit: 0,
-          currency_id: currencyId,
-          roe: topRoe,
-          amount_per_unit: 0,
-          amount: amt,
-          amount_in_local: amountInLocal,
-          amount_in_header: amountInLocal,
-          tax_code: row.sac_code ?? "",
-          Dr_Cr: "Cr",
-        };
-      });
-      const allChargesPayload = [...chargesPayload, ...taxCharges];
+      // Agent invoice: no tax charges in payload. Customer invoice: append tax rows from sac_wise_totals
+      const taxCharges = isAgentPost
+        ? []
+        : sacWiseTotals.map((row) => {
+            const amt = clampAmount(row.total_amount ?? 0) ?? 0;
+            const amountInLocal = clampAmount(amt * topRoe) ?? 0;
+            return {
+              shipment_no: values.shipment_no,
+              charge_id: row.charge_id ?? null,
+              unit_id: null,
+              no_of_unit: 0,
+              currency_id: currencyId,
+              roe: topRoe,
+              amount_per_unit: 0,
+              amount: amt,
+              amount_in_local: amountInLocal,
+              amount_in_header: amountInLocal,
+              tax_code: row.sac_code ?? "",
+              Dr_Cr: "Cr",
+            };
+          });
+      const allChargesPayload = isAgentPost ? chargesPayload : [...chargesPayload, ...taxCharges];
       const payload = {
         id: saveResponse.id,
         bill_to: values.bill_to,
