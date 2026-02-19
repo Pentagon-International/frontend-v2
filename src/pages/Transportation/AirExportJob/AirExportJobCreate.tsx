@@ -44,6 +44,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
+import FormTextInput from "../../../components/FormTextInput";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -1623,7 +1624,7 @@ function AirExportJobCreate() {
   };
 
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Text size="xl" fw={600} c="#105476">
           {mode === "view"
@@ -1955,7 +1956,7 @@ function AirExportJobCreate() {
               </Grid.Col>
 
               <Grid.Col span={2}>
-                <TextInput
+                <FormTextInput
                   label="Flight Number"
                   required
                   placeholder="Enter Flight number"
@@ -1964,7 +1965,7 @@ function AirExportJobCreate() {
               </Grid.Col>
 
               <Grid.Col span={2}>
-                <TextInput
+                <FormTextInput
                   label="MAWB Number"
                   required
                   placeholder="Enter MAWB number"
@@ -2204,7 +2205,7 @@ function AirExportJobCreate() {
                         </Grid.Col>
 
                         <Grid.Col span={2}>
-                          <TextInput
+                          <FormTextInput
                             label="Vessel"
                             required
                             placeholder="Enter vessel name"
@@ -2226,7 +2227,7 @@ function AirExportJobCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={2.5}>
-                          <TextInput
+                          <FormTextInput
                             label="Voyage Number"
                             required
                             placeholder="Enter voyage number"
@@ -2276,7 +2277,7 @@ function AirExportJobCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={2.5}>
-                          <TextInput
+                          <FormTextInput
                             label="Flight Number"
                             required
                             placeholder="Enter flight number"
@@ -2326,7 +2327,7 @@ function AirExportJobCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={2.5}>
-                          <TextInput
+                          <FormTextInput
                             label="Truck Number"
                             required
                             placeholder="Enter truck number"
@@ -2341,7 +2342,7 @@ function AirExportJobCreate() {
                     {routing.transport_type === "Rail" && (
                       <>
                         <Grid.Col span={2}>
-                          <TextInput
+                          <FormTextInput
                             label="Carrier"
                             required
                             placeholder="Enter carrier name"
@@ -2368,7 +2369,7 @@ function AirExportJobCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={2.5}>
-                          <TextInput
+                          <FormTextInput
                             label="Rail Number"
                             required
                             placeholder="Enter rail number"

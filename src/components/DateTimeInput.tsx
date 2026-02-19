@@ -40,6 +40,19 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
   const dateValue = value ? dayjs(value).toDate() : null;
   const timeValue = value ? dayjs(value).format("HH:mm") : "";
 
+  // Helper to check if date is selected (same as SingleDateInput)
+  const isDateSelected = (
+    date: Date | null,
+    selectedDate: Date | null
+  ): boolean => {
+    if (!date || !selectedDate) return false;
+    return (
+      date.getDate() === selectedDate.getDate() &&
+      date.getMonth() === selectedDate.getMonth() &&
+      date.getFullYear() === selectedDate.getFullYear()
+    );
+  };
+
   // Handle date change
   const handleDateChange = (date: Date | null) => {
     if (allowDeselection && date && value) {
@@ -110,9 +123,22 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
     onChange(newDateTime);
   };
 
-  // Function to get styles for calendar days
+  // Function to get styles for calendar/field (same structure as SingleDateInput)
   const getDateStyles = () => {
     return {
+      input: {
+        fontSize: "13px",
+        fontFamily: "Inter",
+        height: "36px",
+      },
+      label: {
+        fontSize: "13px",
+        fontWeight: 500,
+        color: "#424242",
+        marginBottom: "4px",
+        fontFamily: "Inter",
+        fontStyle: "medium",
+      },
       day: {
         width: "2.25rem",
         height: "2.25rem",
@@ -142,6 +168,12 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
         pointerEvents: "none" as const,
         visibility: "hidden" as const,
       },
+      yearsList: {
+        width: "100%",
+      },
+      monthsList: {
+        width: "100%",
+      },
       calendarHeaderLevel: {
         fontSize: "1rem",
         fontWeight: 500,
@@ -150,7 +182,6 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
         textAlign: "center" as const,
       },
       calendarHeaderControl: {
-        width: "2rem",
         height: "2rem",
         margin: "0 0.5rem",
       },
@@ -163,8 +194,25 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
     };
   };
 
+  const timeInputStyles = {
+    input: {
+      fontSize: "13px",
+      fontFamily: "Inter",
+      height: "36px",
+      padding: "8px 12px",
+      borderRadius: "4px",
+    },
+    label: {
+      fontSize: "13px",
+      fontWeight: 500,
+      color: "#424242",
+      marginBottom: "4px",
+      fontFamily: "Inter",
+      fontStyle: "medium",
+    },
+  };
+
   return (
-    // <DatesProvider settings={{ locale: "en-GB" }}>
     <Group gap="xs" align="flex-end" wrap="nowrap">
       <DateInput
         label={label}
@@ -174,7 +222,7 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
         valueFormat="YYYY-MM-DD"
         leftSection={<IconCalendar size={18} />}
         leftSectionPointerEvents="none"
-        radius="md"
+        radius="sm"
         size={size}
         nextIcon={<IconChevronRight size={16} />}
         previousIcon={<IconChevronLeft size={16} />}
@@ -187,19 +235,129 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
         withAsterisk={withAsterisk}
         styles={getDateStyles()}
         style={{ flex: 1 }}
+        getDayProps={(date) => {
+          const isSelected = isDateSelected(date, dateValue);
+          return {
+            onMouseEnter: (e: React.MouseEvent) => {
+              const target = e.currentTarget as HTMLElement;
+              if (!isSelected) {
+                target.style.backgroundColor = "#e9ecef";
+                target.style.borderRadius = "6px";
+              } else {
+                target.style.backgroundColor = "#1c7ed6";
+              }
+            },
+            onMouseLeave: (e: React.MouseEvent) => {
+              const target = e.currentTarget as HTMLElement;
+              if (!isSelected) {
+                target.style.backgroundColor = "";
+                target.style.borderRadius = "";
+              } else {
+                target.style.backgroundColor = "#228be6";
+              }
+            },
+            style: {
+              backgroundColor: isSelected ? "#228be6" : undefined,
+              color: isSelected ? "#fff" : undefined,
+              fontWeight: isSelected ? 600 : undefined,
+              borderRadius: "6px",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+            },
+          };
+        }}
+        getYearControlProps={(year) => {
+          const isSelected = isDateSelected(year, dateValue);
+          return {
+            onMouseEnter: (e: React.MouseEvent) => {
+              const target = e.currentTarget as HTMLElement;
+              if (!isSelected) {
+                target.style.backgroundColor = "#e9ecef";
+                target.style.borderRadius = "6px";
+              } else {
+                target.style.backgroundColor = "#1c7ed6";
+              }
+            },
+            onMouseLeave: (e: React.MouseEvent) => {
+              const target = e.currentTarget as HTMLElement;
+              if (!isSelected) {
+                target.style.backgroundColor = "";
+                target.style.borderRadius = "";
+              } else {
+                target.style.backgroundColor = "#228be6";
+              }
+            },
+            style: {
+              backgroundColor: isSelected ? "#228be6" : undefined,
+              color: isSelected ? "#fff" : undefined,
+              fontWeight: isSelected ? 600 : undefined,
+              borderRadius: "6px",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              width: "100%",
+              height: "2.25rem",
+              fontSize: "0.9rem",
+            },
+          };
+        }}
+        getMonthControlProps={(month) => {
+          const isSelected = isDateSelected(month, dateValue);
+          return {
+            onMouseEnter: (e: React.MouseEvent) => {
+              const target = e.currentTarget as HTMLElement;
+              if (!isSelected) {
+                target.style.backgroundColor = "#e9ecef";
+                target.style.borderRadius = "6px";
+              } else {
+                target.style.backgroundColor = "#1c7ed6";
+              }
+            },
+            onMouseLeave: (e: React.MouseEvent) => {
+              const target = e.currentTarget as HTMLElement;
+              if (!isSelected) {
+                target.style.backgroundColor = "";
+                target.style.borderRadius = "";
+              } else {
+                target.style.backgroundColor = "#228be6";
+              }
+            },
+            style: {
+              backgroundColor: isSelected ? "#228be6" : undefined,
+              color: isSelected ? "#fff" : undefined,
+              fontWeight: isSelected ? 600 : undefined,
+              borderRadius: "6px",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              width: "3rem",
+              height: "2.25rem",
+              fontSize: "0.9rem",
+            },
+          };
+        }}
       />
       <TimeInput
         label="Time"
         withSeconds={false}
-        radius="md"
+        radius="sm"
         size={size}
         value={timeValue}
         onChange={handleTimeChange}
         disabled={disabled}
+        styles={timeInputStyles}
       />
-      {/* <TimePicker label="Enter time" />; */}
     </Group>
-    // </DatesProvider>
   );
 };
 

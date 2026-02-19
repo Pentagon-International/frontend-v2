@@ -13,6 +13,10 @@ import {
   ScrollArea,
   Tabs,
   Table,
+  Menu,
+  ActionIcon,
+  Modal,
+  Center,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -20,6 +24,10 @@ import {
   IconChevronRight,
   IconPlus,
   IconTrash,
+  IconDotsVertical,
+  IconEye,
+  IconDownload,
+  IconX,
 } from "@tabler/icons-react";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
@@ -33,6 +41,7 @@ import {
 } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
+import { apiCallProtected } from "../../../api/axios";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
@@ -400,6 +409,8 @@ function InvoiceCreate() {
 
   const [isPosting, setIsPosting] = useState(false);
   const [invoiceIsPosted, setInvoiceIsPosted] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [addressOptions, setAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
@@ -2141,6 +2152,54 @@ function InvoiceCreate() {
     }
   };
 
+  const handleDraftInvoicePreview = async () => {
+    if (!saveResponse?.id) return;
+    setPreviewOpen(true);
+    setPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}${URL.invoice}${saveResponse.id}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setPdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching invoice PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load PDF preview",
+      });
+      setPreviewOpen(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(null);
+  };
+
+  const handleDownloadPDF = () => {
+    if (pdfBlob) {
+      const link = document.createElement("a");
+      link.href = pdfBlob;
+      link.download = `Invoice-${saveResponse?.document_no || saveResponse?.id || "draft"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   const headerSameState = Object.values(gstRatesByChargeIndex).find(
     (rates) => rates?.same_state !== undefined,
   )?.same_state;
@@ -2216,6 +2275,25 @@ function InvoiceCreate() {
                   </Badge>
                 </Group>
               </Group>
+            )}
+            {saveResponse && (
+              <Menu shadow="md" width={200}>
+                <Menu.Target>
+                  <ActionIcon variant="light" color="#105476" size="lg">
+                    <IconDotsVertical size={18} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item
+                    leftSection={<IconEye size={14} />}
+                    onClick={handleDraftInvoicePreview}
+                  >
+                    {saveResponse?.status?.toUpperCase() === "POSTED"
+                      ? "Invoice"
+                      : "Draft Invoice"}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
             )}
             <Button
               variant="outline"
@@ -3969,6 +4047,63 @@ function InvoiceCreate() {
           </Group>
         </Box>
       </Stack>
+
+      {/* PDF Preview Modal */}
+      <Modal
+        opened={previewOpen}
+        onClose={handleClosePreview}
+        title="PDF Preview"
+        size="xl"
+        styles={{
+          body: {
+            padding: 0,
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {pdfBlob ? (
+            <>
+              <iframe
+                src={pdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }

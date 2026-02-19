@@ -168,6 +168,7 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
           <Route path="export-generation">
             <Route index element={<AirExportGenerationMaster />} />
@@ -247,6 +248,7 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
           <Route path="import-job">
             <Route index element={<ImportJobMaster />} />
@@ -257,6 +259,7 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
         </Route>
         <Route path="/reports" element={<DemoPage />} />
