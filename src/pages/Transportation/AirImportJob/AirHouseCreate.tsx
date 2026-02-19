@@ -1154,32 +1154,36 @@ function HouseCreate() {
   }, [isEditMode, location.state?.mawbDetails]);
 
   // Auto-update HAWB origin agent name and address from MAWB origin agent
+  // Master sends origin_agent = code (for payload); we display and send customer name in house as agent_name, address as agent_address
+  // In edit flow we may have origin_agent_address from API (e.g. agent_address) - only overwrite when master has new address data
   useEffect(() => {
     const mawbDetails =
       location.state?.mawbDetails || location.state?.mawbDetails;
     if (!mawbDetails) return;
 
-    const mawbOriginAgent = mawbDetails.origin_agent || "";
+    const mawbOriginAgentCode = mawbDetails.origin_agent || "";
+    const mawbOriginAgentName =
+      mawbDetails.origin_agent_name ||
+      (mawbDetails.origin_agent_data as Record<string, unknown> | undefined)
+        ?.customer_name ||
+      "";
     const mawbOriginAgentData = mawbDetails.origin_agent_data as
       | Record<string, unknown>
       | null
       | undefined;
 
-    console.log("🔍 MAWB Origin Agent Auto-fill:", {
-      mawbOriginAgent,
-      hasMawbOriginAgentData: !!mawbOriginAgentData,
-      mawbOriginAgentData,
-      addressesData: mawbOriginAgentData?.addresses_data,
-      fullMawbDetails: mawbDetails,
-    });
+    if (mawbOriginAgentCode && mawbOriginAgentCode.trim() !== "") {
+      // Origin Agent Name in house = customer name (for display and for payload agent_name)
+      form.setFieldValue(
+        "origin_agent_name",
+        mawbOriginAgentName && mawbOriginAgentName.trim() !== ""
+          ? mawbOriginAgentName
+          : ""
+      );
 
-    if (mawbOriginAgent && mawbOriginAgent.trim() !== "") {
-      // Auto-set HAWB origin agent name from MAWB origin agent
-      form.setFieldValue("origin_agent_name", mawbOriginAgent);
-
-      // Auto-set HAWB origin agent address from MAWB origin agent addresses_data
+      // Origin Agent Address: only set when master has address data from agent selection.
+      // Do not clear when master has no addresses_data (e.g. edit flow where we have agent_address from API).
       if (mawbOriginAgentData && mawbOriginAgentData.addresses_data) {
-        // Check if addresses_data exists and is an array
         const addressesData = Array.isArray(mawbOriginAgentData.addresses_data)
           ? (mawbOriginAgentData.addresses_data as Array<{
               id: number;
@@ -1187,53 +1191,37 @@ function HouseCreate() {
             }>)
           : null;
 
-        console.log("📍 Processed Addresses Data:", addressesData);
-
-        // Auto-select the first address if available
         if (
           addressesData &&
           addressesData.length > 0 &&
           addressesData[0].address
         ) {
-          const firstAddress = addressesData[0].address;
-          console.log("✅ Setting HBL origin agent address:", firstAddress);
-          form.setFieldValue("origin_agent_address", firstAddress);
-        } else {
-          console.log("⚠️ No valid address found in addresses_data");
-          // Clear address if no addresses_data available
-          form.setFieldValue("origin_agent_address", "");
+          form.setFieldValue("origin_agent_address", addressesData[0].address);
         }
-      } else {
-        console.log("⚠️ No mawbOriginAgentData or addresses_data found");
-        // Clear address if no origin_agent_data
-        form.setFieldValue("origin_agent_address", "");
+        // else: leave existing value (e.g. from editData.origin_agent_address / API agent_address)
       }
+      // else: do not clear - preserve edit flow value (agent_address from API) or user input
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // Auto-set routed_by to MAWB origin agent name when routed is "agent"
+  // Auto-set routed_by to MAWB origin agent customer name when routed is "agent"
   useEffect(() => {
     if (form.values.routed === "agent") {
       const mawbDetails = location.state?.mawbDetails;
       if (!mawbDetails) return;
 
-      // Get origin agent name from mawbDetails
-      // origin_agent should be the name (from SearchableSelect which uses customer_name)
-      let mawbOriginAgentName = mawbDetails.origin_agent || "";
-
-      // If origin_agent is empty, try to get it from origin_agent_data
+      // Use customer name (origin_agent_name or origin_agent_data.customer_name), not code
+      let mawbOriginAgentName = mawbDetails.origin_agent_name || "";
       if (!mawbOriginAgentName && mawbDetails.origin_agent_data) {
         const originAgentData = mawbDetails.origin_agent_data as Record<
           string,
           unknown
         >;
-        // Try to get customer_name from origin_agent_data
         mawbOriginAgentName = (originAgentData.customer_name as string) || "";
       }
 
       if (mawbOriginAgentName && mawbOriginAgentName.trim() !== "") {
-        // Auto-set routed_by to MAWB origin agent name if not already set or if MAWB origin agent changed
         if (
           !form.values.routed_by ||
           form.values.routed_by !== mawbOriginAgentName
@@ -1246,25 +1234,9 @@ function HouseCreate() {
   }, [
     form.values.routed,
     location.state?.mawbDetails?.origin_agent,
+    location.state?.mawbDetails?.origin_agent_name,
     location.state?.mawbDetails?.origin_agent_data,
   ]);
-
-  // Auto-set routed_by to MAWB origin agent when routed is "agent"
-  useEffect(() => {
-    if (form.values.routed === "agent") {
-      const mawbOriginAgent = location.state?.mawbDetails?.origin_agent || "";
-      if (mawbOriginAgent && mawbOriginAgent.trim() !== "") {
-        // Auto-set routed_by to MAWB origin agent if not already set or if MAWB origin agent changed
-        if (
-          !form.values.routed_by ||
-          form.values.routed_by !== mawbOriginAgent
-        ) {
-          form.setFieldValue("routed_by", mawbOriginAgent);
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routed, location.state?.mawbDetails?.origin_agent]);
 
   // Validate step 1 - Validate required fields
   const validateStep1 = () => {
