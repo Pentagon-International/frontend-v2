@@ -79,6 +79,7 @@ type CarrierDetailsForm = {
 };
 
 type RoutingDetail = {
+  id?: number;
   transport_type: string;
   from_code: string;
   from_name: string;
@@ -128,7 +129,9 @@ type HAWBDetail = {
   notify_customer1_email: string;
   commodity_description?: string;
   marks_no?: string;
+  shipment_terms_code?: string;
   cargo_details?: Array<{
+    id?: number;
     no_of_packages: number | null;
     gross_weight: number | null;
     volume: number | null;
@@ -457,7 +460,6 @@ function AirImportJobCreate() {
           schedule_id: jobData.schedule_id || "",
           carrier_code: jobData.carrier_code || "",
           carrier_name: jobData.carrier_name || "",
-          flight_name: jobData.vessel_name || jobData.flight_name || "",
           flight_number:
             jobData.flight_number ||
             jobData.voyage_number ||
@@ -541,14 +543,14 @@ function AirImportJobCreate() {
                 ? String(house.customer_service)
                 : "",
               trade: house.trade ? String(house.trade) : "",
-              origin_agent_name: house.origin_agent_name
-                ? String(house.origin_agent_name)
+              origin_agent_name: (house.agent_name ?? house.origin_agent_name)
+                ? String(house.agent_name ?? house.origin_agent_name)
                 : "",
-              origin_agent_address: house.origin_agent_address
-                ? String(house.origin_agent_address)
+              origin_agent_address: (house.agent_address ?? house.origin_agent_address)
+                ? String(house.agent_address ?? house.origin_agent_address)
                 : "",
-              origin_agent_email: house.origin_agent_email
-                ? String(house.origin_agent_email)
+              origin_agent_email: (house.agent_email ?? house.origin_agent_email)
+                ? String(house.agent_email ?? house.origin_agent_email)
                 : "",
               shipper_code: house.shipper_code ? String(house.shipper_code) : "",
               shipper_name: house.shipper_name
@@ -589,6 +591,9 @@ function AirImportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              shipment_terms_code: house.shipment_terms_code
+                ? String(house.shipment_terms_code)
+                : "",
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -614,6 +619,7 @@ function AirImportJobCreate() {
                                 ? String(cargo.haz)
                                 : "";
                         return {
+                          ...(cargo.id != null && { id: Number(cargo.id) }),
                           no_of_packages:
                             cargo.no_of_packages != null && !Number.isNaN(Number(cargo.no_of_packages))
                               ? Number(cargo.no_of_packages)
@@ -689,6 +695,7 @@ function AirImportJobCreate() {
           const mappedRoutings = jobData.ocean_routings.map(
             (routing: Record<string, unknown>) => {
               return {
+                ...(routing.id != null && { id: Number(routing.id) }),
                 transport_type: routing.transport_type || "",
                 from_code: routing.from_port_code || routing.from_code || "",
                 from_name: routing.from_port_name || routing.from_name || "",
@@ -732,6 +739,7 @@ function AirImportJobCreate() {
           const mappedRoutings = jobData.routings.map(
             (routing: Record<string, unknown>) => {
               return {
+                ...(routing.id != null && { id: Number(routing.id) }),
                 transport_type: routing.transport_type || "",
                 from_code: routing.from_port_code || routing.from_code || "",
                 from_name: routing.from_port_name || routing.from_name || "",
@@ -982,6 +990,7 @@ function AirImportJobCreate() {
             mawbDetails: {
               service: mawbDetailsForm.values.service || "Air",
               origin_agent: mawbDetailsForm.values.origin_agent || "",
+              origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
               origin_name: mawbDetailsForm.values.origin_name || "",
               destination_code: mawbDetailsForm.values.destination_code || "",
@@ -1019,6 +1028,7 @@ function AirImportJobCreate() {
             mawbDetails: {
               service: mawbDetailsForm.values.service || "Air",
               origin_agent: mawbDetailsForm.values.origin_agent || "",
+              origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
               origin_name: mawbDetailsForm.values.origin_name || "",
               destination_code: mawbDetailsForm.values.destination_code || "",
@@ -1060,6 +1070,7 @@ function AirImportJobCreate() {
           mawbDetails: {
             service: mawbDetailsForm.values.service || "Air",
             origin_agent: mawbDetailsForm.values.origin_agent || "",
+            origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
             origin_code: mawbDetailsForm.values.origin_code || "",
             origin_name: mawbDetailsForm.values.origin_name || "",
             destination_code: mawbDetailsForm.values.destination_code || "",
@@ -1173,6 +1184,7 @@ function AirImportJobCreate() {
           mawbDetailsForm.setValues({
             service: savedMawbDetails.service || "Air",
             origin_agent: savedMawbDetails.origin_agent || "",
+            origin_agent_name: savedMawbDetails.origin_agent_name || "",
             origin_code: savedMawbDetails.origin_code || "",
             origin_name: savedMawbDetails.origin_name || "",
             destination_code: savedMawbDetails.destination_code || "",
@@ -1303,12 +1315,16 @@ function AirImportJobCreate() {
       lastRestoredMawbDetailsRef.current = null;
 
       // Prepare MAWB details with ALL current form values including origin_name and destination_name
+      // origin_agent = code (for API payload); origin_agent_name = customer name (for display and house payload)
       const mawbDetailsToPass = {
         service: mawbDetailsForm.values.service || "Air",
         origin_agent:
           mawbDetailsForm.values.origin_agent ||
           location.state?.mawbDetails?.origin_agent ||
-          location.state?.mawbDetails?.origin_agent ||
+          "",
+        origin_agent_name:
+          mawbDetailsForm.values.origin_agent_name ||
+          location.state?.mawbDetails?.origin_agent_name ||
           "",
         origin_code: mawbDetailsForm.values.origin_code || "",
         origin_name: mawbDetailsForm.values.origin_name || "",
@@ -1612,40 +1628,27 @@ function AirImportJobCreate() {
             : null
           : null,
         carrier_code: carrierDetailsForm.values.carrier_code,
-        voyage_number: carrierDetailsForm.values.flight_number || null,
-        mbl_date: carrierDetailsForm.values.mawb_date
+        flightno: carrierDetailsForm.values.flight_number || null,
+        mawb_no: carrierDetailsForm.values.mawb_number || null,
+        mawb_date: carrierDetailsForm.values.mawb_date
           ? dayjs(carrierDetailsForm.values.mawb_date).isValid()
             ? dayjs(carrierDetailsForm.values.mawb_date).format("YYYY-MM-DD")
             : null
           : null,
-        flightno: carrierDetailsForm.values.flight_number || null,
-        mawb_no: carrierDetailsForm.values.mawb_number || null,
         ocean_routings: routingsForm.values.routings.map((routing) => {
-          // New format: all fields are nullable
+          const toIso = (d: Date | null) =>
+            d && dayjs(d).isValid()
+              ? dayjs(d).utc().format("YYYY-MM-DDTHH:mm:ss") + "Z"
+              : null;
           const routingPayload: Record<string, unknown> = {
+            ...(routing.id != null && { id: Number(routing.id) }),
             transport_type: routing.transport_type || null,
             from_port_code: routing.from_code || null,
             to_port_code: routing.to_code || null,
-            etd: routing.etd
-              ? dayjs(routing.etd).isValid()
-                ? dayjs(routing.etd).format("YYYY-MM-DD")
-                : null
-              : null,
-            eta: routing.eta
-              ? dayjs(routing.eta).isValid()
-                ? dayjs(routing.eta).format("YYYY-MM-DD")
-                : null
-              : null,
-            atd: routing.atd
-              ? dayjs(routing.atd).isValid()
-                ? dayjs(routing.atd).format("YYYY-MM-DD")
-                : null
-              : null,
-            ata: routing.ata
-              ? dayjs(routing.ata).isValid()
-                ? dayjs(routing.ata).format("YYYY-MM-DD")
-                : null
-              : null,
+            etd: toIso(routing.etd),
+            eta: toIso(routing.eta),
+            atd: toIso(routing.atd),
+            ata: toIso(routing.ata),
             carrier_code: null,
             vessel: null,
             flight: null,
@@ -1654,7 +1657,6 @@ function AirImportJobCreate() {
             rail_no: null,
           };
 
-          // Map fields based on transport type
           if (routing.transport_type === "Sea") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.vessel = routing.vessel || null;
@@ -1669,7 +1671,6 @@ function AirImportJobCreate() {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.rail_no = routing.rail_no || null;
           } else {
-            // Default case - include all fields
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.vessel = routing.vessel || null;
             routingPayload.flight = routing.flight || null;
@@ -1683,20 +1684,18 @@ function AirImportJobCreate() {
         housing_details: hawbDetails.map((hawb) => ({
           ...(hawb.id != null && hawb.id !== undefined && { id: Number(hawb.id) }),
           hawb_no: hawb.hawb_number,
-          routed: hawb.routed,
-          routed_by: hawb.routed_by || null,
           origin_code: hawb.origin_code,
           destination_code: hawb.destination_code,
-          customer_service: hawb.customer_service || "",
           trade: hawb.trade,
-          origin_agent_name: hawb.origin_agent_name,
-          origin_agent_address: hawb.origin_agent_address || "",
-          origin_agent_email: hawb.origin_agent_email || "",
-          shipper_code: hawb.shipper_code || "",
+          routed: hawb.routed,
+          routed_by: hawb.routed_by || null,
+          customer_service: hawb.customer_service || "",
+          agent_name: hawb.origin_agent_name || "",
+          agent_address: hawb.origin_agent_address || "",
+          agent_email: hawb.origin_agent_email || "",
           shipper_name: hawb.shipper_name,
           shipper_address: hawb.shipper_address || "",
           shipper_email: hawb.shipper_email || "",
-          consignee_code: hawb.consignee_code || "",
           consignee_name: hawb.consignee_name,
           consignee_address: hawb.consignee_address || "",
           consignee_email: hawb.consignee_email || "",
@@ -1705,7 +1704,15 @@ function AirImportJobCreate() {
           notify_customer1_email: hawb.notify_customer1_email || "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
-          cargo_details: hawb.cargo_details || [],
+          ...(hawb.shipment_terms_code != null && hawb.shipment_terms_code !== "" && { shipment_terms_code: hawb.shipment_terms_code }),
+          cargo_details: (hawb.cargo_details || []).map((c) => ({
+            ...(c.id != null && { id: Number(c.id) }),
+            no_of_packages: c.no_of_packages ?? 0,
+            gross_weight: c.gross_weight != null ? String(c.gross_weight) : "",
+            volume: c.volume != null ? String(c.volume) : "",
+            chargeable_weight: c.chargeable_weight != null ? String(c.chargeable_weight) : "",
+            haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
+          })),
           mawb_charges: hawb.charges
             ? hawb.charges.map((charge) => ({
                 ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),

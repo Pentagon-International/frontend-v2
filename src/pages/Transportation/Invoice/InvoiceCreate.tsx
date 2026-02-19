@@ -533,28 +533,39 @@ function InvoiceCreate() {
   }, [stateData]);
 
   // State from housing is set after state API loads
+  // Agent invoice: use agent_state_id; Customer invoice: use shipper_state_id
   useEffect(() => {
     if (isStateLoading) return;
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
+    const job = location.state?.job as {
+      housing_details?: Array<{
+        shipper_state_id?: number | null;
+        agent_state_id?: number | null;
+      }>;
+    } | undefined;
+    const jobHousing = job?.housing_details;
     const firstHawb =
       Array.isArray(hawbDetails) && hawbDetails.length > 0
         ? hawbDetails[0]
-        : null;
-    const jobHousing = (
-      location.state?.job as {
-        housing_details?: Array<{ shipper_state_id?: number | null }>;
-      }
-    )?.housing_details;
-    const shipperStateId =
-      firstHawb?.shipper_state_id != null
-        ? firstHawb.shipper_state_id
-        : (jobHousing?.[0]?.shipper_state_id ?? null);
+        : jobHousing?.[0] ?? null;
+    const firstHawbAny = firstHawb as
+      | { shipper_state_id?: number | null; agent_state_id?: number | null }
+      | null
+      | undefined;
+    const isAgent =
+      (location.state as { is_agent?: boolean } | null)?.is_agent === true;
+
+    const stateId =
+      isAgent
+        ? (firstHawbAny?.agent_state_id ?? jobHousing?.[0]?.agent_state_id ?? null)
+        : (firstHawbAny?.shipper_state_id ?? jobHousing?.[0]?.shipper_state_id ?? null);
+
     if (
-      shipperStateId != null &&
-      String(shipperStateId) !== form.values.state
+      stateId != null &&
+      String(stateId) !== form.values.state
     ) {
-      form.setFieldValue("state", String(shipperStateId));
+      form.setFieldValue("state", String(stateId));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStateLoading, stateData]);
