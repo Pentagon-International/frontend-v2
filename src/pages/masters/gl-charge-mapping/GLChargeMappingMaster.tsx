@@ -42,6 +42,9 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { Dropdown, SearchableSelect } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
+import { useListFilterStore } from "../../../store/listFilterStore";
+
+const LIST_KEY = "GL_CHARGE_MAPPING_MASTER";
 
 type GLChargeMappingMaster = {
   id?: string | number;
@@ -152,6 +155,41 @@ export default function GLChargeMappingMasterList() {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
 
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore){
+      setIsRestoring(false);
+      return
+    };
+
+    if (typeof stored?.search === "string") setSearch(stored.search);
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const f = stored.filters as GLChargeMappingFilters;
+      const restored = { ...DEFAULT_FILTERS, ...f };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllExcept(LIST_KEY)
+    setShouldRestore(LIST_KEY, false);
+
+    setIsRestoring(false);
+  }, [location.key]);
+
   const currentPage = pagination.pageIndex + 1;
   const statusOptions = ["ACTIVE", "INACTIVE"];
 
@@ -236,12 +274,15 @@ export default function GLChargeMappingMasterList() {
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
   };
 
   const clearAllFilters = () => {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
   };
 
   const buildFiltersPayload = (
@@ -297,7 +338,7 @@ export default function GLChargeMappingMasterList() {
       "gl-charge-mapping",
       pagination.pageIndex,
       pagination.pageSize,
-      appliedFilters,
+      JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
     queryFn: async () => {
@@ -313,6 +354,8 @@ export default function GLChargeMappingMasterList() {
           Object.keys(filtersPayload).length > 0
             ? { filters: filtersPayload }
             : {};
+        
+        setIsInitialLoad(false);
 
         const response = await apiCallProtected.post(
           `${URL.glChargeMappingFilter}?&index=${index}&limit=${pagination.pageSize}`,
@@ -334,12 +377,13 @@ export default function GLChargeMappingMasterList() {
         throw error;
       }
     },
+    enabled: !isRestoring && search === debouncedSearch,
     staleTime: 0,
     refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    refetchOnMount: false,
   });
 
-  const isLoading = glChargeMappingFetching || glChargeMappingLoading;
+  const isLoading = glChargeMappingFetching || glChargeMappingLoading || isInitialLoad;
   const tableData = glChargeMappingData ?? [];
 
   const columns = useMemo<MRT_ColumnDef<GLChargeMappingMaster>[]>(
@@ -404,11 +448,14 @@ export default function GLChargeMappingMasterList() {
             <Menu.Dropdown>
               <Box px={10} py={5}>
                 <UnstyledButton
-                  onClick={() =>
+                  onClick={() => {
+                    setStoreFilters(LIST_KEY, appliedFilters);
+                    setStoreSearch(LIST_KEY, search);
+                    setShouldRestore(LIST_KEY, true);
                     navigate("/master/gl-charge-mapping/edit", {
-                      state: row.original,
-                    })
-                  }
+                      state: { ...row.original },
+                    });
+                  }}
                 >
                   <Group gap={"sm"}>
                     <IconEdit size={16} style={{ color: "#105476" }} />
@@ -423,7 +470,14 @@ export default function GLChargeMappingMasterList() {
         ),
       },
     ],
-    [navigate],
+    [
+      navigate,
+      appliedFilters,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+    ],
   );
 
   const table = useMantineReactTable({
@@ -559,7 +613,7 @@ export default function GLChargeMappingMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
-            {/* <TextInput
+            <TextInput
               placeholder="Search..."
               leftSection={<IconSearch size={16} />}
               rightSection={
@@ -597,7 +651,7 @@ export default function GLChargeMappingMasterList() {
                   },
                 },
               }}
-            /> */}
+            />
             <ActionIcon
               variant={showFilters ? "filled" : "outline"}
               size={36}
@@ -636,7 +690,12 @@ export default function GLChargeMappingMasterList() {
                   },
                 },
               }}
-              onClick={() => navigate("/master/gl-charge-mapping/create")}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/master/gl-charge-mapping/create");
+              }}
             >
               Create New
             </Button>
@@ -917,6 +976,7 @@ export default function GLChargeMappingMasterList() {
                 size="xs"
                 label="Status"
                 placeholder="Select Status"
+                searchable
                 data={statusOptions}
                 value={draftFilters.status || null}
                 onChange={(value) =>

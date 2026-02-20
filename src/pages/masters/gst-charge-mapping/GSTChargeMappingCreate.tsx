@@ -131,7 +131,7 @@ export default function GSTChargeMappingCreate() {
         });
       }
 
-      navigate("/master/gst-charge-mapping", { state: { refreshData: true } });
+      navigate("/master/gst-charge-mapping");
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({

@@ -40,6 +40,9 @@ import { apiCallProtected } from "../../../api/axios";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Dropdown, SearchableSelect } from "../../../components";
+import { useListFilterStore } from "../../../store/listFilterStore";
+
+const LIST_KEY = "CHARGE_MASTER";
 
 type ChargeMaster = {
   id?: string;
@@ -79,12 +82,51 @@ export default function ChargeMasterList() {
   const [appliedFilters, setAppliedFilters] =
     useState<ChargeFilters>(DEFAULT_FILTERS);
 
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
 
+  // Restore filters/search from store when returning from create/edit
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const restored = { ...DEFAULT_FILTERS, ...stored.filters };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    
+    clearAllExcept(LIST_KEY)
+    setShouldRestore(LIST_KEY, false);
+
+    setIsRestoring(false);
+
+  }, [location.key]);
+
   const currentPage = pagination.pageIndex + 1;
-  const chargesTypeOptions = ["FREIGHT", "ORIGIN", "DESTINATION"];
-  const calculationTypeOptions = ["PER_CONTAINER", "SHIPMENT", "UNIT"];
+  const chargesTypeOptions = ["FREIGHT", "ORIGIN", "DESTINATION", "OTHER"];
+  const calculationTypeOptions = ["PER_CONTAINER", "SHIPMENT", "UNIT", "PERCENTAGE"];
   const statusOptions = ["ACTIVE", "INACTIVE"];
   // Handle page size change
   const handlePageSizeChange = (newPageSize: number) => {
@@ -105,12 +147,15 @@ export default function ChargeMasterList() {
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
   };
 
   const clearAllFilters = () => {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
   };
 
   const buildFiltersPayload = (filters: ChargeFilters, searchValue: string) => {
@@ -138,7 +183,7 @@ export default function ChargeMasterList() {
       "charges",
       pagination.pageIndex,
       pagination.pageSize,
-      appliedFilters,
+      JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
     queryFn: async () => {
@@ -154,7 +199,7 @@ export default function ChargeMasterList() {
           Object.keys(filtersPayload).length > 0
             ? { filters: filtersPayload } :
           {};
-
+        setIsInitialLoad(false)
         const response = await apiCallProtected.post(
           `${URL.chargeMasterFilter}?&index=${index}&limit=${pagination.pageSize}`,
           payload,
@@ -175,12 +220,13 @@ export default function ChargeMasterList() {
         throw error;
       }
     },
+    enabled: !isRestoring && search === debouncedSearch,
     staleTime: 0,
     refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    refetchOnMount: false,
   });
 
-  const isLoading = chargeFetching || chargeLoading;
+  const isLoading = chargeFetching || chargeLoading || isInitialLoad;
   const tableData = chargeData ?? [];
 
   // useEffect(() => {
@@ -242,9 +288,12 @@ export default function ChargeMasterList() {
             <Menu.Dropdown>
               <Box px={10} py={5}>
                 <UnstyledButton
-                  onClick={() =>
-                    navigate("/master/charge/edit", { state: row.original })
-                  }
+                  onClick={() => {
+                    setStoreFilters(LIST_KEY, appliedFilters);
+                    setStoreSearch(LIST_KEY, search);
+                    setShouldRestore(LIST_KEY, true);
+                    navigate("/master/charge/edit", { state: { ...row.original } });
+                  }}
                 >
                   <Group gap={"sm"}>
                     <IconEdit size={16} style={{ color: "#105476" }} />
@@ -259,7 +308,14 @@ export default function ChargeMasterList() {
         ),
       },
     ],
-    [navigate],
+    [
+      navigate,
+      appliedFilters,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+    ],
   );
 
   const table = useMantineReactTable({
@@ -395,7 +451,7 @@ export default function ChargeMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
-            {/* <TextInput
+            <TextInput
               placeholder="Search..."
               leftSection={<IconSearch size={16} />}
               rightSection={
@@ -433,7 +489,7 @@ export default function ChargeMasterList() {
                   },
                 },
               }}
-            /> */}
+            />
             <ActionIcon
               variant={showFilters ? "filled" : "outline"}
               size={36}
@@ -472,7 +528,12 @@ export default function ChargeMasterList() {
                   },
                 },
               }}
-              onClick={() => navigate("/master/charge/create")}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/master/charge/create");
+              }}
             >
               Create New
             </Button>
@@ -575,6 +636,7 @@ export default function ChargeMasterList() {
                 label="Charges Type"
                 placeholder="Select Charge Type"
                 data={chargesTypeOptions}
+                searchable
                 value={draftFilters.charges_type || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
@@ -591,6 +653,7 @@ export default function ChargeMasterList() {
                 label="Calculation Type"
                 placeholder="Select Calculation Type"
                 data={calculationTypeOptions}
+                searchable
                 value={draftFilters.calculation_type || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
@@ -607,6 +670,7 @@ export default function ChargeMasterList() {
                 label="Status"
                 placeholder="Select Status"
                 data={statusOptions}
+                searchable
                 value={draftFilters.status || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
