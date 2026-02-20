@@ -78,6 +78,8 @@ type QuotationData = {
   enquiry_received_date: string;
   customer_code: string;
   customer_address: string;
+  /** From filter quotation response; used when creating booking (shipper/consignee) */
+  customer_address_id?: number;
   service: string;
   cargo_type: string;
   charges: any[];

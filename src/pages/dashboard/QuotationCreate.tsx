@@ -2091,6 +2091,10 @@ function QuotationCreate({
         enquiry_id: actualEnquiryData.enquiry_id,
         customer_name: actualEnquiryData.customer_name,
         customer_address: actualEnquiryData.customer_address || "",
+        customer_address_id:
+          actualEnquiryData.customer_address_id != null
+            ? Number(actualEnquiryData.customer_address_id)
+            : undefined,
         sales_person: actualEnquiryData.sales_person,
         enquiry_received_date: actualEnquiryData.enquiry_received_date,
         customer_code: actualEnquiryData.customer_code || "",

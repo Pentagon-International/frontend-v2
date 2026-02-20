@@ -91,10 +91,10 @@ function AirImportBookingCreate() {
         },
       ],
 
-      // Stepper 2 - Party Details (Import: customer = consignee, with address from quotation list)
-      consignee_code: "",
+      // Stepper 2 - Party Details (Import: customer = consignee; use customer_code and customer_address_id from quotation list)
+      consignee_code: (enquiryData.customer_code as string) || "",
       consignee_name: (enquiryData.customer_name as string) || "",
-      consignee_address_id: 0,
+      consignee_address_id: Number(enquiryData.customer_address_id) || 0,
       consignee_address: (enquiryData.customer_address as string) || "",
       consignee_email: "",
       shipper_code: "",

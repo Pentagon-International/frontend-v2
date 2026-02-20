@@ -1125,6 +1125,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             label: String(initialData.consignee_address),
           },
         ]);
+        form.setFieldValue("consignee_address_id", Number(initialData.consignee_address_id) || 0);
       }
 
       // Forwarder Address
@@ -2795,7 +2796,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 searchable
                 data={shipperAddressOptions}
                 value={
-                  form.values.shipper_address_id
+                  form.values.shipper_address_id != null
                     ? String(form.values.shipper_address_id)
                     : ""
                 }
@@ -2883,7 +2884,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 searchable
                 data={consigneeAddressOptions}
                 value={
-                  form.values.consignee_address_id
+                  form.values.consignee_address_id != null
                     ? String(form.values.consignee_address_id)
                     : ""
                 }

@@ -94,10 +94,11 @@ function OceanExportBookingCreate() {
         },
       ],
 
-      // Stepper 2 - Party Details (Export: customer = shipper)
-      shipper_code: "",
+      // Stepper 2 - Party Details (Export: customer = shipper; use customer_code and customer_address_id from quotation list)
+      shipper_code: (enquiryData.customer_code as string) || "",
       shipper_name: (enquiryData.customer_name as string) || "",
-      shipper_address_id: 0,
+      shipper_address_id: Number(enquiryData.customer_address_id) || 0,
+      shipper_address: (enquiryData.customer_address as string) || "",
       shipper_email: "",
       consignee_code: "",
       consignee_name: "",
@@ -118,21 +119,54 @@ function OceanExportBookingCreate() {
       cha_address_id: 0,
 
       // Stepper 3 - Commodity Details
+      // For FCL: map from quotationData.cargo_details (dynamic, multiple rows). For LCL/AIR: from serviceDetails
       is_hazardous: serviceDetails.hazardous_cargo || false,
       commodity_description: "",
       marks_no: "",
-      cargo_details: [
-        {
-          no_of_packages: serviceDetails.no_of_packages || undefined,
-          gross_weight: serviceDetails.gross_weight || undefined,
-          volume_weight: serviceDetails.volume_weight || undefined,
-          chargeable_weight: serviceDetails.chargeable_weight || undefined,
-          volume: serviceDetails.volume || undefined,
-          chargeable_volume: serviceDetails.chargeable_volume || undefined,
-          container_type_code: serviceDetails.container_type_code || undefined,
-          no_of_containers: serviceDetails.no_of_containers || undefined,
-        },
-      ],
+      cargo_details:
+        (quotationData.service_type as string) === "FCL" &&
+        Array.isArray(quotationData.cargo_details) &&
+        quotationData.cargo_details.length > 0
+          ? (quotationData.cargo_details as Array<Record<string, unknown>>).map(
+              (cargo: Record<string, unknown>) => ({
+                no_of_packages: cargo.no_of_packages
+                  ? Number(cargo.no_of_packages)
+                  : undefined,
+                gross_weight: cargo.gross_weight
+                  ? Number(cargo.gross_weight)
+                  : undefined,
+                volume_weight: cargo.volume_weight
+                  ? Number(cargo.volume_weight)
+                  : undefined,
+                chargeable_weight: cargo.chargeable_weight
+                  ? Number(cargo.chargeable_weight)
+                  : undefined,
+                volume: cargo.volume ? Number(cargo.volume) : undefined,
+                chargeable_volume: cargo.chargeable_volume
+                  ? Number(cargo.chargeable_volume)
+                  : undefined,
+                container_type_code: cargo.container_type_code
+                  ? String(cargo.container_type_code)
+                  : cargo.container_type
+                    ? String(cargo.container_type)
+                    : undefined,
+                no_of_containers: cargo.no_of_containers
+                  ? Number(cargo.no_of_containers)
+                  : undefined,
+              })
+            )
+          : [
+              {
+                no_of_packages: serviceDetails.no_of_packages || undefined,
+                gross_weight: serviceDetails.gross_weight || undefined,
+                volume_weight: serviceDetails.volume_weight || undefined,
+                chargeable_weight: serviceDetails.chargeable_weight || undefined,
+                volume: serviceDetails.volume || undefined,
+                chargeable_volume: serviceDetails.chargeable_volume || undefined,
+                container_type_code: serviceDetails.container_type_code || undefined,
+                no_of_containers: serviceDetails.no_of_containers || undefined,
+              },
+            ],
 
       // Pickup Details
       pickup_location: "",

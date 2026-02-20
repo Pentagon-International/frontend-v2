@@ -103,10 +103,11 @@ function AirExportBookingCreate() {
         },
       ],
 
-      // Stepper 2 - Party Details (Export: customer = shipper)
-      shipper_code: "",
+      // Stepper 2 - Party Details (Export: customer = shipper; use customer_code and customer_address_id from quotation list)
+      shipper_code: (enquiryData.customer_code as string) || "",
       shipper_name: (enquiryData.customer_name as string) || "",
-      shipper_address_id: 0,
+      shipper_address_id: Number(enquiryData.customer_address_id) || 0,
+      shipper_address: (enquiryData.customer_address as string) || "",
       shipper_email: "",
       consignee_code: "",
       consignee_name: "",

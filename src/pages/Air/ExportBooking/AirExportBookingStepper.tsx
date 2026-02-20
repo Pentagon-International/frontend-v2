@@ -1120,13 +1120,15 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
       // Populate address options from response data for Party Details
       // Shipper Address
-      if (initialData.shipper_address_id && initialData.shipper_address) {
+      // Shipper Address (from quotation list address string or with id)
+      if (initialData.shipper_address) {
         setShipperAddressOptions([
           {
-            value: String(initialData.shipper_address_id),
+            value: String(initialData.shipper_address_id || 0),
             label: String(initialData.shipper_address),
           },
         ]);
+        form.setFieldValue("shipper_address_id", Number(initialData.shipper_address_id) || 0);
       }
 
       // Consignee Address
@@ -2994,7 +2996,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 searchable
                 data={shipperAddressOptions}
                 value={
-                  form.values.shipper_address_id
+                  form.values.shipper_address_id != null
                     ? String(form.values.shipper_address_id)
                     : ""
                 }
@@ -3121,7 +3123,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 searchable
                 data={consigneeAddressOptions}
                 value={
-                  form.values.consignee_address_id
+                  form.values.consignee_address_id != null
                     ? String(form.values.consignee_address_id)
                     : ""
                 }
