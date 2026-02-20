@@ -211,6 +211,7 @@ type ReversableDataResponse = {
   currency_id?: number;
   currency_code?: string;
   bill_to?: string;
+  bill_to_name?: string;
   address?: string;
   gstn?: string;
   shipment_no?: string;
@@ -281,6 +282,12 @@ function InvoiceReverse() {
   } | null>(null);
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
   const [chargeErrors, setChargeErrors] = useState<Record<number, Record<string, string>>>({});
+  const [billToDisplayName, setBillToDisplayName] = useState<string | null>(
+    null,
+  );
+  const [addressOptions, setAddressOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
 
   const [gstRatesByChargeIndex, setGstRatesByChargeIndex] = useState<
     Record<number, GstRates | null>
@@ -622,6 +629,7 @@ function InvoiceReverse() {
               ? parseFloat(data.roe)
               : data.roe
             : null;
+        setBillToDisplayName(data.bill_to_name ?? null);
         form.setValues({
           bill_to: data.bill_to ?? "",
           address: data.address ?? "",
@@ -687,7 +695,7 @@ function InvoiceReverse() {
                     header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
                     amount_in_local: Number.isFinite(amountInLocal) ? amountInLocal : null,
                     tax_code: c.tax_code ?? "",
-                    dr_cr: (c.Dr_Cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
+                    dr_cr: (c.Dr_Cr === "Dr" ? "Dr" : "Cr"),
                   };
                 })
               : [],
@@ -839,7 +847,7 @@ function InvoiceReverse() {
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
           amount_in_header: headerAmount,
           tax_code: charge.tax_code ?? "",
-          Dr_Cr: charge.dr_cr ?? "Cr",
+          Dr_Cr: charge.dr_cr ?? "Dr",
           igst_rate: igstRate,
           cgst_rate: cgstRate,
           sgst_rate: sgstRate,
@@ -863,7 +871,7 @@ function InvoiceReverse() {
           amount_in_local: amountInLocal,
           amount_in_header: amountInLocal,
           tax_code: row.sac_code ?? "",
-          Dr_Cr: "Cr",
+          Dr_Cr: "Dr",
         };
       });
       const allChargesPayload = [...chargesPayload, ...taxCharges];
@@ -886,7 +894,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Dr",
+        Dr_Cr: "Cr",
         charges: allChargesPayload,
         taxes,
       };
@@ -942,6 +950,55 @@ function InvoiceReverse() {
       });
     } finally {
       setIsPosting(false);
+    }
+  };
+
+  const handleBillToChange = (
+    value: string | null,
+    selectedData?: { value: string; label: string } | null,
+    originalData?: Record<string, unknown> | null,
+  ) => {
+    form.setFieldValue("bill_to", value ?? "");
+    setBillToDisplayName(selectedData?.label ?? null);
+
+    const isCleared =
+      value == null || (typeof value === "string" && value.trim() === "");
+    if (isCleared) {
+      setAddressOptions([]);
+      form.setFieldValue("address", "");
+      form.setFieldValue("state", "");
+      return;
+    }
+
+    if (
+      originalData &&
+      (originalData as Record<string, unknown>).addresses_data
+    ) {
+      const addressesData = (originalData as Record<string, unknown>)
+        .addresses_data as Array<{
+        id: number;
+        address: string;
+        state_id?: number;
+      }>;
+      const newAddressOptions = (addressesData || []).map(
+        (addr: { id: number; address: string }) => ({
+          value: String(addr.id),
+          label: addr.address,
+        }),
+      );
+
+      setAddressOptions(newAddressOptions);
+      form.setFieldValue("address", "");
+
+      const addrWithState = (addressesData || []).find(
+        (a: { state_id?: number }) => a.state_id != null,
+      );
+      if (addrWithState?.state_id != null) {
+        form.setFieldValue("state", String(addrWithState.state_id));
+      }
+    } else {
+      setAddressOptions([]);
+      form.setFieldValue("address", "");
     }
   };
 
@@ -1052,7 +1109,7 @@ function InvoiceReverse() {
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
           amount_in_header: headerAmount,
           tax_code: charge.tax_code ?? "",
-          Dr_Cr: charge.dr_cr ?? "Cr",
+          Dr_Cr: charge.dr_cr ?? "Dr",
           igst_rate: igstRate,
           cgst_rate: cgstRate,
           sgst_rate: sgstRate,
@@ -1080,7 +1137,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Dr",
+        Dr_Cr: "Cr",
         charges: chargesPayload,
       };
       if (isUpdate) {
@@ -1273,16 +1330,37 @@ function InvoiceReverse() {
         >
           <Grid>
             <Grid.Col span={4}>
-              <TextInput
+              <SearchableSelect
                 label="Bill To"
-                placeholder="Bill To"
+                placeholder="Type customer name"
+                apiEndpoint={URL.customer}
+                searchFields={["customer_name", "customer_code"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.customer_code),
+                  label: String(item.customer_name),
+                })}
                 value={form.values.bill_to}
-                onChange={(e) => form.setFieldValue("bill_to", e.target.value)}
-                // disabled={isReadOnly}
-                readOnly={isReadOnly}
+                displayValue={billToDisplayName || undefined}
+                onChange={handleBillToChange}
+                returnOriginalData={true}
                 withAsterisk
-                error={form.errors.bill_to}
-                styles={inputStyles}
+                dropdownZIndex={1000}
+                readOnly={isReadOnly}
+                error={
+                  form.errors.bill_to ? String(form.errors.bill_to) : undefined
+                }
+                styles={{
+                  input: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    height: "36px",
+                  },
+                  label: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    marginBottom: "4px",
+                  },
+                }}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -1419,17 +1497,37 @@ function InvoiceReverse() {
               />
             </Grid.Col>
             <Grid.Col span={6}>
-              <TextInput
-                label="Address"
-                placeholder="Address"
-                value={form.values.address}
-                onChange={(e) => form.setFieldValue("address", e.target.value)}
-                // disabled={isReadOnly}
-                readOnly={isReadOnly}
-                withAsterisk
-                error={form.errors.address}
-                styles={inputStyles}
-              />
+              {addressOptions.length > 0 ? (
+                <Dropdown
+                  label="Address"
+                  placeholder="Select address"
+                  data={addressOptions}
+                  value={form.values.address}
+                  onChange={(value) =>
+                    form.setFieldValue("address", value || "")
+                  }
+                  searchable
+                  withAsterisk
+                  readOnly={isReadOnly}
+                  error={
+                    form.errors.address
+                      ? String(form.errors.address)
+                      : undefined
+                  }
+                  styles={inputStyles}
+                />
+              ) : (
+                <TextInput
+                  label="Address"
+                  placeholder="Address"
+                  value={form.values.address}
+                  onChange={(e) => form.setFieldValue("address", e.target.value)}
+                  readOnly={isReadOnly}
+                  withAsterisk
+                  error={form.errors.address}
+                  styles={inputStyles}
+                />
+              )}
             </Grid.Col>
             <Grid.Col span={6}>
               <Textarea
