@@ -976,6 +976,7 @@ export default function GLChargeMappingMasterList() {
                 size="xs"
                 label="Status"
                 placeholder="Select Status"
+                searchable
                 data={statusOptions}
                 value={draftFilters.status || null}
                 onChange={(value) =>
