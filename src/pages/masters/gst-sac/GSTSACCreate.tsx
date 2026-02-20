@@ -68,7 +68,7 @@ export default function GSTSACCreate() {
         });
       }
 
-      navigate("/master/gst-sac", { state: { refreshData: true } });
+      navigate("/master/gst-sac");
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
