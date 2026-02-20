@@ -96,7 +96,7 @@ const fetchGetEffectiveSac = async (
 
 // Same endpoint as InvoiceCreate (invoice/calculate-gst-breakup/), payload: { customer_id, reverse_invoice_id }
 const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
-  customer_id: number;
+  // customer_id: number;
   reverse_invoice_id: number;
 }) => {
   try {
@@ -580,11 +580,14 @@ function InvoiceReverse() {
   }, [location.state]);
 
   useEffect(() => {
-    if (
-      chargesTabActive !== "tax" ||
-      !saveResponse?.id ||
-      saveResponse?.customer_id == null
-    ) {
+    // if (
+    //   chargesTabActive !== "tax" ||
+    //   !saveResponse?.id ||
+    //   saveResponse?.customer_id == null
+    // ) {
+      if (
+        chargesTabActive !== "tax" ||
+        !saveResponse?.id       ) {
       return;
     }
     let cancelled = false;
@@ -1603,11 +1606,18 @@ function InvoiceReverse() {
                       </ScrollArea>
                     </>
                   )}
-                  {chargesTabActive === "tax" &&
+                  {/* {chargesTabActive === "tax" &&
                     saveResponse &&
                     (!saveResponse.id || saveResponse.customer_id == null) && (
                       <Text size="sm" c="dimmed" py="md">
                         Save the reverse invoice to load GST breakup (customer_id from response is required).
+                      </Text>
+                    )} */}
+                                      {chargesTabActive === "tax" &&
+                    saveResponse &&
+                    (!saveResponse.id ) && (
+                      <Text size="sm" c="dimmed" py="md">
+                        Save the reverse invoice to load GST breakup.
                       </Text>
                     )}
                 </Tabs.Panel>
