@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconArrowLeft, IconChevronRight, IconTrash } from "@tabler/icons-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -70,6 +70,27 @@ const fetchUnitMaster = async () => {
   }
 };
 
+type GstRatesBySacResponse = {
+  igst_percent?: number | string | null;
+  cgst_percent?: number | string | null;
+  sgst_percent?: number | string | null;
+  same_state?: boolean;
+};
+
+type GstRates = {
+  igst: number | null;
+  cgst: number | null;
+  sgst: number | null;
+  same_state: boolean;
+};
+
+const fetchGstRatesByStateSac = async (payload: {
+  state_id: number;
+  sac_code: string;
+}) => {
+  return postAPICall("invoice/gst-rates-by-state-sac/", payload, API_HEADER);
+};
+
 const fetchGetEffectiveSac = async (
   items: { charge_id: number; service_id: number }[],
 ) => {
@@ -96,7 +117,7 @@ const fetchGetEffectiveSac = async (
 
 // Same endpoint as InvoiceCreate (invoice/calculate-gst-breakup/), payload: { customer_id, reverse_invoice_id }
 const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
-  customer_id: number;
+  // customer_id: number;
   reverse_invoice_id: number;
 }) => {
   try {
@@ -190,6 +211,7 @@ type ReversableDataResponse = {
   currency_id?: number;
   currency_code?: string;
   bill_to?: string;
+  bill_to_name?: string;
   address?: string;
   gstn?: string;
   shipment_no?: string;
@@ -260,6 +282,21 @@ function InvoiceReverse() {
   } | null>(null);
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
   const [chargeErrors, setChargeErrors] = useState<Record<number, Record<string, string>>>({});
+  const [billToDisplayName, setBillToDisplayName] = useState<string | null>(
+    null,
+  );
+  const [addressOptions, setAddressOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
+
+  const [gstRatesByChargeIndex, setGstRatesByChargeIndex] = useState<
+    Record<number, GstRates | null>
+  >({});
+  const [gstRatesLoadingByIndex, setGstRatesLoadingByIndex] = useState<
+    Record<number, boolean>
+  >({});
+  const gstRatesCacheRef = useRef<Map<string, GstRates>>(new Map());
+  const lastGstRatesFetchKeyRef = useRef<string>("");
 
   const jobServiceId =
     (location.state as { job?: { service_id?: number } })?.job?.service_id ?? null;
@@ -439,6 +476,107 @@ function InvoiceReverse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeAmounts, chargeRoesForLocal]);
 
+  // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
+  useEffect(() => {
+    const stateId = form.values.state ? Number(form.values.state) : null;
+    if (!stateId || Number.isNaN(stateId)) {
+      setGstRatesLoadingByIndex({});
+      return;
+    }
+
+    const sacs = (form.values.charges || [])
+      .map((c, idx) => ({
+        idx,
+        sac: String(c.tax_code || "").trim(),
+        localAmount: c.amount_in_local,
+      }))
+      .filter((x) => x.sac !== "");
+
+    if (sacs.length === 0) {
+      setGstRatesLoadingByIndex({});
+      return;
+    }
+
+    const fetchKey = JSON.stringify({
+      stateId,
+      sacs: sacs.map((s) => ({ sac: s.sac, localAmount: s.localAmount })),
+    });
+    if (fetchKey === lastGstRatesFetchKeyRef.current) return;
+    lastGstRatesFetchKeyRef.current = fetchKey;
+
+    let cancelled = false;
+
+    const indicesToFetch: number[] = [];
+    sacs.forEach(({ idx, sac }) => {
+      const cacheKey = `${stateId}:${sac}`;
+      const hasCache = gstRatesCacheRef.current.has(cacheKey);
+      const hasRates = gstRatesByChargeIndex[idx] != null;
+      if (!hasCache && !hasRates) {
+        indicesToFetch.push(idx);
+      }
+    });
+
+    if (indicesToFetch.length > 0) {
+      setGstRatesLoadingByIndex((prev) => {
+        const next = { ...prev };
+        indicesToFetch.forEach((idx) => { next[idx] = true; });
+        return next;
+      });
+    }
+
+    Promise.all(
+      sacs.map(async ({ idx, sac }) => {
+        const cacheKey = `${stateId}:${sac}`;
+        const cached = gstRatesCacheRef.current.get(cacheKey);
+        if (cached) return { idx, rates: cached, fromCache: true };
+
+        try {
+          const res = (await fetchGstRatesByStateSac({
+            state_id: stateId,
+            sac_code: sac,
+          })) as any;
+          const payload = res?.data?.data ?? res?.data ?? res;
+          const data = payload as GstRatesBySacResponse | null | undefined;
+
+          const igstRaw = data?.igst_percent;
+          const cgstRaw = data?.cgst_percent;
+          const sgstRaw = data?.sgst_percent;
+          const sameState = data?.same_state ?? false;
+
+          const rates: GstRates = {
+            igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+            cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+            sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+            same_state: sameState,
+          };
+
+          gstRatesCacheRef.current.set(cacheKey, rates);
+          return { idx, rates, fromCache: false };
+        } catch {
+          return { idx, rates: null, fromCache: false };
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      setGstRatesByChargeIndex((prev) => {
+        const next = { ...prev };
+        results.forEach(({ idx, rates }) => { next[idx] = rates; });
+        return next;
+      });
+      const indicesToClear = results.filter((r) => !r.fromCache).map((r) => r.idx);
+      if (indicesToClear.length > 0) {
+        setGstRatesLoadingByIndex((prev) => {
+          const next = { ...prev };
+          indicesToClear.forEach((idx) => { next[idx] = false; });
+          return next;
+        });
+      }
+    });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.state, form.values.charges]);
+
   // Auto-calculate header_amount: same currency → header_amount = amount_in_local; different → amount_in_local / header ROE
   const headerBillingCurrency = form.values.currency;
   const headerRoe = form.values.roe;
@@ -491,6 +629,7 @@ function InvoiceReverse() {
               ? parseFloat(data.roe)
               : data.roe
             : null;
+        setBillToDisplayName(data.bill_to_name ?? null);
         form.setValues({
           bill_to: data.bill_to ?? "",
           address: data.address ?? "",
@@ -556,7 +695,7 @@ function InvoiceReverse() {
                     header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
                     amount_in_local: Number.isFinite(amountInLocal) ? amountInLocal : null,
                     tax_code: c.tax_code ?? "",
-                    dr_cr: (c.Dr_Cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
+                    dr_cr: (c.Dr_Cr === "Dr" ? "Dr" : "Cr"),
                   };
                 })
               : [],
@@ -580,18 +719,20 @@ function InvoiceReverse() {
   }, [location.state]);
 
   useEffect(() => {
-    if (
-      chargesTabActive !== "tax" ||
-      !saveResponse?.id ||
-      saveResponse?.customer_id == null
-    ) {
+    // if (
+    //   chargesTabActive !== "tax" ||
+    //   !saveResponse?.id ||
+    //   saveResponse?.customer_id == null
+    // ) {
+      if (
+        chargesTabActive !== "tax" ||
+        !saveResponse?.id       ) {
       return;
     }
     let cancelled = false;
     setGstBreakupLoading(true);
     setGstBreakup(null);
     fetchReverseInvoiceCalculateGstBreakup({
-      customer_id: saveResponse.customer_id,
       reverse_invoice_id: saveResponse.id,
     })
       .then((data) => {
@@ -609,7 +750,8 @@ function InvoiceReverse() {
   }, [chargesTabActive, saveResponse?.id, saveResponse?.customer_id]);
 
   const handlePostInvoiceReverse = async () => {
-    if (!saveResponse?.id || saveResponse?.customer_id == null) {
+    // if (!saveResponse?.id || saveResponse?.customer_id == null) {
+      if (!saveResponse?.id) {
       ToastNotification({
         message: "Save the reverse invoice first and ensure customer_id is available.",
         type: "error",
@@ -641,7 +783,6 @@ function InvoiceReverse() {
       let breakupData = gstBreakup;
       if (!breakupData?.sac_wise_totals?.length) {
         breakupData = await fetchReverseInvoiceCalculateGstBreakup({
-          customer_id: saveResponse.customer_id,
           reverse_invoice_id: saveResponse.id,
         }) as typeof gstBreakup;
       }
@@ -652,7 +793,30 @@ function InvoiceReverse() {
         rate: row.rate ?? 0,
         amount: row.total_amount ?? 0,
       }));
-      const chargesPayload = values.charges.map((charge) => {
+      // Resolve GST rates per charge for post payload
+      const gstRatesForPostCharges: (GstRates | null)[] = await Promise.all(
+        values.charges.map(async (charge, idx) => {
+          const cached = gstRatesByChargeIndex[idx];
+          if (cached) return cached;
+          const sacCode = (charge.tax_code ?? "").trim();
+          if (!sacCode || stateId <= 0) return null;
+          try {
+            const res = (await fetchGstRatesByStateSac({ state_id: stateId, sac_code: sacCode })) as any;
+            const pl = res?.data?.data ?? res?.data ?? res;
+            const gstData = pl as GstRatesBySacResponse | null | undefined;
+            return {
+              igst: gstData?.igst_percent == null || gstData.igst_percent === "" ? null : Number(gstData.igst_percent),
+              cgst: gstData?.cgst_percent == null || gstData.cgst_percent === "" ? null : Number(gstData.cgst_percent),
+              sgst: gstData?.sgst_percent == null || gstData.sgst_percent === "" ? null : Number(gstData.sgst_percent),
+              same_state: gstData?.same_state ?? false,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      const chargesPayload = values.charges.map((charge, idx) => {
         const chargeCurrencyItem = (currencyData as { id?: number; code?: string; currency_code?: string }[])?.find(
           (c) => (c.code || c.currency_code || "").toString() === charge.currency,
         );
@@ -661,6 +825,15 @@ function InvoiceReverse() {
           (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
         );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
+        const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+        const rates = gstRatesForPostCharges[idx];
+        const igstRate = rates?.igst ?? 0;
+        const cgstRate = rates?.cgst ?? 0;
+        const sgstRate = rates?.sgst ?? 0;
+        const sameState = rates?.same_state ?? false;
+        const igstAmt = !sameState && igstRate > 0 ? clampAmount(headerAmount * (igstRate / 100)) : 0;
+        const cgstAmt = sameState && cgstRate > 0 ? clampAmount(headerAmount * (cgstRate / 100)) : 0;
+        const sgstAmt = sameState && sgstRate > 0 ? clampAmount(headerAmount * (sgstRate / 100)) : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
           shipment_no: values.shipment_no,
@@ -672,9 +845,15 @@ function InvoiceReverse() {
           amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
           amount: clampAmount(charge.amount ?? 0) ?? 0,
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
-          amount_in_header: clampAmount(charge.header_amount ?? 0) ?? 0,
+          amount_in_header: headerAmount,
           tax_code: charge.tax_code ?? "",
-          Dr_Cr: charge.dr_cr ?? "Cr",
+          Dr_Cr: charge.dr_cr ?? "Dr",
+          igst_rate: igstRate,
+          cgst_rate: cgstRate,
+          sgst_rate: sgstRate,
+          igst: igstAmt,
+          cgst: cgstAmt,
+          sgst: sgstAmt,
         };
       });
       const taxCharges = sacWiseTotals.map((row) => {
@@ -692,7 +871,7 @@ function InvoiceReverse() {
           amount_in_local: amountInLocal,
           amount_in_header: amountInLocal,
           tax_code: row.sac_code ?? "",
-          Dr_Cr: "Cr",
+          Dr_Cr: "Dr",
         };
       });
       const allChargesPayload = [...chargesPayload, ...taxCharges];
@@ -715,7 +894,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Dr",
+        Dr_Cr: "Cr",
         charges: allChargesPayload,
         taxes,
       };
@@ -774,6 +953,55 @@ function InvoiceReverse() {
     }
   };
 
+  const handleBillToChange = (
+    value: string | null,
+    selectedData?: { value: string; label: string } | null,
+    originalData?: Record<string, unknown> | null,
+  ) => {
+    form.setFieldValue("bill_to", value ?? "");
+    setBillToDisplayName(selectedData?.label ?? null);
+
+    const isCleared =
+      value == null || (typeof value === "string" && value.trim() === "");
+    if (isCleared) {
+      setAddressOptions([]);
+      form.setFieldValue("address", "");
+      form.setFieldValue("state", "");
+      return;
+    }
+
+    if (
+      originalData &&
+      (originalData as Record<string, unknown>).addresses_data
+    ) {
+      const addressesData = (originalData as Record<string, unknown>)
+        .addresses_data as Array<{
+        id: number;
+        address: string;
+        state_id?: number;
+      }>;
+      const newAddressOptions = (addressesData || []).map(
+        (addr: { id: number; address: string }) => ({
+          value: String(addr.id),
+          label: addr.address,
+        }),
+      );
+
+      setAddressOptions(newAddressOptions);
+      form.setFieldValue("address", "");
+
+      const addrWithState = (addressesData || []).find(
+        (a: { state_id?: number }) => a.state_id != null,
+      );
+      if (addrWithState?.state_id != null) {
+        form.setFieldValue("state", String(addrWithState.state_id));
+      }
+    } else {
+      setAddressOptions([]);
+      form.setFieldValue("address", "");
+    }
+  };
+
   const handleSubmit = async (values: InvoiceFormData) => {
     if (!documentNo?.trim()) {
       ToastNotification({ message: "Document number is missing.", type: "error" });
@@ -826,7 +1054,31 @@ function InvoiceReverse() {
         return `${day}-${month}-${year}`;
       };
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
-      const chargesPayload = values.charges.map((charge) => {
+
+      // Resolve GST rates per charge (use cached or fetch)
+      const gstRatesForCharges: (GstRates | null)[] = await Promise.all(
+        values.charges.map(async (charge, idx) => {
+          const cached = gstRatesByChargeIndex[idx];
+          if (cached) return cached;
+          const sacCode = (charge.tax_code ?? "").trim();
+          if (!sacCode || stateId <= 0) return null;
+          try {
+            const res = (await fetchGstRatesByStateSac({ state_id: stateId, sac_code: sacCode })) as any;
+            const pl = res?.data?.data ?? res?.data ?? res;
+            const gstData = pl as GstRatesBySacResponse | null | undefined;
+            return {
+              igst: gstData?.igst_percent == null || gstData.igst_percent === "" ? null : Number(gstData.igst_percent),
+              cgst: gstData?.cgst_percent == null || gstData.cgst_percent === "" ? null : Number(gstData.cgst_percent),
+              sgst: gstData?.sgst_percent == null || gstData.sgst_percent === "" ? null : Number(gstData.sgst_percent),
+              same_state: gstData?.same_state ?? false,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      const chargesPayload = values.charges.map((charge, idx) => {
         const chargeCurrencyItem = (currencyData as { id?: number; code?: string; currency_code?: string }[])?.find(
           (c) => (c.code || c.currency_code || "").toString() === charge.currency,
         );
@@ -835,6 +1087,15 @@ function InvoiceReverse() {
           (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
         );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
+        const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+        const rates = gstRatesForCharges[idx];
+        const igstRate = rates?.igst ?? 0;
+        const cgstRate = rates?.cgst ?? 0;
+        const sgstRate = rates?.sgst ?? 0;
+        const sameState = rates?.same_state ?? false;
+        const igstAmt = !sameState && igstRate > 0 ? clampAmount(headerAmount * (igstRate / 100)) : 0;
+        const cgstAmt = sameState && cgstRate > 0 ? clampAmount(headerAmount * (cgstRate / 100)) : 0;
+        const sgstAmt = sameState && sgstRate > 0 ? clampAmount(headerAmount * (sgstRate / 100)) : 0;
         return {
           ...(isUpdate && charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
           shipment_no: values.shipment_no,
@@ -846,9 +1107,15 @@ function InvoiceReverse() {
           amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
           amount: clampAmount(charge.amount ?? 0) ?? 0,
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
-          amount_in_header: clampAmount(charge.header_amount ?? 0) ?? 0,
+          amount_in_header: headerAmount,
           tax_code: charge.tax_code ?? "",
-          Dr_Cr: charge.dr_cr ?? "Cr",
+          Dr_Cr: charge.dr_cr ?? "Dr",
+          igst_rate: igstRate,
+          cgst_rate: cgstRate,
+          sgst_rate: sgstRate,
+          igst: igstAmt,
+          cgst: cgstAmt,
+          sgst: sgstAmt,
         };
       });
       const payload = {
@@ -870,7 +1137,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Dr",
+        Dr_Cr: "Cr",
         charges: chargesPayload,
       };
       if (isUpdate) {
@@ -943,6 +1210,10 @@ function InvoiceReverse() {
       setIsSubmitting(false);
     }
   };
+
+  const headerSameState = Object.values(gstRatesByChargeIndex).find(
+    (rates) => rates?.same_state !== undefined,
+  )?.same_state;
 
   if (loading) {
     return (
@@ -1059,15 +1330,37 @@ function InvoiceReverse() {
         >
           <Grid>
             <Grid.Col span={4}>
-              <TextInput
+              <SearchableSelect
                 label="Bill To"
-                placeholder="Bill To"
+                placeholder="Type customer name"
+                apiEndpoint={URL.customer}
+                searchFields={["customer_name", "customer_code"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.customer_code),
+                  label: String(item.customer_name),
+                })}
                 value={form.values.bill_to}
-                onChange={(e) => form.setFieldValue("bill_to", e.target.value)}
-                disabled={isReadOnly}
+                displayValue={billToDisplayName || undefined}
+                onChange={handleBillToChange}
+                returnOriginalData={true}
                 withAsterisk
-                error={form.errors.bill_to}
-                styles={inputStyles}
+                dropdownZIndex={1000}
+                readOnly={isReadOnly}
+                error={
+                  form.errors.bill_to ? String(form.errors.bill_to) : undefined
+                }
+                styles={{
+                  input: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    height: "36px",
+                  },
+                  label: {
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    marginBottom: "4px",
+                  },
+                }}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -1079,7 +1372,8 @@ function InvoiceReverse() {
                 onChange={(value) => form.setFieldValue("state", value ?? "")}
                 searchable
                 withAsterisk
-                disabled={isStateLoading || isReadOnly}
+                // disabled={isStateLoading || isReadOnly}
+                readOnly={isStateLoading || isReadOnly}
                 error={form.errors.state}
                 styles={inputStyles}
               />
@@ -1090,7 +1384,8 @@ function InvoiceReverse() {
                 placeholder="GSTN"
                 value={form.values.gstn}
                 onChange={(e) => form.setFieldValue("gstn", e.target.value)}
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={form.errors.gstn}
                 styles={inputStyles}
               />
@@ -1101,7 +1396,8 @@ function InvoiceReverse() {
                 placeholder="Shipment No"
                 value={form.values.shipment_no}
                 onChange={(e) => form.setFieldValue("shipment_no", e.target.value)}
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 withAsterisk
                 error={form.errors.shipment_no}
                 styles={inputStyles}
@@ -1116,7 +1412,8 @@ function InvoiceReverse() {
                 onChange={(value) => form.setFieldValue("daybook_id", value ?? "")}
                 searchable
                 withAsterisk
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={form.errors.daybook_id}
                 styles={inputStyles}
               />
@@ -1128,7 +1425,8 @@ function InvoiceReverse() {
                 value={normalizeDate(form.values.document_date)}
                 onChange={(date) => form.setFieldValue("document_date", date)}
                 withAsterisk
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={
                   form.errors.document_date
                     ? typeof form.errors.document_date === "string"
@@ -1145,7 +1443,8 @@ function InvoiceReverse() {
                 value={normalizeDate(form.values.due_date)}
                 onChange={(date) => form.setFieldValue("due_date", date)}
                 withAsterisk
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={
                   form.errors.due_date
                     ? typeof form.errors.due_date === "string"
@@ -1164,7 +1463,8 @@ function InvoiceReverse() {
                 onChange={(value) => form.setFieldValue("currency", value ?? "")}
                 searchable
                 withAsterisk
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={form.errors.currency}
                 styles={inputStyles}
               />
@@ -1175,7 +1475,8 @@ function InvoiceReverse() {
                 placeholder="ROE"
                 value={form.values.roe ?? undefined}
                 onChange={(value) => form.setFieldValue("roe", typeof value === "number" ? value : value === "" ? null : parseFloat(String(value)) || null)}
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 withAsterisk
                 min={0}
                 decimalScale={4}
@@ -1189,22 +1490,44 @@ function InvoiceReverse() {
                 placeholder="IRN No"
                 value={form.values.irn_no}
                 onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 error={form.errors.irn_no}
                 styles={inputStyles}
               />
             </Grid.Col>
             <Grid.Col span={6}>
-              <TextInput
-                label="Address"
-                placeholder="Address"
-                value={form.values.address}
-                onChange={(e) => form.setFieldValue("address", e.target.value)}
-                disabled={isReadOnly}
-                withAsterisk
-                error={form.errors.address}
-                styles={inputStyles}
-              />
+              {addressOptions.length > 0 ? (
+                <Dropdown
+                  label="Address"
+                  placeholder="Select address"
+                  data={addressOptions}
+                  value={form.values.address}
+                  onChange={(value) =>
+                    form.setFieldValue("address", value || "")
+                  }
+                  searchable
+                  withAsterisk
+                  readOnly={isReadOnly}
+                  error={
+                    form.errors.address
+                      ? String(form.errors.address)
+                      : undefined
+                  }
+                  styles={inputStyles}
+                />
+              ) : (
+                <TextInput
+                  label="Address"
+                  placeholder="Address"
+                  value={form.values.address}
+                  onChange={(e) => form.setFieldValue("address", e.target.value)}
+                  readOnly={isReadOnly}
+                  withAsterisk
+                  error={form.errors.address}
+                  styles={inputStyles}
+                />
+              )}
             </Grid.Col>
             <Grid.Col span={6}>
               <Textarea
@@ -1212,7 +1535,8 @@ function InvoiceReverse() {
                 placeholder="Narration"
                 value={form.values.narration}
                 onChange={(e) => form.setFieldValue("narration", e.target.value)}
-                disabled={isReadOnly}
+                // disabled={isReadOnly}
+                readOnly={isReadOnly}
                 rows={2}
                 error={form.errors.narration}
                 styles={{ input: { fontSize: "13px", fontFamily: "Inter" }, label: inputStyles.label }}
@@ -1252,17 +1576,28 @@ function InvoiceReverse() {
                     <Grid.Col span={1.5} style={{ fontSize: "13px" }}>Charge</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency</Grid.Col>
-                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>ROE</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>No of Unit</Grid.Col>
+                    <Grid.Col span={0.45} style={{ fontSize: "13px" }}>ROE</Grid.Col>
+                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>No of Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Amount per Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>
                       Amount in {form.values.currency ? form.values.currency.toUpperCase() : "()"}
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
-                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>Dr/Cr</Grid.Col>
-                    <Grid.Col span={0.5} style={{ fontSize: "13px" }}>Actions</Grid.Col>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
+                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>Dr/Cr</Grid.Col>
+                    {headerSameState === true && (
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>CGST</Grid.Col>
+                    )}
+                    {headerSameState === true && (
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>SGST</Grid.Col>
+                    )}
+                    {headerSameState === false && (
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>IGST</Grid.Col>
+                    )}
+                    {!isReadOnly && (
+                      <Grid.Col span={0.5} style={{ fontSize: "13px" }}>Actions</Grid.Col>
+                    )}
                   </Grid>
                   {form.values.charges.map((charge, index) => (
                     <Grid
@@ -1314,7 +1649,8 @@ function InvoiceReverse() {
                             }
                           }}
                           withAsterisk
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           error={chargeErrors[index]?.charge_name}
                           minSearchLength={2}
                           dropdownZIndex={1000}
@@ -1330,7 +1666,8 @@ function InvoiceReverse() {
                           value={charge.unit_code || null}
                           onChange={(value) => form.setFieldValue(`charges.${index}.unit_code`, value ?? "")}
                           searchable
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
@@ -1352,12 +1689,13 @@ function InvoiceReverse() {
                           }}
                           searchable
                           withAsterisk
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           error={chargeErrors[index]?.currency}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.75}>
+                      <Grid.Col span={0.45}>
                         <NumberInput
                           placeholder="ROE"
                           value={charge.roe ?? undefined}
@@ -1374,18 +1712,20 @@ function InvoiceReverse() {
                           }}
                           hideControls
                           withAsterisk
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           error={chargeErrors[index]?.roe}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.65}>
                         <NumberInput
                           value={charge.no_of_unit ?? undefined}
                           onChange={(v) => form.setFieldValue(`charges.${index}.no_of_unit`, typeof v === "number" ? v : v === "" ? null : parseFloat(String(v)) || null)}
                           min={0}
                           hideControls
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
@@ -1396,7 +1736,8 @@ function InvoiceReverse() {
                           min={0}
                           decimalScale={2}
                           hideControls
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
@@ -1419,7 +1760,8 @@ function InvoiceReverse() {
                           decimalScale={2}
                           hideControls
                           withAsterisk
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           error={chargeErrors[index]?.amount}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
@@ -1431,11 +1773,12 @@ function InvoiceReverse() {
                           min={0}
                           decimalScale={2}
                           hideControls
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <NumberInput
                           placeholder="Local Amount"
                           value={charge.amount_in_local ?? undefined}
@@ -1454,23 +1797,31 @@ function InvoiceReverse() {
                           decimalScale={2}
                           hideControls
                           withAsterisk
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           error={chargeErrors[index]?.amount_in_local}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <TextInput
                           placeholder="SAC Code"
                           withAsterisk
-                          readOnly
+                          // readOnly
                           value={charge.tax_code}
-                          disabled={isReadOnly}
+                          //disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           error={chargeErrors[index]?.tax_code}
+                          rightSection={
+                            gstRatesLoadingByIndex[index] &&
+                            (!charge.tax_code || charge.tax_code.trim() === "") ? (
+                              <Loader size="xs" color="#105476" />
+                            ) : null
+                          }
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.75}>
+                      <Grid.Col span={0.55}>
                         <Dropdown
                           placeholder="Dr/Cr"
                           data={[
@@ -1479,10 +1830,104 @@ function InvoiceReverse() {
                           ]}
                           value={charge.dr_cr ?? "Cr"}
                           onChange={(value) => form.setFieldValue(`charges.${index}.dr_cr`, (value === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr")}
-                          disabled={isReadOnly}
+                          // disabled={isReadOnly}
+                          readOnly={isReadOnly}
                           styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                         />
                       </Grid.Col>
+                      {headerSameState === true && (
+                        <Grid.Col span={0.55}>
+                          <TextInput
+                            placeholder="CGST"
+                            value={(() => {
+                              const rate = gstRatesByChargeIndex[index]?.cgst;
+                              const localAmount = charge.amount_in_local;
+                              if (rate == null || localAmount == null) return "";
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return amount != null ? String(amount) : "";
+                            })()}
+                            readOnly
+                            rightSection={(() => {
+                              const rate = gstRatesByChargeIndex[index]?.cgst;
+                              const localAmount = charge.amount_in_local;
+                              const amount =
+                                rate == null || localAmount == null
+                                  ? null
+                                  : clampAmount((localAmount * rate) / 100);
+                              const display = amount != null ? String(amount) : "";
+                              return gstRatesLoadingByIndex[index] && display === "" ? (
+                                <Loader size="xs" color="#105476" />
+                              ) : null;
+                            })()}
+                            styles={{
+                              root: { flex: "0 0 88px" },
+                              input: { fontSize: "11px", fontFamily: "Inter", height: "28px" },
+                            }}
+                          />
+                        </Grid.Col>
+                      )}
+                      {headerSameState === true && (
+                        <Grid.Col span={0.55}>
+                          <TextInput
+                            placeholder="SGST"
+                            value={(() => {
+                              const rate = gstRatesByChargeIndex[index]?.sgst;
+                              const localAmount = charge.amount_in_local;
+                              if (rate == null || localAmount == null) return "";
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return amount != null ? String(amount) : "";
+                            })()}
+                            readOnly
+                            rightSection={(() => {
+                              const rate = gstRatesByChargeIndex[index]?.sgst;
+                              const localAmount = charge.amount_in_local;
+                              const amount =
+                                rate == null || localAmount == null
+                                  ? null
+                                  : clampAmount((localAmount * rate) / 100);
+                              const display = amount != null ? String(amount) : "";
+                              return gstRatesLoadingByIndex[index] && display === "" ? (
+                                <Loader size="xs" color="#105476" />
+                              ) : null;
+                            })()}
+                            styles={{
+                              root: { flex: "0 0 88px" },
+                              input: { fontSize: "11px", fontFamily: "Inter", height: "28px" },
+                            }}
+                          />
+                        </Grid.Col>
+                      )}
+                      {headerSameState === false && (
+                        <Grid.Col span={0.55}>
+                          <TextInput
+                            placeholder="IGST"
+                            value={(() => {
+                              const rate = gstRatesByChargeIndex[index]?.igst;
+                              const localAmount = charge.amount_in_local;
+                              if (rate == null || localAmount == null) return "";
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return amount != null ? String(amount) : "";
+                            })()}
+                            readOnly
+                            rightSection={(() => {
+                              const rate = gstRatesByChargeIndex[index]?.igst;
+                              const localAmount = charge.amount_in_local;
+                              const amount =
+                                rate == null || localAmount == null
+                                  ? null
+                                  : clampAmount((localAmount * rate) / 100);
+                              const display = amount != null ? String(amount) : "";
+                              return gstRatesLoadingByIndex[index] && display === "" ? (
+                                <Loader size="xs" color="#105476" />
+                              ) : null;
+                            })()}
+                            styles={{
+                              root: { flex: "0 0 88px" },
+                              input: { fontSize: "11px", fontFamily: "Inter", height: "28px" },
+                            }}
+                          />
+                        </Grid.Col>
+                      )}
                       <Grid.Col span={0.5}>
                         {!isReadOnly && (
                           <Group gap="xs">
@@ -1492,7 +1937,27 @@ function InvoiceReverse() {
                                 color="red"
                                 size="sm"
                                 px={12}
-                                onClick={() => form.removeListItem("charges", index)}
+                                onClick={() => {
+                                  setGstRatesByChargeIndex((prev) => {
+                                    const next: Record<number, GstRates | null> = {};
+                                    Object.entries(prev).forEach(([key, value]) => {
+                                      const idx = Number(key);
+                                      if (Number.isNaN(idx) || idx === index) return;
+                                      next[idx > index ? idx - 1 : idx] = value;
+                                    });
+                                    return next;
+                                  });
+                                  setGstRatesLoadingByIndex((prev) => {
+                                    const next: Record<number, boolean> = {};
+                                    Object.entries(prev).forEach(([key, value]) => {
+                                      const idx = Number(key);
+                                      if (Number.isNaN(idx) || idx === index) return;
+                                      next[idx > index ? idx - 1 : idx] = value;
+                                    });
+                                    return next;
+                                  });
+                                  form.removeListItem("charges", index);
+                                }}
                               >
                                 <IconTrash size={16} />
                               </Button>
@@ -1531,6 +1996,77 @@ function InvoiceReverse() {
                       </Grid.Col>
                     </Grid>
                   ))}
+                </Box>
+                {/* Totals Section */}
+                <Box
+                  mt="xl"
+                  p="md"
+                  style={{
+                    backgroundColor: "#f8f9fa",
+                    borderRadius: 8,
+                    border: "1px solid #dee2e6",
+                  }}
+                >
+                  <Grid gutter="md">
+                    <Grid.Col span={3}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>Local Amount Total</Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {form.values.charges
+                            .reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0)
+                            .toFixed(2)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={3}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>IGST Total</Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {form.values.charges
+                            .reduce((sum, c, idx) => {
+                              const rate = gstRatesByChargeIndex[idx]?.igst;
+                              const localAmount = c.amount_in_local;
+                              if (rate == null || localAmount == null) return sum;
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return sum + (amount ?? 0);
+                            }, 0)
+                            .toFixed(2)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={3}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>CGST Total</Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {form.values.charges
+                            .reduce((sum, c, idx) => {
+                              const rate = gstRatesByChargeIndex[idx]?.cgst;
+                              const localAmount = c.amount_in_local;
+                              if (rate == null || localAmount == null) return sum;
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return sum + (amount ?? 0);
+                            }, 0)
+                            .toFixed(2)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={3}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>SGST Total</Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {form.values.charges
+                            .reduce((sum, c, idx) => {
+                              const rate = gstRatesByChargeIndex[idx]?.sgst;
+                              const localAmount = c.amount_in_local;
+                              if (rate == null || localAmount == null) return sum;
+                              const amount = clampAmount((localAmount * rate) / 100);
+                              return sum + (amount ?? 0);
+                            }, 0)
+                            .toFixed(2)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                  </Grid>
                 </Box>
               </Tabs.Panel>
 
@@ -1603,11 +2139,18 @@ function InvoiceReverse() {
                       </ScrollArea>
                     </>
                   )}
-                  {chargesTabActive === "tax" &&
+                  {/* {chargesTabActive === "tax" &&
                     saveResponse &&
                     (!saveResponse.id || saveResponse.customer_id == null) && (
                       <Text size="sm" c="dimmed" py="md">
                         Save the reverse invoice to load GST breakup (customer_id from response is required).
+                      </Text>
+                    )} */}
+                                      {chargesTabActive === "tax" &&
+                    saveResponse &&
+                    (!saveResponse.id ) && (
+                      <Text size="sm" c="dimmed" py="md">
+                        Save the reverse invoice to load GST breakup.
                       </Text>
                     )}
                 </Tabs.Panel>

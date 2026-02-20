@@ -232,6 +232,7 @@ function ChartOfAccountsCreate() {
                           label="GL Head"
                           placeholder="Select GL Head"
                           withAsterisk
+                          searchable
                           data={glHeadOptions}
                           {...form.getInputProps("gl_head")}
                           styles={{
