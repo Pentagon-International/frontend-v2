@@ -38,10 +38,8 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
       registry: {
         ...state.registry,
         [key]: {
+          ...state.registry[key],
           filters,
-          search: state.registry[key]?.search || "",
-          shouldRestore: state.registry[key]?.shouldRestore ?? false,
-          displayValues: state.registry[key]?.displayValues,
         },
       },
     }));
@@ -52,9 +50,7 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
       registry: {
         ...state.registry,
         [key]: {
-          filters: state.registry[key]?.filters || {},
-          search: state.registry[key]?.search || "",
-          shouldRestore: state.registry[key]?.shouldRestore ?? false,
+          ...state.registry[key],
           displayValues,
         },
       },
@@ -66,10 +62,8 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
       registry: {
         ...state.registry,
         [key]: {
-          filters: state.registry[key]?.filters || {},
+          ...state.registry[key],
           search,
-          shouldRestore: state.registry[key]?.shouldRestore ?? false,
-          displayValues: state.registry[key]?.displayValues,
         },
       },
     }));
@@ -127,10 +121,8 @@ export const useListFilterStore = create<ListFilterStore>((set, get) => ({
       registry: {
         ...state.registry,
         [key]: {
-          filters: state.registry[key]?.filters || {},
-          search: state.registry[key]?.search || "",
+          ...state.registry[key],
           shouldRestore: value,
-          displayValues: state.registry[key]?.displayValues,
         },
       },
     }));

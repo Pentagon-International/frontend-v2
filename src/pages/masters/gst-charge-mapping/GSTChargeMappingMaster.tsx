@@ -18,7 +18,6 @@ import {
   Center,
   Loader,
   Stack,
-  Select,
   TextInput,
   Grid,
 } from "@mantine/core";
@@ -36,7 +35,14 @@ import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
-import { SearchableSelect, SingleDateInput } from "../../../components";
+import {
+  Dropdown,
+  SearchableSelect,
+  SingleDateInput,
+} from "../../../components";
+import { useListFilterStore } from "../../../store/listFilterStore";
+
+const LIST_KEY = "GST_CHARGE_MAPPING_MASTER";
 
 type GSTChargeMappingMaster = {
   id?: number;
@@ -87,8 +93,54 @@ export default function GSTChargeMappingMasterList() {
   const [appliedFilters, setAppliedFilters] =
     useState<GSTChargeMappingFilters>(DEFAULT_FILTERS);
 
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
+
+  // Restore filters/search from store when returning from create/edit
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const raw = stored.filters as Record<string, unknown>;
+      const restored: GSTChargeMappingFilters = {
+        ...DEFAULT_FILTERS,
+        ...stored.filters,
+        effective_from:
+          raw.effective_from != null
+            ? raw.effective_from instanceof Date
+              ? raw.effective_from
+              : new Date(String(raw.effective_from))
+            : null,
+      };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key]);
 
   const currentPage = pagination.pageIndex + 1;
   const statusOptions = ["ACTIVE", "INACTIVE"];
@@ -110,12 +162,15 @@ export default function GSTChargeMappingMasterList() {
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
   };
 
   const clearAllFilters = () => {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
   };
 
   const formatDateToYYYYMMDD = (date: Date | null): string | undefined => {
@@ -156,7 +211,7 @@ export default function GSTChargeMappingMasterList() {
       "gst-charge-mapping",
       pagination.pageIndex,
       pagination.pageSize,
-      appliedFilters,
+      JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
     queryFn: async () => {
@@ -168,6 +223,8 @@ export default function GSTChargeMappingMasterList() {
           `${URL.gstChargeMappingFilter}?index=${index}&limit=${pagination.pageSize}`,
           payload
         );
+        setIsInitialLoad(false);
+        setShowFilters(false);
 
         const data = response as any;
         if (data && Array.isArray(data.data)) {
@@ -178,28 +235,19 @@ export default function GSTChargeMappingMasterList() {
         return [];
       } catch (error) {
         console.error("Error fetching GST Charge Mapping data:", error);
+        setShowFilters(false);
         setTotalRecords(0);
         throw error;
       }
     },
+    enabled: !isRestoring && search === debouncedSearch,
     staleTime: 0,
     refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    refetchOnMount: false,
   });
 
-  useEffect(() => {
-    if (location.state?.refreshData) {
-      refetchGSTChargeMapping();
-      navigate(location.pathname, { replace: true, state: {} });
-    }
-  }, [
-    location.state?.refreshData,
-    refetchGSTChargeMapping,
-    navigate,
-    location.pathname,
-  ]);
-
-  const isLoading = gstChargeMappingFetching || gstChargeMappingLoading;
+  const isLoading =
+    gstChargeMappingFetching || gstChargeMappingLoading || isInitialLoad;
   const tableData = gstChargeMappingData ?? [];
 
   const columns = useMemo<MRT_ColumnDef<GSTChargeMappingMaster>[]>(
@@ -250,11 +298,14 @@ export default function GSTChargeMappingMasterList() {
             <Menu.Dropdown>
               <Box px={10} py={5}>
                 <UnstyledButton
-                  onClick={() =>
+                  onClick={() => {
+                    setStoreFilters(LIST_KEY, appliedFilters);
+                    setStoreSearch(LIST_KEY, search);
+                    setShouldRestore(LIST_KEY, true);
                     navigate("/master/gst-charge-mapping/edit", {
                       state: row.original,
-                    })
-                  }
+                    });
+                  }}
                 >
                   <Group gap={"sm"}>
                     <IconEdit size={16} style={{ color: "#105476" }} />
@@ -269,7 +320,14 @@ export default function GSTChargeMappingMasterList() {
         ),
       },
     ],
-    [navigate]
+    [
+      navigate,
+      appliedFilters,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+    ]
   );
 
   const table = useMantineReactTable({
@@ -403,6 +461,65 @@ export default function GSTChargeMappingMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
+            <TextInput
+              placeholder="Search..."
+              leftSection={<IconSearch size={16} />}
+              rightSection={
+                search ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size="sm"
+                    onClick={() => setSearch("")}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <IconX size={16} />
+                  </ActionIcon>
+                ) : null
+              }
+              w={248}
+              size="sm"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              styles={{
+                input: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontstyle: "regular",
+                  color: "#333740",
+                  minWidth: "24px",
+                  minHeight: "24px",
+                  width: "248px",
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  "&:focus": {
+                    border: "1px solid #105476",
+                  },
+                },
+              }}
+            />
+            <ActionIcon
+              variant={showFilters ? "filled" : "outline"}
+              size={36}
+              color={showFilters ? "#E0F5FF" : "gray"}
+              onClick={() => setShowFilters(!showFilters)}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                  border: showFilters
+                    ? "1px solid #105476"
+                    : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  "&:active": {
+                    border: "1px solid #105476",
+                    color: "#FFFFFF",
+                  },
+                },
+              }}
+            >
+              <IconFilter size={18} />
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"
@@ -419,7 +536,12 @@ export default function GSTChargeMappingMasterList() {
                   },
                 },
               }}
-              onClick={() => navigate("/master/gst-charge-mapping/create")}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/master/gst-charge-mapping/create");
+              }}
             >
               Create New
             </Button>
@@ -427,11 +549,12 @@ export default function GSTChargeMappingMasterList() {
         </Group>
       </Box>
 
-      {/* Filter Section - hidden as same as ChargeMaster */}
-      {/* {showFilters && (
+      {/* Filter Section */}
+      {showFilters && (
         <Box
           tt="capitalize"
           mb="sm"
+          p="sm"
           style={{
             borderRadius: "8px",
             border: "1px solid #E0E0E0",
@@ -447,7 +570,6 @@ export default function GSTChargeMappingMasterList() {
             style={{
               backgroundColor: "#FAFAFA",
               padding: "4px 8px",
-              borderRadius: "8px 8px 0 0",
             }}
           >
             <Text
@@ -555,12 +677,13 @@ export default function GSTChargeMappingMasterList() {
             </Grid.Col>
 
             <Grid.Col span={2.4}>
-              <Select
+              <Dropdown
                 size="xs"
                 label="Status"
                 placeholder="Select Status"
                 data={statusOptions}
-                value={draftFilters.status}
+                searchable
+                value={draftFilters.status || null}
                 onChange={(value) =>
                   setDraftFilters((prev) => ({
                     ...prev,
@@ -615,7 +738,7 @@ export default function GSTChargeMappingMasterList() {
             </Button>
           </Group>
         </Box>
-      )} */}
+      )}
 
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>

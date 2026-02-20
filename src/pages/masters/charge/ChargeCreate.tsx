@@ -28,15 +28,17 @@ type ChargeFormData = {
 };
 
 const chargesTypeOptions = [
-  { value: "Freight", label: "Freight" },
-  { value: "Origin", label: "Origin" },
-  { value: "Destination", label: "Destination" },
+  { value: "FREIGHT", label: "FREIGHT" },
+  { value: "ORIGIN", label: "ORIGIN" },
+  { value: "DESTINATION", label: "DESTINATION" },
+  { value: "OTHER", label: "OTHER" },
 ];
 
 const calculationTypeOptions = [
-  { value: "Per_Container", label: "Per_Container" },
-  { value: "Shipment", label: "Shipment" },
-  { value: "Unit", label: "Unit" },
+  { value: "PER_CONTAINER", label: "PER_CONTAINER" },
+  { value: "PERCENTAGE", label: "PERCENTAGE" },
+  { value: "SHIPMENT", label: "SHIPMENT" },
+  { value: "UNIT", label: "UNIT" },
 ];
 
 const schema = yup.object().shape({
@@ -248,6 +250,7 @@ export default function ChargeCreate() {
                     label="Charges Type"
                     placeholder="Select charges type"
                     withAsterisk
+                    searchable
                     data={chargesTypeOptions}
                     {...form.getInputProps("charges_type")}
                     styles={{
@@ -272,6 +275,7 @@ export default function ChargeCreate() {
                     label="Calculation Type"
                     placeholder="Select calculation type"
                     withAsterisk
+                    searchable
                     data={calculationTypeOptions}
                     {...form.getInputProps("calculation_type")}
                     styles={{

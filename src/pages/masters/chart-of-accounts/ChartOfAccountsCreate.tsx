@@ -89,9 +89,7 @@ function ChartOfAccountsCreate() {
           type: "success",
           message: "Chart of Accounts updated successfully",
         });
-        navigate("/master/chart-of-accounts", {
-          state: { refreshData: true },
-        });
+        navigate("/master/chart-of-accounts");
       } else {
         // Create mode: Use POST request
         const response = await postAPICall(
@@ -103,9 +101,7 @@ function ChartOfAccountsCreate() {
           type: "success",
           message: "Chart of Accounts created successfully",
         });
-        navigate("/master/chart-of-accounts", {
-          state: { refreshData: true },
-        });
+        navigate("/master/chart-of-accounts");
       }
     } catch (err: any) {
       ToastNotification({
