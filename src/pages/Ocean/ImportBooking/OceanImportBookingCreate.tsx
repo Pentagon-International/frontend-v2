@@ -50,7 +50,7 @@ function OceanImportBookingCreate() {
       // Stepper 1 fields
       customer_code: enquiryData.customer_code || "",
       customer_name: enquiryData.customer_name || "",
-      service: "", // Will be set to FCL or LCL by user in Ocean Import Booking
+      service: (serviceDetails.service as string) || (quotationData.service_type as string) || "", // FCL or LCL from quotation
       origin_code: serviceDetails.origin_code_read || "",
       origin_name: serviceDetails.origin_name || "",
       destination_code: serviceDetails.destination_code_read || "",
@@ -88,10 +88,11 @@ function OceanImportBookingCreate() {
         },
       ],
 
-      // Stepper 2 - Party Details (Import: customer = consignee)
+      // Stepper 2 - Party Details (Import: customer = consignee, with address from quotation list)
       consignee_code: "",
-      consignee_name: "",
+      consignee_name: (enquiryData.customer_name as string) || "",
       consignee_address_id: 0,
+      consignee_address: (enquiryData.customer_address as string) || "",
       consignee_email: "",
       shipper_code: "",
       shipper_name: "",
@@ -174,9 +175,25 @@ function OceanImportBookingCreate() {
       delivery_address_name: "",
       planned_delivery_date: new Date(),
 
-      // Stepper 5 - Quotation Details
+      // Stepper 5 - Quotation Details and rate_details for prefilling charges
       quotation_id: quotationData.quotation_id || "",
       quotation_charges: quotationData.charges || [],
+      rate_details: Array.isArray(quotationData.charges)
+        ? (quotationData.charges as Array<Record<string, unknown>>).map(
+            (c) => ({
+              charge_name: c.charge_name || "",
+              currency_country_code: c.currency || c.currency_country_code || "",
+              roe: c.roe ?? "",
+              unit: c.unit || "",
+              no_of_units: c.no_of_units ?? "",
+              sell_per_unit: c.sell_per_unit ?? "",
+              min_sell: c.min_sell ?? "",
+              cost_per_unit: c.cost_per_unit ?? "",
+              total_cost: c.total_cost ?? "",
+              total_sell: c.total_sell ?? "",
+            })
+          )
+        : [],
     };
   };
 

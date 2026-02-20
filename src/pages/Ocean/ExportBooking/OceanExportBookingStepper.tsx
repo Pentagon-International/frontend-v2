@@ -856,8 +856,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       delivery_address_id: "",
       planned_delivery_date: new Date(),
 
-      // Merge with initial data if in edit mode
-      ...(isEditMode && initialData
+      // Merge with initial data when provided (edit mode or create-from-quotation)
+      ...(initialData
         ? mapInitialDataToFormValues(initialData)
         : {}),
     },
@@ -981,8 +981,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   // Effect to set up display names when in edit mode
   useEffect(() => {
-    if (isEditMode && initialData) {
-      console.log("Setting up display names for edit mode:", initialData);
+    if (initialData) {
+      console.log("Setting up display names from initialData:", initialData);
 
       // Set display names for SearchableSelect components
       if (initialData.shipper_name) {

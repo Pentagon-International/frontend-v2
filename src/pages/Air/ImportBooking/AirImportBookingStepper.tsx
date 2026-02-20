@@ -876,8 +876,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       planned_delivery_date: new Date(),
       actual_delivery_date: null,
 
-      // Merge with initial data if in edit mode
-      ...(isEditMode && initialData
+      // Merge with initial data when provided (edit mode or create-from-quotation)
+      ...(initialData
         ? mapInitialDataToFormValues(initialData)
         : {}),
     },
@@ -1016,10 +1016,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
   }, [isEditMode, jobData, initialData, form]);
 
-  // Effect to set up display names when in edit mode
+  // Effect to set up display names and address options when initialData is provided (edit or create-from-quotation)
   useEffect(() => {
-    if (isEditMode && initialData) {
-      console.log("Setting up display names for edit mode:", initialData);
+    if (initialData) {
+      console.log("Setting up display names from initialData:", initialData);
 
       // Set display names for SearchableSelect components
       if (initialData.shipper_name) {
@@ -1115,11 +1115,11 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         ]);
       }
 
-      // Consignee Address
-      if (initialData.consignee_address_id && initialData.consignee_address) {
+      // Consignee Address (from quotation list address string or with id)
+      if (initialData.consignee_address) {
         setConsigneeAddressOptions([
           {
-            value: String(initialData.consignee_address_id),
+            value: String(initialData.consignee_address_id || 0),
             label: String(initialData.consignee_address),
           },
         ]);
@@ -1256,10 +1256,9 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
   }, [isEditMode, initialData]);
 
-  // Effect to populate routing codes from initialData in edit mode
+  // Effect to populate routing codes from initialData (edit or create-from-quotation)
   useEffect(() => {
     if (
-      isEditMode &&
       initialData &&
       initialData.routing_details &&
       Array.isArray(initialData.routing_details)
@@ -2858,7 +2857,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <Grid.Col span={1.25}>
                     <Dropdown
                       data={[
-                        "Status",
                         "Active",
                         "Inactive",
                         "Pending",
@@ -4188,7 +4186,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             <Grid.Col span={6}>
               <SearchableSelect
                 label="Pickup Address"
-                placeholder="Type customer name"
+                placeholder="Type pickup address"
                 apiEndpoint={URL.customer}
                 searchFields={["customer_code", "customer_name"]}
                 displayFormat={(item: Record<string, unknown>) => {

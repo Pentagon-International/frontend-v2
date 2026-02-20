@@ -1966,7 +1966,6 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     <Grid.Col span={1.25}>
                       <Dropdown
                         data={[
-                          "Status",
                           "Active",
                           "Inactive",
                           "Pending",

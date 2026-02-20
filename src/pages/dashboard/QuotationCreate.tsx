@@ -2072,38 +2072,64 @@ function QuotationCreate({
       return;
     }
 
-    // Prepare the data to pass to shipment stepper
+    // Merge quotation codes into service details so booking form can prefill origin, destination, shipment terms
+    const serviceDetails = {
+      ...selectedService,
+      origin_code: quotationForService.origin_code ?? selectedService.origin_code_read,
+      origin_code_read: quotationForService.origin_code ?? selectedService.origin_code_read,
+      origin_name: quotationForService.origin ?? selectedService.origin_name,
+      destination_code: quotationForService.destination_code ?? selectedService.destination_code_read,
+      destination_code_read: quotationForService.destination_code ?? selectedService.destination_code_read,
+      destination_name: quotationForService.destination ?? selectedService.destination_name,
+      shipment_terms_code: quotationForService.shipment_terms_code ?? selectedService.shipment_terms_code_read,
+      shipment_terms_code_read: quotationForService.shipment_terms_code ?? selectedService.shipment_terms_code_read,
+      shipment_terms_name: quotationForService.shipment_terms ?? quotationForService.shipment_terms_name ?? selectedService.shipment_terms_name,
+    };
+
     const bookingData = {
-      // Enquiry data (common for all services)
       enquiryData: {
         enquiry_id: actualEnquiryData.enquiry_id,
         customer_name: actualEnquiryData.customer_name,
+        customer_address: actualEnquiryData.customer_address || "",
         sales_person: actualEnquiryData.sales_person,
         enquiry_received_date: actualEnquiryData.enquiry_received_date,
-        // Add customer_code when available in future
         customer_code: actualEnquiryData.customer_code || "",
       },
-      // Selected service quotation data
       quotationData: quotationForService,
-      // Service details
-      serviceDetails: selectedService,
+      serviceDetails,
     };
 
-    console.log("Creating booking with data:", bookingData);
+    const trade =
+      quotationForService.trade || selectedService.trade;
+    const serviceType =
+      quotationForService.service_type || selectedService.service;
 
-    // Navigate based on service trade
-    if (selectedService.trade === "Export") {
-      navigate("/customer-service/export-shipment/create", {
-        state: { bookingData },
-      });
-    } else if (selectedService.trade === "Import") {
-      navigate("/customer-service/import-shipment/create", {
-        state: { bookingData },
-      });
+    // Navigate by service and trade: Air -> /air/..., Sea (FCL/LCL) -> /SeaExport/...
+    if (serviceType === "AIR") {
+      if (trade === "Export") {
+        navigate("/air/export-booking/create", { state: { bookingData } });
+      } else if (trade === "Import") {
+        navigate("/air/import-booking/create", { state: { bookingData } });
+      } else {
+        ToastNotification({ type: "error", message: "Invalid trade type" });
+      }
+    } else if (serviceType === "FCL" || serviceType === "LCL") {
+      if (trade === "Export") {
+        navigate("/SeaExport/export-booking/create", {
+          state: { bookingData },
+        });
+      } else if (trade === "Import") {
+        navigate("/SeaExport/import-booking/create", {
+          state: { bookingData },
+        });
+      } else {
+        ToastNotification({ type: "error", message: "Invalid trade type" });
+      }
     } else {
       ToastNotification({
         type: "error",
-        message: "Invalid service trade type",
+        message:
+          "Create booking is only supported for AIR, FCL and LCL services",
       });
     }
   };
@@ -4699,46 +4725,48 @@ function QuotationCreate({
                               {isStandaloneEdit && (
                                 <>
                                   <Menu.Divider />
-                                  <Menu.Item
-                                    leftSection={
-                                      <Box
-                                        style={{
-                                          backgroundColor: "#E7F5FF",
+                                  {actualEnquiryData?.status === "GAINED" && (
+                                    <Menu.Item
+                                      leftSection={
+                                        <Box
+                                          style={{
+                                            backgroundColor: "#E7F5FF",
+                                            borderRadius: "6px",
+                                            padding: "6px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <IconBook size={16} color="#105476" />
+                                        </Box>
+                                      }
+                                      styles={{
+                                        item: {
+                                          fontFamily: "Inter",
+                                          fontSize: "14px",
+                                          fontWeight: 500,
                                           borderRadius: "6px",
-                                          padding: "6px",
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                        }}
-                                      >
-                                        <IconBook size={16} color="#105476" />
-                                      </Box>
-                                    }
-                                    styles={{
-                                      item: {
-                                        fontFamily: "Inter",
-                                        fontSize: "14px",
-                                        fontWeight: 500,
-                                        borderRadius: "6px",
-                                        padding: "10px 12px",
-                                        marginBottom: "4px",
-                                        "&:hover": {
-                                          backgroundColor: "#F8F9FA",
+                                          padding: "10px 12px",
+                                          marginBottom: "4px",
+                                          "&:hover": {
+                                            backgroundColor: "#F8F9FA",
+                                          },
                                         },
-                                      },
-                                      itemLabel: {
-                                        fontFamily: "Inter",
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                      },
-                                    }}
-                                    onClick={() => {
-                                      handleCreateBooking();
-                                    }}
-                                  >
-                                    Create Booking
-                                  </Menu.Item>
+                                        itemLabel: {
+                                          fontFamily: "Inter",
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                        },
+                                      }}
+                                      onClick={() => {
+                                        handleCreateBooking();
+                                      }}
+                                    >
+                                      Create Booking
+                                    </Menu.Item>
+                                  )}
                                   <Menu.Item
                                     leftSection={
                                       <Box
@@ -6001,46 +6029,48 @@ function QuotationCreate({
                           {isStandaloneEdit && (
                             <>
                               <Menu.Divider />
-                              <Menu.Item
-                                leftSection={
-                                  <Box
-                                    style={{
-                                      backgroundColor: "#E7F5FF",
+                              {actualEnquiryData?.status === "GAINED" && (
+                                <Menu.Item
+                                  leftSection={
+                                    <Box
+                                      style={{
+                                        backgroundColor: "#E7F5FF",
+                                        borderRadius: "6px",
+                                        padding: "6px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <IconBook size={16} color="#105476" />
+                                    </Box>
+                                  }
+                                  styles={{
+                                    item: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
                                       borderRadius: "6px",
-                                      padding: "6px",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                    }}
-                                  >
-                                    <IconBook size={16} color="#105476" />
-                                  </Box>
-                                }
-                                styles={{
-                                  item: {
-                                    fontFamily: "Inter",
-                                    fontSize: "13px",
-                                    fontWeight: 500,
-                                    borderRadius: "6px",
-                                    padding: "10px 12px",
-                                    marginBottom: "4px",
-                                    "&:hover": {
-                                      backgroundColor: "#F8F9FA",
+                                      padding: "10px 12px",
+                                      marginBottom: "4px",
+                                      "&:hover": {
+                                        backgroundColor: "#F8F9FA",
+                                      },
                                     },
-                                  },
-                                  itemLabel: {
-                                    fontFamily: "Inter",
-                                    fontSize: "14px",
-                                    fontWeight: 500,
-                                    color: "#424242",
-                                  },
-                                }}
-                                onClick={() => {
-                                  handleCreateBooking();
-                                }}
-                              >
-                                Create Booking
-                              </Menu.Item>
+                                    itemLabel: {
+                                      fontFamily: "Inter",
+                                      fontSize: "14px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                    },
+                                  }}
+                                  onClick={() => {
+                                    handleCreateBooking();
+                                  }}
+                                >
+                                  Create Booking
+                                </Menu.Item>
+                              )}
                               <Menu.Item
                                 leftSection={
                                   <Box

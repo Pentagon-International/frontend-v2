@@ -56,7 +56,7 @@ function OceanExportBookingCreate() {
       // Stepper 1 fields
       customer_code: enquiryData.customer_code || "",
       customer_name: enquiryData.customer_name || "",
-      service: "", // Will be set to FCL or LCL by user in Ocean Export Booking
+      service: (serviceDetails.service as string) || (quotationData.service_type as string) || "", // FCL or LCL from quotation
       origin_code: serviceDetails.origin_code_read || "",
       origin_name: serviceDetails.origin_name || "",
       destination_code: serviceDetails.destination_code_read || "",
@@ -96,7 +96,7 @@ function OceanExportBookingCreate() {
 
       // Stepper 2 - Party Details (Export: customer = shipper)
       shipper_code: "",
-      shipper_name: "",
+      shipper_name: (enquiryData.customer_name as string) || "",
       shipper_address_id: 0,
       shipper_email: "",
       consignee_code: "",
@@ -151,6 +151,22 @@ function OceanExportBookingCreate() {
       // Stepper 5 - Quotation Details
       quotation_id: quotationData.quotation_id || "",
       quotation_charges: quotationData.charges || [],
+      rate_details: Array.isArray(quotationData.charges)
+        ? (quotationData.charges as Array<Record<string, unknown>>).map(
+            (c) => ({
+              charge_name: c.charge_name || "",
+              currency_country_code: c.currency || c.currency_country_code || "",
+              roe: c.roe ?? "",
+              unit: c.unit || "",
+              no_of_units: c.no_of_units ?? "",
+              sell_per_unit: c.sell_per_unit ?? "",
+              min_sell: c.min_sell ?? "",
+              cost_per_unit: c.cost_per_unit ?? "",
+              total_cost: c.total_cost ?? "",
+              total_sell: c.total_sell ?? "",
+            })
+          )
+        : [],
     };
   };
 

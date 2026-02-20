@@ -443,7 +443,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   // Initialize routing display names from initialData if available (synchronous)
   const initialRoutingDisplayNames = React.useMemo(() => {
     if (
-      isEditMode &&
       initialData?.routing_details &&
       Array.isArray(initialData.routing_details) &&
       initialData.routing_details.length > 0
@@ -927,8 +926,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       delivery_address_id: "",
       planned_delivery_date: new Date(),
 
-      // Merge with initial data if in edit mode
-      ...(isEditMode && initialData
+      // Merge with initial data when provided (edit mode or create-from-quotation)
+      ...(initialData
         ? mapInitialDataToFormValues(initialData)
         : {}),
     },
@@ -1021,8 +1020,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   // Effect to set up display names when in edit mode
   useEffect(() => {
-    if (isEditMode && initialData) {
-      console.log("Setting up display names for edit mode:", initialData);
+    if (initialData) {
+      console.log("Setting up display names from initialData:", initialData);
 
       // Set display names for SearchableSelect components
       if (initialData.shipper_name) {
@@ -1118,11 +1117,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         ]);
       }
 
-      // Consignee Address
-      if (initialData.consignee_address_id && initialData.consignee_address) {
+      // Consignee Address (from quotation list address string or with id)
+      if (initialData.consignee_address) {
         setConsigneeAddressOptions([
           {
-            value: String(initialData.consignee_address_id),
+            value: String(initialData.consignee_address_id || 0),
             label: String(initialData.consignee_address),
           },
         ]);

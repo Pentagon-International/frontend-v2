@@ -907,8 +907,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       planned_delivery_date: new Date(),
       actual_delivery_date: null,
 
-      // Merge with initial data if in edit mode
-      ...(isEditMode && initialData
+      // Merge with initial data when provided (edit mode or create-from-quotation)
+      ...(initialData
         ? mapInitialDataToFormValues(initialData)
         : {}),
     },
@@ -1032,8 +1032,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   // Effect to set up display names when in edit mode
   useEffect(() => {
-    if (isEditMode && initialData) {
-      console.log("Setting up display names for edit mode:", initialData);
+    if (initialData) {
+      console.log("Setting up display names from initialData:", initialData);
 
       // Set display names for SearchableSelect components
       if (initialData.shipper_name) {
@@ -1270,10 +1270,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     }
   }, [isEditMode, initialData]);
 
-  // Effect to populate routing codes from initialData in edit mode
+  // Effect to populate routing codes from initialData (edit or create-from-quotation)
   useEffect(() => {
     if (
-      isEditMode &&
       initialData &&
       initialData.routing_details &&
       Array.isArray(initialData.routing_details)
@@ -2844,7 +2843,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <Grid.Col span={1.25}>
                     <Dropdown
                       data={[
-                        "Status",
                         "Active",
                         "Inactive",
                         "Pending",
