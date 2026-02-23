@@ -2983,7 +2983,7 @@ function ExportJobCreate() {
                 <Grid.Col span={2.2}>
                   <RequiredLabel label="Container Type" required={false}/>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={2.2}>
                   <RequiredLabel label="Container No" required={false}/>
                 </Grid.Col>
                 <Grid.Col span={1.8}>
@@ -2998,7 +2998,7 @@ function ExportJobCreate() {
                 <Grid.Col span={1.7}>
                   <RequiredLabel label="Unloading Date" required={false}/>
                 </Grid.Col>
-                <Grid.Col span={0.5}>
+                <Grid.Col span={0.6}>
                   {containerDetailsForm.values.containers.length > 1 && 
                   <RequiredLabel label="Actions" required={false}/>}
                 </Grid.Col>
@@ -3027,7 +3027,7 @@ function ExportJobCreate() {
                       }
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={2.2}>
                     <FormTextInput
                       required
                       placeholder="Container number"
@@ -3137,7 +3137,7 @@ function ExportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.5}>
+                  <Grid.Col span={0.6}>
                     {containerDetailsForm.values.containers.length > 1 &&
                       !isReadOnly && (
                         <Button

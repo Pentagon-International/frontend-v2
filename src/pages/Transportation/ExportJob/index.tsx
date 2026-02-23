@@ -30,16 +30,18 @@ import {
   IconFilterOff,
   IconSearch,
   IconCalendar,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
-import { SearchableSelect } from "../../../components";
+import { Dropdown, SearchableSelect, SingleDateInput } from "../../../components";
 import { DateInput } from "@mantine/dates";
 import { ToastNotification } from "../../../components";
 import dayjs from "dayjs";
+import FormTextInput from "../../../components/FormTextInput";
 
 // Type definitions
 type ExportJobData = {
@@ -693,7 +695,7 @@ function ExportJobMaster() {
                 root: {
                   backgroundColor: showFilters ? "#105476" : "transparent",
                   borderRadius: "4px",
-                  color: "#105476",
+                  color: showFilters ? "white" : "#105476",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontStyle: "semibold",
@@ -732,26 +734,49 @@ function ExportJobMaster() {
 
       {/* Filter Section */}
       {showFilters && (
-        <Card
-          shadow="xs"
-          padding="md"
-          radius="md"
-          withBorder
-          mb="md"
-          bg="#f8f9fa"
+        <Box
+          tt="capitalize"
+          mb="sm"
+          p="sm"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+            flexShrink: 0,
+            height: "fit-content",
+          }}
         >
-          <Group justify="space-between" align="center" mb="md">
-            <Group align="center" gap="xs">
-              <IconFilter size={16} color="#105476" />
-              <Text size="sm" fw={500} c="#105476">
-                Filters
-              </Text>
-            </Group>
+          <Group
+            justify="space-between"
+            align="center"
+            mb="sm"
+            px="md"
+            style={{
+              backgroundColor: "#FAFAFA",
+              padding: "4px 8px",
+            }}
+          >
+            <Text
+              size="sm"
+              fw={600}
+              c="#000000"
+              style={{ fontFamily: "Inter", fontSize: "14px" }}
+            >
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
           </Group>
 
-          <Grid>
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
             <Grid.Col span={3}>
-              <TextInput
+              <FormTextInput
                 label="MBL Number"
                 placeholder="Enter MBL Number"
                 size="xs"
@@ -828,7 +853,7 @@ function ExportJobMaster() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <Select
+              <Dropdown
                 label="Service"
                 placeholder="Select Service"
                 size="xs"
@@ -841,7 +866,7 @@ function ExportJobMaster() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <DateInput
+              <SingleDateInput
                 label="ETD"
                 placeholder="YYYY-MM-DD"
                 size="xs"
@@ -867,7 +892,7 @@ function ExportJobMaster() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <DateInput
+              <SingleDateInput
                 label="ETA"
                 placeholder="YYYY-MM-DD"
                 size="xs"
@@ -892,30 +917,52 @@ function ExportJobMaster() {
               />
             </Grid.Col>
 
-            <Grid.Col span={12}>
-              <Group justify="flex-end" gap="sm">
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  size="xs"
-                  leftSection={<IconFilterOff size={14} />}
-                  onClick={clearAllFilters}
-                >
-                  Clear All
-                </Button>
-                <Button
-                  color="#105476"
-                  size="xs"
-                  leftSection={<IconFilter size={14} />}
-                  onClick={applyFilters}
-                  loading={isFilteredLoading}
-                >
-                  Apply Filters
-                </Button>
-              </Group>
-            </Grid.Col>
           </Grid>
-        </Card>
+
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={clearAllFilters}
+              leftSection={<IconX size={16} />}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  color: "#444955",
+                },
+              }}
+            >
+              Clear Filters
+            </Button>
+            <Button
+              size="sm"
+              onClick={applyFilters}
+              loading={isFilteredLoading}
+              disabled={isFilteredLoading}
+              leftSection={<IconFilter size={16} />}
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  "&:hover": {
+                    backgroundColor: "#0d4261",
+                  },
+                },
+              }}
+            >
+              Apply Filters
+            </Button>
+          </Group>
+        </Box>
       )}
 
       {isTableLoading ? (

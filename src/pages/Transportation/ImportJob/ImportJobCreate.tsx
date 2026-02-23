@@ -6,7 +6,6 @@ import {
   Stack,
   Stepper,
   Text,
-  TextInput,
   Divider,
   Card,
   Badge,
@@ -52,6 +51,8 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
+import FormTextInput from "../../../components/FormTextInput";
+import RequiredLabel from "../../../components/RequiredLabel";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -1961,7 +1962,7 @@ function ImportJobCreate() {
   };
 
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Text size="xl" fw={600} c="#105476">
           {mode === "view"
@@ -1986,18 +1987,88 @@ function ImportJobCreate() {
               {mode === "edit" ? "Update" : "Create"}
             </Button>
             {housingDetails.length > 0 && (
-              <Menu shadow="md" width={200}>
+              <Menu shadow="md" width={220} position="bottom-end">
                 <Menu.Target>
-                  <ActionIcon variant="light" color="#105476" size="lg">
+                  <ActionIcon
+                    variant="subtle"
+                    color="#105476"
+                    size="lg"
+                    styles={{
+                      root: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        border: "1px solid #E9ECEF",
+                        borderRadius: "8px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                    }}
+                  >
                     <IconDotsVertical size={18} />
                   </ActionIcon>
                 </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Label>Preview PDF</Menu.Label>
+
+                <Menu.Dropdown
+                  styles={{
+                    dropdown: {
+                      border: "1px solid #E9ECEF",
+                      borderRadius: "8px",
+                      padding: "8px",
+                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                    },
+                  }}
+                >
+                  <Menu.Label
+                    styles={{
+                      label: {
+                        fontFamily: "Inter",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: "#6B7280",
+                        marginBottom: "6px",
+                      },
+                    }}
+                  >
+                    Preview PDF
+                  </Menu.Label>
+
                   {housingDetails.map((housing, idx) => (
                     <Menu.Item
                       key={idx}
-                      leftSection={<IconEye size={14} />}
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconEye size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
                       onClick={() =>
                         generateCargoArrivalNoticePDFPreview(housing)
                       }
@@ -2010,7 +2081,39 @@ function ImportJobCreate() {
                   {housingDetails.map((housing, idx) => (
                     <Menu.Item
                       key={`do-${idx}`}
-                      leftSection={<IconEye size={14} />}
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconEye size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
                       onClick={() => generateDeliveryOrderPDFPreview(housing)}
                     >
                       Delivery Order - {housing.hbl_number || `HBL ${idx + 1}`}
@@ -2018,7 +2121,39 @@ function ImportJobCreate() {
                   ))}
                   {jobData?.id != null && (
                     <Menu.Item
-                      leftSection={<IconFileInvoice size={14} />}
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconFileInvoice size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
                       onClick={() => {
                         const allCollectCharges = housingDetails.flatMap(
                           (house) =>
@@ -2081,8 +2216,9 @@ function ImportJobCreate() {
               </Text>
             </Group>
             <Grid mb="sm">
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <Dropdown
+                  size="sm"
                   label="Service"
                   required
                   placeholder="Select Service"
@@ -2092,8 +2228,9 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SearchableSelect
+                  size="sm"
                   label="Origin Agent"
                   required
                   placeholder="Type agent name"
@@ -2153,8 +2290,9 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SearchableSelect
+                  size="sm"
                   label="Origin"
                   required
                   apiEndpoint={URL.portMaster}
@@ -2187,8 +2325,9 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SearchableSelect
+                  size="sm"
                   label="Destination"
                   required
                   apiEndpoint={URL.portMaster}
@@ -2229,7 +2368,7 @@ function ImportJobCreate() {
 
             {/* Second row for ETD, ETA, ATD, ATA */}
             <Grid mb="xl">
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="ETD"
                   withAsterisk
@@ -2248,7 +2387,7 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="ETA"
                   withAsterisk
@@ -2267,7 +2406,7 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="ATD"
                   placeholder="YYYY-MM-DD"
@@ -2285,7 +2424,7 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="ATA"
                   placeholder="YYYY-MM-DD"
@@ -2313,8 +2452,9 @@ function ImportJobCreate() {
               </Text>
             </Group>
             <Grid mb="xl">
-              <Grid.Col span={2}>
+              <Grid.Col span={2.4}>
                 <SearchableSelect
+                  size="sm"
                   label="Carrier"
                   required
                   apiEndpoint={URL.carrier}
@@ -2354,8 +2494,8 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
-                <TextInput
+              <Grid.Col span={2.4}>
+                <FormTextInput
                   label="Vessel Name"
                   required
                   placeholder="Enter vessel name"
@@ -2364,8 +2504,8 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
-                <TextInput
+              <Grid.Col span={2.4}>
+                <FormTextInput
                   label="Voyage Number"
                   required
                   placeholder="Enter voyage number"
@@ -2373,17 +2513,16 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
-                <TextInput
+              <Grid.Col span={2.4}>
+                <FormTextInput
                   label="MBL Number"
                   required
                   placeholder="Enter MBL number"
                   {...carrierDetailsForm.getInputProps("mbl_number")}
-                  // No maxLength restriction for MBL Number
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
+              <Grid.Col span={2.4}>
                 <SingleDateInput
                   label="MBL Date"
                   placeholder="YYYY-MM-DD"
@@ -2418,8 +2557,9 @@ function ImportJobCreate() {
               {routingsForm.values.routings.map((routing, index) => (
                 <Box key={index}>
                   <Grid>
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <Dropdown
+                        size="sm"
                         label="Transport Type"
                         required
                         placeholder="Select Transport Type"
@@ -2444,8 +2584,9 @@ function ImportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SearchableSelect
+                        size="sm"
                         label="From"
                         required
                         apiEndpoint={URL.portMaster}
@@ -2493,8 +2634,9 @@ function ImportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SearchableSelect
+                        size="sm"
                         label="To"
                         required
                         apiEndpoint={URL.portMaster}
@@ -2545,8 +2687,8 @@ function ImportJobCreate() {
                     {/* Dynamic field labels based on transport type */}
                     {routing.transport_type === "Sea" && (
                       <>
-                        <Grid.Col span={2}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Vessel"
                             required
                             placeholder="Enter vessel name"
@@ -2567,8 +2709,8 @@ function ImportJobCreate() {
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Voyage Number"
                             required
                             placeholder="Enter voyage number"
@@ -2579,7 +2721,6 @@ function ImportJobCreate() {
                                 `routings.${index}.voyage_number`,
                                 value
                               );
-                              // Also update flight_voyage_number for backward compatibility
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight_voyage_number`,
                                 value
@@ -2597,8 +2738,9 @@ function ImportJobCreate() {
 
                     {routing.transport_type === "Air" && (
                       <>
-                        <Grid.Col span={2}>
+                        <Grid.Col span={2.4}>
                           <SearchableSelect
+                            size="sm"
                             label="Carrier"
                             required
                             apiEndpoint={URL.carrier}
@@ -2632,8 +2774,8 @@ function ImportJobCreate() {
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Flight Number"
                             required
                             placeholder="Enter flight number"
@@ -2644,7 +2786,6 @@ function ImportJobCreate() {
                                 `routings.${index}.flight`,
                                 value
                               );
-                              // Also update flight_voyage_number for backward compatibility
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight_voyage_number`,
                                 value
@@ -2662,8 +2803,9 @@ function ImportJobCreate() {
 
                     {routing.transport_type === "Road" && (
                       <>
-                        <Grid.Col span={2}>
+                        <Grid.Col span={2.4}>
                           <SearchableSelect
+                            size="sm"
                             label="Carrier"
                             required
                             apiEndpoint={URL.carrier}
@@ -2697,8 +2839,8 @@ function ImportJobCreate() {
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Truck Number"
                             required
                             placeholder="Enter truck number"
@@ -2709,7 +2851,6 @@ function ImportJobCreate() {
                                 `routings.${index}.truck_no`,
                                 value
                               );
-                              // Also update flight_voyage_number for backward compatibility
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight_voyage_number`,
                                 value
@@ -2727,8 +2868,8 @@ function ImportJobCreate() {
 
                     {routing.transport_type === "Rail" && (
                       <>
-                        <Grid.Col span={2}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Carrier"
                             required
                             placeholder="Enter carrier name"
@@ -2741,7 +2882,6 @@ function ImportJobCreate() {
                                 `routings.${index}.carrier_name`,
                                 formattedValue
                               );
-                              // For Rail, carrier_code can be same as carrier_name or empty
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
                                 formattedValue
@@ -2754,8 +2894,8 @@ function ImportJobCreate() {
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Rail Number"
                             required
                             placeholder="Enter rail number"
@@ -2766,7 +2906,6 @@ function ImportJobCreate() {
                                 `routings.${index}.rail_no`,
                                 value
                               );
-                              // Also update flight_voyage_number for backward compatibility
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight_voyage_number`,
                                 value
@@ -2782,7 +2921,7 @@ function ImportJobCreate() {
                       </>
                     )}
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ETD"
                         withAsterisk
@@ -2806,7 +2945,7 @@ function ImportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ETA"
                         withAsterisk
@@ -2830,7 +2969,7 @@ function ImportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ATD"
                         placeholder="YYYY-MM-DD"
@@ -2853,7 +2992,7 @@ function ImportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ATA"
                         placeholder="YYYY-MM-DD"
@@ -2966,7 +3105,7 @@ function ImportJobCreate() {
 
             {/* Static Header Row */}
             {containerDetailsForm.values.containers.length > 0 && (
-              <Grid
+              <Grid 
                 mb="xs"
                 style={{
                   fontWeight: 600,
@@ -2974,13 +3113,29 @@ function ImportJobCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2.2}>Container Type</Grid.Col>
-                <Grid.Col span={2}>Container No</Grid.Col>
-                <Grid.Col span={1.8}>Actual Seal No</Grid.Col>
-                <Grid.Col span={1.8}>Customs Seal No</Grid.Col>
-                <Grid.Col span={1.7}>Loading Date</Grid.Col>
-                <Grid.Col span={1.7}>Unloading Date</Grid.Col>
-                <Grid.Col span={0.5}></Grid.Col>
+                <Grid.Col span={2.2}>
+                  <RequiredLabel label="Container Type" required={false} />
+                </Grid.Col>
+                <Grid.Col span={2.2}>
+                  <RequiredLabel label="Container No" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.8}>
+                  <RequiredLabel label="Actual Seal No" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.8}>
+                  <RequiredLabel label="Customs Seal No" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.7}>
+                  <RequiredLabel label="Loading Date" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.7}>
+                  <RequiredLabel label="Unloading Date" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.6}>
+                  {containerDetailsForm.values.containers.length > 1 && 
+                    <RequiredLabel label="Actions" required={false} />
+                  }
+                </Grid.Col>
               </Grid>
             )}
 
@@ -3006,9 +3161,8 @@ function ImportJobCreate() {
                       }
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
-                    <TextInput
-                      required
+                  <Grid.Col span={2.2}>
+                    <FormTextInput
                       placeholder="Container number"
                       maxLength={11}
                       {...containerDetailsForm.getInputProps(
@@ -3021,7 +3175,6 @@ function ImportJobCreate() {
                         ] as string
                       }
                       onBlur={() => {
-                        // Validate uniqueness on blur
                         const currentValue =
                           containerDetailsForm.values.containers[
                             index
@@ -3039,7 +3192,6 @@ function ImportJobCreate() {
                               "Container number must be unique"
                             );
                           } else {
-                            // Clear error if no duplicates
                             const currentError =
                               containerDetailsForm.errors[
                                 `containers.${index}.container_no`
@@ -3057,7 +3209,7 @@ function ImportJobCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.8}>
-                    <TextInput
+                    <FormTextInput
                       placeholder="Actual seal number"
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.actual_seal_no`
@@ -3066,7 +3218,7 @@ function ImportJobCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.8}>
-                    <TextInput
+                    <FormTextInput
                       placeholder="Customs seal number"
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.customs_seal_no`
@@ -3116,10 +3268,12 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.5}>
+                  <Grid.Col span={0.6}>
                     {containerDetailsForm.values.containers.length > 1 &&
                       !isReadOnly && (
                         <Button
+                          size="sm"
+                          px={12}
                           variant="light"
                           color="red"
                           onClick={() => removeContainer(index)}
@@ -3267,15 +3421,71 @@ function ImportJobCreate() {
                       >
                         Remove
                       </Button>
-                      <Menu shadow="md" width={200}>
+                      <Menu shadow="md" width={200} position="bottom-end">
                         <Menu.Target>
-                          <ActionIcon variant="light" color="#105476" size="lg">
+                          <ActionIcon
+                            variant="subtle"
+                            color="#105476"
+                            size="lg"
+                            styles={{
+                              root: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                border: "1px solid #E9ECEF",
+                                borderRadius: "8px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                            }}
+                          >
                             <IconDotsVertical size={18} />
                           </ActionIcon>
                         </Menu.Target>
-                        <Menu.Dropdown>
+                        <Menu.Dropdown
+                          styles={{
+                            dropdown: {
+                              border: "1px solid #E9ECEF",
+                              borderRadius: "8px",
+                              padding: "8px",
+                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                            },
+                          }}
+                        >
                           <Menu.Item
-                            leftSection={<IconEye size={14} />}
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconEye size={16} color="#105476" />
+                              </Box>
+                            }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                marginBottom: "4px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
                             onClick={() =>
                               generateCargoArrivalNoticePDFPreview(house)
                             }
@@ -3283,7 +3493,39 @@ function ImportJobCreate() {
                             Cargo Arrival Notice
                           </Menu.Item>
                           <Menu.Item
-                            leftSection={<IconEye size={14} />}
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconEye size={16} color="#105476" />
+                              </Box>
+                            }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                marginBottom: "4px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
                             onClick={() =>
                               generateDeliveryOrderPDFPreview(house)
                             }

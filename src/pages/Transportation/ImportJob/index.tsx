@@ -11,8 +11,10 @@ import {
   Card,
   Center,
   Stack,
+  Box,
   Menu,
   ActionIcon,
+  UnstyledButton,
   Select,
   Loader,
   Grid,
@@ -28,16 +30,18 @@ import {
   IconFilterOff,
   IconSearch,
   IconCalendar,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
-import { SearchableSelect } from "../../../components";
+import { Dropdown, SearchableSelect, SingleDateInput } from "../../../components";
 import { DateInput } from "@mantine/dates";
 import { ToastNotification } from "../../../components";
 import dayjs from "dayjs";
+import FormTextInput from "../../../components/FormTextInput";
 
 // Type definitions
 type ImportJobData = {
@@ -500,23 +504,29 @@ function ImportJobMaster() {
         header: "Actions",
         size: 80,
         Cell: ({ row }) => (
-          <Menu shadow="md" width={120}>
+          <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
             <Menu.Target>
               <ActionIcon variant="subtle" color="gray">
                 <IconDotsVertical size={16} />
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<IconEdit size={14} />}
-                onClick={() => {
-                  navigate(`/SeaExport/import-job/edit`, {
-                    state: { job: row.original },
-                  });
-                }}
-              >
-                Edit
-              </Menu.Item>
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() => {
+                    navigate(`/SeaExport/import-job/edit`, {
+                      state: { job: row.original },
+                    });
+                  }}
+                >
+                  <Group gap="sm">
+                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                      Edit
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
             </Menu.Dropdown>
           </Menu>
         ),
@@ -570,33 +580,73 @@ function ImportJobMaster() {
       shadow: "sm",
       p: "md",
       radius: "md",
-    },
-    mantineTableBodyCellProps: {
       style: {
-        padding: "8px 12px",
-        fontSize: "13px",
-        backgroundColor: "#ffffff",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
       },
     },
-    mantineTableHeadCellProps: {
-      style: {
-        padding: "6px 12px",
-        fontSize: "12px",
-        backgroundColor: "#ffffff",
-        top: 0,
-        zIndex: 3,
-        borderBottom: "1px solid #e9ecef",
-      },
+    mantineTableBodyCellProps: ({ column }) => {
+      const extraStyles =
+        column.id === "actions"
+          ? {
+              position: "sticky" as const,
+              right: 0,
+              minWidth: "30px",
+              zIndex: 2,
+              borderLeft: "1px solid #F3F3F3",
+              boxShadow: "1px -2px 4px 0px #00000040",
+            }
+          : {};
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          color: "#333740",
+          backgroundColor: "#ffffff",
+          ...extraStyles,
+        },
+      };
+    },
+    mantineTableHeadCellProps: ({ column }) => {
+      const extraStyles =
+        column.id === "actions"
+          ? {
+              position: "sticky" as const,
+              right: 0,
+              minWidth: "80px",
+              zIndex: 2,
+              backgroundColor: "#FBFBFB",
+              boxShadow: "0px -2px 4px 0px #00000040",
+            }
+          : {};
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
+          top: 0,
+          zIndex: 3,
+          borderBottom: "1px solid #F3F3F3",
+          ...extraStyles,
+        },
+      };
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
     renderEmptyRowsFallback: () => (
@@ -604,7 +654,7 @@ function ImportJobMaster() {
         <td colSpan={columns.length}>
           <Center py="xl">
             <Stack align="center" gap="md">
-              <Text c="dimmed" size="lg" ta="center">
+              <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
                 No jobs to display
               </Text>
             </Stack>
@@ -615,65 +665,140 @@ function ImportJobMaster() {
   });
 
   return (
-    <Card shadow="sm" padding="lg" radius="md" withBorder>
-      <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-        <Text size="md" fw={600} c="#105476">
-          Import Job List
-        </Text>
+    <Card
+      shadow="sm"
+      pt="md"
+      pb="sm"
+      px="lg"
+      radius="md"
+      withBorder
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        flex: 1,
+      }}
+    >
+      <Box mb="md">
+        <Group justify="space-between" align="center" wrap="nowrap">
+          <Text
+            size="md"
+            fw={600}
+            c="#444955"
+            style={{ fontFamily: "Inter", fontSize: "16px" }}
+          >
+            Import Job List
+          </Text>
 
-        <Group gap="sm" wrap="nowrap">
-          <TextInput
-            placeholder="Search"
-            leftSection={<IconSearch size={16} />}
-            w={{ sm: 150, md: 300 }}
-            radius="sm"
-            size="xs"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.currentTarget.value)}
-          />
-          <Button
-            variant={showFilters ? "filled" : "outline"}
-            leftSection={<IconFilter size={16} />}
-            size="xs"
-            color="#105476"
-            onClick={toggleFilters}
-          >
-            Filters
-          </Button>
-          <Button
-            variant="filled"
-            leftSection={<IconPlus size={14} />}
-            size="xs"
-            color="#105476"
-            onClick={() => navigate("/SeaExport/import-job/create")}
-          >
-            Create New
-          </Button>
+          <Group gap="sm" wrap="nowrap">
+            <TextInput
+              placeholder="Search"
+              leftSection={<IconSearch size={16} />}
+              w={{ sm: 150, md: 300 }}
+              radius="sm"
+              size="xs"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.currentTarget.value)}
+              styles={{
+                input: {
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  height: "36px",
+                },
+              }}
+            />
+            <Button
+              variant={showFilters ? "filled" : "outline"}
+              leftSection={<IconFilter size={16} />}
+              size="sm"
+              onClick={toggleFilters}
+              styles={{
+                root: {
+                  backgroundColor: showFilters ? "#105476" : "transparent",
+                  borderRadius: "4px",
+                  color: showFilters ? "white" : "#105476",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontStyle: "semibold",
+                  border: "1px solid #105476",
+                  "&:hover": {
+                    backgroundColor: showFilters ? "#105476" : "#E0F5FF",
+                  },
+                },
+              }}
+            >
+              Filters
+            </Button>
+            <Button
+              leftSection={<IconPlus size={16} />}
+              size="sm"
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  color: "#FFFFFF",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontStyle: "semibold",
+                  "&:hover": {
+                    backgroundColor: "#105476",
+                  },
+                },
+              }}
+              onClick={() => navigate("/SeaExport/import-job/create")}
+            >
+              Create New
+            </Button>
+          </Group>
         </Group>
-      </Group>
+      </Box>
 
       {/* Filter Section */}
       {showFilters && (
-        <Card
-          shadow="xs"
-          padding="md"
-          radius="md"
-          withBorder
-          mb="md"
-          bg="#f8f9fa"
+        <Box
+          tt="capitalize"
+          mb="sm"
+          p="sm"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+            flexShrink: 0,
+            height: "fit-content",
+          }}
         >
-          <Group justify="space-between" align="center" mb="md">
-            <Group align="center" gap="xs">
-              <IconFilter size={16} color="#105476" />
-              <Text size="sm" fw={500} c="#105476">
-                Filters
-              </Text>
-            </Group>
+          <Group
+            justify="space-between"
+            align="center"
+            mb="sm"
+            px="md"
+            style={{
+              backgroundColor: "#FAFAFA",
+              padding: "4px 8px",
+            }}
+          >
+            <Text
+              size="sm"
+              fw={600}
+              c="#000000"
+              style={{ fontFamily: "Inter", fontSize: "14px" }}
+            >
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
           </Group>
 
-          <Grid>
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
             <Grid.Col span={3}>
-              <TextInput
+              <FormTextInput
                 label="MBL Number"
                 placeholder="Enter MBL Number"
                 size="xs"
@@ -750,7 +875,7 @@ function ImportJobMaster() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <Select
+              <Dropdown
                 label="Service"
                 placeholder="Select Service"
                 size="xs"
@@ -763,7 +888,7 @@ function ImportJobMaster() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <DateInput
+              <SingleDateInput
                 label="ETD"
                 placeholder="YYYY-MM-DD"
                 size="xs"
@@ -789,7 +914,7 @@ function ImportJobMaster() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <DateInput
+              <SingleDateInput
                 label="ETA"
                 placeholder="YYYY-MM-DD"
                 size="xs"
@@ -814,110 +939,199 @@ function ImportJobMaster() {
               />
             </Grid.Col>
 
-            <Grid.Col span={12}>
-              <Group justify="flex-end" gap="sm">
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  size="xs"
-                  leftSection={<IconFilterOff size={14} />}
-                  onClick={clearAllFilters}
-                >
-                  Clear All
-                </Button>
-                <Button
-                  color="#105476"
-                  size="xs"
-                  leftSection={<IconFilter size={14} />}
-                  onClick={applyFilters}
-                  loading={isFilteredLoading}
-                >
-                  Apply Filters
-                </Button>
-              </Group>
-            </Grid.Col>
           </Grid>
-        </Card>
+
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={clearAllFilters}
+              leftSection={<IconX size={16} />}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  color: "#444955",
+                },
+              }}
+            >
+              Clear Filters
+            </Button>
+            <Button
+              size="sm"
+              onClick={applyFilters}
+              loading={isFilteredLoading}
+              disabled={isFilteredLoading}
+              leftSection={<IconFilter size={16} />}
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  "&:hover": {
+                    backgroundColor: "#0d4261",
+                  },
+                },
+              }}
+            >
+              Apply Filters
+            </Button>
+          </Group>
+        </Box>
       )}
 
-      <MantineReactTable table={table} />
-
-      {/* Custom Pagination Bar */}
-      <Group
-        w="100%"
-        justify="space-between"
-        align="center"
-        p="xs"
-        wrap="nowrap"
-        pt="md"
-      >
-        {/* Rows per page and range */}
-        <Group gap="sm" align="center" wrap="nowrap">
-          <Text size="sm" c="dimmed">
-            Rows per page
-          </Text>
-          <Select
-            size="xs"
-            data={["10", "25", "50"]}
-            value={String(pageSize)}
-            onChange={(val) => {
-              if (!val) return;
-              handlePageSizeChange(Number(val));
+      {isTableLoading ? (
+        <Center py="xl">
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+              Loading import jobs...
+            </Text>
+          </Stack>
+        </Center>
+      ) : (
+        <>
+          <div
+            style={{
+              position: "relative",
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
             }}
-            w={110}
-            styles={
-              { input: { fontSize: 12, height: 30 } } as Record<string, unknown>
-            }
-          />
-          <Text size="sm" c="dimmed">
-            {(() => {
-              const total = displayData.length || 0;
-              if (total === 0) return "0–0 of 0";
-              const start = (currentPage - 1) * pageSize + 1;
-              const end = Math.min(currentPage * pageSize, total);
-              return `${start}–${end} of ${total}`;
-            })()}
-          </Text>
-        </Group>
+          >
+            {isFetching && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                  borderRadius: "8px",
+                }}
+              >
+                <Stack align="center" gap="md">
+                  <Loader size="lg" color="#105476" />
+                  <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+                    Refreshing data...
+                  </Text>
+                </Stack>
+              </div>
+            )}
+            <MantineReactTable table={table} />
+          </div>
 
-        {/* Page controls */}
-        <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-          <ActionIcon
-            variant="default"
-            size="sm"
-            onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
+          {/* Custom Pagination Bar */}
+          <Group
+            w="100%"
+            justify="space-between"
+            align="center"
+            p="xs"
+            wrap="nowrap"
+            pt="md"
           >
-            <IconChevronLeft size={16} />
-          </ActionIcon>
-          <Text size="sm" ta="center" style={{ width: 26 }}>
-            {currentPage}
-          </Text>
-          <Text size="sm" c="dimmed">
-            of {Math.max(1, Math.ceil(displayData.length / pageSize))}
-          </Text>
-          <ActionIcon
-            variant="default"
-            size="sm"
-            onClick={() => {
-              const totalPages = Math.max(
-                1,
-                Math.ceil(displayData.length / pageSize)
-              );
-              handlePageChange(Math.min(totalPages, currentPage + 1));
-            }}
-            disabled={(() => {
-              const totalPages = Math.max(
-                1,
-                Math.ceil(displayData.length / pageSize)
-              );
-              return currentPage >= totalPages;
-            })()}
-          >
-            <IconChevronRight size={16} />
-          </ActionIcon>
-        </Group>
-      </Group>
+            <Group gap="sm" align="center" wrap="nowrap">
+              <Text
+                size="sm"
+                c="dimmed"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Rows per page
+              </Text>
+              <Select
+                size="xs"
+                data={["10", "25", "50"]}
+                value={String(pageSize)}
+                onChange={(val) => {
+                  if (!val) return;
+                  handlePageSizeChange(Number(val));
+                }}
+                w={110}
+                styles={
+                  {
+                    input: {
+                      fontSize: "13px",
+                      height: "36px",
+                      fontFamily: "Inter",
+                    },
+                  } as Record<string, unknown>
+                }
+              />
+              <Text
+                size="sm"
+                c="dimmed"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                {(() => {
+                  const total = displayData.length || 0;
+                  if (total === 0) return "0–0 of 0";
+                  const start = (currentPage - 1) * pageSize + 1;
+                  const end = Math.min(currentPage * pageSize, total);
+                  return `${start}–${end} of ${total}`;
+                })()}
+              </Text>
+            </Group>
+
+            <Group gap="xs" align="center" wrap="nowrap" pr={50}>
+              <ActionIcon
+                variant="default"
+                size="sm"
+                onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+              >
+                <IconChevronLeft size={16} />
+              </ActionIcon>
+              <Text
+                size="sm"
+                ta="center"
+                style={{ width: 26, fontFamily: "Inter, sans-serif" }}
+              >
+                {currentPage}
+              </Text>
+              <Text
+                size="sm"
+                c="dimmed"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                of {Math.max(1, Math.ceil(displayData.length / pageSize))}
+              </Text>
+              <ActionIcon
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  const totalPages = Math.max(
+                    1,
+                    Math.ceil(displayData.length / pageSize)
+                  );
+                  handlePageChange(Math.min(totalPages, currentPage + 1));
+                }}
+                disabled={(() => {
+                  const totalPages = Math.max(
+                    1,
+                    Math.ceil(displayData.length / pageSize)
+                  );
+                  return currentPage >= totalPages;
+                })()}
+              >
+                <IconChevronRight size={16} />
+              </ActionIcon>
+            </Group>
+          </Group>
+        </>
+      )}
     </Card>
   );
 }
