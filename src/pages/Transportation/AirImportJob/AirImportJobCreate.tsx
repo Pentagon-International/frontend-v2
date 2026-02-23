@@ -1790,27 +1790,124 @@ function AirImportJobCreate() {
               {mode === "edit" ? "Update" : "Create"}
             </Button>
             {hawbDetails.length > 0 && (
-              <Menu shadow="md" width={200}>
+              <Menu shadow="md" width={220} position="bottom-end">
                 <Menu.Target>
-                  <ActionIcon variant="light" color="#105476" size="lg">
+                  <ActionIcon
+                    variant="subtle"
+                    color="#105476"
+                    size="lg"
+                    styles={{
+                      root: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        border: "1px solid #E9ECEF",
+                        borderRadius: "8px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                    }}
+                  >
                     <IconDotsVertical size={18} />
                   </ActionIcon>
                 </Menu.Target>
-                <Menu.Dropdown>
-                  {/* <Menu.Label>Preview PDF</Menu.Label> */}
+
+                <Menu.Dropdown
+                  styles={{
+                    dropdown: {
+                      border: "1px solid #E9ECEF",
+                      borderRadius: "8px",
+                      padding: "8px",
+                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                    },
+                  }}
+                >
                   {hawbDetails.map((hawb, idx) => (
                     <Menu.Item
                       key={idx}
-                      leftSection={<IconEye size={14} />}
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconEye size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
                       onClick={() => generateCargoArrivalNoticePDFPreview(hawb)}
                     >
                       Cargo Arrival Notice -{" "}
                       {hawb.hawb_number || `HAWB ${idx + 1}`}
                     </Menu.Item>
                   ))}
-                  <Menu.Divider />
+
+                  <Menu.Divider
+                    styles={{
+                      divider: {
+                        margin: "6px 0",
+                        borderColor: "#E9ECEF",
+                      },
+                    }}
+                  />
+
                   <Menu.Item
-                    leftSection={<IconEye size={14} />}
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconEye size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
                     onClick={() => {
                       ToastNotification({
                         type: "info",
@@ -1820,26 +1917,59 @@ function AirImportJobCreate() {
                   >
                     Deliver Order
                   </Menu.Item>
+
                   {jobData?.id != null && (
                     <Menu.Item
-                      leftSection={<IconFileInvoice size={14} />}
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconFileInvoice size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
                       onClick={() => {
-                        // Agent Invoice: collect all CC charges from all houses into one list
-                        // (invoice create page uses only first house's charges)
                         const allCollectCharges = hawbDetails.flatMap((hawb) =>
                           (hawb.charges ?? []).filter(
                             (c) =>
-                              String(c.pp_cc ?? "").trim().toUpperCase() ===
-                              "CC"
+                              String(c.pp_cc ?? "").trim().toUpperCase() === "CC"
                           )
                         );
+
                         const firstHouse = hawbDetails[0];
+
                         const housingDetailsForInvoice = [
                           {
                             ...firstHouse,
                             charges: allCollectCharges,
                           },
                         ];
+
                         navigate("/air/import-job/invoice", {
                           state: {
                             hawbDetails: housingDetailsForInvoice,
@@ -2797,23 +2927,113 @@ function AirImportJobCreate() {
                       >
                         Remove
                       </Button>
-                      <Menu shadow="md" width={200}>
+                      <Menu shadow="md" width={220} position="bottom-end">
                         <Menu.Target>
-                          <ActionIcon variant="light" color="#105476" size="lg">
+                          <ActionIcon
+                            variant="subtle"
+                            color="#105476"
+                            size="lg"
+                            styles={{
+                              root: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                border: "1px solid #E9ECEF",
+                                borderRadius: "8px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                            }}
+                          >
                             <IconDotsVertical size={18} />
                           </ActionIcon>
                         </Menu.Target>
-                        <Menu.Dropdown>
+
+                        <Menu.Dropdown
+                          styles={{
+                            dropdown: {
+                              border: "1px solid #E9ECEF",
+                              borderRadius: "8px",
+                              padding: "8px",
+                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                            },
+                          }}
+                        >
+                          {/* Cargo Arrival Notice */}
                           <Menu.Item
-                            leftSection={<IconEye size={14} />}
-                            onClick={() =>
-                              generateCargoArrivalNoticePDFPreview(hawb)
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconEye size={16} color="#105476" />
+                              </Box>
                             }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                marginBottom: "4px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
+                            onClick={() => generateCargoArrivalNoticePDFPreview(hawb)}
                           >
                             Cargo Arrival Notice
                           </Menu.Item>
+
+                          {/* Delivery Order */}
                           <Menu.Item
-                            leftSection={<IconEye size={14} />}
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconEye size={16} color="#105476" />
+                              </Box>
+                            }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                marginBottom: "4px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
                             onClick={() => {
                               ToastNotification({
                                 type: "info",
