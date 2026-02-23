@@ -51,6 +51,13 @@ interface ImportShipmentStepperProps {
   jobData?: Record<string, unknown>;
   active?: number;
   setActive?: (step: number) => void;
+  /** Called when quotation flow returns is_booked: true - Create should fetch booking and switch to edit */
+  onQuotationAlreadyBooked?: (
+    bookingMessage: string,
+    bookingId: number
+  ) => void;
+  /** Called when edit form has been fully populated with jobData (for hiding loader) */
+  onEditFormPopulated?: () => void;
 }
 
 interface CargoDetail {
@@ -316,7 +323,13 @@ type QuotationCharge = {
 
 type QuotationItem = {
   quotation_id: string;
+  service?: string;
+  service_type?: string;
   charges: QuotationCharge[];
+  is_booked?: boolean;
+  booking_id?: number | null;
+  booking_message?: string | null;
+  shipment_code?: string | null;
 };
 
 type QuotationsResponse = {
@@ -381,6 +394,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   jobData,
   active: externalActive,
   setActive: externalSetActive,
+  onQuotationAlreadyBooked,
+  onEditFormPopulated,
 }) => {
   const prevRoutedRef = useRef<string | null>(null);
   const [internalActive, setInternalActive] = useState(0);
@@ -660,7 +675,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       vessel_name: String(data.vessel_name || ""),
       voyage_no: String(data.voyage_no || ""),
 
-      // Routing Details - map from routing_details array
+      // Routing Details - map from routing_details array (include from/to/carrier codes from API)
       routingDetails: data.routing_details
         ? (data.routing_details as Array<Record<string, unknown>>).map(
             (route: Record<string, unknown>) => ({
@@ -670,11 +685,11 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   : Number(route.id)
                 : undefined,
               move_type: String(route.move_type || ""),
-              from_location_code: "",
-              to_location_code: "",
+              from_location_code: String(route.from_location_code || ""),
+              to_location_code: String(route.to_location_code || ""),
               etd: route.etd ? new Date(String(route.etd)) : new Date(),
               eta: route.eta ? new Date(String(route.eta)) : new Date(),
-              carrier_code: "",
+              carrier_code: String(route.carrier_code || ""),
               flight_no: route.flight_no ? String(route.flight_no) : null,
               status: String(route.status || ""),
             })
@@ -766,29 +781,37 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             },
           ],
 
-      // Pickup Details
-      pickup_location: String(data.pickup_location || ""),
-      pickup_from_code: String(data.pickup_from_code || ""),
-      pickup_address_id: String(data.pickup_address_id || ""),
+      // Pickup Details (handle null from API)
+      pickup_location: String(data.pickup_location ?? ""),
+      pickup_from_code: String(
+        data.pickup_from_code ?? data.pickup_from_id ?? ""
+      ),
+      pickup_address_id: String(data.pickup_address_id ?? ""),
       planned_pickup_date: data.planned_pickup_date
         ? new Date(String(data.planned_pickup_date))
         : new Date(),
-      actual_pickup_date: data.actual_pickup_date
-        ? new Date(String(data.actual_pickup_date))
-        : null,
-      transporter_name: String(data.transporter_name || ""),
-      transporter_email: String(data.transporter_email || ""),
+      actual_pickup_date:
+        data.actual_pickup_date &&
+        String(data.actual_pickup_date) !== "null"
+          ? new Date(String(data.actual_pickup_date))
+          : null,
+      transporter_name: String(data.transporter_name ?? ""),
+      transporter_email: String(data.transporter_email ?? ""),
 
-      // Delivery Details
-      delivery_location: String(data.delivery_location || ""),
-      delivery_from_code: String(data.delivery_from_code || ""),
-      delivery_address_id: String(data.delivery_address_id || ""),
+      // Delivery Details (handle null from API)
+      delivery_location: String(data.delivery_location ?? ""),
+      delivery_from_code: String(
+        data.delivery_from_code ?? data.delivery_from_id ?? ""
+      ),
+      delivery_address_id: String(data.delivery_address_id ?? ""),
       planned_delivery_date: data.planned_delivery_date
         ? new Date(String(data.planned_delivery_date))
         : new Date(),
-      actual_delivery_date: data.actual_delivery_date
-        ? new Date(String(data.actual_delivery_date))
-        : null,
+      actual_delivery_date:
+        data.actual_delivery_date &&
+        String(data.actual_delivery_date) !== "null"
+          ? new Date(String(data.actual_delivery_date))
+          : null,
     };
   };
   const form = useForm<FormValues>({
@@ -967,6 +990,57 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     return options;
   }, [quotationsData, isEditMode, initialData, isFromQuotationFlow]);
 
+  // Quotation flow: when is_booked false set charges; when is_booked true fetch existing booking
+  const lastBookedIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      !isFromQuotationFlow ||
+      !quotationsData?.status ||
+      !Array.isArray(quotationsData.data) ||
+      quotationsData.data.length === 0 ||
+      !onQuotationAlreadyBooked
+    ) {
+      return;
+    }
+    const firstItem = quotationsData.data[0] as QuotationItem;
+    if (firstItem.is_booked === true && firstItem.booking_id) {
+      const bookingId = Number(firstItem.booking_id);
+      if (lastBookedIdRef.current === bookingId) return;
+      lastBookedIdRef.current = bookingId;
+      onQuotationAlreadyBooked(
+        firstItem.booking_message || "This quotation is already linked to a booking.",
+        bookingId
+      );
+    } else if (firstItem.is_booked !== true && firstItem.charges?.length) {
+      lastBookedIdRef.current = null;
+      setQuotationId(String(firstItem.quotation_id || ""));
+      const mappedCharges = firstItem.charges.map(
+        (charge: QuotationCharge, index: number) => ({
+          id: index + 1,
+          charge_name: String(charge.charge_name || ""),
+          currency_country_code: String(charge.currency || ""),
+          roe: charge.roe ? String(charge.roe) : "",
+          unit: String(charge.unit || ""),
+          no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
+          sell_per_unit: charge.sell_per_unit
+            ? String(charge.sell_per_unit)
+            : "",
+          min_sell: charge.min_sell ? String(charge.min_sell) : "",
+          cost_per_unit: charge.cost_per_unit
+            ? String(charge.cost_per_unit)
+            : "",
+          total_cost: charge.total_cost ? String(charge.total_cost) : "",
+          total_sell: charge.total_sell ? String(charge.total_sell) : "",
+        })
+      );
+      setCharges(mappedCharges);
+    }
+  }, [
+    isFromQuotationFlow,
+    quotationsData,
+    onQuotationAlreadyBooked,
+  ]);
+
   // Salespersons data query - must be after form initialization
   const { data: rawSalespersonsData = [] } = useQuery({
     queryKey: ["salespersons", form.values.customer_code || ""],
@@ -1021,35 +1095,171 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     return options;
   }, [rawSalespersonsData, isEditMode, initialData]);
 
-  // Effect to load edit data when jobData is available
+  // Track which job we've populated from - run only once per job to avoid overwriting user edits
+  const populatedJobIdRef = useRef<number | null>(null);
+
+  // Effect to load edit data when jobData is available (runs ONCE per job, does not re-run on form changes)
   useEffect(() => {
-    if (isEditMode && jobData && !initialData) {
-      // If we have jobData but no initialData, map jobData to form values
-      const mappedData = mapInitialDataToFormValues(jobData);
+    if (!isEditMode || !jobData) return;
+    const jobId = jobData.id != null ? (typeof jobData.id === "number" ? jobData.id : Number(jobData.id)) : null;
+    if (jobId != null && populatedJobIdRef.current === jobId) return;
+    if (jobId != null) populatedJobIdRef.current = jobId;
+
+    const mappedData = mapInitialDataToFormValues(jobData);
       form.setValues(mappedData as FormValues);
 
-      // Set routing display names from jobData (matching Export flow)
+      // Set routing display names from jobData
       if (jobData.routing_details && Array.isArray(jobData.routing_details)) {
         const routingNames = (
           jobData.routing_details as Array<Record<string, unknown>>
         ).map((route: Record<string, unknown>) => ({
           from: route.from_location_name
-            ? `${String(route.from_location_name)} (${String(route.from_location_code || "")})`
+            ? `${String(route.from_location_name)} (${String(route.from_location_code ?? "")})`
             : null,
           to: route.to_location_name
-            ? `${String(route.to_location_name)} (${String(route.to_location_code || "")})`
+            ? `${String(route.to_location_name)} (${String(route.to_location_code ?? "")})`
             : null,
           carrier: route.carrier_name ? String(route.carrier_name) : null,
         }));
         setRoutingDisplayNames(routingNames);
       }
-    }
-  }, [isEditMode, jobData, initialData, form]);
+
+      // Set display names for SearchableSelect components
+      if (jobData.shipper_name) setShipperDisplayName(String(jobData.shipper_name));
+      if (jobData.consignee_name) setConsigneeDisplayName(String(jobData.consignee_name));
+      if (jobData.forwarder_name) setForwarderDisplayName(String(jobData.forwarder_name));
+      if (jobData.destination_agent_name)
+        setDestinationAgentDisplayName(String(jobData.destination_agent_name));
+      if (jobData.billing_customer_name)
+        setBillingCustomerDisplayName(String(jobData.billing_customer_name));
+      else if (jobData.billing_customer)
+        setBillingCustomerDisplayName(String(jobData.billing_customer));
+      if (jobData.notify_customer_name)
+        setNotifyCustomerDisplayName(String(jobData.notify_customer_name));
+      else if (jobData.notify_customer)
+        setNotifyCustomerDisplayName(String(jobData.notify_customer));
+      if (jobData.cha_name) setChaDisplayName(String(jobData.cha_name));
+      else if (jobData.cha) setChaDisplayName(String(jobData.cha));
+      if (jobData.pickup_from)
+        setPickupFromDisplayName(
+          jobData.pickup_from_code
+            ? `${String(jobData.pickup_from)} (${String(jobData.pickup_from_code)})`
+            : String(jobData.pickup_from)
+        );
+      if (jobData.delivery_from)
+        setDeliveryFromDisplayName(
+          jobData.delivery_from_code
+            ? `${String(jobData.delivery_from)} (${String(jobData.delivery_from_code)})`
+            : String(jobData.delivery_from)
+        );
+      if (jobData.pickup_address_text || jobData.pickup_address)
+        setPickupAddressDisplayName(
+          String(jobData.pickup_address_text ?? jobData.pickup_address ?? "")
+        );
+      if (jobData.delivery_address_text || jobData.delivery_address)
+        setDeliveryAddressDisplayName(
+          String(jobData.delivery_address_text ?? jobData.delivery_address ?? "")
+        );
+
+      // Set address options for Party Details
+      if (jobData.shipper_address_id != null && jobData.shipper_address) {
+        setShipperAddressOptions([
+          { value: String(jobData.shipper_address_id), label: String(jobData.shipper_address) },
+        ]);
+      }
+      if (jobData.consignee_address != null || jobData.consignee_address_id != null) {
+        setConsigneeAddressOptions([
+          {
+            value: String(jobData.consignee_address_id ?? 0),
+            label: String(jobData.consignee_address ?? ""),
+          },
+        ]);
+      }
+      if (jobData.forwarder_address_id != null && jobData.forwarder_address) {
+        setForwarderAddressOptions([
+          {
+            value: String(jobData.forwarder_address_id),
+            label: String(jobData.forwarder_address),
+          },
+        ]);
+      }
+      if (jobData.destination_agent_address_id != null && jobData.destination_agent_address) {
+        setAgentAddressOptions([
+          {
+            value: String(jobData.destination_agent_address_id),
+            label: String(jobData.destination_agent_address),
+          },
+        ]);
+      }
+      if (jobData.billing_customer_address_id != null && jobData.billing_customer_address) {
+        setBillingCustomerAddressOptions([
+          {
+            value: String(jobData.billing_customer_address_id),
+            label: String(jobData.billing_customer_address),
+          },
+        ]);
+      }
+      if (jobData.notify_customer_address_id != null && jobData.notify_customer_address) {
+        setNotifyCustomerAddressOptions([
+          {
+            value: String(jobData.notify_customer_address_id),
+            label: String(jobData.notify_customer_address),
+          },
+        ]);
+      }
+      if (jobData.cha_address_id != null && jobData.cha_address) {
+        setChaAddressOptions([
+          {
+            value: String(jobData.cha_address_id),
+            label: String(jobData.cha_address),
+          },
+        ]);
+      }
+
+      // Set quotation ID
+      if (jobData.quotation_id) {
+        setQuotationId(String(jobData.quotation_id));
+      }
+
+      // Set charges from rate_details
+      if (
+        jobData.rate_details &&
+        Array.isArray(jobData.rate_details) &&
+        jobData.rate_details.length > 0
+      ) {
+        const mappedCharges = (
+          jobData.rate_details as Array<Record<string, unknown>>
+        ).map((charge: Record<string, unknown>, index: number) => ({
+          id: charge.id ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : index + 1,
+          charge_name: String(charge.charge_name ?? ""),
+          currency_country_code: String(
+            charge.currency_country_code ?? charge.currency ?? ""
+          ),
+          roe: charge.roe != null ? String(charge.roe) : "",
+          unit: String(charge.unit ?? ""),
+          no_of_units: charge.no_of_units != null ? String(charge.no_of_units) : "",
+          sell_per_unit: charge.sell_per_unit != null ? String(charge.sell_per_unit) : "",
+          min_sell: charge.min_sell != null ? String(charge.min_sell) : "",
+          cost_per_unit: charge.cost_per_unit != null ? String(charge.cost_per_unit) : "",
+          total_cost: charge.total_cost != null ? String(charge.total_cost) : "",
+          total_sell: charge.total_sell != null ? String(charge.total_sell) : "",
+        }));
+        setCharges(mappedCharges);
+      }
+
+      // Defer to next microtask so parent state update runs after form updates
+      queueMicrotask(() => {
+        onEditFormPopulated?.();
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- form excluded to prevent re-running on user edits
+  }, [isEditMode, jobData, onEditFormPopulated]);
 
   // Effect to set up display names and address options when initialData is provided (edit or create-from-quotation)
+  // In edit mode with jobData, skip - the jobData effect above handles it
   useEffect(() => {
-    if (initialData) {
-      console.log("Setting up display names from initialData:", initialData);
+    if (!initialData || (isEditMode && jobData)) return;
+
+    console.log("Setting up display names from initialData:", initialData);
 
       // Set display names for SearchableSelect components
       if (initialData.shipper_name) {
@@ -1284,21 +1494,26 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         }));
         setCharges(mappedCharges);
       }
-    }
-  }, [isEditMode, initialData]);
+  }, [isEditMode, initialData, jobData]);
 
-  // Effect to populate routing codes from initialData (edit or create-from-quotation)
+  // Effect to populate routing codes from initialData - run only once per initialData to avoid overwriting user edits
+  const populatedRoutingRef = useRef<number | null>(null);
   useEffect(() => {
     if (
-      initialData &&
-      initialData.routing_details &&
-      Array.isArray(initialData.routing_details)
+      !initialData ||
+      !initialData.routing_details ||
+      !Array.isArray(initialData.routing_details)
     ) {
-      const routingDetails = initialData.routing_details as Array<
-        Record<string, unknown>
-      >;
-      // Ensure form has the same number of routing details as initialData
-      if (form.values.routingDetails.length === routingDetails.length) {
+      return;
+    }
+    const routingDetails = initialData.routing_details as Array<
+      Record<string, unknown>
+    >;
+    const dataKey = initialData.id != null ? Number(initialData.id) : 0;
+    if (populatedRoutingRef.current === dataKey) return;
+    populatedRoutingRef.current = dataKey;
+
+    if (form.values.routingDetails.length === routingDetails.length) {
         routingDetails.forEach(
           (route: Record<string, unknown>, index: number) => {
             // Populate codes from route data (even if empty string, to ensure they're set)
@@ -1330,14 +1545,9 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           })
         );
         setRoutingDisplayNames(updatedDisplayNames);
-      }
     }
-  }, [
-    isEditMode,
-    initialData,
-    form.values.routingDetails.length,
-    routingDisplayNames.length,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per initialData, form excluded to avoid overwriting user edits
+  }, [isEditMode, initialData?.id]);
 
   // Effect to set routing display names for create mode (when initialData has routing_details from quotation)
   useEffect(() => {
@@ -4648,9 +4858,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   searchable
                   data={quotationOptions}
                   value={quotationId}
-                  disabled={isEditMode}
                   onChange={(value) => {
-                    if (isEditMode) return; // Prevent changes in edit mode
                     setQuotationId(value || "");
                     // Map charges when quotation is selected
                     if (
@@ -4705,41 +4913,160 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(event) =>
                     setQuotationId(event.currentTarget.value)
                   }
-                  disabled={isEditMode}
                 />
               )}
             </Grid.Col>
           </Grid>
 
           {/* Charges Table */}
-          <Grid style={{ maxWidth: "100%", marginLeft: "7px" }}>
-            {/* Headers */}
-            <Grid
-              style={{
-                fontWeight: 600,
-                color: "#105476",
-                borderBottom: "2px solid #105476",
-                paddingBottom: "8px",
-                marginBottom: "16px",
-              }}
-            >
-              <Grid.Col span={1.5}>Charge Name</Grid.Col>
-              <Grid.Col span={1}>Currency</Grid.Col>
-              <Grid.Col span={0.75}>ROE</Grid.Col>
-              <Grid.Col span={1}>Unit</Grid.Col>
-              <Grid.Col span={0.75}>No of Units</Grid.Col>
-              <Grid.Col span={1}>Sell Per Unit</Grid.Col>
-              <Grid.Col span={1}>Min Sell</Grid.Col>
-              <Grid.Col span={1}>Cost Per Unit</Grid.Col>
-              <Grid.Col span={1}>Total Sell</Grid.Col>
-              <Grid.Col span={1}>Total Cost</Grid.Col>
-              <Grid.Col span={1}>Actions</Grid.Col>
-            </Grid>
+          <Stack justify="lg" px={0}>
+            {charges.length > 0 && (
+              <Grid
+                style={{
+                  fontWeight: 600,
+                  color: "#105476",
+                }}
+                gutter="sm"
+              >
+                <Grid.Col span={1.5}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Charge Name
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Currency
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    ROE
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Unit
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    No of Units
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Sell Per Unit
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Min Sell
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Cost Per Unit
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Total Sell
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Total Cost
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <Text
+                    style={{
+                      fontFamily: "Inter",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      color: "#000000",
+                    }}
+                  >
+                    Actions
+                  </Text>
+                </Grid.Col>
+              </Grid>
+            )}
 
             {/* Dynamic Charge Rows */}
             {charges.map((charge, index) => (
-              <Box key={charge.id} mb="md">
-                <Grid mb="xs" style={{ alignItems: "center" }}>
+              <Box key={charge.id}>
+                <Grid gutter="sm">
                   <Grid.Col span={1.5}>
                     <TextInput
                       placeholder="Charge Name"
@@ -4781,7 +5108,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       size="xs"
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={1}>
                     <TextInput
                       placeholder="ROE"
                       value={charge.roe}
@@ -4807,7 +5134,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       size="xs"
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={1}>
                     <TextInput
                       placeholder="0"
                       value={charge.no_of_units}
@@ -4911,19 +5238,17 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid>
               </Box>
             ))}
-          </Grid>
+          </Stack>
 
           {/* Totals */}
           <Grid
-            mt="md"
             style={{
               fontWeight: 600,
               color: "#105476",
-              borderTop: "1px solid #ccc",
               paddingTop: "0.5rem",
             }}
           >
-            <Grid.Col span={7} />
+            <Grid.Col span={7.5} />
             <Grid.Col span={1} ml={10}>
               Total:
             </Grid.Col>

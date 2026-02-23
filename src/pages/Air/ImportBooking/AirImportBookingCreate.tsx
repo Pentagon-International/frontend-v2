@@ -1,6 +1,6 @@
 import { Box, Flex, Text, Center, Loader } from "@mantine/core";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   IconCircleCheck,
   IconUser,
@@ -10,6 +10,10 @@ import {
   IconCurrencyDollar,
 } from "@tabler/icons-react";
 import AirImportBookingStepper from "./AirImportBookingStepper";
+import { getAPICall } from "../../../service/getApiCall";
+import { URL } from "../../../api/serverUrls";
+import { API_HEADER } from "../../../store/storeKeys";
+import { ToastNotification } from "../../../components";
 
 function AirImportBookingCreate() {
   const navigate = useNavigate();
@@ -221,6 +225,8 @@ function AirImportBookingCreate() {
 
   const [active, setActive] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingBooking, setIsFetchingBooking] = useState(false);
+  const [isEditFormReady, setIsEditFormReady] = useState(false);
 
   const handleStepChange = (step: number) => {
     console.log(`Current step: ${step + 1}`);
@@ -245,6 +251,61 @@ function AirImportBookingCreate() {
     navigate("../", { state: { refreshData: true } });
   };
 
+  // When quotation is already linked to a booking - fetch booking data and switch to edit mode
+  const handleQuotationAlreadyBooked = useCallback(
+    async (bookingMessage: string, bookingId: number) => {
+      ToastNotification({ type: "info", message: bookingMessage });
+      setIsFetchingBooking(true);
+      try {
+        const response = (await getAPICall(
+          `${URL.customerServiceShipment}${bookingId}/`,
+          API_HEADER
+        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
+        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
+          ? response.data[0]
+          : (response?.data as Record<string, unknown>);
+        if (response?.success && bookingItem) {
+          navigate("/air/import-booking/edit", {
+            state: { job: bookingItem },
+            replace: true,
+          });
+        } else {
+          ToastNotification({
+            type: "error",
+            message: "Failed to load existing booking data.",
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching booking:", error);
+        ToastNotification({
+          type: "error",
+          message: "Failed to load existing booking. Please try again.",
+        });
+      } finally {
+        setIsFetchingBooking(false);
+      }
+    },
+    [navigate]
+  );
+
+  const handleEditFormPopulated = useCallback(() => {
+    setIsEditFormReady(true);
+  }, []);
+
+  // Reset isEditFormReady when jobData changes (e.g. new edit load)
+  useEffect(() => {
+    if (isEditMode && jobData) {
+      setIsEditFormReady(false);
+    } else if (!isEditMode || !jobData) {
+      setIsEditFormReady(true); // Not in edit-with-job mode, no loader needed
+    }
+  }, [isEditMode, jobData]);
+
+  const showLoader =
+    isSubmitting ||
+    isFetchingBooking ||
+    (isEditMode && !!jobData && !isEditFormReady);
+
   return (
     <Box
       component="form"
@@ -255,7 +316,7 @@ function AirImportBookingCreate() {
         overflow: "hidden",
       }}
     >
-      {isSubmitting && (
+      {showLoader && (
         <Center
           style={{
             position: "absolute",
@@ -740,6 +801,12 @@ function AirImportBookingCreate() {
                 jobData={jobData}
                 active={active}
                 setActive={setActive}
+                onQuotationAlreadyBooked={
+                  bookingData ? handleQuotationAlreadyBooked : undefined
+                }
+                onEditFormPopulated={
+                  isEditMode && jobData ? handleEditFormPopulated : undefined
+                }
               />
             </Box>
           </Box>

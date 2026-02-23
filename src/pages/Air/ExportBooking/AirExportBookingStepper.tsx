@@ -52,6 +52,13 @@ interface ExportShipmentStepperProps {
   jobData?: Record<string, unknown>;
   active?: number;
   setActive?: (step: number) => void;
+  /** Called when quotation flow returns is_booked: true - Create should fetch booking and switch to edit */
+  onQuotationAlreadyBooked?: (
+    bookingMessage: string,
+    bookingId: number
+  ) => void;
+  /** Called when edit form has been fully populated with jobData (for hiding loader) */
+  onEditFormPopulated?: () => void;
 }
 
 interface RoutingDetail {
@@ -328,7 +335,13 @@ type QuotationCharge = {
 
 type QuotationItem = {
   quotation_id: string;
+  service?: string;
+  service_type?: string;
   charges: QuotationCharge[];
+  is_booked?: boolean;
+  booking_id?: number | null;
+  booking_message?: string | null;
+  shipment_code?: string | null;
 };
 
 type QuotationsResponse = {
@@ -393,6 +406,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   jobData,
   active: externalActive,
   setActive: externalSetActive,
+  onQuotationAlreadyBooked,
+  onEditFormPopulated,
 }) => {
   const prevRoutedRef = useRef<string | null>(null);
   const [internalActive, setInternalActive] = useState(0);
@@ -1050,20 +1065,143 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     return options;
   }, [quotationsData, isEditMode, initialData, isFromQuotationFlow]);
 
-  // Effect to load edit data when jobData is available
+  // Quotation flow: when is_booked false set charges; when is_booked true fetch existing booking
+  const lastBookedIdRef = useRef<number | null>(null);
   useEffect(() => {
-    if (isEditMode && jobData && !initialData) {
-      // If we have jobData but no initialData, map jobData to form values
-      const mappedData = mapInitialDataToFormValues(jobData);
-      form.setValues(mappedData as FormValues);
-      console.log("Loaded edit data from jobData:", jobData);
+    if (
+      !isFromQuotationFlow ||
+      !quotationsData?.status ||
+      !Array.isArray(quotationsData.data) ||
+      quotationsData.data.length === 0 ||
+      !onQuotationAlreadyBooked
+    ) {
+      return;
     }
-  }, [isEditMode, jobData, initialData]);
+    const firstItem = quotationsData.data[0] as QuotationItem;
+    if (firstItem.is_booked === true && firstItem.booking_id) {
+      const bookingId = Number(firstItem.booking_id);
+      if (lastBookedIdRef.current === bookingId) return;
+      lastBookedIdRef.current = bookingId;
+      onQuotationAlreadyBooked(
+        firstItem.booking_message || "This quotation is already linked to a booking.",
+        bookingId
+      );
+    } else if (firstItem.is_booked !== true && firstItem.charges?.length) {
+      lastBookedIdRef.current = null;
+      setQuotationId(String(firstItem.quotation_id || ""));
+      const mappedCharges = firstItem.charges.map(
+        (charge: QuotationCharge, index: number) => ({
+          id: index + 1,
+          charge_name: String(charge.charge_name || ""),
+          currency_country_code: String(charge.currency || ""),
+          roe: charge.roe ? String(charge.roe) : "",
+          unit: String(charge.unit || ""),
+          no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
+          sell_per_unit: charge.sell_per_unit
+            ? String(charge.sell_per_unit)
+            : "",
+          min_sell: charge.min_sell ? String(charge.min_sell) : "",
+          cost_per_unit: charge.cost_per_unit
+            ? String(charge.cost_per_unit)
+            : "",
+          total_cost: charge.total_cost ? String(charge.total_cost) : "",
+          total_sell: charge.total_sell ? String(charge.total_sell) : "",
+        })
+      );
+      setCharges(mappedCharges);
+    }
+  }, [
+    isFromQuotationFlow,
+    quotationsData,
+    onQuotationAlreadyBooked,
+  ]);
 
-  // Effect to set up display names when in edit mode
+  // Track which job we've populated from - run only once per job to avoid overwriting user edits
+  const populatedJobIdRef = useRef<number | null>(null);
+
+  // Effect to load edit data when jobData is available (runs ONCE per job)
   useEffect(() => {
-    if (initialData) {
-      console.log("Setting up display names from initialData:", initialData);
+    if (!isEditMode || !jobData) return;
+    const jobId = jobData.id != null ? (typeof jobData.id === "number" ? jobData.id : Number(jobData.id)) : null;
+    if (jobId != null && populatedJobIdRef.current === jobId) return;
+    if (jobId != null) populatedJobIdRef.current = jobId;
+
+    const mappedData = mapInitialDataToFormValues(jobData);
+    form.setValues(mappedData as FormValues);
+
+    if (jobData.routing_details && Array.isArray(jobData.routing_details)) {
+      const routingNames = (jobData.routing_details as Array<Record<string, unknown>>).map(
+        (route: Record<string, unknown>) => ({
+          from: route.from_location_name ? `${String(route.from_location_name)} (${String(route.from_location_code ?? "")})` : null,
+          to: route.to_location_name ? `${String(route.to_location_name)} (${String(route.to_location_code ?? "")})` : null,
+          carrier: route.carrier_name ? String(route.carrier_name) : null,
+        })
+      );
+      setRoutingDisplayNames(routingNames);
+    }
+    if (jobData.shipper_name) setShipperDisplayName(String(jobData.shipper_name));
+    if (jobData.consignee_name) setConsigneeDisplayName(String(jobData.consignee_name));
+    if (jobData.forwarder_name) setForwarderDisplayName(String(jobData.forwarder_name));
+    if (jobData.destination_agent_name) setDestinationAgentDisplayName(String(jobData.destination_agent_name));
+    if (jobData.billing_customer_name) setBillingCustomerDisplayName(String(jobData.billing_customer_name));
+    else if (jobData.billing_customer) setBillingCustomerDisplayName(String(jobData.billing_customer));
+    if (jobData.notify_customer_name) setNotifyCustomerDisplayName(String(jobData.notify_customer_name));
+    else if (jobData.notify_customer) setNotifyCustomerDisplayName(String(jobData.notify_customer));
+    if (jobData.cha_name) setChaDisplayName(String(jobData.cha_name));
+    else if (jobData.cha) setChaDisplayName(String(jobData.cha));
+    if (jobData.pickup_from) setPickupFromDisplayName(jobData.pickup_from_code ? `${String(jobData.pickup_from)} (${String(jobData.pickup_from_code)})` : String(jobData.pickup_from));
+    if (jobData.delivery_from) setDeliveryFromDisplayName(jobData.delivery_from_code ? `${String(jobData.delivery_from)} (${String(jobData.delivery_from_code)})` : String(jobData.delivery_from));
+    if (jobData.pickup_address_text || jobData.pickup_address) setPickupAddressDisplayName(String(jobData.pickup_address_text ?? jobData.pickup_address ?? ""));
+    if (jobData.delivery_address_text || jobData.delivery_address) setDeliveryAddressDisplayName(String(jobData.delivery_address_text ?? jobData.delivery_address ?? ""));
+
+    if (jobData.shipper_address_id != null && jobData.shipper_address) {
+      setShipperAddressOptions([{ value: String(jobData.shipper_address_id), label: String(jobData.shipper_address) }]);
+    }
+    if (jobData.consignee_address != null || jobData.consignee_address_id != null) {
+      setConsigneeAddressOptions([{ value: String(jobData.consignee_address_id ?? 0), label: String(jobData.consignee_address ?? "") }]);
+    }
+    if (jobData.forwarder_address_id != null && jobData.forwarder_address) {
+      setForwarderAddressOptions([{ value: String(jobData.forwarder_address_id), label: String(jobData.forwarder_address) }]);
+    }
+    if (jobData.destination_agent_address_id != null && jobData.destination_agent_address) {
+      setAgentAddressOptions([{ value: String(jobData.destination_agent_address_id), label: String(jobData.destination_agent_address) }]);
+    }
+    if (jobData.billing_customer_address_id != null && jobData.billing_customer_address) {
+      setBillingCustomerAddressOptions([{ value: String(jobData.billing_customer_address_id), label: String(jobData.billing_customer_address) }]);
+    }
+    if (jobData.notify_customer_address_id != null && jobData.notify_customer_address) {
+      setNotifyCustomerAddressOptions([{ value: String(jobData.notify_customer_address_id), label: String(jobData.notify_customer_address) }]);
+    }
+    if (jobData.cha_address_id != null && jobData.cha_address) {
+      setChaAddressOptions([{ value: String(jobData.cha_address_id), label: String(jobData.cha_address) }]);
+    }
+    if (jobData.quotation_id) setQuotationId(String(jobData.quotation_id));
+    if (jobData.rate_details && Array.isArray(jobData.rate_details) && jobData.rate_details.length > 0) {
+      const mappedCharges = (jobData.rate_details as Array<Record<string, unknown>>).map((charge: Record<string, unknown>, index: number) => ({
+        id: charge.id ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : index + 1,
+        charge_name: String(charge.charge_name ?? ""),
+        currency_country_code: String(charge.currency_country_code ?? charge.currency ?? ""),
+        roe: charge.roe != null ? String(charge.roe) : "",
+        unit: String(charge.unit ?? ""),
+        no_of_units: charge.no_of_units != null ? String(charge.no_of_units) : "",
+        sell_per_unit: charge.sell_per_unit != null ? String(charge.sell_per_unit) : "",
+        min_sell: charge.min_sell != null ? String(charge.min_sell) : "",
+        cost_per_unit: charge.cost_per_unit != null ? String(charge.cost_per_unit) : "",
+        total_cost: charge.total_cost != null ? String(charge.total_cost) : "",
+        total_sell: charge.total_sell != null ? String(charge.total_sell) : "",
+      }));
+      setCharges(mappedCharges);
+    }
+
+    queueMicrotask(() => { onEditFormPopulated?.(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- form excluded to prevent re-running on user edits
+  }, [isEditMode, jobData, onEditFormPopulated]);
+
+  // Effect to set up display names when initialData is provided (skip in edit mode with jobData)
+  useEffect(() => {
+    if (!initialData || (isEditMode && jobData)) return;
+
+    console.log("Setting up display names from initialData:", initialData);
 
       // Set display names for SearchableSelect components
       if (initialData.shipper_name) {
@@ -1299,8 +1437,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         }));
         setCharges(mappedCharges);
       }
-    }
-  }, [isEditMode, initialData]);
+  }, [isEditMode, initialData, jobData]);
 
   // Effect to populate routing codes from initialData (edit or create-from-quotation)
   useEffect(() => {
