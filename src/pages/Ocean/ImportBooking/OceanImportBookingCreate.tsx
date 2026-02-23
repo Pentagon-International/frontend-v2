@@ -213,6 +213,7 @@ function OceanImportBookingCreate() {
 
       // Stepper 5 - Quotation Details and rate_details for prefilling charges
       quotation_id: quotationData.quotation_id || "",
+      quotation_primary_id: (data as { quotation_primary_id?: number }).quotation_primary_id ?? quotationData.id,
       quotation_charges: quotationData.charges || [],
       rate_details: Array.isArray(quotationData.charges)
         ? (quotationData.charges as Array<Record<string, unknown>>).map(

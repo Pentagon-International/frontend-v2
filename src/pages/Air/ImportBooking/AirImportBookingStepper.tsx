@@ -325,19 +325,34 @@ type QuotationsResponse = {
   data: QuotationItem[];
 };
 
+type FilterGainedPayload =
+  | {
+      customer_code: string;
+      origin_code: string;
+      destination_code: string;
+      service: string;
+      service_type: string;
+    }
+  | { quotation_id: number };
+
 const fetchQuotations = async (
-  customerCode: string,
-  originCode: string,
-  destinationCode: string
+  payload: FilterGainedPayload
 ): Promise<QuotationsResponse> => {
-  if (!customerCode || !originCode || !destinationCode) {
-    return { status: false, message: "", data: [] };
+  if ("quotation_id" in payload) {
+    if (!payload.quotation_id) {
+      return { status: false, message: "", data: [] };
+    }
+  } else {
+    if (
+      !payload.customer_code ||
+      !payload.origin_code ||
+      !payload.destination_code ||
+      !payload.service ||
+      !payload.service_type
+    ) {
+      return { status: false, message: "", data: [] };
+    }
   }
-  const payload = {
-    customer_code: customerCode,
-    origin_code: originCode,
-    destination_code: destinationCode,
-  };
   const response = (await postAPICall(
     URL.quotationFilterGained,
     payload,
@@ -883,24 +898,39 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     },
   });
 
-  // Quotations data query - must be after form initialization
+  // quotation_primary_id when creating from quotation page (for filter-gained API)
+  const quotationPrimaryId = initialData?.quotation_primary_id
+    ? Number(initialData.quotation_primary_id)
+    : null;
+  const isFromQuotationFlow = !!quotationPrimaryId;
+
+  // Quotations data query: Flow 1 (create new) - customer/origin/destination/service; Flow 2 (from quotation) - quotation_id
   const { data: quotationsData } = useQuery<QuotationsResponse>({
-    queryKey: [
-      "quotations",
-      form.values.customer_code,
-      form.values.origin_code,
-      form.values.destination_code,
-    ],
+    queryKey: isFromQuotationFlow
+      ? ["quotations", "byQuotation", quotationPrimaryId]
+      : [
+          "quotations",
+          form.values.customer_code,
+          form.values.origin_code,
+          form.values.destination_code,
+          form.values.service,
+        ],
     queryFn: () =>
-      fetchQuotations(
-        form.values.customer_code,
-        form.values.origin_code,
-        form.values.destination_code
-      ),
-    enabled:
-      !!form.values.customer_code &&
-      !!form.values.origin_code &&
-      !!form.values.destination_code,
+      isFromQuotationFlow
+        ? fetchQuotations({ quotation_id: quotationPrimaryId! })
+        : fetchQuotations({
+            customer_code: form.values.customer_code,
+            origin_code: form.values.origin_code,
+            destination_code: form.values.destination_code,
+            service: form.values.service,
+            service_type: "Import", // Air Import
+          }),
+    enabled: isFromQuotationFlow
+      ? !!quotationPrimaryId
+      : !!form.values.customer_code &&
+        !!form.values.origin_code &&
+        !!form.values.destination_code &&
+        !!form.values.service,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -922,8 +952,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       });
     }
 
-    // In edit mode, ensure the quotation_id from initialData is in options
-    if (isEditMode && initialData?.quotation_id) {
+    // In edit mode or create-from-quotation, ensure the quotation_id from initialData is in options
+    if ((isEditMode || isFromQuotationFlow) && initialData?.quotation_id) {
       const quotationIdValue = String(initialData.quotation_id);
       const exists = options.some((opt) => opt.value === quotationIdValue);
       if (!exists) {
@@ -935,7 +965,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
 
     return options;
-  }, [quotationsData, isEditMode, initialData]);
+  }, [quotationsData, isEditMode, initialData, isFromQuotationFlow]);
 
   // Salespersons data query - must be after form initialization
   const { data: rawSalespersonsData = [] } = useQuery({

@@ -2101,6 +2101,8 @@ function QuotationCreate({
       },
       quotationData: quotationForService,
       serviceDetails,
+      // Quotation primary key (id) for filter-gained API - row id from filter_quotations list (e.g. 163), NOT quotation_service_id (197)
+      quotation_primary_id: actualEnquiryData?.id,
     };
 
     const trade =
