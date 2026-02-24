@@ -51,6 +51,7 @@ import {
   SearchableSelect,
   DateRangeInput,
 } from "../../components";
+import { postAPICall } from "../../service/postApiCall";
 import { putAPICall } from "../../service/putApiCall";
 import useAuthStore from "../../store/authStore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -349,15 +350,21 @@ function EnquiryMaster() {
         ToastNotification({ type: "error", message: "No access token found" });
         return;
       }
-      const response = await fetch(`${URL.base}${URL.enquiryDownloadExcel}`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to download");
-      const blob = await response.blob();
+      // Build filter payload for download (use preview filters in detailed view, summary filters otherwise)
+      const filterPayload = showPreviewTable
+        ? buildPreviewFilterPayload
+        : buildFilterPayload();
+      const requestBody = { filters: { ...filterPayload } };
+      console.log("Detailed view excel payload---",filterPayload);
+      
+      
+      const response: any = await postAPICall(
+        `${URL.enquiryDownloadExcel}`,
+        requestBody,
+        { responseType: "blob" }
+      );
+      console.log("Detailed view excel response---",response);
+      const blob = response?.data instanceof Blob ? response.data : response;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
