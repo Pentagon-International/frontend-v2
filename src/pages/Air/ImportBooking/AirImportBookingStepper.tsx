@@ -108,15 +108,7 @@ interface FormValues {
   customer_service_name: string;
   is_direct: boolean;
   is_coload: boolean;
-
-  // Ocean Schedule fields
-  schedule_id: string;
-  carrier_code: string;
-  carrier_name: string;
-  eta: Date;
-  etd: Date;
-  vessel_name: string;
-  voyage_no: string;
+  houseno:string;
 
   // Routing Details
   routingDetails: RoutingDetail[];
@@ -154,6 +146,7 @@ interface FormValues {
   pickup_address_id: string;
   planned_pickup_date: Date;
   actual_pickup_date: Date | null;
+  transporter_code: string;
   transporter_name: string;
   transporter_email: string;
 
@@ -182,14 +175,7 @@ const validationSchema = yup.object({
     .required("Customer service name is required"),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
-
-  // Ocean Schedule fields - All optional
-  schedule_id: yup.string(),
-  carrier_code: yup.string(),
-  eta: yup.date(),
-  etd: yup.date(),
-  vessel_name: yup.string(),
-  voyage_no: yup.string(),
+  houseno: yup.string().required("House No is required"),
 
   // Routing Details - All optional
   routingDetails: yup.array().of(
@@ -248,6 +234,8 @@ const validationSchema = yup.object({
   pickup_from_code: yup.string(),
   pickup_address_id: yup.string(),
   planned_pickup_date: yup.date(),
+  actual_pickup_date: yup.date().nullable(),
+  transporter_code: yup.string(),
   transporter_name: yup.string(),
   transporter_email: yup.string().email("Invalid email format"),
 
@@ -660,15 +648,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       customer_service_name: String(data.customer_service_name || ""),
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
-
-      // Ocean Schedule fields
-      schedule_id: String(data.schedule_id || ""),
-      carrier_code: String(data.carrier_code || ""),
-      carrier_name: String(data.carrier_name || ""),
-      eta: data.eta ? new Date(String(data.eta)) : new Date(),
-      etd: data.etd ? new Date(String(data.etd)) : new Date(),
-      vessel_name: String(data.vessel_name || ""),
-      voyage_no: String(data.voyage_no || ""),
+      houseno: String(data.houseno),
 
       // Routing Details - map from routing_details array (include from/to/carrier codes and names from API)
       routingDetails: data.routing_details
@@ -793,6 +773,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         String(data.actual_pickup_date) !== "null"
           ? new Date(String(data.actual_pickup_date))
           : null,
+      transporter_code: String(data.transporter_code ?? ""),
       transporter_name: String(data.transporter_name ?? ""),
       transporter_email: String(data.transporter_email ?? ""),
 
@@ -834,15 +815,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       customer_service_name: "",
       is_direct: false,
       is_coload: false,
-
-      // Ocean Schedule fields
-      schedule_id: "",
-      carrier_code: "",
-      carrier_name: "",
-      eta: new Date(),
-      etd: new Date(),
-      vessel_name: "",
-      voyage_no: "",
+      houseno:"",
 
       // Routing Details - start with one empty row
       routingDetails: [
@@ -905,6 +878,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       pickup_address_id: "",
       planned_pickup_date: new Date(),
       actual_pickup_date: null,
+      transporter_code: "",
       transporter_name: "",
       transporter_email: "",
 
@@ -1725,14 +1699,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         customer_service_name: form.values.customer_service_name,
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
-
-        // Ocean Schedule fields
-        schedule_id: form.values.schedule_id,
-        carrier_code: form.values.carrier_code,
-        eta: formatDate(form.values.eta),
-        etd: formatDate(form.values.etd),
-        vessel_name: form.values.vessel_name,
-        voyage_no: form.values.voyage_no,
+        houseno: form.values.houseno,
 
         // Routing Details
         routing_details: form.values.routingDetails.map((route) => {
@@ -1837,6 +1804,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         actual_pickup_date: form.values.actual_pickup_date
           ? formatDate(form.values.actual_pickup_date)
           : null,
+        transporter_code: form.values.transporter_code,
         transporter_name: form.values.transporter_name,
         transporter_email: form.values.transporter_email,
 
@@ -2196,6 +2164,18 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     error={form.errors.customer_service_name}
                   />
                 </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="House Number"
+                    placeholder="Enter House Number"
+                    withAsterisk
+                    value={form.values.houseno}
+                    onChange={(e) => {
+                      form.setFieldValue("houseno", e.target.value);
+                    }}
+                    error={form.errors.houseno}
+                  />
+                </Grid.Col>
                 {(form.values.service === "AIR" ||
                   form.values.service === "FCL") && (
                   <Grid.Col span={4}>
@@ -2251,87 +2231,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     </Radio.Group>
                   </Grid.Col>
                 )}
-              </Grid>
-
-              <Divider my="lg" />
-
-              {/* Ocean Schedule Section */}
-              <Text size="md" fw={600} mb="md" c="#105476">
-                Ocean Schedule
-              </Text>
-              <Grid mb="lg">
-                <Grid.Col span={4}>
-                  <FormTextInput
-                    label="Schedule ID"
-                    placeholder="Enter schedule ID"
-                    {...form.getInputProps("schedule_id")}
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <SearchableSelect
-                    label="Carrier"
-                    placeholder="Type carrier name"
-                    apiEndpoint={URL.carrier}
-                    searchFields={["carrier_code", "carrier_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.carrier_code),
-                      label: String(item.carrier_name),
-                    })}
-                    value={form.values.carrier_code}
-                    displayValue={form.values.carrier_name}
-                    onChange={(value, selectedData) => {
-                      form.setFieldValue("carrier_code", value || "");
-                      form.setFieldValue("carrier_name", selectedData?.label || "");
-                    }}
-                    error={form.errors.carrier_code as string}
-                    minSearchLength={2}
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <Dropdown
-                    label="Vessel Name"
-                    placeholder="Select vessel"
-                    // withAsterisk
-                    searchable
-                    data={[
-                      "MSC LORETO",
-                      "EVER GIVEN",
-                      "CMA CGM MARCO POLO",
-                      "COSCO SHIPPING UNIVERSE",
-                    ]}
-                    {...form.getInputProps("vessel_name")}
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <FormTextInput
-                    label="Voyage Number"
-                    placeholder="Enter voyage number"
-                    // withAsterisk
-                    {...form.getInputProps("voyage_no")}
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <SingleDateInput
-                    label="ETD (Estimated Time of Departure)"
-                    placeholder="YYYY-MM-DD"
-                    value={form.values.etd || new Date()}
-                    onChange={(date) => {
-                      form.setFieldValue("etd", date || new Date());
-                    }}
-                    error={form.errors.etd}
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <SingleDateInput
-                    label="ETA (Estimated Time of Arrival)"
-                    placeholder="YYYY-MM-DD"
-                    value={form.values.eta || new Date()}
-                    onChange={(date) => {
-                      form.setFieldValue("eta", date || new Date());
-                    }}
-                    error={form.errors.eta}
-                  />
-                </Grid.Col>
               </Grid>
 
               <Divider my="lg" />
@@ -3719,15 +3618,23 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={3}>
-                  <FormTextInput
+                  <SearchableSelect
                     label="Transporter Name"
-                    placeholder="Enter transporter name"
-                    value={form.values.transporter_name}
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.target.value);
-                      form.setFieldValue("transporter_name", formattedValue);
+                    placeholder="Type transporter / customer name"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_code", "customer_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.transporter_code}
+                    displayValue={form.values.transporter_name}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("transporter_code", value || "");
+                      form.setFieldValue("transporter_name", selectedData?.label || "");
                     }}
-                    error={form.errors.transporter_name}
+                    error={form.errors.transporter_code as string}
+                    minSearchLength={2}
                   />
                 </Grid.Col>
                 <Grid.Col span={3}>
