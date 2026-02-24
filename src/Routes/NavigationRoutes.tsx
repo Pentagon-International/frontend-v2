@@ -104,6 +104,8 @@ import {
   AirExportHouseCreate,
   AirExportGenerationMaster,
   AirExportGenerationCreate,
+  AirJobGenerationMaster,
+  AirJobGenerationCreate,
   AirExportBookingMaster,
   AirExportBookingCreate,
   AirImportBookingMaster,
@@ -174,11 +176,17 @@ const NavigationRoutes = () => {
             <Route index element={<AirExportGenerationMaster />} />
             <Route path="create" element={<AirExportGenerationCreate />} />
           </Route>
+          <Route path="job-generation">
+            <Route index element={<AirJobGenerationMaster />} />
+            <Route path="create" element={<AirJobGenerationCreate />} />
+            <Route path="edit" element={<AirJobGenerationCreate />} />
+            <Route path="view" element={<AirJobGenerationCreate />} />
+          </Route>
           <Route path="export-booking">
             <Route index element={<AirExportBookingMaster />} />
             <Route path="create" element={<AirExportBookingCreate />} />
             <Route path="edit" element={<AirExportBookingCreate />} />
-          </Route>s
+          </Route>
           <Route path="import-booking">
             <Route index element={<AirImportBookingMaster />} />
             <Route path="create" element={<AirImportBookingCreate />} />
