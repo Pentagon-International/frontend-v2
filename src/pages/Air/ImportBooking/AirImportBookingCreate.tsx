@@ -331,7 +331,7 @@ function AirImportBookingCreate() {
 
       <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
         <Flex
-          gap="md"
+          gap="sm"
           align="flex-start"
           style={{ height: "calc(100vh - 112px)", width: "100%" }}
         >
@@ -785,30 +785,21 @@ function AirImportBookingCreate() {
               gap: "8px",
             }}
           >
-            <Box
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                borderRadius: "8px",
-                backgroundColor: "#FFFFFF",
-              }}
-            >
-              <AirImportBookingStepper
-                onStepChange={handleStepChange}
-                onComplete={handleComplete}
-                initialData={isEditMode ? jobData : mappedBookingData}
-                isEditMode={isEditMode}
-                jobData={jobData}
-                active={active}
-                setActive={setActive}
-                onQuotationAlreadyBooked={
-                  bookingData ? handleQuotationAlreadyBooked : undefined
-                }
-                onEditFormPopulated={
-                  isEditMode && jobData ? handleEditFormPopulated : undefined
-                }
-              />
-            </Box>
+            <AirImportBookingStepper
+              onStepChange={handleStepChange}
+              onComplete={handleComplete}
+              initialData={isEditMode ? jobData : mappedBookingData}
+              isEditMode={isEditMode}
+              jobData={jobData}
+              active={active}
+              setActive={setActive}
+              onQuotationAlreadyBooked={
+                bookingData ? handleQuotationAlreadyBooked : undefined
+              }
+              onEditFormPopulated={
+                isEditMode && jobData ? handleEditFormPopulated : undefined
+              }
+            />
           </Box>
         </Flex>
       </Box>
