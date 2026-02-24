@@ -6,8 +6,6 @@ import {
   Tabs,
   Table,
   Text,
-  TextInput,
-  Textarea,
   Badge,
   ActionIcon,
   Menu,
@@ -48,7 +46,10 @@ import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
-import { NumberInput } from "@mantine/core";
+import FormTextInput from "../../../components/FormTextInput";
+import RequiredLabel from "../../../components/RequiredLabel";
+import FormTextArea from "../../../components/FormTextArea";
+import FormNumberInput from "../../../components/FormNumberInput";
 
 // Type definitions
 type HouseDetailsForm = {
@@ -185,7 +186,7 @@ const fetchUnitMaster = async () => {
     const response = (await postAPICall(
       URL.unitMasterFilter,
       payload,
-      API_HEADER
+      API_HEADER,
     )) as { data?: unknown[] };
     return response?.data || [];
   } catch (error) {
@@ -218,7 +219,7 @@ function HouseCreate() {
 
       return 1;
     },
-    [user?.country?.country_code]
+    [user?.country?.country_code],
   );
 
   // Calculate chargeable weight: Max of (Gross Weight ÷ 1000) and Volume
@@ -231,7 +232,7 @@ function HouseCreate() {
 
       return Math.max(grossWeightInCbm, volumeInCbm);
     },
-    []
+    [],
   );
 
   // State for address options (populated from addresses_data when shipper/consignee is selected)
@@ -271,9 +272,9 @@ function HouseCreate() {
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
   const [invoiceListLoading, setInvoiceListLoading] = useState(false);
-  const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<string | null>(
-    null
-  );
+  const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<
+    string | null
+  >(null);
 
   // Charges Form - Using useForm similar to routings in ImportJobCreate
   const chargesForm = useForm<{ charges: ChargeDetail[] }>({
@@ -349,7 +350,7 @@ function HouseCreate() {
             // Find container_id by matching container_number with containerDetails
             const matchedContainer = containerDetails.find(
               (container: Record<string, unknown>) =>
-                container.container_no === containerNumber
+                container.container_no === containerNumber,
             );
             const containerId = matchedContainer?.id
               ? typeof matchedContainer.id === "number"
@@ -376,14 +377,16 @@ function HouseCreate() {
                     : cargo.haz === "Yes" || cargo.haz === true
                   : null,
             };
-          }
+          },
         );
         setCargoDetails(mappedCargoDetails);
       }
 
       // Load charges - check both charges and mbl_charges
       const chargesToLoad =
-        (editData.charges && Array.isArray(editData.charges) ? editData.charges : null) ||
+        (editData.charges && Array.isArray(editData.charges)
+          ? editData.charges
+          : null) ||
         (editData as { mbl_charges?: unknown[] }).mbl_charges ||
         [];
       const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
@@ -392,16 +395,32 @@ function HouseCreate() {
       const currArr = Array.isArray(currencyData) ? currencyData : [];
       if (chargesArray.length > 0) {
         const unitDataArr = unitArr as { id?: number; unit_code?: string }[];
-        const currencyDataArr = currArr as { id?: number; code?: string; currency_code?: string }[];
+        const currencyDataArr = currArr as {
+          id?: number;
+          code?: string;
+          currency_code?: string;
+        }[];
         const mappedCharges = chargesArray.map(
           (charge: Record<string, unknown>) => {
-            const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
-            const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+            const unitDetails = charge.unit_details as
+              | { unit_id?: number; unit_code?: string }
+              | undefined;
+            const currencyDetails = charge.currency_details as
+              | { currency_id?: number; currency_code?: string }
+              | undefined;
             const unitCode = String(
-              charge.unit_code ?? charge.unit ?? charge.unit_input ?? unitDetails?.unit_code ?? ""
+              charge.unit_code ??
+                charge.unit ??
+                charge.unit_input ??
+                unitDetails?.unit_code ??
+                "",
             ).trim();
             const currencyCode = String(
-              charge.currency ?? currencyDetails?.currency_code ?? (charge.currency_details as Record<string, unknown>)?.currency_code ?? ""
+              charge.currency ??
+                currencyDetails?.currency_code ??
+                (charge.currency_details as Record<string, unknown>)
+                  ?.currency_code ??
+                "",
             ).trim();
 
             const toNum = (v: unknown): number | null => {
@@ -411,22 +430,50 @@ function HouseCreate() {
               return Number.isNaN(n) ? null : n;
             };
 
-            const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+            const chargeId =
+              charge.charge_id != null
+                ? Number(charge.charge_id)
+                : charge.id != null
+                  ? Number(charge.id)
+                  : null;
             const unitIdFromApi =
-              charge.unit_id != null ? String(charge.unit_id) :
-              charge.unit != null ? String(charge.unit) :
-              unitDetails?.unit_id != null ? String(unitDetails.unit_id) : null;
+              charge.unit_id != null
+                ? String(charge.unit_id)
+                : charge.unit != null
+                  ? String(charge.unit)
+                  : unitDetails?.unit_id != null
+                    ? String(unitDetails.unit_id)
+                    : null;
             const currencyIdFromApi =
-              charge.currency_id != null ? String(charge.currency_id) :
-              charge.currency != null ? String(charge.currency) :
-              currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : null;
-            const unitByCode = unitCode ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode) : null;
-            const currByCode = currencyCode ? currencyDataArr.find((c) => (c.currency_code ?? c.code ?? "") === currencyCode) : null;
-            const unit_id = unitIdFromApi ?? (unitByCode?.id != null ? String(unitByCode.id) : "");
-            const currency_id = currencyIdFromApi ?? (currByCode?.id != null ? String(currByCode.id) : "");
+              charge.currency_id != null
+                ? String(charge.currency_id)
+                : charge.currency != null
+                  ? String(charge.currency)
+                  : currencyDetails?.currency_id != null
+                    ? String(currencyDetails.currency_id)
+                    : null;
+            const unitByCode = unitCode
+              ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode)
+              : null;
+            const currByCode = currencyCode
+              ? currencyDataArr.find(
+                  (c) => (c.currency_code ?? c.code ?? "") === currencyCode,
+                )
+              : null;
+            const unit_id =
+              unitIdFromApi ??
+              (unitByCode?.id != null ? String(unitByCode.id) : "");
+            const currency_id =
+              currencyIdFromApi ??
+              (currByCode?.id != null ? String(currByCode.id) : "");
 
             return {
-              id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+              id:
+                charge.id != null
+                  ? typeof charge.id === "number"
+                    ? charge.id
+                    : Number(charge.id)
+                  : undefined,
               charge_id: chargeId,
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
               pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
@@ -439,7 +486,7 @@ function HouseCreate() {
               amount_per_unit: toNum(charge.amount_per_unit),
               amount: toNum(charge.amount),
             };
-          }
+          },
         );
         chargesForm.setValues({ charges: mappedCharges });
       }
@@ -458,7 +505,7 @@ function HouseCreate() {
       if (editData.origin_agent_name) {
         form.setFieldValue(
           "origin_agent_name",
-          String(editData.origin_agent_name)
+          String(editData.origin_agent_name),
         );
       }
     }
@@ -549,7 +596,7 @@ function HouseCreate() {
     const updatedCargoDetails = cargoDetails.map((cargo) => {
       const chargeableWeight = calculateChargeableWeight(
         cargo.gross_weight,
-        cargo.volume
+        cargo.volume,
       );
       // Only update if chargeable_weight changed
       if (cargo.chargeable_weight === chargeableWeight) {
@@ -564,7 +611,7 @@ function HouseCreate() {
     // Only update if there are actual changes
     const hasChanges = updatedCargoDetails.some(
       (cargo, index) =>
-        cargo.chargeable_weight !== cargoDetails[index]?.chargeable_weight
+        cargo.chargeable_weight !== cargoDetails[index]?.chargeable_weight,
     );
 
     if (hasChanges) {
@@ -578,11 +625,17 @@ function HouseCreate() {
     .map((c) => c.currency_id)
     .join(",");
   useEffect(() => {
-    const currencyArr = (currencyData ?? []) as { id?: number; code?: string; currency_code?: string }[];
+    const currencyArr = (currencyData ?? []) as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
     const updatedCharges = chargesForm.values.charges.map((charge) => {
       let roe = charge.roe;
       if (charge.currency_id && !roe) {
-        const curr = currencyArr.find((c) => String(c.id) === charge.currency_id);
+        const curr = currencyArr.find(
+          (c) => String(c.id) === charge.currency_id,
+        );
         const code = curr?.currency_code ?? curr?.code ?? "";
         if (code) roe = getRoeValue(code);
       }
@@ -592,7 +645,7 @@ function HouseCreate() {
       return charge;
     });
     const hasChanges = updatedCharges.some(
-      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe
+      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe,
     );
     if (hasChanges) chargesForm.setValues({ charges: updatedCharges });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -602,7 +655,7 @@ function HouseCreate() {
   // Formula: amount = roe * no_of_unit * amount_per_unit (only if amount_per_unit is given)
   const chargeCalculationKeys = chargesForm.values.charges
     .map(
-      (c) => `${c.roe || ""}_${c.no_of_unit || ""}_${c.amount_per_unit || ""}`
+      (c) => `${c.roe || ""}_${c.no_of_unit || ""}_${c.amount_per_unit || ""}`,
     )
     .join(",");
 
@@ -641,7 +694,7 @@ function HouseCreate() {
     // Only update if there are actual changes to amount
     const hasChanges = updatedCharges.some(
       (charge, index) =>
-        charge.amount !== chargesForm.values.charges[index]?.amount
+        charge.amount !== chargesForm.values.charges[index]?.amount,
     );
 
     if (hasChanges) {
@@ -654,7 +707,11 @@ function HouseCreate() {
   useEffect(() => {
     if (active !== 4) return;
     setInvoiceListLoading(true);
-    postAPICall(URL.invoiceCombined, { filters: {"shipment_no": editData?.shipment_id} }, API_HEADER)
+    postAPICall(
+      URL.invoiceCombined,
+      { filters: { shipment_no: editData?.shipment_id } },
+      API_HEADER,
+    )
       .then((res: unknown) => {
         const data = (res as { data?: InvoiceListItem[] })?.data;
         setInvoiceList(Array.isArray(data) ? data : []);
@@ -696,7 +753,11 @@ function HouseCreate() {
   // Format currency data: value = id, label = currency_code (for payload we send currency_id)
   const currencyOptions = useMemo(() => {
     if (!Array.isArray(currencyData)) return [];
-    const data = currencyData as { id?: number; code?: string; currency_code?: string }[];
+    const data = currencyData as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
     return data.map((item) => {
       const code = item.currency_code ?? item.code ?? "";
       const id = item.id != null ? String(item.id) : "";
@@ -707,11 +768,19 @@ function HouseCreate() {
   // Format unit data: value = id, label = unit_name or unit_code (for payload we send unit_id)
   const unitOptions = useMemo(() => {
     if (!Array.isArray(unitDataRaw)) return [];
-    const data = unitDataRaw as { id?: number; unit_code?: string; unit_name?: string; name?: string }[];
+    const data = unitDataRaw as {
+      id?: number;
+      unit_code?: string;
+      unit_name?: string;
+      name?: string;
+    }[];
     return data.map((item) => {
       const label = item.unit_name ?? item.name ?? item.unit_code ?? "";
       const id = item.id != null ? String(item.id) : "";
-      return { value: id || String(item.unit_code ?? ""), label: label || String(item.unit_code ?? "") };
+      return {
+        value: id || String(item.unit_code ?? ""),
+        label: label || String(item.unit_code ?? ""),
+      };
     });
   }, [unitDataRaw]);
 
@@ -794,7 +863,7 @@ function HouseCreate() {
       });
       console.log(
         "📊 updateTradeField after update, form.values.trade:",
-        form.values.trade
+        form.values.trade,
       );
     } else if (!hblDestinationCode && form.values.trade) {
       // Clear trade if HBL destination is cleared
@@ -914,7 +983,7 @@ function HouseCreate() {
         if (!isEditMode || !form.values.origin_agent_address) {
           console.log(
             "✅ Setting HBL origin agent address from mblDetails.origin_agent_address:",
-            mblOriginAgentAddress
+            mblOriginAgentAddress,
           );
           form.setFieldValue("origin_agent_address", mblOriginAgentAddress);
         }
@@ -940,7 +1009,7 @@ function HouseCreate() {
           if (!isEditMode || !form.values.origin_agent_address) {
             console.log(
               "✅ Setting HBL origin agent address from addresses_data:",
-              firstAddress
+              firstAddress,
             );
             form.setFieldValue("origin_agent_address", firstAddress);
           }
@@ -1122,7 +1191,10 @@ function HouseCreate() {
       const chargeError: Record<string, string> = {};
 
       // Mandatory fields: charge_name (or charge_id), pp_cc, currency, roe, amount
-      if ((!charge.charge_name || charge.charge_name.trim() === "") && (charge.charge_id == null || charge.charge_id === 0)) {
+      if (
+        (!charge.charge_name || charge.charge_name.trim() === "") &&
+        (charge.charge_id == null || charge.charge_id === 0)
+      ) {
         chargeError.charge_name = "Charge Name is required";
         hasErrors = true;
       }
@@ -1221,7 +1293,7 @@ function HouseCreate() {
           c.container_no === container_number ||
           // Also allow matching by index if containerNumbers are aligned
           (Array.isArray(containerNumbers) &&
-            containerNumbers[idx] === container_number)
+            containerNumbers[idx] === container_number),
       );
 
       // Build base payload common to create/edit
@@ -1317,14 +1389,14 @@ function HouseCreate() {
       shipper_address: form.values.shipper_address,
       shipper_email: form.values.shipper_email,
       shipper_state_id: form.values.shipper_state_id
-      ? Number(form.values.shipper_state_id)
-      : ((
-          editData as
-            | { shipment_id?: string; shipper_state_id?: number }
-            | undefined
-        )?.shipper_state_id ?? null),
-    shipment_id:
-      (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+        ? Number(form.values.shipper_state_id)
+        : ((
+            editData as
+              | { shipment_id?: string; shipper_state_id?: number }
+              | undefined
+          )?.shipper_state_id ?? null),
+      shipment_id:
+        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_code: form.values.consignee_code,
       consignee_name: form.values.consignee_name,
       consignee_address: form.values.consignee_address,
@@ -1344,7 +1416,7 @@ function HouseCreate() {
     if (isEditMode && editIndex !== undefined) {
       // Deep clone existing list (prevents stale nested references)
       updatedHousingDetails = JSON.parse(
-        JSON.stringify(existingHousingDetails)
+        JSON.stringify(existingHousingDetails),
       );
 
       // Safely replace the updated house
@@ -1419,17 +1491,17 @@ function HouseCreate() {
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
       shipper_state_id: v.shipper_state_id
-      ? Number(v.shipper_state_id)
-      : ((editData as { shipper_state_id?: number } | undefined)
-          ?.shipper_state_id ??
-        (
-          location.state?.job as {
-            housing_details?: Array<{ shipper_state_id?: number }>;
-          }
-        )?.housing_details?.[editIndex ?? 0]?.shipper_state_id ??
-        null),
-    shipment_id:
-      (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+        ? Number(v.shipper_state_id)
+        : ((editData as { shipper_state_id?: number } | undefined)
+            ?.shipper_state_id ??
+          (
+            location.state?.job as {
+              housing_details?: Array<{ shipper_state_id?: number }>;
+            }
+          )?.housing_details?.[editIndex ?? 0]?.shipper_state_id ??
+          null),
+      shipment_id:
+        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_code: v.consignee_code,
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
@@ -1471,14 +1543,15 @@ function HouseCreate() {
         shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
         shipper_state_id: form.values.shipper_state_id
-        ? Number(form.values.shipper_state_id)
-        : ((
-            editData as
-              | { shipment_id?: string; shipper_state_id?: number }
-              | undefined
-          )?.shipper_state_id ?? null),
-      shipment_id:
-        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+          ? Number(form.values.shipper_state_id)
+          : ((
+              editData as
+                | { shipment_id?: string; shipper_state_id?: number }
+                | undefined
+            )?.shipper_state_id ?? null),
+        shipment_id:
+          (editData as { shipment_id?: string } | undefined)?.shipment_id ??
+          null,
         consignee_code: form.values.consignee_code,
         consignee_name: form.values.consignee_name,
         consignee_address: form.values.consignee_address,
@@ -1498,7 +1571,8 @@ function HouseCreate() {
         mbl_charges: chargesForm.values.charges
           .filter((charge) => charge.charge_name || charge.charge_id != null)
           .map((charge) => ({
-            ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),
+            ...(charge.id != null &&
+              charge.id !== undefined && { id: Number(charge.id) }),
             charge_id: charge.charge_id ?? null,
             charge_name: charge.charge_name,
             pp_cc: charge.pp_cc,
@@ -1560,7 +1634,7 @@ function HouseCreate() {
   };
 
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box p="md" mx="auto">
       <Group justify="space-between" mb="lg">
         <Text size="xl" fw={600} c="#105476">
           {isEditMode ? "Edit HBL Details" : "Create HBL Details"}
@@ -1599,48 +1673,170 @@ function HouseCreate() {
             onClick={() => {
               if (active === 0) {
                 if (!validateStep1()) return;
-                if (!validateStep2()) { setActive(1); return; }
-                if (!validateStep3()) { setActive(2); return; }
-                if (!validateStep4()) { setActive(3); return; }
+                if (!validateStep2()) {
+                  setActive(1);
+                  return;
+                }
+                if (!validateStep3()) {
+                  setActive(2);
+                  return;
+                }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
                 handleSave();
               } else if (active === 1) {
                 if (!validateStep2()) return;
-                if (!validateStep3()) { setActive(2); return; }
-                if (!validateStep4()) { setActive(3); return; }
+                if (!validateStep3()) {
+                  setActive(2);
+                  return;
+                }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
                 handleSave();
               } else if (active === 2) {
                 if (!validateStep3()) return;
-                if (!validateStep4()) { setActive(3); return; }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
                 handleSave();
               } else if (active === 3) {
                 if (!validateStep4()) return;
                 handleSave();
               } else if (active === 4) {
-                if (!validateStep1()) { setActive(0); return; }
-                if (!validateStep2()) { setActive(1); return; }
-                if (!validateStep3()) { setActive(2); return; }
-                if (!validateStep4()) { setActive(3); return; }
+                if (!validateStep1()) {
+                  setActive(0);
+                  return;
+                }
+                if (!validateStep2()) {
+                  setActive(1);
+                  return;
+                }
+                if (!validateStep3()) {
+                  setActive(2);
+                  return;
+                }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
                 handleSave();
               }
             }}
           >
             Save HBL
           </Button>
-          <Menu shadow="md" width={200}>
+          <Menu shadow="md" width={220} position="bottom-end">
             <Menu.Target>
-              <ActionIcon variant="light" color="#105476" size="lg">
+              <ActionIcon
+                variant="subtle"
+                color="#105476"
+                size="lg"
+                styles={{
+                  root: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    border: "1px solid #E9ECEF",
+                    borderRadius: "8px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                }}
+              >
                 <IconDotsVertical size={18} />
               </ActionIcon>
             </Menu.Target>
-            <Menu.Dropdown>
+
+            <Menu.Dropdown
+              styles={{
+                dropdown: {
+                  border: "1px solid #E9ECEF",
+                  borderRadius: "8px",
+                  padding: "8px",
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                },
+              }}
+            >
+              {/* Cargo Arrival Notice */}
               <Menu.Item
-                leftSection={<IconEye size={14} />}
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconEye size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
                 onClick={generatePDFPreview}
               >
                 Cargo Arrival Notice
               </Menu.Item>
+
+              {/* Delivery Order */}
               <Menu.Item
-                leftSection={<IconEye size={14} />}
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconEye size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
                 onClick={() => {
                   ToastNotification({
                     type: "info",
@@ -1648,7 +1844,7 @@ function HouseCreate() {
                   });
                 }}
               >
-                Deliver Order
+                Delivery Order
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -1659,17 +1855,12 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        styles={{
-          list: {
-            borderBottom: "none",
-          },
-        }}
       >
         <Tabs.List
           mb="md"
           style={{
             display: "flex",
-            gap: "12px",
+            gap: "8px",
             flexWrap: "wrap",
             borderBottom: "none",
           }}
@@ -1678,12 +1869,12 @@ function HouseCreate() {
             value="0"
             style={{
               textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 0 ? "#105476" : "transparent",
-              color: active === 0 ? "white" : "#105476",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
             }}
           >
             Shipment Details
@@ -1692,12 +1883,12 @@ function HouseCreate() {
             value="1"
             style={{
               textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 1 ? "#105476" : "transparent",
-              color: active === 1 ? "white" : "#105476",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
             }}
           >
             Party Details
@@ -1706,12 +1897,12 @@ function HouseCreate() {
             value="2"
             style={{
               textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 2 ? "#105476" : "transparent",
-              color: active === 2 ? "white" : "#105476",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 2 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
             }}
           >
             Cargo Details
@@ -1720,12 +1911,12 @@ function HouseCreate() {
             value="3"
             style={{
               textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 3 ? "#105476" : "transparent",
-              color: active === 3 ? "white" : "#105476",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
               fontWeight: active === 3 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
             }}
           >
             Charges
@@ -1735,12 +1926,12 @@ function HouseCreate() {
               value="4"
               style={{
                 textAlign: "center",
-                padding: "6px 14px",
-                backgroundColor: active === 4 ? "#105476" : "transparent",
-                color: active === 4 ? "white" : "#105476",
+                padding: "12px",
+                backgroundColor: "transparent",
+                borderBottom: active === 4 ? "3px solid #105476" : "none",
+                color: "#105476",
+                fontSize: 16,
                 fontWeight: active === 4 ? 600 : 400,
-                borderRadius: "4px",
-                borderBottom: "none",
               }}
             >
               Accounts
@@ -1750,11 +1941,11 @@ function HouseCreate() {
 
         <Tabs.Panel value="0">
           <Group align="center" mb="xs">
-            <Text size="lg" fw={600} c="#105476">
+            <Text size="md" fw={600} c="#105476">
               Shipment Details
             </Text>
             {isEditMode && editData?.shipment_id && (
-              <Badge color="#105476" size="lg" variant="light">
+              <Badge color="#105476" size="md" variant="light">
                 Shipment ID: {editData.shipment_id}
               </Badge>
             )}
@@ -1763,7 +1954,7 @@ function HouseCreate() {
           <Box mt="md">
             <Grid>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="HBL Number"
                   required
                   placeholder="Enter HBL Number"
@@ -1799,7 +1990,7 @@ function HouseCreate() {
                     if (selectedData) {
                       form.setFieldValue(
                         "origin_name",
-                        selectedData.label.split(" (")[0] || ""
+                        selectedData.label.split(" (")[0] || "",
                       );
                     }
                   }}
@@ -1838,7 +2029,7 @@ function HouseCreate() {
                     if (selectedData) {
                       form.setFieldValue(
                         "destination_name",
-                        selectedData.label.split(" (")[0] || ""
+                        selectedData.label.split(" (")[0] || "",
                       );
                     } else if (!value) {
                       form.setFieldValue("destination_name", "");
@@ -1872,7 +2063,7 @@ function HouseCreate() {
                       });
                       console.log(
                         "📝 After setValues, form.values.trade:",
-                        form.values.trade
+                        form.values.trade,
                       );
                     } else if (!hblDestinationCode) {
                       // Clear trade if HBL destination is cleared
@@ -1880,7 +2071,7 @@ function HouseCreate() {
                       form.setFieldValue("trade", "");
                     } else {
                       console.log(
-                        "⚠️ No MBL destination found, cannot update Trade"
+                        "⚠️ No MBL destination found, cannot update Trade",
                       );
                     }
                   }}
@@ -1943,7 +2134,7 @@ function HouseCreate() {
                       error={form.errors.routed_by}
                     />
                   ) : (
-                    <TextInput
+                    <FormTextInput
                       label="Routed By"
                       required
                       placeholder="Enter routed by"
@@ -1971,7 +2162,7 @@ function HouseCreate() {
                     minSearchLength={2}
                   />
                 ) : (
-                  <TextInput
+                  <FormTextInput
                     label="Routed By"
                     required
                     placeholder="Enter routed by"
@@ -1981,7 +2172,7 @@ function HouseCreate() {
                 )}
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Customer Service"
                   placeholder="Enter Customer Service"
                   value={form.values.customer_service}
@@ -1999,7 +2190,7 @@ function HouseCreate() {
         <Tabs.Panel value="1">
           <Box mt="md">
             {/* Shipper Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Shipper
             </Text>
             <Grid mb="xs">
@@ -2020,7 +2211,7 @@ function HouseCreate() {
                     form.setFieldValue("shipper_code", value || "");
                     form.setFieldValue(
                       "shipper_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options and shipper_state_id
@@ -2042,7 +2233,7 @@ function HouseCreate() {
                         (addr: { id: number; address: string }) => ({
                           value: addr.address,
                           label: addr.address,
-                        })
+                        }),
                       );
 
                       setShipperAddressOptions(addressOptions);
@@ -2054,7 +2245,7 @@ function HouseCreate() {
                       ) {
                         form.setFieldValue(
                           "shipper_address",
-                          addressesData[0].address
+                          addressesData[0].address,
                         );
                       } else {
                         form.setFieldValue("shipper_address", "");
@@ -2084,7 +2275,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Shipper Email"
                   type="email"
                   placeholder="Enter Shipper Email"
@@ -2111,7 +2302,7 @@ function HouseCreate() {
             </Grid>
 
             {/* Consignee Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Consignee
             </Text>
             <Grid mb="xs">
@@ -2132,7 +2323,7 @@ function HouseCreate() {
                     form.setFieldValue("consignee_code", value || "");
                     form.setFieldValue(
                       "consignee_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options
@@ -2153,7 +2344,7 @@ function HouseCreate() {
                         (addr: { id: number; address: string }) => ({
                           value: addr.address,
                           label: addr.address,
-                        })
+                        }),
                       );
 
                       setConsigneeAddressOptions(addressOptions);
@@ -2165,7 +2356,7 @@ function HouseCreate() {
                       ) {
                         form.setFieldValue(
                           "consignee_address",
-                          addressesData[0].address
+                          addressesData[0].address,
                         );
                       } else {
                         form.setFieldValue("consignee_address", "");
@@ -2181,7 +2372,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Consignee Email"
                   type="email"
                   placeholder="Enter Consignee Email"
@@ -2207,12 +2398,12 @@ function HouseCreate() {
             </Grid>
 
             {/* Notify Customer Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Notify Customer
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Notify Customer Name"
                   placeholder="Enter Notify Customer Name"
                   {...form.getInputProps("notify_customer1_name")}
@@ -2220,7 +2411,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Notify Customer Email"
                   type="email"
                   placeholder="Enter Notify Customer Email"
@@ -2230,24 +2421,27 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                <Textarea
+                <FormTextArea
                   label="Notify Customer Address"
                   placeholder="Enter Notify Customer Address"
                   minRows={2}
+                  size="sm"
+                  radius="sm"
                   value={form.values.notify_customer1_address}
                   onChange={(e) => {
                     const formattedValue = toTitleCase(e.currentTarget.value);
                     form.setFieldValue(
                       "notify_customer1_address",
-                      formattedValue
+                      formattedValue,
                     );
                   }}
                   error={form.errors.notify_customer1_address}
                 />
               </Grid.Col>
             </Grid>
+
             {/* Destination Agent Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Destination Agent
             </Text>
             <Grid mb="xs">
@@ -2269,7 +2463,7 @@ function HouseCreate() {
                     // Store customer_name for display
                     form.setFieldValue(
                       "origin_agent_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Auto-fill address from addresses_data if available
@@ -2292,7 +2486,7 @@ function HouseCreate() {
                       ) {
                         form.setFieldValue(
                           "origin_agent_address",
-                          addressesData[0].address
+                          addressesData[0].address,
                         );
                       } else {
                         form.setFieldValue("origin_agent_address", "");
@@ -2307,7 +2501,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Destination Agent Email"
                   type="email"
                   placeholder="Enter Destination Agent Email"
@@ -2317,10 +2511,12 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                <Textarea
+                <FormTextArea
                   label="Destination Agent Address"
                   placeholder="Enter Destination Agent Address"
                   minRows={2}
+                  size="sm"
+                  radius="sm"
                   value={form.values.origin_agent_address}
                   onChange={(e) => {
                     const formattedValue = toTitleCase(e.currentTarget.value);
@@ -2335,17 +2531,19 @@ function HouseCreate() {
 
         <Tabs.Panel value="2">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
+            <Text size="md" fw={600} c="#105476" mb="md">
               Cargo Details{" "}
               {cargoDetails.length > 1 && `(${cargoDetails.length})`}
             </Text>
 
             <Grid mb="md">
               <Grid.Col span={6}>
-                <Textarea
+                <FormTextArea
                   label="Commodity Description"
                   placeholder="Enter Commodity Description"
                   minRows={3}
+                  size="sm"
+                  radius="sm"
                   value={form.values.commodity_description}
                   onChange={(e) => {
                     const formattedValue = toTitleCase(e.currentTarget.value);
@@ -2355,10 +2553,12 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={6}>
-                <Textarea
+                <FormTextArea
                   label="Marks No"
                   placeholder="Enter Marks No"
                   minRows={3}
+                  size="sm"
+                  radius="sm"
                   {...form.getInputProps("marks_no")}
                 />
               </Grid.Col>
@@ -2374,38 +2574,35 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={1.5}>
-                  Container Number{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                <Grid.Col span={2}>
+                  <RequiredLabel label="Container Number" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
-                  No of Packages{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="No of Packages" required={true} />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  Gross Weight (KG){" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Gross Weight (KG)" required={true} />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  Volume (CBM){" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Volume (CBM)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2}>Chargeable Weight (CBM)</Grid.Col>
-                <Grid.Col span={1.5}>Haz</Grid.Col>
-                {/* <Grid.Col span={1.5}>Actions</Grid.Col> */}
+                <Grid.Col span={2}>
+                  <RequiredLabel
+                    label="Chargeable Weight (CBM)"
+                    required={false}
+                  />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Haz" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <RequiredLabel label="Actions" required={false} />
+                </Grid.Col>
               </Grid>
 
               {cargoDetails.map((cargo, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={2}>
                     <Dropdown
                       placeholder={
                         containerNumberOptions.length > 0
@@ -2420,7 +2617,7 @@ function HouseCreate() {
                           location.state?.containerDetails || [];
                         const matchedContainer = containerDetails.find(
                           (container: Record<string, unknown>) =>
-                            container.container_no === value
+                            container.container_no === value,
                         );
                         const containerId =
                           matchedContainer?.id !== undefined &&
@@ -2455,7 +2652,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Enter No of Packages"
                       min={0}
                       hideControls
@@ -2483,7 +2680,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
                       hideControls
@@ -2511,7 +2708,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Enter Volume"
                       min={0}
                       hideControls
@@ -2539,17 +2736,12 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder=""
                       hideControls
                       value={cargo.chargeable_weight || undefined}
                       readOnly
                       disabled
-                      styles={{
-                        input: {
-                          backgroundColor: "#f5f5f5",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
@@ -2577,16 +2769,17 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1}>
                     <Group gap="xs">
                       {cargoDetails.length > 1 && (
                         <Button
-                          size="xs"
+                          size="sm"
+                          px={12}
                           variant="light"
                           color="red"
                           onClick={() => {
                             const updated = cargoDetails.filter(
-                              (_, i) => i !== index
+                              (_, i) => i !== index,
                             );
                             setCargoDetails(updated);
                           }}
@@ -2596,7 +2789,8 @@ function HouseCreate() {
                       )}
                       {cargoDetails.length - 1 === index && (
                         <Button
-                          size="xs"
+                          size="sm"
+                          px={12}
                           variant="light"
                           color="#105476"
                           onClick={() => {
@@ -2627,46 +2821,48 @@ function HouseCreate() {
         <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
-              <Text size="lg" fw={600} c="#105476">
+              <Text size="md" fw={600} c="#105476">
                 Charges{" "}
                 {chargesForm.values.charges.length > 1 &&
                   ` (${chargesForm.values.charges.length})`}
               </Text>
               {location.state?.job?.id != null && (
-              <Button
-                variant="outline"
-                color="#105476"
-                onClick={() => {
-                  const fullDetail = getCurrentHousingDetail();
-                  const prepaidCharges = (fullDetail.charges ?? []).filter(
-                    (c: { pp_cc?: string }) =>
-                      String(c.pp_cc ?? "").trim().toUpperCase() === "PP"
-                  );
-                  const detailForInvoice = {
-                    ...fullDetail,
-                    charges: prepaidCharges,
-                  };
-                  navigate("/SeaExport/export-job/invoice", {
-                    state: {
-                      hawbDetails: [detailForInvoice],
-                      housingDetails: [detailForInvoice],
-                      is_agent: false,
-                      ...(location.state?.job && { job: location.state.job }),
-                      ...(location.state?.mblDetails && {
-                        mblDetails: location.state.mblDetails,
-                      }),
-                      ...(location.state?.carrierDetails && {
-                        carrierDetails: location.state.carrierDetails,
-                      }),
-                      ...(location.state?.routings && {
-                        routings: location.state.routings,
-                      }),
-                    },
-                  });
-                }}
-              >
-                Create Invoice
-              </Button>
+                <Button
+                  variant="outline"
+                  color="#105476"
+                  onClick={() => {
+                    const fullDetail = getCurrentHousingDetail();
+                    const prepaidCharges = (fullDetail.charges ?? []).filter(
+                      (c: { pp_cc?: string }) =>
+                        String(c.pp_cc ?? "")
+                          .trim()
+                          .toUpperCase() === "PP",
+                    );
+                    const detailForInvoice = {
+                      ...fullDetail,
+                      charges: prepaidCharges,
+                    };
+                    navigate("/SeaExport/export-job/invoice", {
+                      state: {
+                        hawbDetails: [detailForInvoice],
+                        housingDetails: [detailForInvoice],
+                        is_agent: false,
+                        ...(location.state?.job && { job: location.state.job }),
+                        ...(location.state?.mblDetails && {
+                          mblDetails: location.state.mblDetails,
+                        }),
+                        ...(location.state?.carrierDetails && {
+                          carrierDetails: location.state.carrierDetails,
+                        }),
+                        ...(location.state?.routings && {
+                          routings: location.state.routings,
+                        }),
+                      },
+                    });
+                  }}
+                >
+                  Create Invoice
+                </Button>
               )}
             </Group>
 
@@ -2681,39 +2877,32 @@ function HouseCreate() {
                 gutter="sm"
               >
                 <Grid.Col span={1.75}>
-                  Charge Name{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Charge Name" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.25}>
-                  PP/CC{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="PP/CC" required={true} />
                 </Grid.Col>
-                <Grid.Col span={1.25}>Unit</Grid.Col>
-                <Grid.Col span={1}>No of Unit</Grid.Col>
-                <Grid.Col span={1.5}>
-                  Currency{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                <Grid.Col span={1.25}>
+                  <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1}>
-                  ROE{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.5}>Amount Per Unit</Grid.Col>
                 <Grid.Col span={1.5}>
-                  Amount{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Currency" required={true} />
                 </Grid.Col>
-                {/* <Grid.Col span={1}>Actions</Grid.Col> */}
+                <Grid.Col span={1}>
+                  <RequiredLabel label="ROE" required={true} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Amount Per Unit" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Amount" required={true} />
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <RequiredLabel label="Actions" required={false} />
+                </Grid.Col>
               </Grid>
 
               {chargesForm.values.charges.map((charge, index) => (
@@ -2727,13 +2916,23 @@ function HouseCreate() {
                         value: String(item.id ?? ""),
                         label: String(item.charge_name ?? ""),
                       })}
-                      value={charge.charge_id != null ? String(charge.charge_id) : null}
+                      value={
+                        charge.charge_id != null
+                          ? String(charge.charge_id)
+                          : null
+                      }
                       displayValue={charge.charge_name || undefined}
                       onChange={(value, selectedData) => {
                         const chargeId = value ? Number(value) : null;
                         const chargeName = selectedData?.label ?? "";
-                        chargesForm.setFieldValue(`charges.${index}.charge_id`, chargeId);
-                        chargesForm.setFieldValue(`charges.${index}.charge_name`, chargeName);
+                        chargesForm.setFieldValue(
+                          `charges.${index}.charge_id`,
+                          chargeId,
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.charge_name`,
+                          chargeName,
+                        );
                         if (chargeErrors[index]?.charge_name) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
@@ -2748,7 +2947,6 @@ function HouseCreate() {
                       error={chargeErrors[index]?.charge_name}
                       minSearchLength={2}
                       dropdownZIndex={1000}
-                      styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.25}>
@@ -2763,7 +2961,7 @@ function HouseCreate() {
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.pp_cc`,
-                          value || ""
+                          value || "",
                         );
                         // Clear error when field is updated
                         if (chargeErrors[index]?.pp_cc) {
@@ -2788,11 +2986,31 @@ function HouseCreate() {
                       value={charge.unit_id || null}
                       onChange={(value) => {
                         const unitId = value ?? "";
-                        const unitOpt = unitOptions.find((o) => o.value === unitId);
-                        const unitItem = Array.isArray(unitDataRaw) ? (unitDataRaw as { id?: number; unit_code?: string }[]).find((u) => String(u.id) === unitId || u.unit_code === unitId) : null;
-                        const unitCode = unitItem?.unit_code ?? unitOpt?.label ?? "";
-                        chargesForm.setFieldValue(`charges.${index}.unit_id`, unitId);
-                        chargesForm.setFieldValue(`charges.${index}.unit_code`, unitCode);
+                        const unitOpt = unitOptions.find(
+                          (o) => o.value === unitId,
+                        );
+                        const unitItem = Array.isArray(unitDataRaw)
+                          ? (
+                              unitDataRaw as {
+                                id?: number;
+                                unit_code?: string;
+                              }[]
+                            ).find(
+                              (u) =>
+                                String(u.id) === unitId ||
+                                u.unit_code === unitId,
+                            )
+                          : null;
+                        const unitCode =
+                          unitItem?.unit_code ?? unitOpt?.label ?? "";
+                        chargesForm.setFieldValue(
+                          `charges.${index}.unit_id`,
+                          unitId,
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.unit_code`,
+                          unitCode,
+                        );
                         const unitUpper = unitCode.toUpperCase();
                         let noOfUnit = charge.no_of_unit;
                         if (
@@ -2805,27 +3023,27 @@ function HouseCreate() {
                         if (noOfUnit !== charge.no_of_unit) {
                           chargesForm.setFieldValue(
                             `charges.${index}.no_of_unit`,
-                            noOfUnit
+                            noOfUnit,
                           );
                         }
                       }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
                       hideControls
                       {...(() => {
                         const inputProps = chargesForm.getInputProps(
-                          `charges.${index}.no_of_unit`
+                          `charges.${index}.no_of_unit`,
                         );
                         return {
                           value: inputProps.value as number | undefined,
                           onChange: (value: number | string | null) => {
                             chargesForm.setFieldValue(
                               `charges.${index}.no_of_unit`,
-                              value as number | null
+                              value as number | null,
                             );
                             // Auto-calculate amount if amount_per_unit is provided
                             const currentCharge =
@@ -2853,7 +3071,7 @@ function HouseCreate() {
                               if (calculatedAmount > 0) {
                                 chargesForm.setFieldValue(
                                   `charges.${index}.amount`,
-                                  calculatedAmount
+                                  calculatedAmount,
                                 );
                               }
                             }
@@ -2870,14 +3088,22 @@ function HouseCreate() {
                       value={charge.currency_id || null}
                       onChange={(value) => {
                         const currencyId = value ?? "";
-                        const code = currencyOptions.find((o) => o.value === currencyId)?.label ?? "";
-                        chargesForm.setFieldValue(`charges.${index}.currency_id`, currencyId);
-                        chargesForm.setFieldValue(`charges.${index}.currency`, code);
+                        const code =
+                          currencyOptions.find((o) => o.value === currencyId)
+                            ?.label ?? "";
+                        chargesForm.setFieldValue(
+                          `charges.${index}.currency_id`,
+                          currencyId,
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.currency`,
+                          code,
+                        );
                         const roe = code ? getRoeValue(code) : null;
                         if (roe !== null) {
                           chargesForm.setFieldValue(
                             `charges.${index}.roe`,
-                            roe
+                            roe,
                           );
                         }
                         if (chargeErrors[index]?.currency_id) {
@@ -2895,7 +3121,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="ROE"
                       min={0}
                       hideControls
@@ -2903,7 +3129,7 @@ function HouseCreate() {
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.roe`,
-                          value as number | null
+                          value as number | null,
                         );
                         // Auto-calculate amount if amount_per_unit is provided
                         const currentCharge = chargesForm.values.charges[index];
@@ -2929,7 +3155,7 @@ function HouseCreate() {
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
-                              calculatedAmount
+                              calculatedAmount,
                             );
                           }
                         }
@@ -2949,7 +3175,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Amount Per Unit"
                       min={0}
                       hideControls
@@ -2957,7 +3183,7 @@ function HouseCreate() {
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.amount_per_unit`,
-                          value as number | null
+                          value as number | null,
                         );
                         // Auto-calculate amount if amount_per_unit is provided
                         const currentCharge = chargesForm.values.charges[index];
@@ -2984,7 +3210,7 @@ function HouseCreate() {
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
-                              calculatedAmount
+                              calculatedAmount,
                             );
                           }
                         }
@@ -3004,7 +3230,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Amount"
                       min={0}
                       hideControls
@@ -3012,7 +3238,7 @@ function HouseCreate() {
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.amount`,
-                          value as number | null
+                          value as number | null,
                         );
                         // Clear error when field is updated
                         if (chargeErrors[index]?.amount) {
@@ -3040,7 +3266,8 @@ function HouseCreate() {
                   >
                     {chargesForm.values.charges.length - 1 === index && (
                       <Button
-                        size="xs"
+                        size="sm"
+                        px={12}
                         variant="light"
                         color="#105476"
                         onClick={() => {
@@ -3064,7 +3291,8 @@ function HouseCreate() {
                     )}
                     {chargesForm.values.charges.length > 1 && (
                       <Button
-                        size="xs"
+                        size="sm"
+                        px={12}
                         variant="light"
                         color="red"
                         onClick={() => {
@@ -3084,7 +3312,7 @@ function HouseCreate() {
         {isEditMode && (
           <Tabs.Panel value="4">
             <Box mt="md">
-              <Text size="lg" fw={600} c="#105476" mb="md">
+              <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
               </Text>
               {invoiceListLoading ? (
@@ -3099,456 +3327,665 @@ function HouseCreate() {
                     striped
                     highlightOnHover
                     style={{ minWidth: 700 }}
+                    styles={{
+                      th: {
+                        padding: "8px",
+                      },
+                      td: {
+                        padding: "8px",
+                      },
+                    }}
                   >
                     <Table.Thead>
                       <Table.Tr>
-                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Daybook</Table.Th>
-                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice number</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Date</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Total</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Status</Table.Th>
-                      <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Actions</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {invoiceList.length === 0 ? (
-                      <Table.Tr>
-                        <Table.Td colSpan={6}>
-                          <Center py="xl">
-                            <Text c="dimmed">No invoices to display</Text>
-                          </Center>
-                        </Table.Td>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Daybook
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Invoice number
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Invoice Date
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Invoice Total
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Status
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Actions
+                        </Table.Th>
                       </Table.Tr>
-                    ) : (
-                      invoiceList.map((row, idx) => {
-                        const statusUpper = (row.status ?? "").toUpperCase();
-                        const isPosted = statusUpper === "POSTED" || row.status === "posted";
-                        const isUnposted = statusUpper === "UNPOSTED" || row.status === "unpost";
-                        const isReversed =
-                          statusUpper === "PARTIALLY REVERSED" ||
-                          statusUpper === "FULLY REVERSED";
-                        const rowKey = `${row.id}-${idx}`;
-                        const isExpanded = expandedInvoiceRowId === rowKey;
-                        const reverseInvoices = row.reverse_invoices ?? [];
-                        const hasReverseInvoices = reverseInvoices.length > 0;
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {invoiceList.length === 0 ? (
+                        <Table.Tr>
+                          <Table.Td colSpan={6}>
+                            <Center py="xl">
+                              <Text c="dimmed">No invoices to display</Text>
+                            </Center>
+                          </Table.Td>
+                        </Table.Tr>
+                      ) : (
+                        invoiceList.map((row, idx) => {
+                          const statusUpper = (row.status ?? "").toUpperCase();
+                          const isPosted =
+                            statusUpper === "POSTED" || row.status === "posted";
+                          const isUnposted =
+                            statusUpper === "UNPOSTED" ||
+                            row.status === "unpost";
+                          const isReversed =
+                            statusUpper === "PARTIALLY REVERSED" ||
+                            statusUpper === "FULLY REVERSED";
+                          const rowKey = `${row.id}-${idx}`;
+                          const isExpanded = expandedInvoiceRowId === rowKey;
+                          const reverseInvoices = row.reverse_invoices ?? [];
+                          const hasReverseInvoices = reverseInvoices.length > 0;
 
-                        const invoiceViewId = row.invoice_id ?? row.id;
-                        return (
-                          <Fragment key={rowKey}>
-                            <Table.Tr
-                              style={isReversed ? { cursor: "pointer" } : undefined}
-                              onClick={(e) => {
-                                if (
-                                  (e.target as HTMLElement).closest(
-                                    "[data-menu-dropdown],[button]"
-                                  )
-                                )
-                                  return;
-
-                                if (!isReversed) {
-                                  setExpandedInvoiceRowId(null);
-                                  return;
+                          const invoiceViewId = row.invoice_id ?? row.id;
+                          return (
+                            <Fragment key={rowKey}>
+                              <Table.Tr
+                                style={
+                                  isReversed ? { cursor: "pointer" } : undefined
                                 }
+                                onClick={(e) => {
+                                  if (
+                                    (e.target as HTMLElement).closest(
+                                      "[data-menu-dropdown],[button]",
+                                    )
+                                  )
+                                    return;
 
-                                setExpandedInvoiceRowId((prev) =>
-                                  prev === rowKey ? null : rowKey
-                                );
-                              }}
-                            >
-                              <Table.Td style={{ fontSize: "13px", width: "20%" }}>
-                                <Group gap="xs" wrap="nowrap">
-                                  {isReversed && (
-                                    <Box component="span" style={{ display: "inline-flex" }}>
-                                      {isExpanded ? (
-                                        <IconChevronUp size={14} color="#105476" />
-                                      ) : (
-                                        <IconChevronDown size={14} color="#105476" />
-                                      )}
-                                    </Box>
-                                  )}
-                                  {row.day_book_name ?? "-"}
-                                </Group>
-                              </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", width: "20%" }}>
-                                {row.document_no ?? "-"}
-                              </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", width: "15%" }}>
-                                {row.document_date ?? "-"}
-                              </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", width: "15%" }}>
-                                {row.total}
-                              </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", width: "15%" }}>
-                                <Badge
-                                  size="sm"
-                                  variant="light"
-                                  color={isUnposted ? "yellow" : isPosted ? "green" : "#105476"}
-                                >
-                                  {row.status ?? "-"}
-                                </Badge>
-                              </Table.Td>
-                              <Table.Td
-                                style={{ fontSize: "13px", width: "15%" }}
-                                onClick={(e) => e.stopPropagation()}
+                                  if (!isReversed) {
+                                    setExpandedInvoiceRowId(null);
+                                    return;
+                                  }
+
+                                  setExpandedInvoiceRowId((prev) =>
+                                    prev === rowKey ? null : rowKey,
+                                  );
+                                }}
                               >
-                                <Menu shadow="md" width={200} position="bottom-end">
-                                  <Menu.Target>
-                                    <ActionIcon
-                                      variant="subtle"
-                                      color="#105476"
-                                      size="sm"
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "20%" }}
+                                >
+                                  <Group gap="xs" wrap="nowrap">
+                                    {isReversed && (
+                                      <Box
+                                        component="span"
+                                        style={{ display: "inline-flex" }}
+                                      >
+                                        {isExpanded ? (
+                                          <IconChevronUp
+                                            size={14}
+                                            color="#105476"
+                                          />
+                                        ) : (
+                                          <IconChevronDown
+                                            size={14}
+                                            color="#105476"
+                                          />
+                                        )}
+                                      </Box>
+                                    )}
+                                    {row.day_book_name ?? "-"}
+                                  </Group>
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "20%" }}
+                                >
+                                  {row.document_no ?? "-"}
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "15%" }}
+                                >
+                                  {row.document_date ?? "-"}
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "15%" }}
+                                >
+                                  {row.total}
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "15%" }}
+                                >
+                                  <Badge
+                                    size="sm"
+                                    variant="light"
+                                    color={
+                                      isUnposted
+                                        ? "yellow"
+                                        : isPosted
+                                          ? "green"
+                                          : "#105476"
+                                    }
+                                  >
+                                    {row.status ?? "-"}
+                                  </Badge>
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "15%" }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Menu
+                                    shadow="md"
+                                    width={200}
+                                    position="bottom-end"
+                                  >
+                                    <Menu.Target>
+                                      <ActionIcon
+                                        variant="subtle"
+                                        color="#105476"
+                                        size="sm"
+                                        styles={{
+                                          root: {
+                                            fontFamily: "Inter",
+                                            fontSize: "13px",
+                                            border: "1px solid #E9ECEF",
+                                            borderRadius: "8px",
+                                            "&:hover": {
+                                              backgroundColor: "#F8F9FA",
+                                            },
+                                          },
+                                        }}
+                                      >
+                                        <IconDotsVertical size={16} />
+                                      </ActionIcon>
+                                    </Menu.Target>
+                                    <Menu.Dropdown
                                       styles={{
-                                        root: {
-                                          fontFamily: "Inter",
-                                          fontSize: "13px",
+                                        dropdown: {
                                           border: "1px solid #E9ECEF",
                                           borderRadius: "8px",
-                                          "&:hover": { backgroundColor: "#F8F9FA" },
+                                          padding: "8px",
+                                          boxShadow:
+                                            "0 4px 12px rgba(0, 0, 0, 0.1)",
                                         },
                                       }}
                                     >
-                                      <IconDotsVertical size={16} />
-                                    </ActionIcon>
-                                  </Menu.Target>
-                                  <Menu.Dropdown
-                                    styles={{
-                                      dropdown: {
-                                        border: "1px solid #E9ECEF",
-                                        borderRadius: "8px",
-                                        padding: "8px",
-                                        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                                      },
-                                    }}
-                                  >
-                                    <Menu.Item
-                                      leftSection={
-                                        <Box
-                                          style={{
-                                            backgroundColor: "#E7F5FF",
+                                      <Menu.Item
+                                        leftSection={
+                                          <Box
+                                            style={{
+                                              backgroundColor: "#E7F5FF",
+                                              borderRadius: "6px",
+                                              padding: "6px",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                            }}
+                                          >
+                                            <IconEye
+                                              size={16}
+                                              color="#105476"
+                                            />
+                                          </Box>
+                                        }
+                                        styles={{
+                                          item: {
+                                            fontFamily: "Inter",
+                                            fontSize: "13px",
+                                            fontWeight: 500,
                                             borderRadius: "6px",
-                                            padding: "6px",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
+                                            padding: "10px 12px",
+                                            marginBottom: "4px",
+                                            "&:hover": {
+                                              backgroundColor: "#F8F9FA",
+                                            },
+                                          },
+                                          itemLabel: {
+                                            fontFamily: "Inter",
+                                            fontSize: "13px",
+                                            fontWeight: 500,
+                                            color: "#424242",
+                                          },
+                                        }}
+                                        onClick={() =>
+                                          navigate(
+                                            `/SeaExport/export-job/invoice/view/${invoiceViewId}`,
+                                            {
+                                              state: {
+                                                invoiceData: row,
+                                                ...(location.state?.job && {
+                                                  job: location.state.job,
+                                                }),
+                                              },
+                                            },
+                                          )
+                                        }
+                                      >
+                                        View
+                                      </Menu.Item>
+                                      {isUnposted ? (
+                                        <Menu.Item
+                                          leftSection={
+                                            <Box
+                                              style={{
+                                                backgroundColor: "#E7F5FF",
+                                                borderRadius: "6px",
+                                                padding: "6px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                              }}
+                                            >
+                                              <IconEdit
+                                                size={16}
+                                                color="#105476"
+                                              />
+                                            </Box>
+                                          }
+                                          styles={{
+                                            item: {
+                                              fontFamily: "Inter",
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              borderRadius: "6px",
+                                              padding: "10px 12px",
+                                              marginBottom: "4px",
+                                              "&:hover": {
+                                                backgroundColor: "#F8F9FA",
+                                              },
+                                            },
+                                            itemLabel: {
+                                              fontFamily: "Inter",
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                            },
                                           }}
+                                          onClick={() =>
+                                            navigate(
+                                              `/SeaExport/export-job/invoice/edit/${row.invoice_id}`,
+                                              {
+                                                state: {
+                                                  invoiceData: row,
+                                                  ...(location.state?.job && {
+                                                    job: location.state.job,
+                                                  }),
+                                                },
+                                              },
+                                            )
+                                          }
                                         >
-                                          <IconEye size={16} color="#105476" />
-                                        </Box>
-                                      }
-                                      styles={{
-                                        item: {
-                                          fontFamily: "Inter",
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          borderRadius: "6px",
-                                          padding: "10px 12px",
-                                          marginBottom: "4px",
-                                          "&:hover": { backgroundColor: "#F8F9FA" },
-                                        },
-                                        itemLabel: {
-                                          fontFamily: "Inter",
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          color: "#424242",
-                                        },
-                                      }}
-                                      onClick={() =>
-                                        navigate(`/SeaExport/export-job/invoice/view/${invoiceViewId}`, {
-                                          state: {
-                                            invoiceData: row,
-                                            ...(location.state?.job && { job: location.state.job }),
-                                          },
-                                        })
-                                      }
-                                    >
-                                      View
-                                    </Menu.Item>
-                                    {isUnposted ? (
-                                      <Menu.Item
-                                        leftSection={
-                                          <Box
-                                            style={{
-                                              backgroundColor: "#E7F5FF",
+                                          Edit
+                                        </Menu.Item>
+                                      ) : (
+                                        <Menu.Item
+                                          leftSection={
+                                            <Box
+                                              style={{
+                                                backgroundColor: "#E7F5FF",
+                                                borderRadius: "6px",
+                                                padding: "6px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                              }}
+                                            >
+                                              <IconRefresh
+                                                size={16}
+                                                color="#105476"
+                                              />
+                                            </Box>
+                                          }
+                                          styles={{
+                                            item: {
+                                              fontFamily: "Inter",
+                                              fontSize: "13px",
+                                              fontWeight: 500,
                                               borderRadius: "6px",
-                                              padding: "6px",
-                                              display: "flex",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                            }}
-                                          >
-                                            <IconEdit size={16} color="#105476" />
-                                          </Box>
-                                        }
-                                        styles={{
-                                          item: {
-                                            fontFamily: "Inter",
-                                            fontSize: "13px",
-                                            fontWeight: 500,
-                                            borderRadius: "6px",
-                                            padding: "10px 12px",
-                                            marginBottom: "4px",
-                                            "&:hover": { backgroundColor: "#F8F9FA" },
-                                          },
-                                          itemLabel: {
-                                            fontFamily: "Inter",
-                                            fontSize: "13px",
-                                            fontWeight: 500,
-                                            color: "#424242",
-                                          },
-                                        }}
-                                        onClick={() =>
-                                          navigate(`/SeaExport/export-job/invoice/edit/${row.invoice_id}`, {
-                                            state: {
-                                              invoiceData: row,
-                                              ...(location.state?.job && { job: location.state.job }),
+                                              padding: "10px 12px",
+                                              marginBottom: "4px",
+                                              "&:hover": {
+                                                backgroundColor: "#F8F9FA",
+                                              },
                                             },
-                                          })
-                                        }
-                                      >
-                                        Edit
-                                      </Menu.Item>
-                                    ) : (
-                                      <Menu.Item
-                                        leftSection={
-                                          <Box
-                                            style={{
-                                              backgroundColor: "#E7F5FF",
-                                              borderRadius: "6px",
-                                              padding: "6px",
-                                              display: "flex",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                            }}
-                                          >
-                                            <IconRefresh size={16} color="#105476" />
-                                          </Box>
-                                        }
-                                        styles={{
-                                          item: {
-                                            fontFamily: "Inter",
-                                            fontSize: "13px",
-                                            fontWeight: 500,
-                                            borderRadius: "6px",
-                                            padding: "10px 12px",
-                                            marginBottom: "4px",
-                                            "&:hover": { backgroundColor: "#F8F9FA" },
-                                          },
-                                          itemLabel: {
-                                            fontFamily: "Inter",
-                                            fontSize: "13px",
-                                            fontWeight: 500,
-                                            color: "#424242",
-                                          },
-                                        }}
-                                        onClick={() =>
-                                          navigate("/SeaExport/export-job/invoice/reverse", {
-                                            state: {
-                                              document_no: row.document_no ?? "",
-                                              ...(location.state?.job && { job: location.state.job }),
+                                            itemLabel: {
+                                              fontFamily: "Inter",
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
                                             },
-                                          })
-                                        }
-                                      >
-                                        Invoice Reversal
-                                      </Menu.Item>
-                                    )}
-                                  </Menu.Dropdown>
-                                </Menu>
-                              </Table.Td>
-                            </Table.Tr>
-
-                            {isReversed && isExpanded && (
-                              <Table.Tr>
-                                <Table.Td
-                                  colSpan={6}
-                                  style={{
-                                    padding: 0,
-                                    verticalAlign: "top",
-                                    backgroundColor: "var(--mantine-color-gray-0)",
-                                  }}
-                                >
-                                  <Box p="sm" style={{ borderTop: "1px solid #E9ECEF" }}>
-                                    <Text size="sm" fw={600} c="#105476" mb="xs">
-                                      Reverse invoices
-                                    </Text>
-                                    <Table
-                                      withTableBorder
-                                      withColumnBorders
-                                      striped
-                                      style={{ minWidth: 700 }}
-                                    >
-                                      <Table.Thead>
-                                        <Table.Tr>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "20%" }}>
-                                            Daybook
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "20%" }}>
-                                            Invoice number
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "15%" }}>
-                                            Invoice Date
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "15%" }}>
-                                            Invoice Total
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "15%" }}>
-                                            Status
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "15%" }}>
-                                            Actions
-                                          </Table.Th>
-                                        </Table.Tr>
-                                      </Table.Thead>
-                                      <Table.Tbody>
-                                        {hasReverseInvoices ? (
-                                          reverseInvoices.map((rev, idx) => (
-                                            <Table.Tr key={rev.id ?? idx}>
-                                              <Table.Td style={{ fontSize: "12px", width: "20%" }}>
-                                                {rev.day_book_name ?? "-"}
-                                              </Table.Td>
-                                              <Table.Td style={{ fontSize: "12px", width: "20%" }}>
-                                                {rev.document_no ?? "-"}
-                                              </Table.Td>
-                                              <Table.Td style={{ fontSize: "12px", width: "15%" }}>
-                                                {rev.document_date ?? "-"}
-                                              </Table.Td>
-                                              <Table.Td style={{ fontSize: "12px", width: "15%" }}>
-                                                {rev.total ?? "-"}
-                                              </Table.Td>
-                                              <Table.Td style={{ fontSize: "12px", width: "15%" }}>
-                                                <Badge size="sm" variant="light" color="#105476">
-                                                  {rev.status ?? "-"}
-                                                </Badge>
-                                              </Table.Td>
-                                              <Table.Td
-                                                style={{ fontSize: "12px", width: "15%" }}
-                                                onClick={(e) => e.stopPropagation()}
-                                              >
-                                                <Menu shadow="md" width={200} position="bottom-end">
-                                                  <Menu.Target>
-                                                    <ActionIcon
-                                                      variant="subtle"
-                                                      color="#105476"
-                                                      size="sm"
-                                                      styles={{
-                                                        root: {
-                                                          fontFamily: "Inter",
-                                                          fontSize: "13px",
-                                                          border: "1px solid #E9ECEF",
-                                                          borderRadius: "8px",
-                                                          "&:hover": { backgroundColor: "#F8F9FA" },
-                                                        },
-                                                      }}
-                                                    >
-                                                      <IconDotsVertical size={16} />
-                                                    </ActionIcon>
-                                                  </Menu.Target>
-                                                  <Menu.Dropdown
-                                                    styles={{
-                                                      dropdown: {
-                                                        border: "1px solid #E9ECEF",
-                                                        borderRadius: "8px",
-                                                        padding: "8px",
-                                                        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                                                      },
-                                                    }}
-                                                  >
-                                                    <Menu.Item
-                                                      leftSection={
-                                                        <Box
-                                                          style={{
-                                                            backgroundColor: "#E7F5FF",
-                                                            borderRadius: "6px",
-                                                            padding: "6px",
-                                                            display: "flex",
-                                                            alignItems: "center",
-                                                            justifyContent: "center",
-                                                          }}
-                                                        >
-                                                          <IconEye size={16} color="#105476" />
-                                                        </Box>
-                                                      }
-                                                      styles={{
-                                                        item: {
-                                                          fontFamily: "Inter",
-                                                          fontSize: "13px",
-                                                          fontWeight: 500,
-                                                          borderRadius: "6px",
-                                                          padding: "10px 12px",
-                                                          marginBottom: "4px",
-                                                          "&:hover": { backgroundColor: "#F8F9FA" },
-                                                        },
-                                                        itemLabel: {
-                                                          fontFamily: "Inter",
-                                                          fontSize: "13px",
-                                                          fontWeight: 500,
-                                                          color: "#424242",
-                                                        },
-                                                      }}
-                                                      onClick={() => {
-                                                        const targetId =
-                                                          (rev.reverse_invoice_id ?? row.reverse_invoice_id) as number;
-
-                                                        navigate(
-                                                          `/SeaExport/export-job/invoice/view/${targetId}`,
-                                                          {
-                                                            state: {
-                                                              invoiceData: {
-                                                                ...row,
-                                                                ...rev,
-                                                                id: targetId,
-                                                                document_no:
-                                                                  rev.document_no ??
-                                                                  (row as any).document_no,
-                                                                document_date:
-                                                                  rev.document_date ??
-                                                                  (row as any).document_date,
-                                                                total: rev.total ?? (row as any).total,
-                                                                status: rev.status ?? (row as any).status,
-                                                                day_book_name:
-                                                                  rev.day_book_name ??
-                                                                  (row as any).day_book_name,
-                                                              },
-                                                              ...(location.state?.job && {
-                                                                job: location.state.job,
-                                                              }),
-                                                            },
-                                                          }
-                                                        );
-                                                      }}
-                                                    >
-                                                      View
-                                                    </Menu.Item>
-                                                  </Menu.Dropdown>
-                                                </Menu>
-                                              </Table.Td>
-                                            </Table.Tr>
-                                          ))
-                                        ) : (
-                                          <Table.Tr>
-                                            <Table.Td colSpan={6} style={{ fontSize: "12px" }}>
-                                              <Center py="md">
-                                                <Text c="dimmed">No reverse invoices to display</Text>
-                                              </Center>
-                                            </Table.Td>
-                                          </Table.Tr>
-                                        )}
-                                      </Table.Tbody>
-                                    </Table>
-                                  </Box>
+                                          }}
+                                          onClick={() =>
+                                            navigate(
+                                              "/SeaExport/export-job/invoice/reverse",
+                                              {
+                                                state: {
+                                                  document_no:
+                                                    row.document_no ?? "",
+                                                  ...(location.state?.job && {
+                                                    job: location.state.job,
+                                                  }),
+                                                },
+                                              },
+                                            )
+                                          }
+                                        >
+                                          Invoice Reversal
+                                        </Menu.Item>
+                                      )}
+                                    </Menu.Dropdown>
+                                  </Menu>
                                 </Table.Td>
                               </Table.Tr>
-                            )}
-                          </Fragment>
-                        );
-                      })
-                    )}
-                  </Table.Tbody>
-                </Table>
-              </ScrollArea>
-            )}
-          </Box>
-        </Tabs.Panel>
+
+                              {isReversed && isExpanded && (
+                                <Table.Tr>
+                                  <Table.Td
+                                    colSpan={6}
+                                    style={{
+                                      padding: 0,
+                                      verticalAlign: "top",
+                                      backgroundColor:
+                                        "var(--mantine-color-gray-0)",
+                                    }}
+                                  >
+                                    <Box
+                                      p="sm"
+                                      style={{ borderTop: "1px solid #E9ECEF" }}
+                                    >
+                                      <Text
+                                        size="sm"
+                                        fw={600}
+                                        c="#105476"
+                                        mb="xs"
+                                      >
+                                        Reverse invoices
+                                      </Text>
+                                      <Table
+                                        withTableBorder
+                                        withColumnBorders
+                                        striped
+                                        style={{ minWidth: 700 }}
+                                      >
+                                        <Table.Thead>
+                                          <Table.Tr>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "20%",
+                                              }}
+                                            >
+                                              Daybook
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "20%",
+                                              }}
+                                            >
+                                              Invoice number
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "15%",
+                                              }}
+                                            >
+                                              Invoice Date
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "15%",
+                                              }}
+                                            >
+                                              Invoice Total
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "15%",
+                                              }}
+                                            >
+                                              Status
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "15%",
+                                              }}
+                                            >
+                                              Actions
+                                            </Table.Th>
+                                          </Table.Tr>
+                                        </Table.Thead>
+                                        <Table.Tbody>
+                                          {hasReverseInvoices ? (
+                                            reverseInvoices.map((rev, idx) => (
+                                              <Table.Tr key={rev.id ?? idx}>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "20%",
+                                                  }}
+                                                >
+                                                  {rev.day_book_name ?? "-"}
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "20%",
+                                                  }}
+                                                >
+                                                  {rev.document_no ?? "-"}
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "15%",
+                                                  }}
+                                                >
+                                                  {rev.document_date ?? "-"}
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "15%",
+                                                  }}
+                                                >
+                                                  {rev.total ?? "-"}
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "15%",
+                                                  }}
+                                                >
+                                                  <Badge
+                                                    size="sm"
+                                                    variant="light"
+                                                    color="#105476"
+                                                  >
+                                                    {rev.status ?? "-"}
+                                                  </Badge>
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "15%",
+                                                  }}
+                                                  onClick={(e) =>
+                                                    e.stopPropagation()
+                                                  }
+                                                >
+                                                  <Menu
+                                                    shadow="md"
+                                                    width={200}
+                                                    position="bottom-end"
+                                                  >
+                                                    <Menu.Target>
+                                                      <ActionIcon
+                                                        variant="subtle"
+                                                        color="#105476"
+                                                        size="sm"
+                                                        styles={{
+                                                          root: {
+                                                            fontFamily: "Inter",
+                                                            fontSize: "13px",
+                                                            border:
+                                                              "1px solid #E9ECEF",
+                                                            borderRadius: "8px",
+                                                            "&:hover": {
+                                                              backgroundColor:
+                                                                "#F8F9FA",
+                                                            },
+                                                          },
+                                                        }}
+                                                      >
+                                                        <IconDotsVertical
+                                                          size={16}
+                                                        />
+                                                      </ActionIcon>
+                                                    </Menu.Target>
+                                                    <Menu.Dropdown
+                                                      styles={{
+                                                        dropdown: {
+                                                          border:
+                                                            "1px solid #E9ECEF",
+                                                          borderRadius: "8px",
+                                                          padding: "8px",
+                                                          boxShadow:
+                                                            "0 4px 12px rgba(0, 0, 0, 0.1)",
+                                                        },
+                                                      }}
+                                                    >
+                                                      <Menu.Item
+                                                        leftSection={
+                                                          <Box
+                                                            style={{
+                                                              backgroundColor:
+                                                                "#E7F5FF",
+                                                              borderRadius:
+                                                                "6px",
+                                                              padding: "6px",
+                                                              display: "flex",
+                                                              alignItems:
+                                                                "center",
+                                                              justifyContent:
+                                                                "center",
+                                                            }}
+                                                          >
+                                                            <IconEye
+                                                              size={16}
+                                                              color="#105476"
+                                                            />
+                                                          </Box>
+                                                        }
+                                                        styles={{
+                                                          item: {
+                                                            fontFamily: "Inter",
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            borderRadius: "6px",
+                                                            padding:
+                                                              "10px 12px",
+                                                            marginBottom: "4px",
+                                                            "&:hover": {
+                                                              backgroundColor:
+                                                                "#F8F9FA",
+                                                            },
+                                                          },
+                                                          itemLabel: {
+                                                            fontFamily: "Inter",
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            color: "#424242",
+                                                          },
+                                                        }}
+                                                        onClick={() => {
+                                                          const targetId =
+                                                            (rev.reverse_invoice_id ??
+                                                              row.reverse_invoice_id) as number;
+
+                                                          navigate(
+                                                            `/SeaExport/export-job/invoice/view/${targetId}`,
+                                                            {
+                                                              state: {
+                                                                invoiceData: {
+                                                                  ...row,
+                                                                  ...rev,
+                                                                  id: targetId,
+                                                                  document_no:
+                                                                    rev.document_no ??
+                                                                    (row as any)
+                                                                      .document_no,
+                                                                  document_date:
+                                                                    rev.document_date ??
+                                                                    (row as any)
+                                                                      .document_date,
+                                                                  total:
+                                                                    rev.total ??
+                                                                    (row as any)
+                                                                      .total,
+                                                                  status:
+                                                                    rev.status ??
+                                                                    (row as any)
+                                                                      .status,
+                                                                  day_book_name:
+                                                                    rev.day_book_name ??
+                                                                    (row as any)
+                                                                      .day_book_name,
+                                                                },
+                                                                ...(location
+                                                                  .state
+                                                                  ?.job && {
+                                                                  job: location
+                                                                    .state.job,
+                                                                }),
+                                                              },
+                                                            },
+                                                          );
+                                                        }}
+                                                      >
+                                                        View
+                                                      </Menu.Item>
+                                                    </Menu.Dropdown>
+                                                  </Menu>
+                                                </Table.Td>
+                                              </Table.Tr>
+                                            ))
+                                          ) : (
+                                            <Table.Tr>
+                                              <Table.Td
+                                                colSpan={6}
+                                                style={{ fontSize: "12px" }}
+                                              >
+                                                <Center py="md">
+                                                  <Text c="dimmed">
+                                                    No reverse invoices to
+                                                    display
+                                                  </Text>
+                                                </Center>
+                                              </Table.Td>
+                                            </Table.Tr>
+                                          )}
+                                        </Table.Tbody>
+                                      </Table>
+                                    </Box>
+                                  </Table.Td>
+                                </Table.Tr>
+                              )}
+                            </Fragment>
+                          );
+                        })
+                      )}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </Box>
+          </Tabs.Panel>
         )}
       </Tabs>
 
@@ -3635,10 +4072,35 @@ function HouseCreate() {
         <Stack h="82vh">
           {pdfBlob ? (
             <>
-              <iframe src={pdfBlob} style={{ width: "100%", height: "100%", border: "none", borderRadius: "8px" }} title="PDF Preview" />
-              <Group justify="flex-end" p="md" style={{ borderTop: "1px solid #e9ecef" }}>
-                <Button variant="outline" onClick={handleClosePreview} leftSection={<IconX size={16} />}>Close</Button>
-                <Button onClick={handleDownloadPDF} leftSection={<IconDownload size={16} />} color="#105476">Download PDF</Button>
+              <iframe
+                src={pdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
               </Group>
             </>
           ) : (
@@ -3656,4 +4118,3 @@ function HouseCreate() {
 }
 
 export default HouseCreate;
-

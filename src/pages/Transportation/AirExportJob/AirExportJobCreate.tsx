@@ -1649,32 +1649,90 @@ function AirExportJobCreate() {
               {mode === "edit" ? "Update" : "Create"}
             </Button>
             {hawbDetails.length > 0 && (
-              <Menu shadow="md" width={200}>
+              <Menu shadow="md" width={220} position="bottom-end">
                 <Menu.Target>
-                  <ActionIcon variant="light" color="#105476" size="lg">
+                  <ActionIcon
+                    variant="subtle"
+                    color="#105476"
+                    size="lg"
+                    styles={{
+                      root: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        border: "1px solid #E9ECEF",
+                        borderRadius: "8px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                    }}
+                  >
                     <IconDotsVertical size={18} />
                   </ActionIcon>
                 </Menu.Target>
-                <Menu.Dropdown>
+
+                <Menu.Dropdown
+                  styles={{
+                    dropdown: {
+                      border: "1px solid #E9ECEF",
+                      borderRadius: "8px",
+                      padding: "8px",
+                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                    },
+                  }}
+                >
                   {jobData?.id != null && (
                     <Menu.Item
-                      leftSection={<IconFileInvoice size={14} />}
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconFileInvoice size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
                       onClick={() => {
-                        const allCollectCharges = hawbDetails.flatMap(
-                          (hawb) =>
-                            (hawb.charges ?? []).filter(
-                              (c) =>
-                                String(c.pp_cc ?? "").trim().toUpperCase() ===
-                                "CC"
-                            )
+                        const allCollectCharges = hawbDetails.flatMap((hawb) =>
+                          (hawb.charges ?? []).filter(
+                            (c) =>
+                              String(c.pp_cc ?? "").trim().toUpperCase() === "CC"
+                          )
                         );
+
                         const firstHouse = hawbDetails[0];
+
                         const housingDetailsForInvoice = [
                           {
                             ...firstHouse,
                             charges: allCollectCharges,
                           },
                         ];
+
                         navigate("/air/export-job/invoice", {
                           state: {
                             hawbDetails: housingDetailsForInvoice,

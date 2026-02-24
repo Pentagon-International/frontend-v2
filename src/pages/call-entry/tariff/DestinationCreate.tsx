@@ -43,6 +43,7 @@ import { useDisclosure } from "@mantine/hooks";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { getAPICall } from "../../../service/getApiCall";
+import RequiredLabel from "../../../components/RequiredLabel";
 
 // Type definitions for better type safety
 
@@ -588,23 +589,6 @@ function DestinationCreate() {
     }
   };
 
-  const RequiredLabel = ({ label, required }: { label: string, required: boolean }) => (
-    <Text
-      size="xs"
-      fw={500}
-      style={{
-        fontSize: "13px",
-        fontFamily: "Inter",
-        marginBottom: "4px",
-      }}
-    >
-      {label}
-      {!isViewMode && required && (
-        <span style={{ color: "red", fontWeight: 700 }}> *</span>
-      )}
-    </Text>
-  );
-
   return (
     <>
       <Box
@@ -977,22 +961,22 @@ function DestinationCreate() {
                     <Stack gap={0}>
                       <Grid w="100%" gutter="sm" py="sm" style={{position:"sticky",zIndex:100, top: 88, backgroundColor:"white"}}>
                         <Grid.Col span={2}>
-                          <RequiredLabel label="Customer Name" required={false}/>
+                          <RequiredLabel isViewMode={isViewMode} label="Customer Name" required={false}/>
                         </Grid.Col>
                         <Grid.Col span={2}>
-                          <RequiredLabel label="Charge Name" required />
+                          <RequiredLabel isViewMode={isViewMode} label="Charge Name" required />
                         </Grid.Col>
                         <Grid.Col span={2}>
-                          <RequiredLabel label="Carrier" required />
+                          <RequiredLabel isViewMode={isViewMode} label="Carrier" required />
                         </Grid.Col>
                         <Grid.Col span={!isViewMode ? 1.6 : 2}>
-                          <RequiredLabel label="Currency" required />
+                          <RequiredLabel isViewMode={isViewMode} label="Currency" required />
                         </Grid.Col>
                         <Grid.Col span={!isViewMode ? 1.6 : 2}>
-                          <RequiredLabel label="Unit" required />
+                          <RequiredLabel isViewMode={isViewMode} label="Unit" required />
                         </Grid.Col>
                         <Grid.Col span={!isViewMode ? 1.6 : 2}>
-                          <RequiredLabel label="Rate" required />
+                          <RequiredLabel isViewMode={isViewMode} label="Rate" required />
                         </Grid.Col>
                         {!isViewMode && (
                           <Grid.Col span={1}>
