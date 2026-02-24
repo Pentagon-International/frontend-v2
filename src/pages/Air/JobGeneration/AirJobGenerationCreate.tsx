@@ -347,7 +347,7 @@ function AirJobGenerationCreate() {
     setActive((current) => current + 1);
   };
 
-  const handleSubmit = async () => {
+  const handleSaveBooking = async () => {
     if (viewMode) return;
 
     const jobValidation = jobDetailsForm.validate();
@@ -392,48 +392,70 @@ function AirJobGenerationCreate() {
     setIsSubmitting(true);
 
     try {
-      let responseData: { success?: boolean; message?: string };
+      let responseData: { success?: boolean; message?: string } | undefined;
 
-      if (editMode && jobId) {
+      if (jobId) {
         const { putAPICall } = await import("../../../service/putApiCall");
         const putPayload = { id: jobId, ...payload };
         const response = await putAPICall(URL.booking, putPayload, API_HEADER);
         responseData = response as { success?: boolean; message?: string };
 
         if (responseData?.success === true) {
-          ToastNotification({ type: "success", message: "Air job updated successfully" });
+          ToastNotification({
+            type: "success",
+            message: "Booking updated successfully",
+          });
         } else {
           ToastNotification({
             type: "error",
-            message: responseData?.message || "Failed to update job",
+            message: responseData?.message || "Failed to update booking",
           });
         }
       } else {
         const response = await apiCallProtected.post(URL.booking, payload);
-        responseData = response as { success?: boolean; message?: string };
+        responseData = response as { success?: boolean; message?: string; data?: { id?: number; booking_id?: number } } ;
 
         if (responseData?.success === true) {
-          ToastNotification({ type: "success", message: "Air job created successfully" });
+          ToastNotification({
+            type: "success",
+            message: "Booking created successfully",
+          });
+
+          const createdId =
+            (responseData as any)?.data?.id ??
+            (responseData as any)?.id ??
+            (responseData as any)?.data?.booking_id ??
+            (responseData as any)?.booking_id;
+
+          if (createdId) {
+            setJobId(createdId);
+            setEditMode(true);
+            setViewMode(false);
+          }
         } else {
           ToastNotification({
             type: "error",
-            message: responseData?.message || "Failed to create job",
+            message: responseData?.message || "Failed to create booking",
           });
         }
-      }
-
-      if (responseData?.success === true) {
-        navigate("/air/job-generation", { state: { refreshData: true } });
       }
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } }; message?: string };
       ToastNotification({
         type: "error",
-        message: err?.response?.data?.message || err?.message || "Failed to save job",
+        message: err?.response?.data?.message || err?.message || "Failed to save booking",
       });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleGenerateJob = () => {
+    if (!editMode || viewMode) return;
+    ToastNotification({
+      type: "info",
+      message: "Generate Job action will be implemented soon.",
+    });
   };
 
   const handleSelectBooking = (bookingId: number, checked: boolean) => {
@@ -534,10 +556,10 @@ function AirJobGenerationCreate() {
     <Box p="md" maw={1200} mx="auto">
       <Text size="xl" fw={600} c="#105476" mb="lg">
         {mode === "view"
-          ? "View Air Job"
+          ? "View Air Export Job Generation"
           : mode === "edit"
-            ? "Edit Air Job"
-            : "Create Air Job"}
+            ? "Edit Air Export Job Generation"
+            : "Create Air Export Job Generation"}
       </Text>
 
       <Stepper
@@ -568,10 +590,14 @@ function AirJobGenerationCreate() {
                   apiEndpoint={URL.portMaster}
                   placeholder="Type origin code or name"
                   searchFields={["port_code", "port_name"]}
-                  displayFormat={(item: { port_code: string; port_name: string }) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
+                  dropdownZIndex={310}
+                  displayFormat={(item: Record<string, unknown>) => {
+                    const port = item as { port_code: string; port_name: string };
+                    return {
+                      value: String(port.port_code),
+                      label: `${port.port_name} (${port.port_code})`,
+                    };
+                  }}
                   value={jobDetailsForm.values.origin_code}
                   displayValue={
                     jobDetailsForm.values.origin_name
@@ -595,10 +621,14 @@ function AirJobGenerationCreate() {
                   apiEndpoint={URL.portMaster}
                   placeholder="Type destination code or name"
                   searchFields={["port_code", "port_name"]}
-                  displayFormat={(item: { port_code: string; port_name: string }) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
+                  dropdownZIndex={310}
+                  displayFormat={(item: Record<string, unknown>) => {
+                    const port = item as { port_code: string; port_name: string };
+                    return {
+                      value: String(port.port_code),
+                      label: `${port.port_name} (${port.port_code})`,
+                    };
+                  }}
                   value={jobDetailsForm.values.destination_code}
                   displayValue={
                     jobDetailsForm.values.destination_name
@@ -727,9 +757,20 @@ function AirJobGenerationCreate() {
               >
                 Back to List
               </Button>
-              <Button onClick={handleNext} color="#105476">
-                Next
-              </Button>
+              <Group gap="sm">
+                <Button onClick={handleNext} color="#105476">
+                  Next
+                </Button>
+                {editMode && !isReadOnly && (
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={handleGenerateJob}
+                  >
+                    Generate Job
+                  </Button>
+                )}
+              </Group>
             </Group>
           </Box>
         </Stepper.Step>
@@ -751,10 +792,14 @@ function AirJobGenerationCreate() {
                         apiEndpoint={URL.portMaster}
                         placeholder="From"
                         searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: { port_code: string; port_name: string }) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
+                        dropdownZIndex={310}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const port = item as { port_code: string; port_name: string };
+                          return {
+                            value: String(port.port_code),
+                            label: `${port.port_name} (${port.port_code})`,
+                          };
+                        }}
                         value={routingForm.values.routings[index].from_code}
                         displayValue={
                           routingForm.values.routings[index].from_name
@@ -778,10 +823,14 @@ function AirJobGenerationCreate() {
                         apiEndpoint={URL.portMaster}
                         placeholder="To"
                         searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: { port_code: string; port_name: string }) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
+                        dropdownZIndex={310}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const port = item as { port_code: string; port_name: string };
+                          return {
+                            value: String(port.port_code),
+                            label: `${port.port_name} (${port.port_code})`,
+                          };
+                        }}
                         value={routingForm.values.routings[index].to_code}
                         displayValue={
                           routingForm.values.routings[index].to_name
@@ -922,9 +971,20 @@ function AirJobGenerationCreate() {
               <Button variant="default" onClick={() => setActive((c) => c - 1)}>
                 Back
               </Button>
-              <Button onClick={handleNext} color="#105476">
-                Next
-              </Button>
+              <Group gap="sm">
+                <Button onClick={handleNext} color="#105476">
+                  Next
+                </Button>
+                {editMode && !isReadOnly && (
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={handleGenerateJob}
+                  >
+                    Generate Job
+                  </Button>
+                )}
+              </Group>
             </Group>
           </Box>
         </Stepper.Step>
@@ -973,15 +1033,26 @@ function AirJobGenerationCreate() {
                 Back
               </Button>
               {!isReadOnly ? (
-                <Button
-                  rightSection={<IconCheck size={16} />}
-                  onClick={handleSubmit}
-                  color="teal"
-                  loading={isSubmitting}
-                  disabled={isSubmitting}
-                >
-                  Generate Job
-                </Button>
+                <Group gap="sm">
+                  <Button
+                    rightSection={<IconCheck size={16} />}
+                    onClick={handleSaveBooking}
+                    color="teal"
+                    loading={isSubmitting}
+                    disabled={isSubmitting}
+                  >
+                    {jobId ? "Update Booking" : "Create Booking"}
+                  </Button>
+                  {editMode && (
+                    <Button
+                      variant="outline"
+                      color="#105476"
+                      onClick={handleGenerateJob}
+                    >
+                      Generate Job
+                    </Button>
+                  )}
+                </Group>
               ) : (
                 <Button
                   variant="outline"
