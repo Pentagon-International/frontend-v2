@@ -392,9 +392,35 @@ const Navbar = ({
                 >
                   <SubNavLink
                     parent="Transportation"
-                    label="Air Export Generation"
+                    label="Air Export Booking"
                     icon={IconPlaneDeparture}
-                    path="/air/export-generation"
+                    path="/air/export-booking"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Air Import Booking"
+                    icon={IconPlaneArrival}
+                    path="/air/import-booking"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Air Export Job Generation"
+                    icon={IconPlaneDeparture}
+                    path="/air/job-generation"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
@@ -431,32 +457,6 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Transportation"
-                    label="Air Export Booking"
-                    icon={IconPlaneDeparture}
-                    path="/air/export-booking"
-                    collapsibles={{
-                      setIsSalesOpen,
-                      setIsTariffOpen,
-                      setIsCustomerServiceOpen,
-                      setIsAirOpen,
-                      setIsSeaExportOpen,
-                    }}
-                  />
-                  <SubNavLink
-                    parent="Transportation"
-                    label="Air Import Booking"
-                    icon={IconPlaneArrival}
-                    path="/air/import-booking"
-                    collapsibles={{
-                      setIsSalesOpen,
-                      setIsTariffOpen,
-                      setIsCustomerServiceOpen,
-                      setIsAirOpen,
-                      setIsSeaExportOpen,
-                    }}
-                  />
-                  <SubNavLink
-                    parent="Transportation"
                     label="Air Import to Export Booking"
                     icon={IconPlaneInflight}
                     path="/air/import-to-export-booking"
@@ -479,9 +479,9 @@ const Navbar = ({
                 >
                   <SubNavLink
                     parent="Transportation"
-                    label="FCL Export Generation"
+                    label="Ocean Export Booking"
                     icon={IconFerry}
-                    path="/SeaExport/fcl-export-generation"
+                    path="/SeaExport/export-booking"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
@@ -492,9 +492,35 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Transportation"
-                    label="LCL Export Generation"
+                    label="Ocean Import Booking"
+                    icon={IconFerryFilled}
+                    path="/SeaExport/import-booking"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="FCL Job Generation"
                     icon={IconFerry}
-                    path="/SeaExport/lcl-export-generation"
+                    path="/SeaExport/fcl-job-generation"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="LCL Job Generation"
+                    icon={IconFerry}
+                    path="/SeaExport/lcl-job-generation"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
@@ -521,32 +547,6 @@ const Navbar = ({
                     label="Ocean Import Job"
                     icon={IconFerryFilled}
                     path="/SeaExport/import-job"
-                    collapsibles={{
-                      setIsSalesOpen,
-                      setIsTariffOpen,
-                      setIsCustomerServiceOpen,
-                      setIsAirOpen,
-                      setIsSeaExportOpen,
-                    }}
-                  />
-                  <SubNavLink
-                    parent="Transportation"
-                    label="Ocean Export Booking"
-                    icon={IconFerry}
-                    path="/SeaExport/export-booking"
-                    collapsibles={{
-                      setIsSalesOpen,
-                      setIsTariffOpen,
-                      setIsCustomerServiceOpen,
-                      setIsAirOpen,
-                      setIsSeaExportOpen,
-                    }}
-                  />
-                  <SubNavLink
-                    parent="Transportation"
-                    label="Ocean Import Booking"
-                    icon={IconFerryFilled}
-                    path="/SeaExport/import-booking"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
