@@ -10,6 +10,7 @@ import {
   Checkbox,
   Center,
   Loader,
+  Select,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -106,7 +107,7 @@ const containerDetailsSchema = yup.object({
     .min(1, "At least one container detail is required"),
 });
 
-function SeaExportCreate() {
+function OceanJobGenerationCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -160,6 +161,10 @@ function SeaExportCreate() {
     new Set()
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Map booking id -> selected container number (for stepper 3 payload later)
+  const [bookingContainerMap, setBookingContainerMap] = useState<
+    Record<number, string>
+  >({});
 
   // Job Details Form - Initialize with serviceType immediately
   const jobDetailsForm = useForm<JobDetailsForm>({
@@ -555,6 +560,12 @@ function SeaExportCreate() {
       newSelection.add(bookingId);
     } else {
       newSelection.delete(bookingId);
+      // Clear container selection when booking is unselected
+      setBookingContainerMap((prev) => {
+        const updated = { ...prev };
+        delete updated[bookingId];
+        return updated;
+      });
     }
     setSelectedBookings(newSelection);
   };
@@ -565,72 +576,146 @@ function SeaExportCreate() {
       setSelectedBookings(allIds);
     } else {
       setSelectedBookings(new Set());
+      // Clear all container selections when none are selected
+      setBookingContainerMap({});
     }
+  };
+
+  // Container numbers from Equipments stepper (step 2) for dropdown in step 3
+  const containerNumberOptions = useMemo(() => {
+    return containerForm.values.containers
+      .filter((c) => c.container_number?.trim())
+      .map((c) => ({ value: c.container_number.trim(), label: c.container_number.trim() }));
+  }, [containerForm.values.containers]);
+
+  // Show Container Number column only when at least one container number is given in Equipments
+  const showContainerNumberColumn = containerNumberOptions.length >= 1;
+
+  const handleContainerNumberChange = (bookingId: number, value: string | null) => {
+    setBookingContainerMap((prev) => ({
+      ...prev,
+      [bookingId]: value ?? "",
+    }));
   };
 
   // Booking list columns
   const bookingColumns = useMemo<MRT_ColumnDef<BookingData>[]>(
-    () => [
-      {
-        id: "select",
-        header: "Select",
-        size: 60,
-        Cell: ({ row }) => (
-          <Checkbox
-            checked={selectedBookings.has(row.original.id)}
-            onChange={(event) =>
-              handleSelectBooking(row.original.id, event.currentTarget.checked)
+    () => {
+      const baseColumns: MRT_ColumnDef<BookingData>[] = [
+        {
+          id: "select",
+          header: "Select",
+          size: 60,
+          Cell: ({ row }) => (
+            <Checkbox
+              checked={selectedBookings.has(row.original.id)}
+              onChange={(event) =>
+                handleSelectBooking(row.original.id, event.currentTarget.checked)
+              }
+              disabled={mode === "view"}
+            />
+          ),
+          Header: () => (
+            <Checkbox
+              checked={
+                selectedBookings.size === bookingList.length &&
+                bookingList.length > 0
+              }
+              indeterminate={
+                selectedBookings.size > 0 &&
+                selectedBookings.size < bookingList.length
+              }
+              onChange={(event) => handleSelectAll(event.currentTarget.checked)}
+              disabled={mode === "view"}
+            />
+          ),
+        },
+        {
+          accessorKey: "shipment_code",
+          header: "Booking ID",
+          size: 120,
+        },
+        {
+          accessorKey: "service_type",
+          header: "Service Type",
+          size: 100,
+        },
+        {
+          accessorKey: "customer_name",
+          header: "Customer Name",
+          size: 200,
+        },
+        {
+          accessorKey: "origin_name",
+          header: "Origin",
+          size: 120,
+        },
+        {
+          accessorKey: "destination_name",
+          header: "Destination",
+          size: 120,
+        },
+        {
+          accessorKey: "freight",
+          header: "Freight",
+          size: 100,
+        },
+      ];
+
+      if (showContainerNumberColumn) {
+        baseColumns.push({
+          id: "container_number",
+          header: "Container Number",
+          size: 180,
+          Cell: ({ row }) => {
+            const isSelected = selectedBookings.has(row.original.id);
+
+            if (!isSelected) {
+              // For non-selected bookings, show a disabled field with no options
+              return (
+                <Select
+                  size="xs"
+                  placeholder="-"
+                  data={[]}
+                  value={null}
+                  disabled
+                  styles={{
+                    input: { fontSize: "12px", minHeight: 28 },
+                  }}
+                />
+              );
             }
-            disabled={mode === "view"}
-          />
-        ),
-        Header: () => (
-          <Checkbox
-            checked={
-              selectedBookings.size === bookingList.length &&
-              bookingList.length > 0
-            }
-            indeterminate={
-              selectedBookings.size > 0 &&
-              selectedBookings.size < bookingList.length
-            }
-            onChange={(event) => handleSelectAll(event.currentTarget.checked)}
-            disabled={mode === "view"}
-          />
-        ),
-      },
-      {
-        accessorKey: "shipment_code",
-        header: "Booking ID",
-        size: 120,
-      },
-      {
-        accessorKey: "service_type",
-        header: "Service Type",
-        size: 100,
-      },
-      {
-        accessorKey: "customer_name",
-        header: "Customer Name",
-        size: 200,
-      },
-      {
-        accessorKey: "origin_name",
-        header: "Origin",
-        size: 120,
-      },
-      {
-        accessorKey: "destination_name",
-        header: "Destination",
-        size: 120,
-      },
-      {
-        accessorKey: "freight",
-        header: "Freight",
-        size: 100,
-      },
-    ],
-    [selectedBookings, bookingList, mode]
+
+            return (
+              <Select
+                size="xs"
+                placeholder="Select container"
+                data={containerNumberOptions}
+                value={bookingContainerMap[row.original.id] || null}
+                onChange={(value) =>
+                  handleContainerNumberChange(row.original.id, value)
+                }
+                clearable
+                disabled={mode === "view"}
+                styles={{
+                  input: { fontSize: "12px", minHeight: 28 },
+                }}
+              />
+            );
+          },
+        });
+      }
+
+      return baseColumns;
+    },
+    [
+      selectedBookings,
+      bookingList,
+      mode,
+      showContainerNumberColumn,
+      containerNumberOptions,
+      bookingContainerMap,
+    ]
   );
 
   const bookingTable = useMantineReactTable({
@@ -688,10 +773,10 @@ function SeaExportCreate() {
     <Box p="md" maw={1200} mx="auto">
       <Text size="xl" fw={600} c="#105476" mb="lg">
         {mode === "view"
-          ? "View Ocean Export Job Generation"
+          ? "View Ocean Job Generation"
           : mode === "edit"
-            ? "Edit Ocean Export Job Generation"
-            : "Create Ocean Export Job Generation"}
+            ? "Edit Ocean Job Generation"
+            : "Create Ocean Job Generation"}
       </Text>
 
       <Stepper
@@ -1039,25 +1124,43 @@ function SeaExportCreate() {
             <Text size="md" fw={600} c="#105476" mb="md">
               Equipments:
             </Text>
-            <Stack gap="md">
+
+            {/* Header Row for Equipments */}
+            <Grid mb="xs">
+              <Grid.Col span={2.4}>
+                <Text size="sm" fw={500} c="#105476">
+                  Container Type
+                </Text>
+              </Grid.Col>
+              <Grid.Col span={2.4}>
+                <Text size="sm" fw={500} c="#105476">
+                  Container Number
+                </Text>
+              </Grid.Col>
+              <Grid.Col span={2.4}>
+                <Text size="sm" fw={500} c="#105476">
+                  Custom Seal Number
+                </Text>
+              </Grid.Col>
+              <Grid.Col span={2.4}>
+                <Text size="sm" fw={500} c="#105476">
+                  Actual Seal Number
+                </Text>
+              </Grid.Col>
+              <Grid.Col span={0.4}>
+                <Text size="sm" fw={500} c="#105476">
+                  Actions
+                </Text>
+              </Grid.Col>
+            </Grid>
+
+            {/* Dynamic Equipment Rows */}
+            <Stack gap="xs">
               {containerForm.values.containers.map((_, index) => (
                 <Box key={index}>
                   <Grid>
                     <Grid.Col span={2.4}>
-                      <TextInput
-                        label="Container Number"
-                        withAsterisk
-                        placeholder="Enter container number"
-                        {...containerForm.getInputProps(
-                          `containers.${index}.container_number`
-                        )}
-                        disabled={isReadOnly}
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
                       <Dropdown
-                        label="Container Type"
                         withAsterisk
                         placeholder="Select container type"
                         searchable
@@ -1072,7 +1175,17 @@ function SeaExportCreate() {
 
                     <Grid.Col span={2.4}>
                       <TextInput
-                        label="Custom Seal Number"
+                        withAsterisk
+                        placeholder="Enter container number"
+                        {...containerForm.getInputProps(
+                          `containers.${index}.container_number`
+                        )}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+
+                    <Grid.Col span={2.4}>
+                      <TextInput
                         placeholder="Enter custom seal number"
                         {...containerForm.getInputProps(
                           `containers.${index}.custom_seal_number`
@@ -1083,7 +1196,6 @@ function SeaExportCreate() {
 
                     <Grid.Col span={2.4}>
                       <TextInput
-                        label="Actual Seal Number"
                         placeholder="Enter actual seal number"
                         {...containerForm.getInputProps(
                           `containers.${index}.actual_seal_number`
@@ -1098,7 +1210,7 @@ function SeaExportCreate() {
                           <Button
                             variant="light"
                             color="#105476"
-                            mt={25}
+                            mt={4}
                             leftSection={<IconPlus size={16} />}
                             onClick={() => {
                               // Add new container at the end (bottom)
@@ -1122,7 +1234,7 @@ function SeaExportCreate() {
                           <Button
                             variant="light"
                             color="red"
-                            mt={25}
+                            mt={4}
                             onClick={() => {
                               containerForm.removeListItem("containers", index);
                             }}
@@ -1247,4 +1359,4 @@ function SeaExportCreate() {
   );
 }
 
-export default SeaExportCreate;
+export default OceanJobGenerationCreate;

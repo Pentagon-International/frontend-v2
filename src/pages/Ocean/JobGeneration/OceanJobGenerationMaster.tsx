@@ -44,7 +44,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 
 // Type definitions based on API response
-type SeaExportJobData = {
+type OceanJobData = {
   id: number;
   service: string;
   origin_code_read: string;
@@ -83,7 +83,7 @@ type FilterState = {
   etd: Date | null;
 };
 
-function SeaExportMaster() {
+function OceanJobGenerationMaster() {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -254,7 +254,7 @@ function SeaExportMaster() {
     });
   };
 
-  const handleEdit = (job: SeaExportJobData) => {
+  const handleEdit = (job: OceanJobData) => {
     const pathname = location.pathname.toLowerCase();
     if (pathname.includes("lcl-job-generation")) {
       navigate("/SeaExport/lcl-job-generation/edit", {
@@ -267,7 +267,7 @@ function SeaExportMaster() {
     }
   };
 
-  const handleView = (job: SeaExportJobData) => {
+  const handleView = (job: OceanJobData) => {
     const pathname = location.pathname.toLowerCase();
     if (pathname.includes("lcl-job-generation")) {
       navigate("/SeaExport/lcl-job-generation/view", {
@@ -280,7 +280,7 @@ function SeaExportMaster() {
     }
   };
 
-  const columns = useMemo<MRT_ColumnDef<SeaExportJobData>[]>(
+  const columns = useMemo<MRT_ColumnDef<OceanJobData>[]>(
     () => [
       {
         accessorKey: "sno",
@@ -835,4 +835,4 @@ function SeaExportMaster() {
   );
 }
 
-export default SeaExportMaster;
+export default OceanJobGenerationMaster;

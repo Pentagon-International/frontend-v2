@@ -93,9 +93,9 @@ import ImportToExportBooking from "./customer-service/ImportToExportBooking";
 import Pipeline from "./dashboard/Pipeline";
 import PipelineCreate from "./dashboard/PipelineCreate";
 
-// Transportation - Sea Export
-import SeaExportMaster from "./Transportation/SeaExport";
-import SeaExportCreate from "./Transportation/SeaExport/SeaExportCreate";
+// Transportation - Ocean Job Generation (formerly Sea Export)
+import OceanJobGenerationMaster from "./Ocean/JobGeneration/OceanJobGenerationMaster";
+import OceanJobGenerationCreate from "./Ocean/JobGeneration/OceanJobGenerationCreate";
 import ImportJobMaster from "./Transportation/ImportJob";
 import ImportJobCreate from "./Transportation/ImportJob/ImportJobCreate";
 import HouseCreate from "./Transportation/ImportJob/HouseCreate";
@@ -252,8 +252,8 @@ export {
   ImportToExportBooking,
   Pipeline,
   PipelineCreate,
-  SeaExportMaster,
-  SeaExportCreate,
+  OceanJobGenerationMaster,
+  OceanJobGenerationCreate,
   ImportJobMaster,
   ImportJobCreate,
   HouseCreate,

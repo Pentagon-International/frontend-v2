@@ -86,8 +86,8 @@ import {
   ImportShipmentCreate,
   ImportShipmentEdit,
   ImportToExportBooking,
-  SeaExportMaster,
-  SeaExportCreate,
+  OceanJobGenerationMaster,
+  OceanJobGenerationCreate,
   ImportJobMaster,
   ImportJobCreate,
   HouseCreate,
@@ -214,16 +214,16 @@ const NavigationRoutes = () => {
             element={<Navigate to="/SeaExport/fcl-job-generation" replace />}
           />
           <Route path="fcl-job-generation">
-            <Route index element={<SeaExportMaster />} />
-            <Route path="create" element={<SeaExportCreate />} />
-            <Route path="edit" element={<SeaExportCreate />} />
-            <Route path="view" element={<SeaExportCreate />} />
+            <Route index element={<OceanJobGenerationMaster />} />
+            <Route path="create" element={<OceanJobGenerationCreate />} />
+            <Route path="edit" element={<OceanJobGenerationCreate />} />
+            <Route path="view" element={<OceanJobGenerationCreate />} />
           </Route>
           <Route path="lcl-job-generation">
-            <Route index element={<SeaExportMaster />} />
-            <Route path="create" element={<SeaExportCreate />} />
-            <Route path="edit" element={<SeaExportCreate />} />
-            <Route path="view" element={<SeaExportCreate />} />
+            <Route index element={<OceanJobGenerationMaster />} />
+            <Route path="create" element={<OceanJobGenerationCreate />} />
+            <Route path="edit" element={<OceanJobGenerationCreate />} />
+            <Route path="view" element={<OceanJobGenerationCreate />} />
           </Route>
           <Route path="fcl-export-generation">
             <Route index element={<FCLExportGenerationMaster />} />
@@ -335,10 +335,6 @@ const NavigationRoutes = () => {
             path="import-to-export-booking"
             element={<ImportToExportBooking />}
           />
-        </Route>
-        <Route path="transportation">
-          <Route path="sea-export" element={<SeaExportMaster />} />
-          <Route path="sea-export/create" element={<SeaExportCreate />} />
         </Route>
         <Route
           path="tariff"
