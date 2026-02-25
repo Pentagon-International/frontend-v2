@@ -162,6 +162,7 @@ interface FormValues {
   delivery_from_code: string;
   delivery_address_id: string;
   planned_delivery_date: Date;
+  actual_delivery_date: Date | null;
 }
 
 // Yup validation schema
@@ -257,6 +258,7 @@ const validationSchema = yup.object({
   delivery_from_code: yup.string(),
   delivery_address_id: yup.string(),
   planned_delivery_date: yup.date(),
+  actual_delivery_date: yup.date(),
 });
 
 // Data fetching functions
@@ -419,6 +421,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     {
       id: 1,
       charge_name: "",
+      pp_cc: "",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -484,6 +487,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     useState<Array<{ value: string; label: string }>>([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
+
+  const defaultCurrency = (() => {
+    const userData = localStorage.getItem("user");
+    if (!userData) return "";
+
+    const parsed = JSON.parse(userData);
+
+    return (
+      parsed?.branches?.find((b: any) => b.is_default)?.currency
+        ?.currency_code || ""
+    );
+  })();
 
   // Data fetching queries
   const { data: termsOfShipment = [] } = useQuery({
@@ -599,6 +614,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     const newCharge = {
       id: charges.length + 1,
       charge_name: "",
+      pp_cc: "",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -779,6 +795,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       planned_delivery_date: data.planned_delivery_date
         ? new Date(String(data.planned_delivery_date))
         : new Date(),
+      actual_delivery_date: data.actual_delivery_date
+        ? new Date(String(data.actual_delivery_date))
+        : new Date(),
     };
   };
 
@@ -884,6 +903,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       delivery_from_code: "",
       delivery_address_id: "",
       planned_delivery_date: new Date(),
+      actual_delivery_date: "",
 
       // Merge with initial data when provided (edit mode or create-from-quotation)
       ...(initialData ? mapInitialDataToFormValues(initialData) : {}),
@@ -1196,6 +1216,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               : Number(charge.id)
             : index + 1,
         charge_name: String(charge.charge_name ?? ""),
+        pp_cc: String(charge.pp_cc ?? ""),
         currency_country_code: String(
           charge.currency_country_code ?? charge.currency ?? "",
         ),
@@ -1434,6 +1455,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         (charge: Record<string, unknown>, index: number) => ({
           id: index + 1,
           charge_name: String(charge.charge_name || ""),
+          pp_cc: String(charge.pp_cc ?? ""),
           currency_country_code: String(
             charge.currency_country_code || charge.currency || "",
           ),
@@ -1726,6 +1748,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         delivery_from_code: form.values.delivery_from_code,
         delivery_address_id: form.values.delivery_address_id || "0",
         planned_delivery_date: formatDate(form.values.planned_delivery_date),
+        actual_delivery_date: formatDate(form.values.actual_delivery_date),
 
         routing_details: form.values.routingDetails.map((route) => ({
           move_type: route.move_type,
@@ -1741,6 +1764,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         quotation_id: quotationId,
         rate_details: charges.map((charge) => ({
           charge_name: charge.charge_name,
+          pp_cc: charge.pp_cc || "",
           currency_country_code: charge.currency_country_code,
           roe: parseFloat(charge.roe) || 1,
           unit: charge.unit,
@@ -2446,7 +2470,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           displayValue={
                             form.values.routingDetails[index]?.carrier_name &&
                             form.values.routingDetails[index]?.carrier_code
-                              ? `${form.values.routingDetails[index].carrier_name} (${form.values.routingDetails[index].carrier_code})`
+                              ? `${form.values.routingDetails[index].carrier_name}`
                               : undefined
                           }
                           onChange={(value, selectedData) => {
@@ -3598,9 +3622,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Actual Pickup Date"
                     placeholder="YYYY-MM-DD"
                     value={form.values.actual_pickup_date}
-                    onChange={(date) => {
-                      form.setFieldValue("actual_pickup_date", date);
-                    }}
+                    onChange={(date) =>
+                      form.setFieldValue(
+                        "actual_pickup_date",
+                        date || new Date(),
+                      )
+                    }
+                    error={form.errors.actual_pickup_date}
                   />
                 </Grid.Col>
                 <Grid.Col span={3}>
@@ -3739,8 +3767,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="Actual Delivery Date"
                     placeholder="YYYY-MM-DD"
-                    value={null}
-                    onChange={() => {}}
+                    value={form.values.actual_delivery_date}
+                    onChange={(date) =>
+                      form.setFieldValue(
+                        "actual_delivery_date",
+                        date || new Date(),
+                      )
+                    }
+                    error={form.errors.actual_delivery_date}
                   />
                 </Grid.Col>
               </Grid>
@@ -3783,6 +3817,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                               (charge: QuotationCharge, index: number) => ({
                                 id: index + 1,
                                 charge_name: String(charge.charge_name || ""),
+                                pp_cc: charge.pp_cc
+                                  ? String(charge.pp_cc)
+                                  : "",
                                 currency_country_code: String(
                                   charge.currency || "",
                                 ),
@@ -3853,19 +3890,22 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     }}
                     gutter="sm"
                   >
-                    <Grid.Col span={1.85}>
+                    <Grid.Col span={1.5}>
                       <RequiredLabel label="Charge Name" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.95}>
+                      <RequiredLabel label="Prepaid/Collect" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={0.8}>
                       <RequiredLabel label="Currency" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.8}>
                       <RequiredLabel label="ROE" required={false} />
                     </Grid.Col>
                     <Grid.Col span={1}>
                       <RequiredLabel label="Unit" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.8}>
                       <RequiredLabel label="No of Units" required={false} />
                     </Grid.Col>
                     <Grid.Col span={1}>
@@ -3877,13 +3917,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     <Grid.Col span={1}>
                       <RequiredLabel label="Cost Per Unit" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
-                      <RequiredLabel label="Total Sell" required={false} />
+                    <Grid.Col span={1.05}>
+                      <RequiredLabel label={`Total Sell (${defaultCurrency})`} required={false} />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <RequiredLabel label="Total Cost" required={false} />
+                      <RequiredLabel label={`Total Cost (${defaultCurrency})`} required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1.15}>
+                    <Grid.Col span={1.1}>
                       <RequiredLabel label="Actions" required={false} />
                     </Grid.Col>
                   </Grid>
@@ -3892,7 +3932,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 {charges.map((charge, index) => (
                   <Box key={charge.id}>
                     <Grid gutter="sm">
-                      <Grid.Col span={1.85}>
+                      <Grid.Col span={1.5}>
                         <FormTextInput
                           placeholder="Charge Name"
                           value={charge.charge_name}
@@ -3908,6 +3948,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <Dropdown
+                          placeholder="Prepaid/Collect"
+                          searchable
+                          data={["Prepaid", "Collect"]}
+                          value={charge.pp_cc}
+                          onChange={(value) =>
+                            updateCharge(charge.id, "pp_cc", value || "")
+                          }
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={0.8}>
+                        <Dropdown
                           placeholder="Select Currency"
                           searchable
                           value={charge.currency_country_code}
@@ -3922,7 +3974,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <FormTextInput
                           placeholder="ROE"
                           value={charge.roe}
@@ -3948,7 +4000,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <FormTextInput
                           placeholder="0"
                           value={charge.no_of_units}
@@ -4018,7 +4070,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.15}>
+                      <Grid.Col span={1.1}>
                         <Group gap="xs">
                           {index === charges.length - 1 && (
                             <Button
@@ -4058,7 +4110,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   paddingTop: "0.5rem",
                 }}
               >
-                <Grid.Col span={1} offset={7.85} pl={8}>
+                <Grid.Col span={1} offset={7.9} pl={8}>
                   <Text size="sm" fw={600} mb="md" c="#105476">
                     Total :
                   </Text>

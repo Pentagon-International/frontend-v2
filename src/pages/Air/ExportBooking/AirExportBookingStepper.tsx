@@ -409,6 +409,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     Array<{
       id?: number | string;
       charge_name: string;
+      pp_cc: string;
       currency_country_code: string;
       roe: string;
       unit: string;
@@ -423,6 +424,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     {
       id: 1,
       charge_name: "",
+      pp_cc: "",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -488,6 +490,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     useState<Array<{ value: string; label: string }>>([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
+
+  const defaultCurrency = (() => {
+    const userData = localStorage.getItem("user");
+    if (!userData) return "";
+
+    const parsed = JSON.parse(userData);
+
+    return (
+      parsed?.branches?.find((b: any) => b.is_default)?.currency
+        ?.currency_code || ""
+    );
+  })();
 
   // Auto-set service to AIR on mount
   useEffect(() => {
@@ -604,11 +618,12 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             );
           }
 
-          if (field === "no_of_units" || field === "cost_per_unit") {
+          if (field === "no_of_units" || field === "cost_per_unit" || field === "roe") {
             const noOfUnits = parseFloat(updatedCharge.no_of_units) || 0;
             const costPerUnit = parseFloat(updatedCharge.cost_per_unit) || 0;
+            const roe = parseFloat(updatedCharge.roe) || 1;
 
-            updatedCharge.total_cost = (noOfUnits * costPerUnit).toFixed(2);
+            updatedCharge.total_cost = (noOfUnits * costPerUnit * roe).toFixed(2);
           }
 
           return updatedCharge;
@@ -622,6 +637,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     const newCharge = {
       id: charges.length + 1,
       charge_name: "",
+      pp_cc: "",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -1062,6 +1078,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         (charge: QuotationCharge, index: number) => ({
           id: index + 1,
           charge_name: String(charge.charge_name || ""),
+          pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
           currency_country_code: String(charge.currency || ""),
           roe: charge.roe ? String(charge.roe) : "",
           unit: String(charge.unit || ""),
@@ -1139,6 +1156,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const mappedCharges = (jobData.rate_details as Array<Record<string, unknown>>).map((charge: Record<string, unknown>, index: number) => ({
         id: charge.id ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : index + 1,
         charge_name: String(charge.charge_name ?? ""),
+        pp_cc: String(charge.pp_cc ?? ""),
         currency_country_code: String(charge.currency_country_code ?? charge.currency ?? ""),
         roe: charge.roe != null ? String(charge.roe) : "",
         unit: String(charge.unit ?? ""),
@@ -1359,6 +1377,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 : Number(charge.id)
               : index + 1,
           charge_name: String(charge.charge_name || ""),
+          pp_cc: String(charge.pp_cc ?? ""),
           currency_country_code: String(
             charge.currency_country_code || charge.currency || ""
           ),
@@ -1745,6 +1764,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         rate_details: charges.map((charge) => {
           const chargePayload: Record<string, unknown> = {
             charge_name: charge.charge_name,
+            pp_cc: charge.pp_cc || "",
             currency_country_code: charge.currency_country_code,
             roe: parseFloat(charge.roe) || 1,
             unit: charge.unit,
@@ -2374,7 +2394,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           displayValue={
                             form.values.routingDetails[index]?.carrier_name &&
                             form.values.routingDetails[index]?.carrier_code
-                              ? `${form.values.routingDetails[index].carrier_name} (${form.values.routingDetails[index].carrier_code})`
+                              ? `${form.values.routingDetails[index].carrier_name}`
                               : undefined
                           }
                           onChange={(value, selectedData) => {
@@ -3684,6 +3704,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                               (charge: QuotationCharge, index: number) => ({
                                 id: index + 1,
                                 charge_name: String(charge.charge_name || ""),
+                                pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
                                 currency_country_code: String(
                                   charge.currency || ""
                                 ),
@@ -3754,19 +3775,22 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     }}
                     gutter="sm"
                   >
-                    <Grid.Col span={1.85}>
+                    <Grid.Col span={1.5}>
                       <RequiredLabel label="Charge Name" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.95}>
+                      <RequiredLabel label="Prepaid/Collect" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={0.8}>
                       <RequiredLabel label="Currency" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.8}>
                       <RequiredLabel label="ROE" required={false} />
                     </Grid.Col>
                     <Grid.Col span={1}>
                       <RequiredLabel label="Unit" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.8}>
                       <RequiredLabel label="No of Units" required={false} />
                     </Grid.Col>
                     <Grid.Col span={1}>
@@ -3779,12 +3803,12 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       <RequiredLabel label="Cost Per Unit" required={false} />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <RequiredLabel label="Total Sell" required={false} />
+                      <RequiredLabel label={`Total Sell (${defaultCurrency})`} required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
-                      <RequiredLabel label="Total Cost" required={false} />
+                    <Grid.Col span={1.05}>
+                      <RequiredLabel label={`Total Cost (${defaultCurrency})`} required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1.15}>
+                    <Grid.Col span={1.1}>
                       <RequiredLabel label="Actions" required={false} />
                     </Grid.Col>
                   </Grid>
@@ -3792,7 +3816,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 {charges.map((charge, index) => (
                   <Box key={charge.id}>
                     <Grid gutter="sm">
-                      <Grid.Col span={1.85}>
+                      <Grid.Col span={1.5}>
                         <FormTextInput
                           placeholder="Charge Name"
                           value={charge.charge_name}
@@ -3810,6 +3834,24 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <Dropdown
+                          placeholder="Prepaid/Collect"
+                          searchable
+                          data={["Prepaid", "Collect"]}
+                          value={charge.pp_cc}
+                          onChange={(value) =>
+                            updateCharge(
+                              typeof charge.id === "number"
+                                ? charge.id
+                                : Number(charge.id) || 0,
+                              "pp_cc",
+                              value || ""
+                            )
+                          }
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={0.8}>
+                        <Dropdown
                           placeholder="Select Currency"
                           searchable
                           value={charge.currency_country_code}
@@ -3826,7 +3868,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <FormTextInput
                           placeholder="ROE"
                           value={charge.roe}
@@ -3860,7 +3902,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <FormTextInput
                           placeholder="0"
                           value={charge.no_of_units}
@@ -3938,7 +3980,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.15}>
+                      <Grid.Col span={1.1}>
                         <Group gap="xs">
                           {index === charges.length - 1 && (
                             <Button
@@ -3986,7 +4028,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   paddingTop: "0.5rem",
                 }}
               >
-                <Grid.Col span={1} offset={7.85} pl={8}>
+                <Grid.Col span={1} offset={7.9} pl={8}>
                   <Text size="sm" fw={600} mb="md" c="#105476">
                     Total :
                   </Text>
