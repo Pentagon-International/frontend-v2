@@ -114,6 +114,8 @@ import AirExportHouseCreate from "./Transportation/AirExportJob/AirHouseCreate";
 // Air Module - Customer Service
 import AirExportGenerationMaster from "./Air/ExportGeneration/AirExportGenerationMaster";
 import AirExportGenerationCreate from "./Air/ExportGeneration/AirExportGenerationCreate";
+import AirJobGenerationMaster from "./Air/JobGeneration/AirJobGenerationMaster";
+import AirJobGenerationCreate from "./Air/JobGeneration/AirJobGenerationCreate";
 import AirExportBookingMaster from "./Air/ExportBooking/AirExportBookingMaster";
 import AirExportBookingCreate from "./Air/ExportBooking/AirExportBookingCreate";
 import AirImportBookingMaster from "./Air/ImportBooking/AirImportBookingMaster";
@@ -269,6 +271,8 @@ export {
   // Air Module - Customer Service
   AirExportGenerationMaster,
   AirExportGenerationCreate,
+  AirJobGenerationMaster,
+  AirJobGenerationCreate,
   AirExportBookingMaster,
   AirExportBookingCreate,
   AirImportBookingMaster,

@@ -6,7 +6,6 @@ import {
   Stack,
   Stepper,
   Text,
-  TextInput,
   Divider,
   Card,
   Badge,
@@ -51,6 +50,8 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
+import FormTextInput from "../../../components/FormTextInput";
+import RequiredLabel from "../../../components/RequiredLabel";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -1874,7 +1875,7 @@ function ExportJobCreate() {
   };
 
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Text size="xl" fw={600} c="#105476">
           {mode === "view"
@@ -1899,42 +1900,146 @@ function ExportJobCreate() {
               {mode === "edit" ? "Update" : "Create"}
             </Button>
             {housingDetails.length > 0 && (
-              <Menu shadow="md" width={200}>
+              <Menu shadow="md" width={220} position="bottom-end">
                 <Menu.Target>
-                  <ActionIcon variant="light" color="#105476" size="lg">
+                  <ActionIcon
+                    variant="subtle"
+                    color="#105476"
+                    size="lg"
+                    styles={{
+                      root: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        border: "1px solid #E9ECEF",
+                        borderRadius: "8px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                    }}
+                  >
                     <IconDotsVertical size={18} />
                   </ActionIcon>
                 </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Label>Preview PDF</Menu.Label>
+
+                <Menu.Dropdown
+                  styles={{
+                    dropdown: {
+                      border: "1px solid #E9ECEF",
+                      borderRadius: "8px",
+                      padding: "8px",
+                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                    },
+                  }}
+                >
+                  <Menu.Label
+                    styles={{
+                      label: {
+                        fontFamily: "Inter",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: "#6B7280",
+                        marginBottom: "6px",
+                      },
+                    }}
+                  >
+                    Preview PDF
+                  </Menu.Label>
+
                   {housingDetails.map((housing, idx) => (
                     <Menu.Item
                       key={idx}
-                      leftSection={<IconEye size={14} />}
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconEye size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
                       onClick={() => generateBillOfLadingPDFPreview(housing)}
                     >
                       Bill Of Lading - {housing.hbl_number || `HBL ${idx + 1}`}
                     </Menu.Item>
                   ))}
+
                   {jobData?.id != null && (
                     <Menu.Item
-                      leftSection={<IconFileInvoice size={14} />}
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconFileInvoice size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
                       onClick={() => {
-                        const allCollectCharges = housingDetails.flatMap(
-                          (house) =>
-                            (house.charges ?? []).filter(
-                              (c) =>
-                                String(c.pp_cc ?? "").trim().toUpperCase() ===
-                                "CC"
-                            )
+                        const allCollectCharges = housingDetails.flatMap((house) =>
+                          (house.charges ?? []).filter(
+                            (c) =>
+                              String(c.pp_cc ?? "").trim().toUpperCase() === "CC"
+                          )
                         );
+
                         const firstHouse = housingDetails[0];
+
                         const housingDetailsForInvoice = [
                           {
                             ...firstHouse,
                             charges: allCollectCharges,
                           },
                         ];
+
                         navigate("/SeaExport/export-job/invoice", {
                           state: {
                             hawbDetails: housingDetailsForInvoice,
@@ -1981,8 +2086,9 @@ function ExportJobCreate() {
               </Text>
             </Group>
             <Grid mb="sm">
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <Dropdown
+                  size="sm"
                   label="Service"
                   required
                   placeholder="Select Service"
@@ -1992,7 +2098,7 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SearchableSelect
                   label="Destination Agent"
                   required
@@ -2053,7 +2159,7 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SearchableSelect
                   label="Origin"
                   required
@@ -2087,7 +2193,7 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SearchableSelect
                   label="Destination"
                   required
@@ -2129,7 +2235,7 @@ function ExportJobCreate() {
 
             {/* Second row for ETD, ETA, ATD, ATA */}
             <Grid mb="xl">
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="ETD"
                   withAsterisk
@@ -2148,7 +2254,7 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="ETA"
                   withAsterisk
@@ -2167,7 +2273,7 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="ATD"
                   placeholder="YYYY-MM-DD"
@@ -2185,7 +2291,7 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2.5}>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="ATA"
                   placeholder="YYYY-MM-DD"
@@ -2213,7 +2319,7 @@ function ExportJobCreate() {
               </Text>
             </Group>
             <Grid mb="xl">
-              <Grid.Col span={2}>
+              <Grid.Col span={2.4}>
                 <SearchableSelect
                   label="Carrier"
                   required
@@ -2254,8 +2360,8 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
-                <TextInput
+              <Grid.Col span={2.4}>
+                <FormTextInput
                   label="Vessel Name"
                   required
                   placeholder="Enter vessel name"
@@ -2264,8 +2370,8 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
-                <TextInput
+              <Grid.Col span={2.4}>
+                <FormTextInput
                   label="Voyage Number"
                   required
                   placeholder="Enter voyage number"
@@ -2273,17 +2379,16 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
-                <TextInput
+              <Grid.Col span={2.4}>
+                <FormTextInput
                   label="MBL Number"
                   required
                   placeholder="Enter MBL number"
                   {...carrierDetailsForm.getInputProps("mbl_number")}
-                  // No maxLength restriction for MBL Number
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
+              <Grid.Col span={2.4}>
                 <SingleDateInput
                   label="MBL Date"
                   placeholder="YYYY-MM-DD"
@@ -2318,8 +2423,9 @@ function ExportJobCreate() {
               {routingsForm.values.routings.map((routing, index) => (
                 <Box key={index}>
                   <Grid>
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <Dropdown
+                        size="sm"
                         label="Transport Type"
                         required
                         placeholder="Select Transport Type"
@@ -2344,7 +2450,7 @@ function ExportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SearchableSelect
                         label="From"
                         required
@@ -2393,7 +2499,7 @@ function ExportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SearchableSelect
                         label="To"
                         required
@@ -2445,8 +2551,8 @@ function ExportJobCreate() {
                     {/* Dynamic field labels based on transport type */}
                     {routing.transport_type === "Sea" && (
                       <>
-                        <Grid.Col span={2}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Vessel"
                             required
                             placeholder="Enter vessel name"
@@ -2467,8 +2573,8 @@ function ExportJobCreate() {
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Voyage Number"
                             required
                             placeholder="Enter voyage number"
@@ -2497,7 +2603,7 @@ function ExportJobCreate() {
 
                     {routing.transport_type === "Air" && (
                       <>
-                        <Grid.Col span={2}>
+                        <Grid.Col span={2.4}>
                           <SearchableSelect
                             label="Carrier"
                             required
@@ -2532,8 +2638,8 @@ function ExportJobCreate() {
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Flight Number"
                             required
                             placeholder="Enter flight number"
@@ -2562,7 +2668,7 @@ function ExportJobCreate() {
 
                     {routing.transport_type === "Road" && (
                       <>
-                        <Grid.Col span={2}>
+                        <Grid.Col span={2.4}>
                           <SearchableSelect
                             label="Carrier"
                             required
@@ -2597,8 +2703,8 @@ function ExportJobCreate() {
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Truck Number"
                             required
                             placeholder="Enter truck number"
@@ -2627,8 +2733,8 @@ function ExportJobCreate() {
 
                     {routing.transport_type === "Rail" && (
                       <>
-                        <Grid.Col span={2}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Carrier"
                             required
                             placeholder="Enter carrier name"
@@ -2654,8 +2760,8 @@ function ExportJobCreate() {
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <TextInput
+                        <Grid.Col span={2.4}>
+                          <FormTextInput
                             label="Rail Number"
                             required
                             placeholder="Enter rail number"
@@ -2682,7 +2788,7 @@ function ExportJobCreate() {
                       </>
                     )}
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ETD"
                         withAsterisk
@@ -2706,7 +2812,7 @@ function ExportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ETA"
                         withAsterisk
@@ -2730,7 +2836,7 @@ function ExportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ATD"
                         placeholder="YYYY-MM-DD"
@@ -2753,7 +2859,7 @@ function ExportJobCreate() {
                       />
                     </Grid.Col>
 
-                    <Grid.Col span={2.5}>
+                    <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ATA"
                         placeholder="YYYY-MM-DD"
@@ -2874,13 +2980,28 @@ function ExportJobCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2.2}>Container Type</Grid.Col>
-                <Grid.Col span={2}>Container No</Grid.Col>
-                <Grid.Col span={1.8}>Actual Seal No</Grid.Col>
-                <Grid.Col span={1.8}>Customs Seal No</Grid.Col>
-                <Grid.Col span={1.7}>Loading Date</Grid.Col>
-                <Grid.Col span={1.7}>Unloading Date</Grid.Col>
-                <Grid.Col span={0.5}></Grid.Col>
+                <Grid.Col span={2.2}>
+                  <RequiredLabel label="Container Type" required={false}/>
+                </Grid.Col>
+                <Grid.Col span={2.2}>
+                  <RequiredLabel label="Container No" required={false}/>
+                </Grid.Col>
+                <Grid.Col span={1.8}>
+                  <RequiredLabel label="Actual Seal No" required={false}/>
+                </Grid.Col>
+                <Grid.Col span={1.8}>
+                  <RequiredLabel label="Customs Seal No" required={false}/>
+                </Grid.Col>
+                <Grid.Col span={1.7}>
+                  <RequiredLabel label="Loading Date" required={false}/>
+                </Grid.Col>
+                <Grid.Col span={1.7}>
+                  <RequiredLabel label="Unloading Date" required={false}/>
+                </Grid.Col>
+                <Grid.Col span={0.6}>
+                  {containerDetailsForm.values.containers.length > 1 && 
+                  <RequiredLabel label="Actions" required={false}/>}
+                </Grid.Col>
               </Grid>
             )}
 
@@ -2906,8 +3027,8 @@ function ExportJobCreate() {
                       }
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
-                    <TextInput
+                  <Grid.Col span={2.2}>
+                    <FormTextInput
                       required
                       placeholder="Container number"
                       maxLength={11}
@@ -2957,7 +3078,7 @@ function ExportJobCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.8}>
-                    <TextInput
+                    <FormTextInput
                       placeholder="Actual seal number"
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.actual_seal_no`
@@ -2966,7 +3087,7 @@ function ExportJobCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.8}>
-                    <TextInput
+                    <FormTextInput
                       placeholder="Customs seal number"
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.customs_seal_no`
@@ -3016,7 +3137,7 @@ function ExportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.5}>
+                  <Grid.Col span={0.6}>
                     {containerDetailsForm.values.containers.length > 1 &&
                       !isReadOnly && (
                         <Button
@@ -3163,18 +3284,73 @@ function ExportJobCreate() {
                       >
                         Remove
                       </Button>
-                      <Menu shadow="md" width={200}>
+                      <Menu shadow="md" width={220} position="bottom-end">
                         <Menu.Target>
-                          <ActionIcon variant="light" color="#105476" size="lg">
+                          <ActionIcon
+                            variant="subtle"
+                            color="#105476"
+                            size="lg"
+                            styles={{
+                              root: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                border: "1px solid #E9ECEF",
+                                borderRadius: "8px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                            }}
+                          >
                             <IconDotsVertical size={18} />
                           </ActionIcon>
                         </Menu.Target>
-                        <Menu.Dropdown>
+
+                        <Menu.Dropdown
+                          styles={{
+                            dropdown: {
+                              border: "1px solid #E9ECEF",
+                              borderRadius: "8px",
+                              padding: "8px",
+                              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                            },
+                          }}
+                        >
                           <Menu.Item
-                            leftSection={<IconEye size={14} />}
-                            onClick={() =>
-                              generateBillOfLadingPDFPreview(house)
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconEye size={16} color="#105476" />
+                              </Box>
                             }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                marginBottom: "4px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
+                            onClick={() => generateBillOfLadingPDFPreview(house)}
                           >
                             Bill Of Lading
                           </Menu.Item>

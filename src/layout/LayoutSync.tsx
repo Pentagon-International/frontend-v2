@@ -53,6 +53,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/customer-service/import-to-export-booking")) {
       setActiveNav("Customer Service");
       setActiveSubNav("Import to Export Booking");
+    } else if (path.startsWith("/air/job-generation")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Air Export Job Generation");
     } else if (path.startsWith("/air/export-generation")) {
       setActiveNav("Transportation");
       setActiveSubNav("Air Export Generation");
@@ -73,7 +76,7 @@ export const LayoutSync = () => {
       setActiveSubNav("Air Import to Export Booking");
     } else if (path.startsWith("/air")) {
       setActiveNav("Transportation");
-      setActiveSubNav("Air Export Generation"); // Default
+      setActiveSubNav("Air Export Job Generation"); // Default
     } else if (path.startsWith("/SeaExport/fcl-export-generation")) {
       setActiveNav("Transportation");
       setActiveSubNav("FCL Export Generation");
@@ -82,10 +85,10 @@ export const LayoutSync = () => {
       setActiveSubNav("LCL Export Generation");
     } else if (path.startsWith("/SeaExport/fcl-job-generation")) {
       setActiveNav("Transportation");
-      setActiveSubNav("FCL Export Generation");
+      setActiveSubNav("FCL Job Generation");
     } else if (path.startsWith("/SeaExport/lcl-job-generation")) {
       setActiveNav("Transportation");
-      setActiveSubNav("LCL Export Generation");
+      setActiveSubNav("LCL Job Generation");
     } else if (path.startsWith("/SeaExport/export-job")) {
       setActiveNav("Transportation");
       setActiveSubNav("Ocean Export Job");
@@ -103,7 +106,7 @@ export const LayoutSync = () => {
       setActiveSubNav("Ocean Import to Export Booking");
     } else if (path.startsWith("/SeaExport")) {
       setActiveNav("Transportation");
-      setActiveSubNav("FCL Export Generation"); // Default to FCL
+      setActiveSubNav("FCL Job Generation"); // Default to FCL
     } else if (path.startsWith("/supplier-invoice/reversal")) {
       setActiveNav("Desk");
       setActiveSubNav("Supplier Invoice Reverse");

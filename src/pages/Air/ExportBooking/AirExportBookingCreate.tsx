@@ -1,6 +1,6 @@
 import { Box, Flex, Text, Center, Loader } from "@mantine/core";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   IconCircleCheck,
   IconUser,
@@ -10,6 +10,10 @@ import {
   IconCurrencyDollar,
 } from "@tabler/icons-react";
 import AirExportBookingStepper from "./AirExportBookingStepper";
+import { getAPICall } from "../../../service/getApiCall";
+import { URL } from "../../../api/serverUrls";
+import { API_HEADER } from "../../../store/storeKeys";
+import { ToastNotification } from "../../../components";
 
 function AirExportBookingCreate() {
   const navigate = useNavigate();
@@ -160,6 +164,7 @@ function AirExportBookingCreate() {
 
       // Stepper 5 - Quotation Details
       quotation_id: quotationData.quotation_id || "",
+      quotation_primary_id: (data as { quotation_primary_id?: number }).quotation_primary_id ?? quotationData.id,
       quotation_charges: quotationData.charges || [],
       rate_details: Array.isArray(quotationData.charges)
         ? (quotationData.charges as Array<Record<string, unknown>>).map(
@@ -190,6 +195,8 @@ function AirExportBookingCreate() {
 
   const [active, setActive] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingBooking, setIsFetchingBooking] = useState(false);
+  const [isEditFormReady, setIsEditFormReady] = useState(false);
 
   const handleStepChange = (step: number) => {
     console.log(`Current step: ${step + 1}`);
@@ -214,6 +221,60 @@ function AirExportBookingCreate() {
     navigate("../", { state: { refreshData: true } });
   };
 
+  // When quotation is already linked to a booking - fetch booking data and switch to edit mode
+  const handleQuotationAlreadyBooked = useCallback(
+    async (bookingMessage: string, bookingId: number) => {
+      ToastNotification({ type: "info", message: bookingMessage });
+      setIsFetchingBooking(true);
+      try {
+        const response = (await getAPICall(
+          `${URL.customerServiceShipment}${bookingId}/`,
+          API_HEADER
+        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
+        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
+          ? response.data[0]
+          : (response?.data as Record<string, unknown>);
+        if (response?.success && bookingItem) {
+          navigate("/air/export-booking/edit", {
+            state: { job: bookingItem },
+            replace: true,
+          });
+        } else {
+          ToastNotification({
+            type: "error",
+            message: "Failed to load existing booking data.",
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching booking:", error);
+        ToastNotification({
+          type: "error",
+          message: "Failed to load existing booking. Please try again.",
+        });
+      } finally {
+        setIsFetchingBooking(false);
+      }
+    },
+    [navigate]
+  );
+
+  const handleEditFormPopulated = useCallback(() => {
+    setIsEditFormReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (isEditMode && jobData) {
+      setIsEditFormReady(false);
+    } else if (!isEditMode || !jobData) {
+      setIsEditFormReady(true);
+    }
+  }, [isEditMode, jobData]);
+
+  const showLoader =
+    isSubmitting ||
+    isFetchingBooking ||
+    (isEditMode && !!jobData && !isEditFormReady);
+
   return (
     <Box
       component="form"
@@ -224,7 +285,7 @@ function AirExportBookingCreate() {
         overflow: "hidden",
       }}
     >
-      {isSubmitting && (
+      {showLoader && (
         <Center
           style={{
             position: "absolute",
@@ -239,14 +300,14 @@ function AirExportBookingCreate() {
 
       <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
         <Flex
-          gap="md"
+          gap="sm"
           align="flex-start"
           style={{ height: "calc(100vh - 112px)", width: "100%" }}
         >
           {/* Vertical Stepper Sidebar */}
           <Box
             style={{
-              minWidth: 240,
+              minWidth: 220,
               width: "100%",
               maxWidth: 250,
               height: "100%",
@@ -693,14 +754,6 @@ function AirExportBookingCreate() {
               gap: "8px",
             }}
           >
-            <Box
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                borderRadius: "8px",
-                backgroundColor: "#FFFFFF",
-              }}
-            >
               <AirExportBookingStepper
                 onStepChange={handleStepChange}
                 onComplete={handleComplete}
@@ -709,8 +762,13 @@ function AirExportBookingCreate() {
                 jobData={jobData}
                 active={active}
                 setActive={setActive}
+                onQuotationAlreadyBooked={
+                  bookingData ? handleQuotationAlreadyBooked : undefined
+                }
+                onEditFormPopulated={
+                  isEditMode && jobData ? handleEditFormPopulated : undefined
+                }
               />
-            </Box>
           </Box>
         </Flex>
       </Box>

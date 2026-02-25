@@ -6,8 +6,6 @@ import {
   Tabs,
   Table,
   Text,
-  TextInput,
-  Textarea,
   Badge,
   ActionIcon,
   Menu,
@@ -48,8 +46,10 @@ import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
-import { NumberInput } from "@mantine/core";
 import FormTextInput from "../../../components/FormTextInput";
+import RequiredLabel from "../../../components/RequiredLabel";
+import FormTextArea from "../../../components/FormTextArea";
+import FormNumberInput from "../../../components/FormNumberInput";
 
 // Type definitions
 type HAWBDetailsForm = {
@@ -1455,21 +1455,6 @@ function HouseCreate() {
     }
   };
 
-  const RequiredLabel = ({ label, required }: { label: string, required: boolean }) => (
-      <Text
-        size="xs"
-        fw={500}
-        style={{
-          fontSize: "13px",
-          fontFamily: "Inter",
-        }}
-      >
-        {label}
-        {required && (
-          <span style={{ color: "red", fontWeight: 700 }}> *</span>
-        )}
-      </Text>
-  );
 
   return (
     <Box p="md" mx="auto">
@@ -1568,21 +1553,110 @@ function HouseCreate() {
           >
             Save HBL
           </Button>
-          <Menu shadow="md" width={200}>
+          <Menu shadow="md" width={220} position="bottom-end">
             <Menu.Target>
-              <ActionIcon variant="light" color="#105476" size="lg">
+              <ActionIcon
+                variant="subtle"
+                color="#105476"
+                size="lg"
+                styles={{
+                  root: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    border: "1px solid #E9ECEF",
+                    borderRadius: "8px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                }}
+              >
                 <IconDotsVertical size={18} />
               </ActionIcon>
             </Menu.Target>
-            <Menu.Dropdown>
+
+            <Menu.Dropdown
+              styles={{
+                dropdown: {
+                  border: "1px solid #E9ECEF",
+                  borderRadius: "8px",
+                  padding: "8px",
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                },
+              }}
+            >
               <Menu.Item
-                leftSection={<IconEye size={14} />}
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconEye size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
                 onClick={generatePDFPreview}
               >
                 Cargo Arrival Notice
               </Menu.Item>
+
               <Menu.Item
-                leftSection={<IconEye size={14} />}
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconEye size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
                 onClick={() => {
                   ToastNotification({
                     type: "info",
@@ -1601,17 +1675,12 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        styles={{
-          list: {
-            borderBottom: "none",
-          },
-        }}
       >
         <Tabs.List
           mb="md"
           style={{
             display: "flex",
-            gap: "12px",
+            gap: "8px",
             flexWrap: "wrap",
             borderBottom: "none",
           }}
@@ -1620,12 +1689,12 @@ function HouseCreate() {
             value="0"
             style={{
               textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 0 ? "#105476" : "transparent",
-              color: active === 0 ? "white" : "#105476",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom:active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
             }}
           >
             Shipment Details
@@ -1634,12 +1703,12 @@ function HouseCreate() {
             value="1"
             style={{
               textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 1 ? "#105476" : "transparent",
-              color: active === 1 ? "white" : "#105476",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom:active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
             }}
           >
             Party Details
@@ -1648,12 +1717,12 @@ function HouseCreate() {
             value="2"
             style={{
               textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 2 ? "#105476" : "transparent",
-              color: active === 2 ? "white" : "#105476",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom:active === 2 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
             }}
           >
             Cargo Details
@@ -1662,12 +1731,12 @@ function HouseCreate() {
             value="3"
             style={{
               textAlign: "center",
-              padding: "6px 14px",
-              backgroundColor: active === 3 ? "#105476" : "transparent",
-              color: active === 3 ? "white" : "#105476",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom:active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
               fontWeight: active === 3 ? 600 : 400,
-              borderRadius: "4px",
-              borderBottom: "none",
             }}
           >
             Charges
@@ -1677,12 +1746,12 @@ function HouseCreate() {
               value="4"
               style={{
                 textAlign: "center",
-                padding: "6px 14px",
-                backgroundColor: active === 4 ? "#105476" : "transparent",
-                color: active === 4 ? "white" : "#105476",
+                padding: "12px",
+                backgroundColor: "transparent",
+                borderBottom:active === 4 ? "3px solid #105476" : "none",
+                color: "#105476",
+                fontSize: 16,
                 fontWeight: active === 4 ? 600 : 400,
-                borderRadius: "4px",
-                borderBottom: "none",
               }}
             >
               Accounts
@@ -1692,11 +1761,11 @@ function HouseCreate() {
 
         <Tabs.Panel value="0">
           <Group align="center" mb="xs">
-            <Text size="lg" fw={600} c="#105476">
+            <Text size="md" fw={600} c="#105476">
               Shipment Details
             </Text>
             {isEditMode && editData?.shipment_id && (
-              <Badge color="#105476" size="lg" variant="light">
+              <Badge color="#105476" size="md" variant="light">
                 Shipment ID: {editData.shipment_id}
               </Badge>
             )}
@@ -1711,20 +1780,6 @@ function HouseCreate() {
                   placeholder="Enter HAWB Number"
                   {...form.getInputProps("hawb_number")}
                   error={form.errors.hawb_number}
-                  styles={{
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                    input: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                      height: "36px",
-                    },
-                  }}
                 />
               </Grid.Col>
 
@@ -1853,20 +1908,6 @@ function HouseCreate() {
                     form.setFieldValue("trade", "Re Export");
                   }}
                   error={form.errors.trade}
-                  styles={{
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                    input: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                      height: "36px",
-                    },
-                  }}
                 />
               </Grid.Col>
 
@@ -1882,20 +1923,6 @@ function HouseCreate() {
                   ]}
                   {...form.getInputProps("routed")}
                   error={form.errors.routed}
-                  styles={{
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                    input: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                      height: "36px",
-                    },
-                  }}
                 />
               </Grid.Col>
 
@@ -1913,20 +1940,6 @@ function HouseCreate() {
                         form.setFieldValue("routed_by", value || "");
                       }}
                       error={form.errors.routed_by}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   ) : (
                     <FormTextInput
@@ -1976,20 +1989,6 @@ function HouseCreate() {
                     form.setFieldValue("customer_service", formattedValue);
                   }}
                   error={form.errors.customer_service}
-                  styles={{
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                    input: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                      height: "36px",
-                    },
-                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -1999,7 +1998,7 @@ function HouseCreate() {
         <Tabs.Panel value="1">
           <Box mt="md">
             {/* Shipper Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Shipper
             </Text>
             <Grid mb="xs">
@@ -2123,7 +2122,7 @@ function HouseCreate() {
             </Grid>
 
             {/* Consignee Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Consignee
             </Text>
             <Grid mb="xs">
@@ -2231,7 +2230,7 @@ function HouseCreate() {
             </Grid>
 
             {/* Notify Customer Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Notify Customer
             </Text>
             <Grid mb="xs">
@@ -2345,7 +2344,7 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
             {/* Destination Agent Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Destination Agent
             </Text>
             <Grid mb="xs">
@@ -2356,7 +2355,7 @@ function HouseCreate() {
                   apiEndpoint={URL.agent}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_name),
+                    value: String(item.customer_code),
                     label: String(item.customer_name),
                   })}
                   value={form.values.origin_agent_name}
@@ -2461,13 +2460,13 @@ function HouseCreate() {
 
         <Tabs.Panel value="2">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
+            <Text size="md" fw={600} c="#105476" mb="md">
               Cargo Details
             </Text>
 
             <Grid mb="md">
               <Grid.Col span={6}>
-                <Textarea
+                <FormTextArea
                   label="Commodity Description"
                   placeholder="Enter Commodity Description"
                   minRows={3}
@@ -2477,23 +2476,10 @@ function HouseCreate() {
                     form.setFieldValue("commodity_description", formattedValue);
                   }}
                   error={form.errors.commodity_description}
-                  styles={{
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                    input: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                    },
-                  }}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
-                <Textarea
+                <FormTextArea
                   label="Marks No"
                   placeholder="Enter Marks No"
                   minRows={3}
@@ -2503,19 +2489,6 @@ function HouseCreate() {
                     form.setFieldValue("marks_no", formattedValue);
                   }}
                   error={form.errors.marks_no}
-                  styles={{
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                    input: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                    },
-                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -2530,22 +2503,22 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2}>
+                <Grid.Col span={2.2}>
                   <RequiredLabel label="No of Packages" required={true}/>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={2.2}>
                   <RequiredLabel label="Gross Weight (KG)" required={true}/>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={2.2}>
                   <RequiredLabel label="Volume (KG)" required={true}/>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={2.2}>
                   <RequiredLabel label="Chargeable Weight (KG)" required={false}/>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={2.2}>
                   <RequiredLabel label="Haz" required={false}/>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={1}>
                   <Text size="xs" fw={600}>
                     Actions
                   </Text>
@@ -2554,8 +2527,8 @@ function HouseCreate() {
 
               {cargoDetails.map((cargo, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={2}>
-                    <NumberInput
+                  <Grid.Col span={2.2}>
+                    <FormNumberInput
                       placeholder="Enter No of Packages"
                       min={0}
                       hideControls
@@ -2581,24 +2554,10 @@ function HouseCreate() {
                         }
                       }}
                       error={cargoErrors[index]?.no_of_packages}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
-                    <NumberInput
+                  <Grid.Col span={2.2}>
+                    <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
                       withAsterisk
@@ -2624,24 +2583,10 @@ function HouseCreate() {
                         }
                       }}
                       error={cargoErrors[index]?.gross_weight}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
-                    <NumberInput
+                  <Grid.Col span={2.2}>
+                    <FormNumberInput
                       placeholder="Enter Volume Weight"
                       min={0}
                       withAsterisk
@@ -2667,46 +2612,18 @@ function HouseCreate() {
                         }
                       }}
                       error={cargoErrors[index]?.volume}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
-                    <NumberInput
+                  <Grid.Col span={2.2}>
+                    <FormNumberInput
                       placeholder=""
                       hideControls
                       value={cargo.chargeable_weight || undefined}
                       readOnly
                       disabled
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={2.2}>
                     <Dropdown
                       placeholder="Select Haz"
                       searchable
@@ -2723,23 +2640,9 @@ function HouseCreate() {
                         };
                         setCargoDetails(updated);
                       }}
-                      style={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1}>
                     <Group gap="xs">
                       {cargoDetails.length > 1 && (
                         <Button
@@ -2790,7 +2693,7 @@ function HouseCreate() {
         <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
-              <Text size="lg" fw={600} c="#105476">
+              <Text size="md" fw={600} c="#105476">
                 Charges
                 {chargesForm.values.charges.length > 1 &&
                   ` (${chargesForm.values.charges.length})`}
@@ -2928,20 +2831,6 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.pp_cc}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.25}>
@@ -2967,41 +2856,13 @@ function HouseCreate() {
                           chargesForm.setFieldValue(`charges.${index}.no_of_unit`, noOfUnit);
                         }
                       }}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
                       hideControls
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                       {...(() => {
                         const inputProps = chargesForm.getInputProps(
                           `charges.${index}.no_of_unit`,
@@ -3067,24 +2928,10 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.currency_id}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="ROE"
                       min={0}
                       hideControls
@@ -3127,24 +2974,10 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.roe}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Amount Per Unit"
                       min={0}
                       hideControls
@@ -3191,24 +3024,10 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.amount_per_unit}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Amount"
                       min={0}
                       hideControls
@@ -3231,20 +3050,6 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.amount}
-                      styles={{
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col
@@ -3302,7 +3107,7 @@ function HouseCreate() {
         {isEditMode && (
           <Tabs.Panel value="4">
             <Box mt="md">
-              <Text size="lg" fw={600} c="#105476" mb="md">
+              <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
               </Text>
               {invoiceListLoading ? (
@@ -3317,6 +3122,14 @@ function HouseCreate() {
                     striped
                     highlightOnHover
                     style={{ minWidth: 700 }}
+                    styles={{
+                      th: {
+                        padding: "8px",
+                      },
+                      td: {
+                        padding: "8px",
+                      },
+                    }}
                   >
                     <Table.Thead>
                       <Table.Tr>
@@ -3433,7 +3246,7 @@ function HouseCreate() {
                                 </Badge>
                               </Table.Td>
                               <Table.Td
-                                style={{ fontSize: "13px", width: "15%" }}
+                                                                style={{ fontSize: "13px", width: "15%" }}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <Menu
@@ -3636,6 +3449,7 @@ function HouseCreate() {
                             {isReversed && isExpanded && (
                               <Table.Tr>
                                 <Table.Td
+                                  px={8}
                                   colSpan={6}
                                   style={{
                                     padding: 0,

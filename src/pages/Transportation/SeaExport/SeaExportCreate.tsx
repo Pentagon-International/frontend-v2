@@ -417,7 +417,7 @@ function SeaExportCreate() {
     setActive((current) => current + 1);
   };
 
-  const handleSubmit = async () => {
+  const handleSaveBooking = async () => {
     // Don't allow submit in view mode
     if (viewMode) {
       return;
@@ -467,63 +467,64 @@ function SeaExportCreate() {
     setIsSubmitting(true);
 
     try {
-      let response;
-      let responseData;
+      let responseData: any;
 
-      if (editMode && jobId) {
-        // Edit mode - use PUT API
+      if (jobId) {
+        // Update existing booking
         const { putAPICall } = await import("../../../service/putApiCall");
         const { API_HEADER } = await import("../../../store/storeKeys");
 
-        // Add id to payload for PUT request
         const putPayload = {
           id: jobId,
           ...payload,
         };
 
-        response = await putAPICall(URL.booking, putPayload, API_HEADER);
+        const response = await putAPICall(URL.booking, putPayload, API_HEADER);
         responseData = response as any;
 
         if (responseData?.success === true) {
           ToastNotification({
             type: "success",
-            message: "Job updated successfully",
+            message: "Booking updated successfully",
           });
         } else {
           ToastNotification({
             type: "error",
-            message: responseData?.message || "Failed to update job",
+            message: responseData?.message || "Failed to update booking",
           });
         }
       } else {
-        // Create mode - use POST API
-        response = await apiCallProtected.post(URL.booking, payload);
+        // Create new booking
+        const response = await apiCallProtected.post(URL.booking, payload);
         responseData = response as any;
 
         if (responseData?.success === true) {
           ToastNotification({
             type: "success",
-            message: "Job created successfully",
+            message: "Booking created successfully",
           });
+
+          const createdId =
+            responseData?.data?.id ??
+            responseData?.id ??
+            responseData?.data?.booking_id ??
+            responseData?.booking_id;
+
+          if (createdId) {
+            setJobId(createdId);
+            setEditMode(true);
+            setViewMode(false);
+          }
         } else {
           ToastNotification({
             type: "error",
-            message: responseData?.message || "Failed to create job",
+            message: responseData?.message || "Failed to create booking",
           });
         }
       }
-
-      if (responseData?.success === true) {
-        // Navigate back to list based on service type
-        const returnPath =
-          serviceType === "LCL"
-            ? "/SeaExport/lcl-job-generation"
-            : "/SeaExport/fcl-job-generation";
-        navigate(returnPath, { state: { refreshData: true } });
-      }
     } catch (error: any) {
       console.error(
-        `Error ${editMode ? "updating" : "creating"} booking:`,
+        `Error ${jobId ? "updating" : "creating"} booking:`,
         error
       );
       ToastNotification({
@@ -531,11 +532,21 @@ function SeaExportCreate() {
         message:
           error?.response?.data?.message ||
           error?.message ||
-          `Failed to ${editMode ? "update" : "create"} job`,
+          `Failed to ${jobId ? "update" : "create"} booking`,
       });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleGenerateJob = () => {
+    if (!editMode || viewMode) {
+      return;
+    }
+    ToastNotification({
+      type: "info",
+      message: "Generate Job action will be implemented soon.",
+    });
   };
 
   const handleSelectBooking = (bookingId: number, checked: boolean) => {
@@ -677,10 +688,10 @@ function SeaExportCreate() {
     <Box p="md" maw={1200} mx="auto">
       <Text size="xl" fw={600} c="#105476" mb="lg">
         {mode === "view"
-          ? "View Ocean Job"
+          ? "View Ocean Export Job Generation"
           : mode === "edit"
-            ? "Edit Ocean Job"
-            : "Create Ocean Job"}
+            ? "Edit Ocean Export Job Generation"
+            : "Create Ocean Export Job Generation"}
       </Text>
 
       <Stepper
@@ -1008,9 +1019,16 @@ function SeaExportCreate() {
               >
                 Back to List
               </Button>
-              <Button onClick={handleNext} color="#105476">
-                Next
-              </Button>
+              <Group gap="sm">
+                <Button onClick={handleNext} color="#105476">
+                  Next
+                </Button>
+                {editMode && !isReadOnly && (
+                  <Button variant="outline" color="#105476" onClick={handleGenerateJob}>
+                    Generate Job
+                  </Button>
+                )}
+              </Group>
             </Group>
           </Box>
         </Stepper.Step>
@@ -1125,9 +1143,16 @@ function SeaExportCreate() {
               >
                 Back
               </Button>
-              <Button onClick={handleNext} color="#105476">
-                Next
-              </Button>
+              <Group gap="sm">
+                <Button onClick={handleNext} color="#105476">
+                  Next
+                </Button>
+                {editMode && !isReadOnly && (
+                  <Button variant="outline" color="#105476" onClick={handleGenerateJob}>
+                    Generate Job
+                  </Button>
+                )}
+              </Group>
             </Group>
           </Box>
         </Stepper.Step>
@@ -1179,15 +1204,26 @@ function SeaExportCreate() {
                 Back
               </Button>
               {!isReadOnly ? (
-                <Button
-                  rightSection={<IconCheck size={16} />}
-                  onClick={handleSubmit}
-                  color="teal"
-                  loading={isSubmitting}
-                  disabled={isSubmitting}
-                >
-                  Generate Job
-                </Button>
+                <Group gap="sm">
+                  <Button
+                    rightSection={<IconCheck size={16} />}
+                    onClick={handleSaveBooking}
+                    color="teal"
+                    loading={isSubmitting}
+                    disabled={isSubmitting}
+                  >
+                    {jobId ? "Update Booking" : "Create Booking"}
+                  </Button>
+                  {editMode && (
+                    <Button
+                      variant="outline"
+                      color="#105476"
+                      onClick={handleGenerateJob}
+                    >
+                      Generate Job
+                    </Button>
+                  )}
+                </Group>
               ) : (
                 <Button
                   variant="outline"

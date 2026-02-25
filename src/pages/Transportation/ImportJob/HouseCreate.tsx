@@ -6,8 +6,6 @@ import {
   Tabs,
   Table,
   Text,
-  TextInput,
-  Textarea,
   Badge,
   ActionIcon,
   Menu,
@@ -49,7 +47,10 @@ import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
-import { NumberInput } from "@mantine/core";
+import FormTextInput from "../../../components/FormTextInput";
+import RequiredLabel from "../../../components/RequiredLabel";
+import FormTextArea from "../../../components/FormTextArea";
+import FormNumberInput from "../../../components/FormNumberInput";
 
 // Type definitions
 type HouseDetailsForm = {
@@ -1628,7 +1629,7 @@ function HouseCreate() {
   };
 
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box p="md" mx="auto">
       <Group justify="space-between" mb="lg">
         <Text size="xl" fw={600} c="#105476">
           {isEditMode ? "Edit HBL Details" : "Create HBL Details"}
@@ -1694,21 +1695,109 @@ function HouseCreate() {
           >
             Save HBL
           </Button>
-          <Menu shadow="md" width={200}>
+          <Menu shadow="md" width={200} position="bottom-end">
             <Menu.Target>
-              <ActionIcon variant="light" color="#105476" size="lg">
+              <ActionIcon
+                variant="subtle"
+                color="#105476"
+                size="lg"
+                styles={{
+                  root: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    border: "1px solid #E9ECEF",
+                    borderRadius: "8px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                }}
+              >
                 <IconDotsVertical size={18} />
               </ActionIcon>
             </Menu.Target>
-            <Menu.Dropdown>
+            <Menu.Dropdown
+              styles={{
+                dropdown: {
+                  border: "1px solid #E9ECEF",
+                  borderRadius: "8px",
+                  padding: "8px",
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                },
+              }}
+            >
               <Menu.Item
-                leftSection={<IconEye size={14} />}
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconEye size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
                 onClick={generatePDFPreview}
               >
                 Cargo Arrival Notice
               </Menu.Item>
               <Menu.Item
-                leftSection={<IconEye size={14} />}
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconEye size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
                 onClick={generateDeliveryOrderPDFPreview}
               >
                 Delivery Order
@@ -1722,35 +1811,85 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        styles={{
-          list: {
-            borderBottom: "none",
-          },
-        }}
       >
         <Tabs.List
           mb="md"
           style={{
             display: "flex",
-            gap: "12px",
+            gap: "8px",
             flexWrap: "wrap",
             borderBottom: "none",
           }}
         >
-          <Tabs.Tab value="0" style={{ textAlign: "center", padding: "6px 14px", backgroundColor: active === 0 ? "#105476" : "transparent", color: active === 0 ? "white" : "#105476", fontWeight: active === 0 ? 600 : 400, borderRadius: "4px", borderBottom: "none" }}>
+          <Tabs.Tab
+            value="0"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 0 ? 600 : 400,
+            }}
+          >
             Shipment Details
           </Tabs.Tab>
-          <Tabs.Tab value="1" style={{ textAlign: "center", padding: "6px 14px", backgroundColor: active === 1 ? "#105476" : "transparent", color: active === 1 ? "white" : "#105476", fontWeight: active === 1 ? 600 : 400, borderRadius: "4px", borderBottom: "none" }}>
+          <Tabs.Tab
+            value="1"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 1 ? 600 : 400,
+            }}
+          >
             Party Details
           </Tabs.Tab>
-          <Tabs.Tab value="2" style={{ textAlign: "center", padding: "6px 14px", backgroundColor: active === 2 ? "#105476" : "transparent", color: active === 2 ? "white" : "#105476", fontWeight: active === 2 ? 600 : 400, borderRadius: "4px", borderBottom: "none" }}>
+          <Tabs.Tab
+            value="2"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 2 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 2 ? 600 : 400,
+            }}
+          >
             Cargo Details
           </Tabs.Tab>
-          <Tabs.Tab value="3" style={{ textAlign: "center", padding: "6px 14px", backgroundColor: active === 3 ? "#105476" : "transparent", color: active === 3 ? "white" : "#105476", fontWeight: active === 3 ? 600 : 400, borderRadius: "4px", borderBottom: "none" }}>
+          <Tabs.Tab
+            value="3"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 3 ? 600 : 400,
+            }}
+          >
             Charges
           </Tabs.Tab>
           {isEditMode && (
-            <Tabs.Tab value="4" style={{ textAlign: "center", padding: "6px 14px", backgroundColor: active === 4 ? "#105476" : "transparent", color: active === 4 ? "white" : "#105476", fontWeight: active === 4 ? 600 : 400, borderRadius: "4px", borderBottom: "none" }}>
+            <Tabs.Tab
+              value="4"
+              style={{
+                textAlign: "center",
+                padding: "12px",
+                backgroundColor: "transparent",
+                borderBottom: active === 4 ? "3px solid #105476" : "none",
+                color: "#105476",
+                fontSize: 16,
+                fontWeight: active === 4 ? 600 : 400,
+              }}
+            >
               Accounts
             </Tabs.Tab>
           )}
@@ -1758,11 +1897,11 @@ function HouseCreate() {
 
         <Tabs.Panel value="0">
           <Group align="center" mb="xs">
-            <Text size="lg" fw={600} c="#105476">
+            <Text size="md" fw={600} c="#105476">
               Shipment Details
             </Text>
             {isEditMode && editData?.shipment_id && (
-              <Badge color="#105476" size="lg" variant="light">
+              <Badge color="#105476" size="md" variant="light">
                 Shipment ID: {editData.shipment_id}
               </Badge>
             )}
@@ -1771,7 +1910,7 @@ function HouseCreate() {
           <Box mt="md">
             <Grid>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="HBL Number"
                   required
                   placeholder="Enter HBL Number"
@@ -1953,7 +2092,7 @@ function HouseCreate() {
                       error={form.errors.routed_by}
                     />
                   ) : (
-                    <TextInput
+                    <FormTextInput
                       label="Routed By"
                       required
                       placeholder="Enter routed by"
@@ -1981,7 +2120,7 @@ function HouseCreate() {
                     minSearchLength={2}
                   />
                 ) : (
-                  <TextInput
+                  <FormTextInput
                     label="Routed By"
                     required
                     placeholder="Enter routed by"
@@ -1991,7 +2130,7 @@ function HouseCreate() {
                 )}
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Customer Service"
                   placeholder="Enter Customer Service"
                   value={form.values.customer_service}
@@ -2009,7 +2148,7 @@ function HouseCreate() {
         <Tabs.Panel value="1">
           <Box mt="md">
             {/* Shipper Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Shipper
             </Text>
             <Grid mb="xs">
@@ -2079,7 +2218,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Shipper Email"
                   type="email"
                   placeholder="Enter Shipper Email"
@@ -2106,7 +2245,7 @@ function HouseCreate() {
             </Grid>
 
             {/* Consignee Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Consignee
             </Text>
             <Grid mb="xs">
@@ -2176,7 +2315,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Consignee Email"
                   type="email"
                   placeholder="Enter Consignee Email"
@@ -2202,12 +2341,12 @@ function HouseCreate() {
             </Grid>
 
             {/* Notify Customer Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Notify Customer
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Notify Customer Name"
                   placeholder="Enter Notify Customer Name"
                   {...form.getInputProps("notify_customer1_name")}
@@ -2215,7 +2354,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Notify Customer Email"
                   type="email"
                   placeholder="Enter Notify Customer Email"
@@ -2225,7 +2364,7 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                <Textarea
+                <FormTextArea
                   label="Notify Customer Address"
                   placeholder="Enter Notify Customer Address"
                   minRows={2}
@@ -2242,7 +2381,7 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
             {/* Origin Agent Section */}
-            <Text size="lg" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Origin Agent
             </Text>
             <Grid mb="xs">
@@ -2302,7 +2441,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="Origin Agent Email"
                   type="email"
                   placeholder="Enter Origin Agent Email"
@@ -2312,7 +2451,7 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                <Textarea
+                <FormTextArea
                   label="Origin Agent Address"
                   placeholder="Enter Origin Agent Address"
                   minRows={2}
@@ -2330,14 +2469,14 @@ function HouseCreate() {
 
         <Tabs.Panel value="2">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
+            <Text size="md" fw={600} c="#105476" mb="md">
               Cargo Details{" "}
               {cargoDetails.length > 1 && `(${cargoDetails.length})`}
             </Text>
 
             <Grid mb="md">
               <Grid.Col span={6}>
-                <Textarea
+                <FormTextArea
                   label="Commodity Description"
                   placeholder="Enter Commodity Description"
                   minRows={3}
@@ -2350,7 +2489,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={6}>
-                <Textarea
+                <FormTextArea
                   label="Marks No"
                   placeholder="Enter Marks No"
                   minRows={3}
@@ -2361,7 +2500,7 @@ function HouseCreate() {
 
             {/* Dynamic Cargo Rows */}
             <Box mb="md">
-              <Grid
+              <Grid 
                 mb="xs"
                 style={{
                   fontWeight: 600,
@@ -2369,38 +2508,35 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={1.5}>
-                  Container Number{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                <Grid.Col span={2}>
+                  <RequiredLabel label="Container Number" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
-                  No of Packages{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="No of Packages" required={true} />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  Gross Weight (KG){" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Gross Weight (KG)" required={true} />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  Volume (CBM){" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Volume (CBM)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2}>Chargeable Weight (CBM)</Grid.Col>
-                <Grid.Col span={1.5}>Haz</Grid.Col>
-                {/* <Grid.Col span={1.5}>Actions</Grid.Col> */}
+                <Grid.Col span={2}>
+                  <RequiredLabel
+                    label="Chargeable Weight (CBM)"
+                    required={false}
+                  />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Haz" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <RequiredLabel label="Actions" required={false} />
+                </Grid.Col>
               </Grid>
 
               {cargoDetails.map((cargo, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={2}>
                     <Dropdown
                       placeholder={
                         containerNumberOptions.length > 0
@@ -2450,7 +2586,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Enter No of Packages"
                       min={0}
                       hideControls
@@ -2462,7 +2598,6 @@ function HouseCreate() {
                           no_of_packages: value as number | null,
                         };
                         setCargoDetails(updated);
-                        // Clear error when field is updated
                         if (cargoErrors[index]?.no_of_packages) {
                           const newErrors = { ...cargoErrors };
                           if (newErrors[index]) {
@@ -2478,7 +2613,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
                       hideControls
@@ -2506,7 +2641,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Enter Volume"
                       min={0}
                       hideControls
@@ -2534,7 +2669,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder=""
                       hideControls
                       value={cargo.chargeable_weight || undefined}
@@ -2572,11 +2707,12 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1}>
                     <Group gap="xs">
                       {cargoDetails.length > 1 && (
                         <Button
-                          size="xs"
+                          size="sm"
+                          px={12}
                           variant="light"
                           color="red"
                           onClick={() => {
@@ -2591,7 +2727,8 @@ function HouseCreate() {
                       )}
                       {cargoDetails.length - 1 === index && (
                         <Button
-                          size="xs"
+                          size="sm"
+                          px={12}
                           variant="light"
                           color="#105476"
                           onClick={() => {
@@ -2622,7 +2759,7 @@ function HouseCreate() {
         <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
-              <Text size="lg" fw={600} c="#105476">
+              <Text size="md" fw={600} c="#105476">
                 Charges{" "}
                 {chargesForm.values.charges.length > 1 &&
                   ` (${chargesForm.values.charges.length})`}
@@ -2667,7 +2804,7 @@ function HouseCreate() {
 
             {/* Dynamic Charges Rows */}
             <Box mb="md">
-              <Grid
+              <Grid 
                 mb="xs"
                 style={{
                   fontWeight: 600,
@@ -2675,45 +2812,38 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={1.75}>
-                  Charge Name{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                <Grid.Col span={2}>
+                  <RequiredLabel label="Charge Name" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.25}>
-                  PP/CC{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="PP/CC" required={true} />
                 </Grid.Col>
-                <Grid.Col span={1.25}>Unit</Grid.Col>
-                <Grid.Col span={1}>No of Unit</Grid.Col>
-                <Grid.Col span={1.5}>
-                  Currency{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                <Grid.Col span={1.25}>
+                  <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1}>
-                  ROE{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.5}>Amount Per Unit</Grid.Col>
                 <Grid.Col span={1.5}>
-                  Amount{" "}
-                  <Text span c="red">
-                    *
-                  </Text>
+                  <RequiredLabel label="Currency" required={true} />
                 </Grid.Col>
-                {/* <Grid.Col span={1}>Actions</Grid.Col> */}
+                <Grid.Col span={1}>
+                  <RequiredLabel label="ROE" required={true} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Amount Per Unit" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Amount" required={true} />
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <RequiredLabel label="Actions" required={false} />
+                </Grid.Col>
               </Grid>
 
               {chargesForm.values.charges.map((charge, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={1.75}>
+                  <Grid.Col span={2}>
                     <SearchableSelect
                       placeholder="Type charge name"
                       apiEndpoint={URL.chargeMaster}
@@ -2823,7 +2953,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
                       hideControls
@@ -2906,7 +3036,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="ROE"
                       min={0}
                       hideControls
@@ -2960,7 +3090,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Amount Per Unit"
                       min={0}
                       hideControls
@@ -3015,7 +3145,7 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>
-                    <NumberInput
+                    <FormNumberInput
                       placeholder="Amount"
                       min={0}
                       hideControls
@@ -3051,7 +3181,8 @@ function HouseCreate() {
                   >
                     {chargesForm.values.charges.length - 1 === index && (
                       <Button
-                        size="xs"
+                        size="sm"
+                        px={12}
                         variant="light"
                         color="#105476"
                         onClick={() => {
@@ -3075,7 +3206,8 @@ function HouseCreate() {
                     )}
                     {chargesForm.values.charges.length > 1 && (
                       <Button
-                        size="xs"
+                        size="sm"
+                        px={12}
                         variant="light"
                         color="red"
                         onClick={() => {
@@ -3095,7 +3227,7 @@ function HouseCreate() {
         {isEditMode && (
           <Tabs.Panel value="4">
             <Box mt="md">
-              <Text size="lg" fw={600} c="#105476" mb="md">
+              <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
               </Text>
               {invoiceListLoading ? (
@@ -3104,7 +3236,21 @@ function HouseCreate() {
                 </Center>
               ) : (
                 <ScrollArea>
-                  <Table withTableBorder withColumnBorders striped highlightOnHover style={{ minWidth: 700 }}>
+                  <Table 
+                    withTableBorder 
+                    withColumnBorders 
+                    striped 
+                    highlightOnHover 
+                    style={{ minWidth: 700 }} 
+                    styles={{
+                      th: {
+                        padding: "8px",
+                      },
+                      td: {
+                        padding: "8px",
+                      },
+                    }}
+                  >
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Daybook</Table.Th>
