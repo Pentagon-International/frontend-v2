@@ -338,9 +338,9 @@ function AirImportBookingCreate() {
           {/* Vertical Stepper Sidebar */}
           <Box
             style={{
-              minWidth: 240,
+              minWidth: 200,
               width: "100%",
-              maxWidth: 250,
+              maxWidth: 210,
               height: "100%",
               alignSelf: "stretch",
               borderRadius: "8px",
