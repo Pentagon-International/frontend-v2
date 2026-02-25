@@ -4072,10 +4072,20 @@ function InvoiceCreate() {
         opened={previewOpen}
         onClose={handleClosePreview}
         title="PDF Preview"
-        size="xl"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
         styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
           body: {
             padding: 0,
+            height: "100%",
           },
         }}
       >
