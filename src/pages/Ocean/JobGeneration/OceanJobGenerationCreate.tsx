@@ -4,21 +4,18 @@ import {
   Grid,
   Group,
   Stack,
-  Stepper,
   Text,
   TextInput,
   Checkbox,
   Center,
   Loader,
   Select,
+  Tabs,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
-  IconCalendar,
   IconCheck,
-  IconChevronLeft,
-  IconChevronRight,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
@@ -29,8 +26,9 @@ import {
   ToastNotification,
   SearchableSelect,
   Dropdown,
+  SingleDateInput,
 } from "../../../components";
-import { DateInput } from "@mantine/dates";
+import FormTextInput from "../../../components/FormTextInput";
 import dayjs from "dayjs";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
@@ -47,18 +45,24 @@ import { API_HEADER } from "../../../store/storeKeys";
 // Type definitions
 type JobDetailsForm = {
   service: string;
+  agent_code: string;
+  agent_name: string;
   origin_code: string;
   origin_name: string;
   destination_code: string;
   destination_name: string;
   eta: string;
   etd: string;
+  ata: string;
+  atd: string;
   cutoff_date: string;
   vessel: string;
   voyage: string;
   schedule: string;
   carrier_code: string;
   carrier_name: string;
+  master_no: string;
+  master_date: string;
 };
 
 type ContainerDetail = {
@@ -79,18 +83,48 @@ type BookingData = {
   selected?: boolean;
 };
 
+type RoutingDetail = {
+  transport_type: string;
+  from_port_code: string;
+  to_port_code: string;
+  carrier_code: string;
+  transport_no: string;
+  etd: string;
+  eta: string;
+  atd: string;
+  ata: string;
+  vessel: string;
+};
+
+// Helper: transport_mode for port/carrier search (SEA/AIR sent with search key)
+const getTransportMode = (
+  transportType: string | null | undefined
+): "SEA" | "AIR" | "LAND" | undefined => {
+  if (!transportType) return undefined;
+  const t = transportType.trim().toUpperCase();
+  if (t === "SEA") return "SEA";
+  if (t === "AIR") return "AIR";
+  if (t === "ROAD" || t === "RAIL") return "LAND";
+  return undefined;
+};
+
 // Validation schemas
 const jobDetailsSchema = yup.object({
   service: yup.string().required("Service is required"),
+  agent_code: yup.string().optional(),
   origin_code: yup.string().required("Origin is required"),
   destination_code: yup.string().required("Destination is required"),
   eta: yup.string().required("ETA is required"),
   etd: yup.string().required("ETD is required"),
+  ata: yup.string().optional(),
+  atd: yup.string().optional(),
   cutoff_date: yup.string().required("Cutoff date is required"),
   vessel: yup.string().required("Vessel is required"),
   voyage: yup.string().required("Voyage is required"),
   schedule: yup.string().required("Schedule is required"),
   carrier_code: yup.string().required("Carrier is required"),
+  master_no: yup.string().optional(),
+  master_date: yup.string().optional(),
 });
 
 const containerDetailsSchema = yup.object({
@@ -102,7 +136,7 @@ const containerDetailsSchema = yup.object({
         container_type: yup.string().required("Container type is required"),
         custom_seal_number: yup.string().optional(),
         actual_seal_number: yup.string().optional(),
-      })
+      }),
     )
     .min(1, "At least one container detail is required"),
 });
@@ -158,9 +192,23 @@ function OceanJobGenerationCreate() {
   const [bookingList, setBookingList] = useState<BookingData[]>([]);
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
   const [selectedBookings, setSelectedBookings] = useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [routingDetails, setRoutingDetails] = useState<RoutingDetail[]>([
+    {
+      transport_type: "",
+      from_port_code: "",
+      to_port_code: "",
+      carrier_code: "",
+      transport_no: "",
+      etd: "",
+      eta: "",
+      atd: "",
+      ata: "",
+      vessel: "",
+    },
+  ]);
   // Map booking id -> selected container number (for stepper 3 payload later)
   const [bookingContainerMap, setBookingContainerMap] = useState<
     Record<number, string>
@@ -170,18 +218,24 @@ function OceanJobGenerationCreate() {
   const jobDetailsForm = useForm<JobDetailsForm>({
     initialValues: {
       service: serviceType || "",
+      agent_code: "",
+      agent_name: "",
       origin_code: "",
       origin_name: "",
       destination_code: "",
       destination_name: "",
       eta: dayjs().format("YYYY-MM-DD"),
       etd: dayjs().format("YYYY-MM-DD"),
+      ata: "",
+      atd: "",
       cutoff_date: dayjs().format("YYYY-MM-DD"),
       vessel: "",
       voyage: "",
       schedule: "",
       carrier_code: "",
       carrier_name: "",
+      master_no: "",
+      master_date: "",
     },
     validate: yupResolver(jobDetailsSchema),
   });
@@ -238,18 +292,24 @@ function OceanJobGenerationCreate() {
       // Populate job details - map from API response structure
       jobDetailsForm.setValues({
         service: jobData.service || serviceType || "",
+        agent_code: jobData.agent_code_read || jobData.agent_code || "",
+        agent_name: jobData.agent_name || "",
         origin_code: jobData.origin_code_read || "",
         origin_name: jobData.origin_name || "",
         destination_code: jobData.destination_code_read || "",
         destination_name: jobData.destination_name || "",
         eta: jobData.eta || dayjs().format("YYYY-MM-DD"),
         etd: jobData.etd || dayjs().format("YYYY-MM-DD"),
+        ata: jobData.ata || "",
+        atd: jobData.atd || "",
         cutoff_date: jobData.cut_off_date || dayjs().format("YYYY-MM-DD"),
         vessel: jobData.vessel || "",
         voyage: jobData.voyage || "",
         schedule: jobData.schedule || "",
         carrier_code: jobData.carrier_code_read || "",
         carrier_name: jobData.carrier_name || "",
+        master_no: jobData.master_no || "",
+        master_date: jobData.master_date || "",
       });
 
       // Populate equipment details if exists - map from API response structure
@@ -276,32 +336,6 @@ function OceanJobGenerationCreate() {
       }
     }
   }, [jobData, mode, serviceType]);
-
-  // Fetch carrier data
-  const fetchCarrier = async () => {
-    try {
-      const response = await getAPICall(`${URL.carrier}`, API_HEADER);
-      return response;
-    } catch (error) {
-      console.error("Error fetching carrier data:", error);
-    }
-  };
-
-  const { data: carrierRes = [] } = useQuery({
-    queryKey: ["carrier"],
-    queryFn: fetchCarrier,
-    staleTime: Infinity,
-  });
-
-  const carrierData = useMemo(() => {
-    if (!Array.isArray(carrierRes)) return [];
-    return carrierRes.map(
-      (item: { carrier_code: string; carrier_name: string }) => ({
-        value: String(item.carrier_code),
-        label: item.carrier_name,
-      })
-    );
-  }, [carrierRes]);
 
   // Fetch container type data
   const fetchContainerType = async () => {
@@ -330,9 +364,9 @@ function OceanJobGenerationCreate() {
     }));
   }, [rawContainerData]);
 
-  // Fetch booking list when reaching step 3
+  // Fetch booking list when reaching Select Bookings step
   useEffect(() => {
-    if (active === 2) {
+    if (active === 3) {
       // In view/edit mode, load bookings from jobData.shipment_details
       if ((mode === "view" || mode === "edit") && jobData?.shipment_details) {
         const bookings = jobData.shipment_details.map((shipment: any) => {
@@ -389,7 +423,7 @@ function OceanJobGenerationCreate() {
 
       const response = await apiCallProtected.post(
         URL.customerServiceShipmentFilter,
-        payload
+        payload,
       );
 
       if (response?.data) {
@@ -451,6 +485,9 @@ function OceanJobGenerationCreate() {
     // Prepare payload according to API structure
     const payload = {
       service: jobDetailsForm.values.service,
+      service_type: "EXPORT",
+      status: "PENDING",
+      agent_code: jobDetailsForm.values.agent_code || undefined,
       origin_code: jobDetailsForm.values.origin_code,
       destination_code: jobDetailsForm.values.destination_code,
       schedule: jobDetailsForm.values.schedule,
@@ -460,13 +497,33 @@ function OceanJobGenerationCreate() {
       cut_off_date: jobDetailsForm.values.cutoff_date,
       eta: jobDetailsForm.values.eta,
       etd: jobDetailsForm.values.etd,
+      ata: jobDetailsForm.values.ata,
+      atd: jobDetailsForm.values.atd,
+      master_no: jobDetailsForm.values.master_no,
+      master_date: jobDetailsForm.values.master_date,
       equipment_details: containerForm.values.containers.map((container) => ({
         container_type_code: container.container_type,
         container_no: container.container_number,
         customer_seal_no: container.custom_seal_number,
         actual_seal_no: container.actual_seal_number,
       })),
-      shipment_id: Array.from(selectedBookings),
+      routing_details: routingDetails.map((route) => ({
+        transport_type: route.transport_type,
+        from_port_code: route.from_port_code,
+        to_port_code: route.to_port_code,
+        carrier_code: route.carrier_code,
+        transport_no: route.transport_no,
+        etd: route.etd,
+        eta: route.eta,
+        atd: route.atd,
+        ata: route.ata,
+        vessel: route.transport_type === "SEA" ? (route.vessel || undefined) : undefined,
+      })),
+      // booking_details maps selected bookings to chosen container numbers
+      booking_details: Array.from(selectedBookings).map((bookingId) => ({
+        booking_id: bookingId,
+        container_no: bookingContainerMap[bookingId] || "",
+      })),
     };
 
     setIsSubmitting(true);
@@ -528,10 +585,7 @@ function OceanJobGenerationCreate() {
         }
       }
     } catch (error: any) {
-      console.error(
-        `Error ${jobId ? "updating" : "creating"} booking:`,
-        error
-      );
+      console.error(`Error ${jobId ? "updating" : "creating"} booking:`, error);
       ToastNotification({
         type: "error",
         message:
@@ -585,13 +639,19 @@ function OceanJobGenerationCreate() {
   const containerNumberOptions = useMemo(() => {
     return containerForm.values.containers
       .filter((c) => c.container_number?.trim())
-      .map((c) => ({ value: c.container_number.trim(), label: c.container_number.trim() }));
+      .map((c) => ({
+        value: c.container_number.trim(),
+        label: c.container_number.trim(),
+      }));
   }, [containerForm.values.containers]);
 
   // Show Container Number column only when at least one container number is given in Equipments
   const showContainerNumberColumn = containerNumberOptions.length >= 1;
 
-  const handleContainerNumberChange = (bookingId: number, value: string | null) => {
+  const handleContainerNumberChange = (
+    bookingId: number,
+    value: string | null,
+  ) => {
     setBookingContainerMap((prev) => ({
       ...prev,
       [bookingId]: value ?? "",
@@ -599,124 +659,121 @@ function OceanJobGenerationCreate() {
   };
 
   // Booking list columns
-  const bookingColumns = useMemo<MRT_ColumnDef<BookingData>[]>(
-    () => {
-      const baseColumns: MRT_ColumnDef<BookingData>[] = [
-        {
-          id: "select",
-          header: "Select",
-          size: 60,
-          Cell: ({ row }) => (
-            <Checkbox
-              checked={selectedBookings.has(row.original.id)}
-              onChange={(event) =>
-                handleSelectBooking(row.original.id, event.currentTarget.checked)
-              }
-              disabled={mode === "view"}
-            />
-          ),
-          Header: () => (
-            <Checkbox
-              checked={
-                selectedBookings.size === bookingList.length &&
-                bookingList.length > 0
-              }
-              indeterminate={
-                selectedBookings.size > 0 &&
-                selectedBookings.size < bookingList.length
-              }
-              onChange={(event) => handleSelectAll(event.currentTarget.checked)}
-              disabled={mode === "view"}
-            />
-          ),
-        },
-        {
-          accessorKey: "shipment_code",
-          header: "Booking ID",
-          size: 120,
-        },
-        {
-          accessorKey: "service_type",
-          header: "Service Type",
-          size: 100,
-        },
-        {
-          accessorKey: "customer_name",
-          header: "Customer Name",
-          size: 200,
-        },
-        {
-          accessorKey: "origin_name",
-          header: "Origin",
-          size: 120,
-        },
-        {
-          accessorKey: "destination_name",
-          header: "Destination",
-          size: 120,
-        },
-        {
-          accessorKey: "freight",
-          header: "Freight",
-          size: 100,
-        },
-      ];
-
-      if (showContainerNumberColumn) {
-        baseColumns.push({
-          id: "container_number",
-          header: "Container Number",
-          size: 180,
-          Cell: ({ row }) => {
-            const isSelected = selectedBookings.has(row.original.id);
-
-            if (!isSelected) {
-              // For non-selected bookings, show a disabled field with no options
-              return (
-                <Select
-                  size="xs"
-                  placeholder="-"
-                  data={[]}
-                  value={null}
-                  disabled
-                  styles={{
-                    input: { fontSize: "12px", minHeight: 28 },
-                  }}
-                />
-              );
+  const bookingColumns = useMemo<MRT_ColumnDef<BookingData>[]>(() => {
+    const baseColumns: MRT_ColumnDef<BookingData>[] = [
+      {
+        id: "select",
+        header: "Select",
+        size: 60,
+        Cell: ({ row }) => (
+          <Checkbox
+            checked={selectedBookings.has(row.original.id)}
+            onChange={(event) =>
+              handleSelectBooking(row.original.id, event.currentTarget.checked)
             }
+            disabled={mode === "view"}
+          />
+        ),
+        Header: () => (
+          <Checkbox
+            checked={
+              selectedBookings.size === bookingList.length &&
+              bookingList.length > 0
+            }
+            indeterminate={
+              selectedBookings.size > 0 &&
+              selectedBookings.size < bookingList.length
+            }
+            onChange={(event) => handleSelectAll(event.currentTarget.checked)}
+            disabled={mode === "view"}
+          />
+        ),
+      },
+      {
+        accessorKey: "shipment_code",
+        header: "Booking ID",
+        size: 120,
+      },
+      {
+        accessorKey: "service_type",
+        header: "Service Type",
+        size: 100,
+      },
+      {
+        accessorKey: "customer_name",
+        header: "Customer Name",
+        size: 200,
+      },
+      {
+        accessorKey: "origin_name",
+        header: "Origin",
+        size: 120,
+      },
+      {
+        accessorKey: "destination_name",
+        header: "Destination",
+        size: 120,
+      },
+      {
+        accessorKey: "freight",
+        header: "Freight",
+        size: 100,
+      },
+    ];
 
+    if (showContainerNumberColumn) {
+      baseColumns.push({
+        id: "container_number",
+        header: "Container Number",
+        size: 180,
+        Cell: ({ row }) => {
+          const isSelected = selectedBookings.has(row.original.id);
+
+          if (!isSelected) {
+            // For non-selected bookings, show a disabled field with no options
             return (
               <Select
                 size="xs"
-                placeholder="Select container"
-                data={containerNumberOptions}
-                value={bookingContainerMap[row.original.id] || null}
-                onChange={(value) =>
-                  handleContainerNumberChange(row.original.id, value)
-                }
-                clearable
-                disabled={mode === "view"}
+                placeholder="-"
+                data={[]}
+                value={null}
+                disabled
                 styles={{
                   input: { fontSize: "12px", minHeight: 28 },
                 }}
               />
             );
-          },
-        });
-      }
+          }
 
-      return baseColumns;
-    },
-    [
-      selectedBookings,
-      bookingList,
-      mode,
-      showContainerNumberColumn,
-      containerNumberOptions,
-      bookingContainerMap,
-    ]
-  );
+          return (
+            <Select
+              size="xs"
+              placeholder="Select container"
+              data={containerNumberOptions}
+              value={bookingContainerMap[row.original.id] || null}
+              onChange={(value) =>
+                handleContainerNumberChange(row.original.id, value)
+              }
+              clearable
+              disabled={mode === "view"}
+              styles={{
+                input: { fontSize: "12px", minHeight: 28 },
+              }}
+            />
+          );
+        },
+      });
+    }
+
+    return baseColumns;
+  }, [
+    selectedBookings,
+    bookingList,
+    mode,
+    showContainerNumberColumn,
+    containerNumberOptions,
+    bookingContainerMap,
+  ]);
 
   const bookingTable = useMantineReactTable({
     columns: bookingColumns,
@@ -770,7 +827,7 @@ function OceanJobGenerationCreate() {
   const isReadOnly = viewMode;
 
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box px="md" py="md" w="100%">
       <Text size="xl" fw={600} c="#105476" mb="lg">
         {mode === "view"
           ? "View Ocean Job Generation"
@@ -779,18 +836,83 @@ function OceanJobGenerationCreate() {
             : "Create Ocean Job Generation"}
       </Text>
 
-      <Stepper
+      <Tabs
+        value={String(active)}
+        onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        active={active}
-        onStepClick={setActive}
-        orientation="horizontal"
-        allowNextStepsSelect={false}
       >
-        {/* Stepper 1: Job Details */}
-        <Stepper.Step label="1" description="Job Details">
+        <Tabs.List
+          mb="md"
+          style={{
+            display: "flex",
+            gap: "8px",
+            flexWrap: "wrap",
+            borderBottom: "none",
+          }}
+        >
+          <Tabs.Tab
+            value="0"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 0 ? 600 : 400,
+            }}
+          >
+            Job Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="1"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 1 ? 600 : 400,
+            }}
+          >
+            Equipments
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="2"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 2 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 2 ? 600 : 400,
+            }}
+          >
+            Routing Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="3"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 3 ? 600 : 400,
+            }}
+          >
+            Select Bookings
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="0">
           <Box mt="md">
+            {/* First section: service, origin, destination, master no, master date, cutoff date */}
             <Grid>
-              <Grid.Col span={4}>
+              <Grid.Col span={3}>
                 <Dropdown
                   label="Service"
                   withAsterisk
@@ -802,13 +924,42 @@ function OceanJobGenerationCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={4}>
+              <Grid.Col span={3}>
+                <SearchableSelect
+                  label="Agent"
+                  apiEndpoint={URL.agent}
+                  placeholder="Type agent name"
+                  searchFields={["customer_code", "customer_name"]}
+                  dropdownZIndex={310}
+                  displayFormat={(item: any) => ({
+                    value: String(item.customer_code ?? item.agent_code ?? ""),
+                    label: String(item.customer_name ?? item.agent_name ?? item.customer_code ?? ""),
+                  })}
+                  value={jobDetailsForm.values.agent_code}
+                  displayValue={
+                    jobDetailsForm.values.agent_name
+                      ? `${jobDetailsForm.values.agent_name} (${jobDetailsForm.values.agent_code})`
+                      : jobDetailsForm.values.agent_code || ""
+                  }
+                  onChange={(value, selectedData) => {
+                    jobDetailsForm.setFieldValue("agent_code", value || "");
+                    jobDetailsForm.setFieldValue(
+                      "agent_name",
+                      selectedData?.label?.split(" (")[0] ?? "",
+                    );
+                  }}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
                 <SearchableSelect
                   label="Origin"
                   required
                   apiEndpoint={URL.portMaster}
                   placeholder="Type origin code or name"
                   searchFields={["port_code", "port_name"]}
+                  dropdownZIndex={310}
                   displayFormat={(item: any) => ({
                     value: String(item.port_code),
                     label: `${item.port_name} (${item.port_code})`,
@@ -824,23 +975,25 @@ function OceanJobGenerationCreate() {
                     if (selectedData) {
                       jobDetailsForm.setFieldValue(
                         "origin_name",
-                        selectedData.label.split(" (")[0] || ""
+                        selectedData.label.split(" (")[0] || "",
                       );
                     }
                   }}
                   error={jobDetailsForm.errors.origin_code as string}
                   minSearchLength={3}
+                  additionalParams={{ transport_mode: "SEA" }}
                   disabled={isReadOnly}
                 />
               </Grid.Col>
 
-              <Grid.Col span={4}>
+              <Grid.Col span={3}>
                 <SearchableSelect
                   label="Destination"
                   required
                   apiEndpoint={URL.portMaster}
                   placeholder="Type destination code or name"
                   searchFields={["port_code", "port_name"]}
+                  dropdownZIndex={310}
                   displayFormat={(item: any) => ({
                     value: String(item.port_code),
                     label: `${item.port_name} (${item.port_code})`,
@@ -854,132 +1007,53 @@ function OceanJobGenerationCreate() {
                   onChange={(value, selectedData) => {
                     jobDetailsForm.setFieldValue(
                       "destination_code",
-                      value || ""
+                      value || "",
                     );
                     if (selectedData) {
                       jobDetailsForm.setFieldValue(
                         "destination_name",
-                        selectedData.label.split(" (")[0] || ""
+                        selectedData.label.split(" (")[0] || "",
                       );
                     }
                   }}
                   error={jobDetailsForm.errors.destination_code as string}
                   minSearchLength={3}
+                  additionalParams={{ transport_mode: "SEA" }}
                   disabled={isReadOnly}
                 />
               </Grid.Col>
 
-              <Grid.Col span={4}>
-                <DateInput
-                  label="ETA"
-                  withAsterisk
-                  placeholder="YYYY-MM-DD"
+              <Grid.Col span={3}>
+                <FormTextInput
+                  label="Master No"
+                  placeholder="Enter master number"
+                  {...jobDetailsForm.getInputProps("master_no")}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="Master Date"
                   value={
-                    jobDetailsForm.values.eta
-                      ? dayjs(jobDetailsForm.values.eta).toDate()
+                    jobDetailsForm.values.master_date
+                      ? dayjs(jobDetailsForm.values.master_date).toDate()
                       : null
                   }
                   onChange={(date) => {
                     const formatted = date
                       ? dayjs(date).format("YYYY-MM-DD")
                       : "";
-                    jobDetailsForm.setFieldValue("eta", formatted);
+                    jobDetailsForm.setFieldValue("master_date", formatted);
                   }}
-                  error={jobDetailsForm.errors.eta}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  size="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
                   disabled={isReadOnly}
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
                 />
               </Grid.Col>
 
-              <Grid.Col span={4}>
-                <DateInput
-                  label="ETD"
-                  withAsterisk
-                  placeholder="YYYY-MM-DD"
-                  value={
-                    jobDetailsForm.values.etd
-                      ? dayjs(jobDetailsForm.values.etd).toDate()
-                      : null
-                  }
-                  onChange={(date) => {
-                    const formatted = date
-                      ? dayjs(date).format("YYYY-MM-DD")
-                      : "";
-                    jobDetailsForm.setFieldValue("etd", formatted);
-                  }}
-                  error={jobDetailsForm.errors.etd}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  size="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  disabled={isReadOnly}
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={4}>
-                <DateInput
+              <Grid.Col span={3}>
+                <SingleDateInput
                   label="Cutoff Date"
                   withAsterisk
-                  placeholder="YYYY-MM-DD"
                   value={
                     jobDetailsForm.values.cutoff_date
                       ? dayjs(jobDetailsForm.values.cutoff_date).toDate()
@@ -991,45 +1065,49 @@ function OceanJobGenerationCreate() {
                       : "";
                     jobDetailsForm.setFieldValue("cutoff_date", formatted);
                   }}
-                  error={jobDetailsForm.errors.cutoff_date}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  size="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
+                  error={jobDetailsForm.errors.cutoff_date as string}
                   disabled={isReadOnly}
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
+                />
+              </Grid.Col>
+            </Grid>
+
+            <Grid mt="sm">
+              <Grid.Col span={3}>
+                <SearchableSelect
+                  label="Carrier"
+                  required
+                  apiEndpoint={URL.carrier}
+                  placeholder="Type carrier code or name"
+                  searchFields={["carrier_code", "carrier_name"]}
+                  dropdownZIndex={310}
+                  displayFormat={(item: Record<string, unknown>) => {
+                    const row = item as { carrier_code?: string; carrier_name?: string };
+                    return {
+                      value: String(row.carrier_code ?? ""),
+                      label: String(row.carrier_name ?? row.carrier_code ?? ""),
+                    };
                   }}
+                  value={jobDetailsForm.values.carrier_code}
+                  displayValue={
+                    jobDetailsForm.values.carrier_name
+                      ? `${jobDetailsForm.values.carrier_name} (${jobDetailsForm.values.carrier_code})`
+                      : jobDetailsForm.values.carrier_code || ""
+                  }
+                  onChange={(value, selectedData) => {
+                    jobDetailsForm.setFieldValue("carrier_code", value || "");
+                    jobDetailsForm.setFieldValue(
+                      "carrier_name",
+                      selectedData?.label?.split(" (")[0] ?? "",
+                    );
+                  }}
+                  error={jobDetailsForm.errors.carrier_code as string}
+                  additionalParams={{ transport_mode: "SEA" }}
+                  disabled={isReadOnly}
                 />
               </Grid.Col>
 
-              <Grid.Col span={4}>
-                <TextInput
+              <Grid.Col span={3}>
+                <FormTextInput
                   label="Vessel"
                   withAsterisk
                   placeholder="Enter vessel name"
@@ -1038,8 +1116,8 @@ function OceanJobGenerationCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={4}>
-                <TextInput
+              <Grid.Col span={3}>
+                <FormTextInput
                   label="Voyage"
                   withAsterisk
                   placeholder="Enter voyage number"
@@ -1048,7 +1126,7 @@ function OceanJobGenerationCreate() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={4}>
+              <Grid.Col span={3}>
                 <Dropdown
                   label="Schedule"
                   placeholder="Select schedule"
@@ -1063,31 +1141,88 @@ function OceanJobGenerationCreate() {
                   disabled={isReadOnly}
                 />
               </Grid.Col>
+            </Grid>
 
-              <Grid.Col span={4}>
-                <Dropdown
-                  label="Carrier"
-                  placeholder="Select carrier"
-                  searchable
-                  data={carrierData}
-                  nothingFoundMessage="No carriers found"
-                  {...jobDetailsForm.getInputProps("carrier_code")}
-                  onChange={(value) => {
-                    jobDetailsForm.setFieldValue("carrier_code", value || "");
-                    const selectedCarrier = carrierData.find(
-                      (carrier) => carrier.value === value
-                    );
-                    if (selectedCarrier) {
-                      jobDetailsForm.setFieldValue(
-                        "carrier_name",
-                        selectedCarrier.label
-                      );
-                    }
+            {/* Second section: ETD, ETA, ATD, ATA */}
+            <Grid mt="sm">
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="ETD"
+                  withAsterisk
+                  value={
+                    jobDetailsForm.values.etd
+                      ? dayjs(jobDetailsForm.values.etd).toDate()
+                      : null
+                  }
+                  onChange={(date) => {
+                    const formatted = date
+                      ? dayjs(date).format("YYYY-MM-DD")
+                      : "";
+                    jobDetailsForm.setFieldValue("etd", formatted);
+                  }}
+                  error={jobDetailsForm.errors.etd as string}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="ETA"
+                  withAsterisk
+                  value={
+                    jobDetailsForm.values.eta
+                      ? dayjs(jobDetailsForm.values.eta).toDate()
+                      : null
+                  }
+                  onChange={(date) => {
+                    const formatted = date
+                      ? dayjs(date).format("YYYY-MM-DD")
+                      : "";
+                    jobDetailsForm.setFieldValue("eta", formatted);
+                  }}
+                  error={jobDetailsForm.errors.eta as string}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="ATD"
+                  value={
+                    jobDetailsForm.values.atd
+                      ? dayjs(jobDetailsForm.values.atd).toDate()
+                      : null
+                  }
+                  onChange={(date) => {
+                    const formatted = date
+                      ? dayjs(date).format("YYYY-MM-DD")
+                      : "";
+                    jobDetailsForm.setFieldValue("atd", formatted);
+                  }}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="ATA"
+                  value={
+                    jobDetailsForm.values.ata
+                      ? dayjs(jobDetailsForm.values.ata).toDate()
+                      : null
+                  }
+                  onChange={(date) => {
+                    const formatted = date
+                      ? dayjs(date).format("YYYY-MM-DD")
+                      : "";
+                    jobDetailsForm.setFieldValue("ata", formatted);
                   }}
                   disabled={isReadOnly}
                 />
               </Grid.Col>
             </Grid>
+
+            {/* Third section: carrier, vessel, voyage, schedule */}
 
             <Group justify="space-between" mt="xl">
               <Button
@@ -1105,21 +1240,18 @@ function OceanJobGenerationCreate() {
                 Back to List
               </Button>
               <Group gap="sm">
+                <Button variant="default" onClick={() => setActive((c) => c - 1)} disabled={active === 0}>
+                  Previous
+                </Button>
                 <Button onClick={handleNext} color="#105476">
                   Next
                 </Button>
-                {editMode && !isReadOnly && (
-                  <Button variant="outline" color="#105476" onClick={handleGenerateJob}>
-                    Generate Job
-                  </Button>
-                )}
               </Group>
             </Group>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 2: Equipment Details */}
-        <Stepper.Step label="2" description="Equipments">
+        <Tabs.Panel value="1">
           <Box mt="md">
             <Text size="md" fw={600} c="#105476" mb="md">
               Equipments:
@@ -1167,7 +1299,7 @@ function OceanJobGenerationCreate() {
                         data={containerTypeData}
                         nothingFoundMessage="No container types found"
                         {...containerForm.getInputProps(
-                          `containers.${index}.container_type`
+                          `containers.${index}.container_type`,
                         )}
                         disabled={isReadOnly}
                       />
@@ -1178,7 +1310,7 @@ function OceanJobGenerationCreate() {
                         withAsterisk
                         placeholder="Enter container number"
                         {...containerForm.getInputProps(
-                          `containers.${index}.container_number`
+                          `containers.${index}.container_number`,
                         )}
                         disabled={isReadOnly}
                       />
@@ -1188,7 +1320,7 @@ function OceanJobGenerationCreate() {
                       <TextInput
                         placeholder="Enter custom seal number"
                         {...containerForm.getInputProps(
-                          `containers.${index}.custom_seal_number`
+                          `containers.${index}.custom_seal_number`,
                         )}
                         disabled={isReadOnly}
                       />
@@ -1198,7 +1330,7 @@ function OceanJobGenerationCreate() {
                       <TextInput
                         placeholder="Enter actual seal number"
                         {...containerForm.getInputProps(
-                          `containers.${index}.actual_seal_number`
+                          `containers.${index}.actual_seal_number`,
                         )}
                         disabled={isReadOnly}
                       />
@@ -1213,7 +1345,6 @@ function OceanJobGenerationCreate() {
                             mt={4}
                             leftSection={<IconPlus size={16} />}
                             onClick={() => {
-                              // Add new container at the end (bottom)
                               containerForm.setFieldValue("containers", [
                                 ...containerForm.values.containers,
                                 {
@@ -1250,27 +1381,373 @@ function OceanJobGenerationCreate() {
 
             <Group justify="space-between" mt="xl">
               <Button
-                variant="default"
-                onClick={() => setActive((current) => current - 1)}
+                variant="outline"
+                color="#105476"
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={() => {
+                  const returnPath =
+                    serviceType === "LCL"
+                      ? "/SeaExport/lcl-job-generation"
+                      : "/SeaExport/fcl-job-generation";
+                  navigate(returnPath);
+                }}
               >
-                Back
+                Back to List
               </Button>
               <Group gap="sm">
+                <Button variant="default" onClick={() => setActive((c) => c - 1)}>
+                  Previous
+                </Button>
                 <Button onClick={handleNext} color="#105476">
                   Next
                 </Button>
-                {editMode && !isReadOnly && (
-                  <Button variant="outline" color="#105476" onClick={handleGenerateJob}>
-                    Generate Job
-                  </Button>
-                )}
               </Group>
             </Group>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 3: Booking Selection */}
-        <Stepper.Step label="3" description="Select Bookings">
+        <Tabs.Panel value="2">
+          <Box mt="md">
+            <Text size="md" fw={600} c="#105476" mb="md">
+              Routing Details
+            </Text>
+
+            {/* Header Row - Vessel column only when at least one route is SEA */}
+            {(() => {
+              const hasAnySea = routingDetails.some((r) => r.transport_type === "SEA");
+              return (
+                <Grid mb="xs">
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      Transport Type
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      From Port
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      To Port
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={hasAnySea ? 1 : 1.5}>
+                    <Text size="sm" fw={500} c="#105476">
+                      Carrier
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={hasAnySea ? 1 : 1.5}>
+                    <Text size="sm" fw={500} c="#105476">
+                      Transport No
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      ETD
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      ETA
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      ATD
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      ATA
+                    </Text>
+                  </Grid.Col>
+                  {hasAnySea && (
+                    <Grid.Col span={1}>
+                      <Text size="sm" fw={500} c="#105476">
+                        Vessel
+                      </Text>
+                    </Grid.Col>
+                  )}
+                  <Grid.Col span={2}>
+                    <Text size="sm" fw={500} c="#105476">
+                      Actions
+                    </Text>
+                  </Grid.Col>
+                </Grid>
+              );
+            })()}
+
+            {/* Dynamic Routing Rows */}
+            <Stack gap="xs">
+              {routingDetails.map((route, index) => (
+                <Box key={index}>
+                  <Grid>
+                    <Grid.Col span={1}>
+                      <Dropdown
+                        placeholder="Select type"
+                        searchable
+                        data={["SEA", "AIR", "ROAD", "RAIL"]}
+                        value={route.transport_type}
+                        onChange={(value) => {
+                          const updated = [...routingDetails];
+                          updated[index] = {
+                            ...updated[index],
+                            transport_type: value || "",
+                            ...(value !== "SEA" ? { vessel: "" } : {}),
+                          };
+                          setRoutingDetails(updated);
+                        }}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SearchableSelect
+                        placeholder="From port code or name"
+                        apiEndpoint={URL.portMaster}
+                        searchFields={["port_code", "port_name"]}
+                        dropdownZIndex={310}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const port = item as { port_code: string; port_name: string };
+                          return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
+                        }}
+                        value={route.from_port_code}
+                        onChange={(value) => {
+                          const updated = [...routingDetails];
+                          updated[index] = { ...updated[index], from_port_code: value || "" };
+                          setRoutingDetails(updated);
+                        }}
+                        minSearchLength={3}
+                        additionalParams={
+                          getTransportMode(route.transport_type)
+                            ? { transport_mode: getTransportMode(route.transport_type)! }
+                            : undefined
+                        }
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SearchableSelect
+                        placeholder="To port code or name"
+                        apiEndpoint={URL.portMaster}
+                        searchFields={["port_code", "port_name"]}
+                        dropdownZIndex={310}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const port = item as { port_code: string; port_name: string };
+                          return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
+                        }}
+                        value={route.to_port_code}
+                        onChange={(value) => {
+                          const updated = [...routingDetails];
+                          updated[index] = { ...updated[index], to_port_code: value || "" };
+                          setRoutingDetails(updated);
+                        }}
+                        minSearchLength={3}
+                        additionalParams={
+                          getTransportMode(route.transport_type)
+                            ? { transport_mode: getTransportMode(route.transport_type)! }
+                            : undefined
+                        }
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={route.transport_type === "SEA" ? 1 : 1.5}>
+                      <SearchableSelect
+                        placeholder="Carrier"
+                        apiEndpoint={URL.carrier}
+                        searchFields={["carrier_code", "carrier_name"]}
+                        dropdownZIndex={310}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const r = item as { carrier_code?: string; carrier_name?: string };
+                          return { value: String(r.carrier_code ?? ""), label: String(r.carrier_name ?? r.carrier_code ?? "") };
+                        }}
+                        value={route.carrier_code}
+                        displayValue={route.carrier_code ? `${route.carrier_code}` : ""}
+                        onChange={(value) => {
+                          const updated = [...routingDetails];
+                          updated[index] = { ...updated[index], carrier_code: value || "" };
+                          setRoutingDetails(updated);
+                        }}
+                        minSearchLength={2}
+                        additionalParams={
+                          getTransportMode(route.transport_type)
+                            ? { transport_mode: getTransportMode(route.transport_type)! }
+                            : undefined
+                        }
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={route.transport_type === "SEA" ? 1 : 1.5}>
+                      <TextInput
+                        placeholder="Transport no"
+                        value={route.transport_no}
+                        onChange={(event) => {
+                          const updated = [...routingDetails];
+                          updated[index] = {
+                            ...updated[index],
+                            transport_no: event.currentTarget.value,
+                          };
+                          setRoutingDetails(updated);
+                        }}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SingleDateInput
+                        placeholder="ETD"
+                        value={route.etd ? dayjs(route.etd).toDate() : null}
+                        onChange={(date) => {
+                          const updated = [...routingDetails];
+                          updated[index] = {
+                            ...updated[index],
+                            etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                          };
+                          setRoutingDetails(updated);
+                        }}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SingleDateInput
+                        placeholder="ETA"
+                        value={route.eta ? dayjs(route.eta).toDate() : null}
+                        onChange={(date) => {
+                          const updated = [...routingDetails];
+                          updated[index] = {
+                            ...updated[index],
+                            eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                          };
+                          setRoutingDetails(updated);
+                        }}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SingleDateInput
+                        placeholder="ATD"
+                        value={route.atd ? dayjs(route.atd).toDate() : null}
+                        onChange={(date) => {
+                          const updated = [...routingDetails];
+                          updated[index] = {
+                            ...updated[index],
+                            atd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                          };
+                          setRoutingDetails(updated);
+                        }}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SingleDateInput
+                        placeholder="ATA"
+                        value={route.ata ? dayjs(route.ata).toDate() : null}
+                        onChange={(date) => {
+                          const updated = [...routingDetails];
+                          updated[index] = {
+                            ...updated[index],
+                            ata: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                          };
+                          setRoutingDetails(updated);
+                        }}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    {route.transport_type === "SEA" && (
+                      <Grid.Col span={1}>
+                        <TextInput
+                          placeholder="Vessel"
+                          value={route.vessel}
+                          onChange={(event) => {
+                            const updated = [...routingDetails];
+                            updated[index] = {
+                              ...updated[index],
+                              vessel: event.currentTarget.value,
+                            };
+                            setRoutingDetails(updated);
+                          }}
+                          disabled={isReadOnly}
+                        />
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={2}>
+                      {!isReadOnly && (
+                        <Group gap="xs" mt={4}>
+                          {index === routingDetails.length - 1 && (
+                            <Button
+                              variant="light"
+                              color="#105476"
+                              size="xs"
+                              leftSection={<IconPlus size={14} />}
+                              onClick={() => {
+                                setRoutingDetails([
+                                  ...routingDetails,
+                                  {
+                                    transport_type: "",
+                                    from_port_code: "",
+                                    to_port_code: "",
+                                    carrier_code: "",
+                                    transport_no: "",
+                                    etd: "",
+                                    eta: "",
+                                    atd: "",
+                                    ata: "",
+                                    vessel: "",
+                                  },
+                                ]);
+                              }}
+                            > 
+                            </Button>
+                          )}
+                          {routingDetails.length > 1 && (
+                            <Button
+                              variant="light"
+                              color="red"
+                              size="xs"
+                              onClick={() => {
+                                setRoutingDetails(
+                                  routingDetails.filter((_, i) => i !== index),
+                                );
+                              }}
+                            >
+                              <IconTrash size={14} />
+                            </Button>
+                          )}
+                        </Group>
+                      )}
+                    </Grid.Col>
+                  </Grid>
+                </Box>
+              ))}
+            </Stack>
+
+            <Group justify="space-between" mt="xl">
+              <Button
+                variant="outline"
+                color="#105476"
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={() => {
+                  const returnPath =
+                    serviceType === "LCL"
+                      ? "/SeaExport/lcl-job-generation"
+                      : "/SeaExport/fcl-job-generation";
+                  navigate(returnPath);
+                }}
+              >
+                Back to List
+              </Button>
+              <Group gap="sm">
+                <Button variant="default" onClick={() => setActive((c) => c - 1)}>
+                  Previous
+                </Button>
+                <Button onClick={handleNext} color="#105476">
+                  Next
+                </Button>
+              </Group>
+            </Group>
+          </Box>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
               <Text size="md" fw={600} c="#105476">
@@ -1310,13 +1787,24 @@ function OceanJobGenerationCreate() {
 
             <Group justify="space-between" mt="xl">
               <Button
-                variant="default"
-                onClick={() => setActive((current) => current - 1)}
+                variant="outline"
+                color="#105476"
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={() => {
+                  const returnPath =
+                    serviceType === "LCL"
+                      ? "/SeaExport/lcl-job-generation"
+                      : "/SeaExport/fcl-job-generation";
+                  navigate(returnPath);
+                }}
               >
-                Back
+                Back to List
               </Button>
               {!isReadOnly ? (
                 <Group gap="sm">
+                  <Button variant="default" onClick={() => setActive((c) => c - 1)}>
+                    Previous
+                  </Button>
                   <Button
                     rightSection={<IconCheck size={16} />}
                     onClick={handleSaveBooking}
@@ -1324,7 +1812,7 @@ function OceanJobGenerationCreate() {
                     loading={isSubmitting}
                     disabled={isSubmitting}
                   >
-                    {jobId ? "Update Booking" : "Create Booking"}
+                    {jobId ? "Update" : "Create"}
                   </Button>
                   {editMode && (
                     <Button
@@ -1353,8 +1841,8 @@ function OceanJobGenerationCreate() {
               )}
             </Group>
           </Box>
-        </Stepper.Step>
-      </Stepper>
+        </Tabs.Panel>
+      </Tabs>
     </Box>
   );
 }
