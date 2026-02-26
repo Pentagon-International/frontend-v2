@@ -913,8 +913,16 @@ function QuotationCreate({
     // Force form reset when service changes to prevent data bleeding
     if (selectedService) {
       const savedData = serviceQuotationData[selectedService.id];
+      // In edit mode, skip reset when serviceQuotationData is still empty (initial load);
+      // the init effect will populate from list/API. Otherwise we'd clear the form before it runs.
+      if (
+        !savedData &&
+        isEditMode &&
+        Object.keys(serviceQuotationData).length === 0
+      ) {
+        return;
+      }
       if (!savedData) {
-        // If no saved data, ensure forms are completely reset
         quotationForm.setValues({
           quote_currency_country_code: "",
           valid_upto: "",
@@ -928,6 +936,7 @@ function QuotationCreate({
           charges: [
             {
               charge_name: "",
+              charge_id: null,
               currency_country_code: "",
               roe: 1,
               unit: "",
@@ -942,7 +951,12 @@ function QuotationCreate({
         });
       }
     }
-  }, [selectedServiceIndex, selectedService?.id]);
+  }, [
+    selectedServiceIndex,
+    selectedService?.id,
+    isEditMode,
+    serviceQuotationData,
+  ]);
 
   // Fetch quotation details when quotationId is provided from URL
   useEffect(() => {
@@ -2725,9 +2739,8 @@ function QuotationCreate({
     dynamicForm,
   ]);
 
-  // Initialize form data for edit mode
+  // Initialize form data for edit mode (from list row or fetched quotation)
   useEffect(() => {
-    // Get quotation data from either quotationData (standalone) or actualEnquiryData (from stepper)
     const quotationDataToUse =
       quotationData?.quotation ||
       actualEnquiryData?.quotation ||
@@ -2737,22 +2750,21 @@ function QuotationCreate({
       Array.isArray(quotationDataToUse) &&
       quotationDataToUse.length > 0;
 
+    // Run when we have quotation data and services; don't block on carrier/currency so list-edit shows charges immediately
     if (
       (isEditMode || hasQuotationData) &&
       (quotationData ||
         actualEnquiryData?.quotation ||
         fetchedQuotationData?.quotation) &&
-      carrierData.length > 0 &&
-      Array.isArray(currencyData) &&
-      currencyData.length > 0 &&
       services.length > 0
     ) {
       const dataSource =
         quotationData || actualEnquiryData || fetchedQuotationData;
       console.log("Initializing form for edit mode:", dataSource);
 
-      // Initialize service quotation data for all services
       const initialServiceData: { [serviceId: number]: any } = {};
+      const carrierList = Array.isArray(carrierData) ? carrierData : [];
+      const currencyList = Array.isArray(currencyData) ? currencyData : [];
 
       services.forEach((service) => {
         const quotationForService = quotationDataToUse?.find(
@@ -2760,23 +2772,20 @@ function QuotationCreate({
         );
 
         if (quotationForService) {
-          // Find carrier code by matching carrier name
-          const matchedCarrier = carrierData.find(
+          const matchedCarrier = carrierList.find(
             (carrier: any) => carrier.label === quotationForService.carrier
           );
           const carrierCode = matchedCarrier?.value || "";
 
-          // Find currency code by matching currency name
-          const data = currencyData as any[];
-          const matchedCurrency = Array.isArray(data)
-            ? data.find(
-                (currency: any) =>
-                  currency.name === quotationForService.quote_currency ||
-                  currency.code === quotationForService.quote_currency
-              )
-            : null;
+          const matchedCurrency = currencyList.find(
+            (currency: any) =>
+              currency.name === quotationForService.quote_currency ||
+              currency.code === quotationForService.quote_currency
+          );
           const currencyCode =
-            matchedCurrency?.code || quotationForService.quote_currency || "";
+            matchedCurrency?.code ||
+            quotationForService.quote_currency ||
+            "";
 
           // Prepare form data for this service
           const quotationForm = {
@@ -2789,12 +2798,13 @@ function QuotationCreate({
             remark: quotationForService.remark || "",
           };
 
-          // Prepare charges data for this service
+          // Prepare charges data for this service (include charge_id for SearchableSelect value)
           const charges =
             quotationForService.charges &&
             quotationForService.charges.length > 0
               ? quotationForService.charges.map((charge: any) => ({
                   charge_name: charge.charge_name || "",
+                  charge_id: charge.charge_id ?? null,
                   currency_country_code: charge.currency || "",
                   roe: charge.roe != null ? String(charge.roe) : "1",
                   unit: charge.unit || "",
