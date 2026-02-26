@@ -3166,6 +3166,7 @@ function AirImportJobCreate() {
                                             {
                                               state: {
                                                 invoiceData: row,
+                                                fromJobLevel: true,
                                                 ...(jobData && {
                                                   job: jobData,
                                                 }),
@@ -3220,6 +3221,7 @@ function AirImportJobCreate() {
                                               {
                                                 state: {
                                                   invoiceData: row,
+                                                  fromJobLevel: true,
                                                   ...(jobData && {
                                                     job: jobData,
                                                   }),
@@ -3564,6 +3566,7 @@ function AirImportJobCreate() {
                                                                       rev.day_book_name ??
                                                                       row.day_book_name,
                                                                   },
+                                                                  fromJobLevel: true,
                                                                   ...(jobData && {
                                                                     job: jobData,
                                                                   }),

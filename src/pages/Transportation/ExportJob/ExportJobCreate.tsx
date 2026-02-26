@@ -3548,6 +3548,7 @@ function ExportJobCreate() {
                                             {
                                               state: {
                                                 invoiceData: row,
+                                                fromJobLevel: true,
                                                 ...(location.state?.job && {
                                                   job: location.state.job,
                                                 }),
@@ -3602,6 +3603,7 @@ function ExportJobCreate() {
                                               {
                                                 state: {
                                                   invoiceData: row,
+                                                  fromJobLevel: true,
                                                   ...(location.state?.job && {
                                                     job: location.state.job,
                                                   }),
@@ -3932,6 +3934,7 @@ function ExportJobCreate() {
                                                                     rev.day_book_name ??
                                                                     row.day_book_name,
                                                                 },
+                                                                fromJobLevel: true,
                                                                 ...(location
                                                                   .state
                                                                   ?.job && {

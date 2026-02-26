@@ -1740,7 +1740,10 @@ function InvoiceCreate() {
             : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
-          shipment_no: values.shipment_no,
+          shipment_no:
+            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+              ? String(charge.shipment_id)
+              : values.shipment_no,
           ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
@@ -1766,9 +1769,12 @@ function InvoiceCreate() {
       const isAgent =
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
         (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+      const job = (location.state as { job?: { job_id?: number; id?: number } } | null)?.job;
+      const jobId = job && (job.job_id != null || job.id != null) ? (job.job_id ?? job.id) : undefined;
 
       const payload = {
         ...(isUpdate ? { id: saveResponse.id } : {}),
+        ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
         address: values.address,
         state_id: isAgent ? (stateId != null && stateId > 0 ? stateId : null) : stateId,
@@ -2037,7 +2043,10 @@ function InvoiceCreate() {
             : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
-          shipment_no: values.shipment_no,
+          shipment_no:
+            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+              ? String(charge.shipment_id)
+              : values.shipment_no,
           ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
@@ -2080,8 +2089,11 @@ function InvoiceCreate() {
             };
           });
       const allChargesPayload = isAgentPost ? chargesPayload : [...chargesPayload, ...taxCharges];
+      const jobForPost = (location.state as { job?: { job_id?: number; id?: number } } | null)?.job;
+      const jobIdForPost = jobForPost && (jobForPost.job_id != null || jobForPost.id != null) ? (jobForPost.job_id ?? jobForPost.id) : undefined;
       const payload = {
         id: saveResponse.id,
+        ...(jobIdForPost != null ? { job_id: jobIdForPost } : {}),
         bill_to: values.bill_to,
         address: values.address,
         state_id: isAgentPost ? (stateId != null && stateId > 0 ? stateId : null) : stateId,
