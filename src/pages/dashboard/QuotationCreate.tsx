@@ -2188,7 +2188,7 @@ function QuotationCreate({
         charge_id:
           charge.charge_id !== undefined && charge.charge_id !== null
             ? Number(charge.charge_id)
-            : undefined,
+            : null,
         currency_country_code: charge.currency_country_code,
         roe: parseFloat(charge.roe.toString()) || 1.0,
         unit: charge.unit,
@@ -2334,7 +2334,14 @@ function QuotationCreate({
           }
         }
 
+        const servicePk =
+          (data.quotationForm as any).id !== undefined &&
+          (data.quotationForm as any).id !== null
+            ? Number((data.quotationForm as any).id)
+            : null;
+
         return {
+          ...(isEditMode && servicePk ? { id: servicePk } : {}),
           service_id: finalServiceId,
           carrier_code: data.quotationForm.carrier_code,
           icd: selectedService?.icd || "", // Get ICD from enquiry service details
@@ -2352,7 +2359,7 @@ function QuotationCreate({
               charge_id:
                 charge.charge_id !== undefined && charge.charge_id !== null
                   ? Number(charge.charge_id)
-                  : undefined,
+                  : null,
               currency_country_code: charge.currency_country_code,
               roe: parseFloat(charge.roe.toString()) || 1.0,
               unit: charge.unit,
@@ -2789,6 +2796,10 @@ function QuotationCreate({
 
           // Prepare form data for this service
           const quotationForm = {
+            // In edit mode, keep primary key (quotation_service_id) so we can send it in payload
+            ...(isEditMode && quotationForService.quotation_service_id
+              ? { id: quotationForService.quotation_service_id }
+              : {}),
             quote_currency_country_code: currencyCode,
             valid_upto: quotationForService.valid_upto || "",
             multi_carrier: quotationForService.multi_carrier ? "true" : "false",
