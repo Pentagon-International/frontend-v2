@@ -88,11 +88,14 @@ function OceanExportBookingCreate() {
       routing_details: [
         {
           move_type: "MAIN",
-          from_location_code: serviceDetails.origin_code_read || "",
-          to_location_code: serviceDetails.destination_code_read || "",
+          from_location_code: "",
+          from_location_name: "",
+          to_location_code: "",
+          to_location_name: "",
           etd: new Date(),
           eta: new Date(),
           carrier_code: "",
+          carrier_name: "",
           flight_no: null,
           status: "PLANNED",
         },
@@ -133,6 +136,9 @@ function OceanExportBookingCreate() {
         quotationData.cargo_details.length > 0
           ? (quotationData.cargo_details as Array<Record<string, unknown>>).map(
               (cargo: Record<string, unknown>) => ({
+                id: cargo.id
+                  ? Number(cargo.id)
+                  : undefined,
                 no_of_packages: cargo.no_of_packages
                   ? Number(cargo.no_of_packages)
                   : undefined,
@@ -161,6 +167,7 @@ function OceanExportBookingCreate() {
             )
           : [
               {
+                id: serviceDetails.id || undefined,
                 no_of_packages: serviceDetails.no_of_packages || undefined,
                 gross_weight: serviceDetails.gross_weight || undefined,
                 volume_weight: serviceDetails.volume_weight || undefined,
@@ -193,6 +200,7 @@ function OceanExportBookingCreate() {
       rate_details: Array.isArray(quotationData.charges)
         ? (quotationData.charges as Array<Record<string, unknown>>).map(
             (c) => ({
+              charge_id: c.charge_id || "",
               charge_name: c.charge_name || "",
               currency_country_code: c.currency || c.currency_country_code || "",
               roe: c.roe ?? "",

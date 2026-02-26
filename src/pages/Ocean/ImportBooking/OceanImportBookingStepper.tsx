@@ -62,6 +62,7 @@ interface ImportShipmentStepperProps {
 
 interface CargoDetail {
   // Common fields
+  id?: number;
   no_of_packages?: number;
   gross_weight?: number;
   volume_weight?: number;
@@ -428,10 +429,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [charges, setCharges] = useState([
     {
-      id: 1,
+      id: undefined as number | undefined,
       charge_id: "",
       charge_name: "",
-      pp_cc: "",
+      pp_cc: "Collect",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -612,10 +613,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     });
   }, [unitDataRaw]);
 
-  const updateCharge = (id: number, field: string, value: string) => {
+  const updateCharge = (index: number, field: string, value: string) => {
     setCharges(
-      charges.map((charge) => {
-        if (charge.id === id) {
+      charges.map((charge, i) => {
+        if (i === index) {
           const updatedCharge = { ...charge, [field]: value };
 
           // Calculate totals when relevant fields change
@@ -658,10 +659,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   const addNewCharge = () => {
     const newCharge = {
-      id: charges.length + 1,
+      id: undefined as number | undefined,
       charge_id: "",
       charge_name: "",
-      pp_cc: "",
+      pp_cc: "Collect",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -675,9 +676,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     setCharges([...charges, newCharge]);
   };
 
-  const removeCharge = (id: number) => {
+  const removeCharge = (index: number) => {
     if (charges.length > 1) {
-      setCharges(charges.filter((charge) => charge.id !== id));
+      setCharges(charges.filter((_, i) => i !== index));
     }
   };
 
@@ -722,6 +723,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       routingDetails: data.routing_details
         ? (data.routing_details as Array<Record<string, unknown>>).map(
             (route: Record<string, unknown>) => ({
+              id: route.id != null ? Number(route.id) : undefined,
               move_type: String(route.move_type || ""),
               from_location_code: String(route.from_location_code || ""),
               to_location_code: String(route.to_location_code || ""),
@@ -767,6 +769,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       cargo_details: data.cargo_details
         ? (data.cargo_details as Array<Record<string, unknown>>).map(
             (cargo: Record<string, unknown>) => ({
+              id: cargo.id != null ? Number(cargo.id) : undefined,
               no_of_packages: cargo.no_of_packages
                 ? Number(cargo.no_of_packages)
                 : undefined,
@@ -1075,11 +1078,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       lastBookedIdRef.current = null;
       setQuotationId(String(firstItem.quotation_id || ""));
       const mappedCharges = firstItem.charges.map(
-        (charge: QuotationCharge, index: number) => ({
-          id: index + 1,
+        (charge: QuotationCharge) => ({
+          id: undefined as number | undefined,
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
-          pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
+          pp_cc: charge.pp_cc ? String(charge.pp_cc) : "Collect",
           currency_country_code: String(charge.currency || charge.currency_country_code || ""),
           roe: charge.roe ? String(charge.roe) : "",
           unit: String(charge.unit || ""),
@@ -1230,16 +1233,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     ) {
       const mappedCharges = (
         jobData.rate_details as Array<Record<string, unknown>>
-      ).map((charge: Record<string, unknown>, index: number) => ({
-        id:
-          charge.id != null
-            ? typeof charge.id === "number"
-              ? charge.id
-              : Number(charge.id)
-            : index + 1,
+      ).map((charge: Record<string, unknown>) => ({
+        id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
         charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
         charge_name: String(charge.charge_name ?? ""),
-        pp_cc: String(charge.pp_cc ?? ""),
+        pp_cc: String(charge.pp_cc ?? "Collect"),
         currency_country_code: String(
           charge.currency_country_code ?? charge.currency ?? "",
         ),
@@ -1471,11 +1469,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
     if (chargesData) {
       const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
-        (charge: Record<string, unknown>, index: number) => ({
-          id: index + 1,
+        (charge: Record<string, unknown>) => ({
+          id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
-          pp_cc: String(charge.pp_cc ?? ""),
+          pp_cc: String(charge.pp_cc ?? "Collect"),
           currency_country_code: String(
             charge.currency_country_code || charge.currency || "",
           ),
@@ -1761,16 +1759,23 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         is_hazardous: form.values.is_hazardous,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
-        cargo_details: form.values.cargo_details.map((cargo) => ({
-          no_of_packages: cargo.no_of_packages || null,
-          gross_weight: cargo.gross_weight || null,
-          volume_weight: cargo.volume_weight || null,
-          chargeable_weight: cargo.chargeable_weight || null,
-          volume: cargo.volume || null,
-          chargeable_volume: cargo.chargeable_volume || null,
-          container_type_code: cargo.container_type_code || null,
-          no_of_containers: cargo.no_of_containers || null,
-        })),
+        cargo_details: form.values.cargo_details.map((cargo) => {
+          const cargoPayload: Record<string, unknown> = {
+            no_of_packages: cargo.no_of_packages || null,
+            gross_weight: cargo.gross_weight || null,
+            volume_weight: cargo.volume_weight || null,
+            chargeable_weight: cargo.chargeable_weight || null,
+            volume: cargo.volume || null,
+            chargeable_volume: cargo.chargeable_volume || null,
+            container_type_code: cargo.container_type_code || null,
+            no_of_containers: cargo.no_of_containers || null,
+          };
+          if (cargo.id != null && cargo.id !== undefined) {
+            cargoPayload.id =
+              typeof cargo.id === "number" ? cargo.id : Number(cargo.id);
+          }
+          return cargoPayload;
+        }),
 
         // Pickup Details
         pickup_location: form.values.pickup_location,
@@ -1791,16 +1796,23 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         planned_delivery_date: formatDate(form.values.planned_delivery_date),
         actual_delivery_date: form.values.actual_delivery_date ? formatDate(form.values.actual_delivery_date) : null,
 
-        routing_details: form.values.routingDetails.map((route) => ({
-          move_type: route.move_type,
-          from_location_code: route.from_location_code,
-          to_location_code: route.to_location_code,
-          etd: formatDate(route.etd),
-          eta: formatDate(route.eta),
-          carrier_code: route.carrier_code,
-          flight_no: route.flight_no,
-          status: route.status,
-        })),
+        routing_details: form.values.routingDetails.map((route) => {
+          const routePayload: Record<string, unknown> = {
+            move_type: route.move_type,
+            from_location_code: route.from_location_code,
+            to_location_code: route.to_location_code,
+            etd: formatDate(route.etd),
+            eta: formatDate(route.eta),
+            carrier_code: route.carrier_code,
+            flight_no: route.flight_no,
+            status: route.status,
+          };
+          if (route.id != null && route.id !== undefined) {
+            routePayload.id =
+              typeof route.id === "number" ? route.id : Number(route.id);
+          }
+          return routePayload;
+        }),
 
         quotation_id: quotationId,
         rate_details: charges.map((charge) => {
@@ -1818,10 +1830,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             total_cost: parseFloat(charge.total_cost) || 0,
             total_sell: parseFloat(charge.total_sell) || 0,
           };
-          // Include id only in edit mode if it exists
-          if (isEditMode && charge.id !== undefined && charge.id !== null) {
-            chargePayload.id =
-              typeof charge.id === "number" ? charge.id : Number(charge.id);
+          // Only attach id when it was received from filter endpoint; do not send generated values
+          if (charge.id != null && charge.id !== undefined) {
+            chargePayload.id = typeof charge.id === "number" ? charge.id : Number(charge.id);
           }
           return chargePayload;
         }),
@@ -2274,16 +2285,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
-                  <Dropdown
+                  <FormTextInput
                     label="Vessel Name"
                     placeholder="Select vessel"
-                    searchable
-                    data={[
-                      "MSC LORETO",
-                      "EVER GIVEN",
-                      "CMA CGM MARCO POLO",
-                      "COSCO SHIPPING UNIVERSE",
-                    ]}
                     {...form.getInputProps("vessel_name")}
                   />
                 </Grid.Col>
@@ -3892,13 +3896,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           );
                           if (selectedQuotation?.charges) {
                             const mappedCharges = selectedQuotation.charges.map(
-                              (charge: QuotationCharge, index: number) => ({
-                                id: index + 1,
+                              (charge: QuotationCharge) => ({
+                                id: undefined as number | undefined,
                                 charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
                                 charge_name: String(charge.charge_name || ""),
                                 pp_cc: charge.pp_cc
                                   ? String(charge.pp_cc)
-                                  : "",
+                                  : "Collect",
                                 currency_country_code: String(
                                   charge.currency || charge.currency_country_code || "",
                                 ),
@@ -4009,7 +4013,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 )}
                 {/* Dynamic Charge Rows */}
                 {charges.map((charge, index) => (
-                  <Box key={charge.id}>
+                  <Box key={index}>
                     <Grid gutter="sm">
                       <Grid.Col span={1.5}>
                         <SearchableSelect
@@ -4026,8 +4030,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           })}
                           onChange={(val, selectedItem) => {
                             setCharges((prev) =>
-                              prev.map((c) =>
-                                c.id === charge.id
+                              prev.map((c, i) =>
+                                i === index
                                   ? {
                                       ...c,
                                       charge_id: val ?? "",
@@ -4046,7 +4050,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           data={["Prepaid", "Collect"]}
                           value={charge.pp_cc}
                           onChange={(value) =>
-                            updateCharge(charge.id, "pp_cc", value || "")
+                            updateCharge(index, "pp_cc", value || "")
                           }
                           size="xs"
                         />
@@ -4057,11 +4061,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           searchable
                           value={charge.currency_country_code}
                           onChange={(value) =>
-                            updateCharge(
-                              charge.id,
-                              "currency_country_code",
-                              value || "",
-                            )
+                            updateCharge(index, "currency_country_code", value || "")
                           }
                           data={currencyOptions}
                           size="xs"
@@ -4072,11 +4072,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="ROE"
                           value={charge.roe}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "roe",
-                              event.currentTarget.value,
-                            )
+                            updateCharge(index, "roe", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4087,7 +4083,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           searchable
                           value={charge.unit}
                           onChange={(value) =>
-                            updateCharge(charge.id, "unit", value || "")
+                            updateCharge(index, "unit", value || "")
                           }
                           data={unitOptions}
                           size="xs"
@@ -4098,11 +4094,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0"
                           value={charge.no_of_units}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "no_of_units",
-                              event.currentTarget.value,
-                            )
+                            updateCharge(index, "no_of_units", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4112,11 +4104,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.sell_per_unit}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "sell_per_unit",
-                              event.currentTarget.value,
-                            )
+                            updateCharge(index, "sell_per_unit", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4126,11 +4114,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.min_sell}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "min_sell",
-                              event.currentTarget.value,
-                            )
+                            updateCharge(index, "min_sell", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4140,11 +4124,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.cost_per_unit}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "cost_per_unit",
-                              event.currentTarget.value,
-                            )
+                            updateCharge(index, "cost_per_unit", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4183,7 +4163,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                               color="red"
                               size="sm"
                               px={12}
-                              onClick={() => removeCharge(charge.id)}
+                              onClick={() => removeCharge(index)}
                             >
                               <IconTrash size={16} />
                             </Button>
