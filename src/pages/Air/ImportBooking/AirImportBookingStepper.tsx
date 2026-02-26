@@ -400,10 +400,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [charges, setCharges] = useState([
     {
-      id: 1,
+      id: undefined as number | undefined,
       charge_id: "",
       charge_name: "",
-      pp_cc: "",
+      pp_cc: "Collect",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -601,10 +601,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     });
   }, [unitDataRaw]);
 
-  const updateCharge = (id: number, field: string, value: string) => {
+  const updateCharge = (index: number, field: string, value: string) => {
     setCharges(
-      charges.map((charge) => {
-        if (charge.id === id) {
+      charges.map((charge, i) => {
+        if (i === index) {
           const updatedCharge = { ...charge, [field]: value };
 
           // Calculate totals when relevant fields change
@@ -639,10 +639,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   const addNewCharge = () => {
     const newCharge = {
-      id: charges.length + 1,
+      id: undefined as number | undefined,
       charge_id: "",
       charge_name: "",
-      pp_cc: "",
+      pp_cc: "Collect",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -656,9 +656,9 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     setCharges([...charges, newCharge]);
   };
 
-  const removeCharge = (id: number) => {
+  const removeCharge = (index: number) => {
     if (charges.length > 1) {
-      setCharges(charges.filter((charge) => charge.id !== id));
+      setCharges(charges.filter((_, i) => i !== index));
     }
   };
 
@@ -695,7 +695,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       customer_service_name: String(data.customer_service_name || ""),
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
-      houseno: String(data.houseno),
+      houseno: String(data.houseno || ""),
 
       // Routing Details - map from routing_details array (include from/to/carrier codes and names from API)
       routingDetails: data.routing_details
@@ -1037,11 +1037,11 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       lastBookedIdRef.current = null;
       setQuotationId(String(firstItem.quotation_id || ""));
       const mappedCharges = firstItem.charges.map(
-        (charge: QuotationCharge, index: number) => ({
-          id: index + 1,
+        (charge: QuotationCharge) => ({
+          id: undefined as number | undefined,
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
-          pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
+          pp_cc: charge.pp_cc ? String(charge.pp_cc) : "Collect",
           currency_country_code: String(charge.currency || ""),
           roe: charge.roe ? String(charge.roe) : "",
           unit: String(charge.unit || ""),
@@ -1237,11 +1237,11 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       ) {
         const mappedCharges = (
           jobData.rate_details as Array<Record<string, unknown>>
-        ).map((charge: Record<string, unknown>, index: number) => ({
-          id: charge.id ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : index + 1,
+        ).map((charge: Record<string, unknown>) => ({
+          id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name ?? ""),
-          pp_cc: String(charge.pp_cc ?? ""),
+          pp_cc: String(charge.pp_cc ?? "Collect"),
           currency_country_code: String(
             charge.currency_country_code ?? charge.currency ?? ""
           ),
@@ -1458,17 +1458,11 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       if (chargesData) {
         const mappedCharges = (
           chargesData as Array<Record<string, unknown>>
-        ).map((charge: Record<string, unknown>, index: number) => ({
-          // Preserve id from API response if in edit mode, otherwise use index
-          id:
-            isEditMode && charge.id
-              ? typeof charge.id === "number"
-                ? charge.id
-                : Number(charge.id)
-              : index + 1,
+        ).map((charge: Record<string, unknown>) => ({
+          id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
-          pp_cc: String(charge.pp_cc ?? ""),
+          pp_cc: String(charge.pp_cc ?? "Collect"),
           currency_country_code: String(
             charge.currency_country_code || charge.currency || ""
           ),
@@ -1891,10 +1885,9 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             total_cost: parseFloat(charge.total_cost) || 0,
             total_sell: parseFloat(charge.total_sell) || 0,
           };
-          // Include id only in edit mode if it exists
-          if (isEditMode && charge.id !== undefined && charge.id !== null) {
-            chargePayload.id =
-              typeof charge.id === "number" ? charge.id : Number(charge.id);
+          // Only attach id when it was received from filter endpoint; do not send generated values
+          if (charge.id != null && charge.id !== undefined) {
+            chargePayload.id = typeof charge.id === "number" ? charge.id : Number(charge.id);
           }
           return chargePayload;
         }),
@@ -3854,11 +3847,11 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           );
                           if (selectedQuotation?.charges) {
                             const mappedCharges = selectedQuotation.charges.map(
-                              (charge: QuotationCharge, index: number) => ({
-                                id: index + 1,
+                              (charge: QuotationCharge) => ({
+                                id: undefined as number | undefined,
                                 charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
                                 charge_name: String(charge.charge_name || ""),
-                                pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
+                                pp_cc: charge.pp_cc ? String(charge.pp_cc) : "Collect",
                                 currency_country_code: String(
                                   charge.currency || ""
                                 ),
@@ -3970,7 +3963,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
                 {/* Dynamic Charge Rows */}
                 {charges.map((charge, index) => (
-                  <Box key={charge.id}>
+                  <Box key={index}>
                     <Grid gutter="sm">
                       <Grid.Col span={1.5}>
                         <SearchableSelect
@@ -3987,8 +3980,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           })}
                           onChange={(val, selectedItem) => {
                             setCharges((prev) =>
-                              prev.map((c) =>
-                                c.id === charge.id
+                              prev.map((c, i) =>
+                                i === index
                                   ? {
                                       ...c,
                                       charge_id: val ?? "",
@@ -4007,7 +4000,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           data={["Prepaid", "Collect"]}
                           value={charge.pp_cc}
                           onChange={(value) =>
-                            updateCharge(charge.id, "pp_cc", value || "")
+                            updateCharge(index, "pp_cc", value || "")
                           }
                           size="xs"
                         />
@@ -4018,11 +4011,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           searchable
                           value={charge.currency_country_code}
                           onChange={(value) =>
-                            updateCharge(
-                              charge.id,
-                              "currency_country_code",
-                              value || ""
-                            )
+                            updateCharge(index, "currency_country_code", value || "")
                           }
                           data={currencyOptions}
                           size="xs"
@@ -4033,11 +4022,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="ROE"
                           value={charge.roe}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "roe",
-                              event.currentTarget.value
-                            )
+                            updateCharge(index, "roe", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4048,7 +4033,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           searchable
                           value={charge.unit}
                           onChange={(value) =>
-                            updateCharge(charge.id, "unit", value || "")
+                            updateCharge(index, "unit", value || "")
                           }
                           data={unitOptions}
                           size="xs"
@@ -4059,11 +4044,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0"
                           value={charge.no_of_units}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "no_of_units",
-                              event.currentTarget.value
-                            )
+                            updateCharge(index, "no_of_units", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4073,11 +4054,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.sell_per_unit}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "sell_per_unit",
-                              event.currentTarget.value
-                            )
+                            updateCharge(index, "sell_per_unit", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4087,11 +4064,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.min_sell}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "min_sell",
-                              event.currentTarget.value
-                            )
+                            updateCharge(index, "min_sell", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4101,11 +4074,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.cost_per_unit}
                           onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "cost_per_unit",
-                              event.currentTarget.value
-                            )
+                            updateCharge(index, "cost_per_unit", event.currentTarget.value)
                           }
                           size="xs"
                         />
@@ -4142,7 +4111,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                               size="xs"
                               variant="light"
                               color="red"
-                              onClick={() => removeCharge(charge.id)}
+                              onClick={() => removeCharge(index)}
                             >
                               <IconTrash size={16} />
                             </Button>

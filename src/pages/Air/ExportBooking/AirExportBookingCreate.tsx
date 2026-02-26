@@ -94,14 +94,14 @@ function AirExportBookingCreate() {
       routing_details: [
         {
           move_type: "MAIN",
-          from_location_code: serviceDetails.origin_code_read || "",
-          from_location_name: serviceDetails.origin_name || "",
-          to_location_code: serviceDetails.destination_code_read || "",
-          to_location_name: serviceDetails.destination_name || "",
+          from_location_code: "",
+          from_location_name: "",
+          to_location_code: "",
+          to_location_name: "",
           etd: new Date(),
           eta: new Date(),
-          carrier_code: quotationData.carrier_code || "",
-          carrier_name: quotationData.carrier || "",
+          carrier_code: "",
+          carrier_name: "",
           flight_no: null,
           status: "PLANNED",
         },
@@ -169,6 +169,7 @@ function AirExportBookingCreate() {
       rate_details: Array.isArray(quotationData.charges)
         ? (quotationData.charges as Array<Record<string, unknown>>).map(
             (c) => ({
+              charge_id: c.charge_id || "",
               charge_name: c.charge_name || "",
               currency_country_code: c.currency || c.currency_country_code || "",
               roe: c.roe ?? "",
