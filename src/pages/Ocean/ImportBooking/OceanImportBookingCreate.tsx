@@ -82,11 +82,14 @@ function OceanImportBookingCreate() {
       routing_details: [
         {
           move_type: "MAIN",
-          from_location_code: serviceDetails.origin_code_read || "",
-          to_location_code: serviceDetails.destination_code_read || "",
+          from_location_code: "",
+          from_location_name: "",
+          to_location_code: "",
+          to_location_name: "",
           etd: new Date(),
           eta: new Date(),
           carrier_code: "",
+          carrier_name: "",
           flight_no: null,
           status: "PLANNED",
         },
@@ -222,6 +225,7 @@ function OceanImportBookingCreate() {
       rate_details: Array.isArray(quotationData.charges)
         ? (quotationData.charges as Array<Record<string, unknown>>).map(
             (c) => ({
+              charge_id: c.charge_id || "",
               charge_name: c.charge_name || "",
               currency_country_code: c.currency || c.currency_country_code || "",
               roe: c.roe ?? "",
@@ -356,16 +360,16 @@ function OceanImportBookingCreate() {
 
       <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
         <Flex
-          gap="md"
+          gap="sm"
           align="flex-start"
           style={{ height: "calc(100vh - 112px)", width: "100%" }}
         >
           {/* Vertical Stepper Sidebar */}
           <Box
             style={{
-              minWidth: 240,
+              minWidth: 200,
               width: "100%",
-              maxWidth: 250,
+              maxWidth: 210,
               height: "100%",
               alignSelf: "stretch",
               borderRadius: "8px",
@@ -810,30 +814,21 @@ function OceanImportBookingCreate() {
               gap: "8px",
             }}
           >
-            <Box
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                borderRadius: "8px",
-                backgroundColor: "#FFFFFF",
-              }}
-            >
-              <OceanImportBookingStepper
-                onStepChange={handleStepChange}
-                onComplete={handleComplete}
-                initialData={isEditMode ? jobData : mappedBookingData}
-                isEditMode={isEditMode}
-                jobData={jobData}
-                active={active}
-                setActive={setActive}
-                onQuotationAlreadyBooked={
-                  bookingData ? handleQuotationAlreadyBooked : undefined
-                }
-                onEditFormPopulated={
-                  isEditMode && jobData ? handleEditFormPopulated : undefined
-                }
-              />
-            </Box>
+            <OceanImportBookingStepper
+              onStepChange={handleStepChange}
+              onComplete={handleComplete}
+              initialData={isEditMode ? jobData : mappedBookingData}
+              isEditMode={isEditMode}
+              jobData={jobData}
+              active={active}
+              setActive={setActive}
+              onQuotationAlreadyBooked={
+                bookingData ? handleQuotationAlreadyBooked : undefined
+              }
+              onEditFormPopulated={
+                isEditMode && jobData ? handleEditFormPopulated : undefined
+              }
+            />
           </Box>
         </Flex>
       </Box>

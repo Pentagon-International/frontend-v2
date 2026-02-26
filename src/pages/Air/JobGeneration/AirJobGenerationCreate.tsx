@@ -4,19 +4,16 @@ import {
   Grid,
   Group,
   Stack,
-  Stepper,
   Text,
   TextInput,
   Center,
   Loader,
+  Tabs,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
-  IconCalendar,
   IconCheck,
-  IconChevronLeft,
-  IconChevronRight,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
@@ -27,9 +24,14 @@ import {
   ToastNotification,
   SearchableSelect,
   Dropdown,
+  SingleDateInput,
+  DateTimeInput,
 } from "../../../components";
-import { DateInput } from "@mantine/dates";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import FormTextInput from "../../../components/FormTextInput";
+
+dayjs.extend(utc);
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { apiCallProtected } from "../../../api/axios";
@@ -38,35 +40,58 @@ import {
   MRT_ColumnDef,
   useMantineReactTable,
 } from "mantine-react-table";
-import { useQuery } from "@tanstack/react-query";
-import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
+import { getAPICall } from "../../../service/getApiCall";
 import { Checkbox } from "@mantine/core";
 
 type JobDetailsForm = {
   service: string;
+  agent_code: string;
+  agent_name: string;
   origin_code: string;
   origin_name: string;
   destination_code: string;
   destination_name: string;
   eta: string;
   etd: string;
+  ata: string;
+  atd: string;
   cutoff_date: string;
   schedule: string;
   carrier_code: string;
   carrier_name: string;
+  master_no: string;
+  master_date: string;
+  flight_no: string;
 };
 
 type RoutingDetail = {
+  id?: number;
+  transport_type: string;
   from_code: string;
   from_name: string;
   to_code: string;
   to_name: string;
   eta: string;
   etd: string;
+  ata: string;
+  atd: string;
   carrier_code: string;
   carrier_name: string;
-  flight_no: string;
+  transport_no: string;
+  vessel: string;
+};
+
+// Helper: transport_mode for port/carrier search (SEA/AIR sent with search key)
+const getTransportMode = (
+  transportType: string | null | undefined
+): "SEA" | "AIR" | "LAND" | undefined => {
+  if (!transportType) return undefined;
+  const t = transportType.trim().toUpperCase();
+  if (t === "SEA") return "SEA";
+  if (t === "AIR") return "AIR";
+  if (t === "ROAD" || t === "RAIL") return "LAND";
+  return undefined;
 };
 
 type BookingData = {
@@ -82,13 +107,19 @@ type BookingData = {
 
 const jobDetailsSchema = yup.object({
   service: yup.string().required("Service is required"),
+  agent_code: yup.string().optional(),
   origin_code: yup.string().required("Origin is required"),
   destination_code: yup.string().required("Destination is required"),
   eta: yup.string().required("ETA is required"),
   etd: yup.string().required("ETD is required"),
+  ata: yup.string().optional(),
+  atd: yup.string().optional(),
   cutoff_date: yup.string().required("Cutoff date is required"),
   schedule: yup.string().required("Schedule is required"),
   carrier_code: yup.string().required("Carrier is required"),
+  master_no: yup.string().optional(),
+  master_date: yup.string().optional(),
+  flight_no: yup.string().optional(),
 });
 
 const routingDetailsSchema = yup.object({
@@ -96,12 +127,16 @@ const routingDetailsSchema = yup.object({
     .array()
     .of(
       yup.object({
+        transport_type: yup.string().optional(),
         from_code: yup.string().required("From is required"),
         to_code: yup.string().required("To is required"),
         eta: yup.string().required("ETA is required"),
         etd: yup.string().required("ETD is required"),
+        ata: yup.string().optional(),
+        atd: yup.string().optional(),
         carrier_code: yup.string().required("Carrier is required"),
-        flight_no: yup.string().required("Flight No is required"),
+        transport_no: yup.string().optional(),
+        vessel: yup.string().optional(),
       })
     )
     .min(1, "At least one routing is required"),
@@ -131,20 +166,31 @@ function AirJobGenerationCreate() {
     new Set()
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingJob, setIsGeneratingJob] = useState(false);
+  const [existingBookingDetails, setExistingBookingDetails] = useState<
+    Record<number, number>
+  >({});
 
   const jobDetailsForm = useForm<JobDetailsForm>({
     initialValues: {
       service: "AIR",
+      agent_code: "",
+      agent_name: "",
       origin_code: "",
       origin_name: "",
       destination_code: "",
       destination_name: "",
-      eta: dayjs().format("YYYY-MM-DD"),
-      etd: dayjs().format("YYYY-MM-DD"),
+      eta: dayjs().utc().toISOString(),
+      etd: dayjs().utc().toISOString(),
+      ata: "",
+      atd: "",
       cutoff_date: dayjs().format("YYYY-MM-DD"),
       schedule: "",
       carrier_code: "",
       carrier_name: "",
+      master_no: "",
+      master_date: "",
+      flight_no: "",
     },
     validate: yupResolver(jobDetailsSchema),
   });
@@ -153,15 +199,19 @@ function AirJobGenerationCreate() {
     initialValues: {
       routings: [
         {
+          transport_type: "",
           from_code: "",
           from_name: "",
           to_code: "",
           to_name: "",
           eta: dayjs().format("YYYY-MM-DD"),
           etd: dayjs().format("YYYY-MM-DD"),
+          ata: "",
+          atd: "",
           carrier_code: "",
           carrier_name: "",
-          flight_no: "",
+          transport_no: "",
+          vessel: "",
         },
       ] as RoutingDetail[],
     },
@@ -185,44 +235,65 @@ function AirJobGenerationCreate() {
     if (jobData && (mode === "edit" || mode === "view")) {
       if (jobData.id) setJobId(jobData.id as number);
 
+      const etaStr = (jobData.eta as string) || "";
+      const etdStr = (jobData.etd as string) || "";
+      const ataStr = (jobData.ata as string) || "";
+      const atdStr = (jobData.atd as string) || "";
       jobDetailsForm.setValues({
         service: (jobData.service as string) || "AIR",
+        agent_code: (jobData.agent_code_read as string) || (jobData.agent_code as string) || "",
+        agent_name: (jobData.agent_name as string) || "",
         origin_code: (jobData.origin_code_read as string) || "",
         origin_name: (jobData.origin_name as string) || "",
         destination_code: (jobData.destination_code_read as string) || "",
         destination_name: (jobData.destination_name as string) || "",
-        eta: (jobData.eta as string) || dayjs().format("YYYY-MM-DD"),
-        etd: (jobData.etd as string) || dayjs().format("YYYY-MM-DD"),
+        eta: etaStr || dayjs().utc().toISOString(),
+        etd: etdStr || dayjs().utc().toISOString(),
+        ata: ataStr || "",
+        atd: atdStr || "",
         cutoff_date: (jobData.cut_off_date as string) || dayjs().format("YYYY-MM-DD"),
         schedule: (jobData.schedule as string) || "",
         carrier_code: (jobData.carrier_code_read as string) || "",
         carrier_name: (jobData.carrier_name as string) || "",
+        master_no: (jobData.master_no as string) || "",
+        master_date: (jobData.master_date as string) || "",
+        flight_no: (jobData.flight_no as string) || "",
       });
 
-      const routingDetails = jobData.routing_details as Array<{
+      const apiRoutings = jobData.routing_details as Array<{
+        id?: number;
+        transport_type?: string;
         from_code?: string;
         from_name?: string;
         to_code?: string;
         to_name?: string;
         eta?: string;
         etd?: string;
+        ata?: string;
+        atd?: string;
         carrier_code?: string;
         carrier_name?: string;
-        flight_no?: string;
+        transport_no?: string;
+        vessel?: string;
       }> | undefined;
-      if (routingDetails && Array.isArray(routingDetails) && routingDetails.length > 0) {
+      if (apiRoutings && Array.isArray(apiRoutings) && apiRoutings.length > 0) {
         routingForm.setFieldValue(
           "routings",
-          routingDetails.map((r) => ({
+          apiRoutings.map((r) => ({
+            id: r.id,
+            transport_type: r.transport_type || "",
             from_code: r.from_code || "",
             from_name: r.from_name || "",
             to_code: r.to_code || "",
             to_name: r.to_name || "",
-            eta: r.eta || dayjs().format("YYYY-MM-DD"),
-            etd: r.etd || dayjs().format("YYYY-MM-DD"),
+            eta: r.eta ? dayjs(r.eta).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
+            etd: r.etd ? dayjs(r.etd).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
+            ata: r.ata ? dayjs(r.ata).format("YYYY-MM-DD") : "",
+            atd: r.atd ? dayjs(r.atd).format("YYYY-MM-DD") : "",
             carrier_code: r.carrier_code || "",
             carrier_name: r.carrier_name || "",
-            flight_no: r.flight_no || "",
+            transport_no: r.transport_no || "",
+            vessel: r.vessel || "",
           }))
         );
       }
@@ -234,31 +305,18 @@ function AirJobGenerationCreate() {
           .filter((id): id is number => id != null);
         setSelectedBookings(new Set(ids));
       }
+
+      const bookingDetails = jobData.booking_details as Array<{ id?: number; booking_id?: number }> | undefined;
+      if (bookingDetails && Array.isArray(bookingDetails)) {
+        const idMap: Record<number, number> = {};
+        bookingDetails.forEach((d) => {
+          const bid = d.booking_id;
+          if (bid != null && d.id != null) idMap[bid] = d.id;
+        });
+        setExistingBookingDetails(idMap);
+      }
     }
   }, [jobData, mode]);
-
-  const { data: carrierRes = [] } = useQuery({
-    queryKey: ["carrier"],
-    queryFn: async () => {
-      try {
-        return await getAPICall(`${URL.carrier}`, API_HEADER);
-      } catch (e) {
-        console.error(e);
-        return [];
-      }
-    },
-    staleTime: Infinity,
-  });
-
-  const carrierData = useMemo(() => {
-    if (!Array.isArray(carrierRes)) return [];
-    return carrierRes.map(
-      (item: { carrier_code: string; carrier_name: string }) => ({
-        value: String(item.carrier_code),
-        label: item.carrier_name,
-      })
-    );
-  }, [carrierRes]);
 
   useEffect(() => {
     if (active === 2) {
@@ -347,12 +405,49 @@ function AirJobGenerationCreate() {
     setActive((current) => current + 1);
   };
 
+  const buildPayload = (status: "PENDING" | "GENERATED") => ({
+    service: jobDetailsForm.values.service,
+    service_type: "EXPORT",
+    status,
+    agent_code: jobDetailsForm.values.agent_code || undefined,
+    origin_code: jobDetailsForm.values.origin_code,
+    destination_code: jobDetailsForm.values.destination_code,
+    schedule: jobDetailsForm.values.schedule,
+    carrier_code: jobDetailsForm.values.carrier_code,
+    cut_off_date: jobDetailsForm.values.cutoff_date,
+    eta: jobDetailsForm.values.eta,
+    etd: jobDetailsForm.values.etd,
+    ata: jobDetailsForm.values.ata || undefined,
+    atd: jobDetailsForm.values.atd || undefined,
+    master_no: jobDetailsForm.values.master_no || undefined,
+    master_date: jobDetailsForm.values.master_date || undefined,
+    flight_no: jobDetailsForm.values.flight_no || undefined,
+    routing_details: routingForm.values.routings.map((r) => ({
+      ...(r.id != null ? { id: r.id } : {}),
+      transport_type: r.transport_type || undefined,
+      from_port_code: r.from_code,
+      to_port_code: r.to_code,
+      eta: r.eta || undefined,
+      etd: r.etd || undefined,
+      ata: r.ata || undefined,
+      atd: r.atd || undefined,
+      carrier_code: r.carrier_code,
+      transport_no: r.transport_no || undefined,
+      vessel: r.transport_type === "SEA" ? (r.vessel || undefined) : undefined,
+    })),
+    booking_details: Array.from(selectedBookings).map((booking_id) => ({
+      ...(existingBookingDetails[booking_id] != null
+        ? { id: existingBookingDetails[booking_id] }
+        : {}),
+      booking_id,
+    })),
+  });
+
   const handleSaveBooking = async () => {
     if (viewMode) return;
 
     const jobValidation = jobDetailsForm.validate();
     const routingValidation = routingForm.validate();
-
     if (jobValidation.hasErrors || routingValidation.hasErrors) {
       ToastNotification({
         type: "error",
@@ -369,25 +464,7 @@ function AirJobGenerationCreate() {
       return;
     }
 
-    const payload = {
-      service: jobDetailsForm.values.service,
-      origin_code: jobDetailsForm.values.origin_code,
-      destination_code: jobDetailsForm.values.destination_code,
-      schedule: jobDetailsForm.values.schedule,
-      carrier_code: jobDetailsForm.values.carrier_code,
-      cut_off_date: jobDetailsForm.values.cutoff_date,
-      eta: jobDetailsForm.values.eta,
-      etd: jobDetailsForm.values.etd,
-      routing_details: routingForm.values.routings.map((r) => ({
-        from_code: r.from_code,
-        to_code: r.to_code,
-        eta: r.eta,
-        etd: r.etd,
-        carrier_code: r.carrier_code,
-        flight_no: r.flight_no,
-      })),
-      shipment_id: Array.from(selectedBookings),
-    };
+    const payload = buildPayload("PENDING");
 
     setIsSubmitting(true);
 
@@ -413,29 +490,63 @@ function AirJobGenerationCreate() {
         }
       } else {
         const response = await apiCallProtected.post(URL.booking, payload);
-        responseData = response as { success?: boolean; message?: string; data?: { id?: number; booking_id?: number } } ;
+        type CreateResponseData = {
+          id?: number;
+          booking_id?: number;
+          routing_details?: Array<{ id?: number }>;
+          booking_details?: Array<{ id?: number; booking_id?: number }>;
+        };
+        type CreateResponse = {
+          success?: boolean;
+          message?: string;
+          data?: CreateResponseData;
+          id?: number;
+          booking_id?: number;
+        };
+        const createResponse = response as CreateResponse;
+        responseData = createResponse;
 
-        if (responseData?.success === true) {
+        if (createResponse?.success === true) {
           ToastNotification({
             type: "success",
             message: "Booking created successfully",
           });
 
+          const resData = createResponse?.data;
           const createdId =
-            (responseData as any)?.data?.id ??
-            (responseData as any)?.id ??
-            (responseData as any)?.data?.booking_id ??
-            (responseData as any)?.booking_id;
+            resData?.id ??
+            createResponse?.id ??
+            resData?.booking_id ??
+            createResponse?.booking_id;
 
           if (createdId) {
             setJobId(createdId);
             setEditMode(true);
             setViewMode(false);
           }
+
+          // Map create response to edit payload ids: routing_details[].id and booking_details[].id
+          if (resData?.routing_details && Array.isArray(resData.routing_details)) {
+            routingForm.setFieldValue(
+              "routings",
+              routingForm.values.routings.map((r, i) => ({
+                ...r,
+                id: resData.routing_details?.[i]?.id ?? r.id,
+              }))
+            );
+          }
+          if (resData?.booking_details && Array.isArray(resData.booking_details)) {
+            const idMap: Record<number, number> = {};
+            resData.booking_details.forEach((bd: { id?: number; booking_id?: number }) => {
+              const bid = bd.booking_id;
+              if (bid != null && bd.id != null) idMap[bid] = bd.id;
+            });
+            setExistingBookingDetails((prev) => ({ ...prev, ...idMap }));
+          }
         } else {
           ToastNotification({
             type: "error",
-            message: responseData?.message || "Failed to create booking",
+            message: createResponse?.message || "Failed to create booking",
           });
         }
       }
@@ -450,12 +561,89 @@ function AirJobGenerationCreate() {
     }
   };
 
-  const handleGenerateJob = () => {
-    if (!editMode || viewMode) return;
-    ToastNotification({
-      type: "info",
-      message: "Generate Job action will be implemented soon.",
-    });
+  const handleGenerateJob = async () => {
+    if (!editMode || viewMode || !jobId) return;
+
+    const jobValidation = jobDetailsForm.validate();
+    const routingValidation = routingForm.validate();
+    if (jobValidation.hasErrors || routingValidation.hasErrors) {
+      ToastNotification({
+        type: "error",
+        message: "Please complete all required fields",
+      });
+      return;
+    }
+    if (selectedBookings.size === 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Please select at least one booking",
+      });
+      return;
+    }
+
+    const payload = buildPayload("GENERATED");
+    setIsGeneratingJob(true);
+    try {
+      const { putAPICall } = await import("../../../service/putApiCall");
+      const putPayload = { id: jobId, ...payload };
+      const response = await putAPICall(URL.booking, putPayload, API_HEADER);
+      const responseData = response as {
+        success?: boolean;
+        message?: string;
+        data?: { job_details_id?: number };
+      };
+      if (responseData?.success === true && responseData?.data?.job_details_id) {
+        ToastNotification({
+          type: "success",
+          message: "Job generated successfully",
+        });
+        try {
+          ToastNotification({
+            type: "info",
+            message: "Redirecting to Air job page...",
+          });
+          const jobListRes = await getAPICall(
+            `${URL.jobCreate}${responseData.data.job_details_id}/`,
+            API_HEADER
+          );
+          // GET: axios returns full response so body = response.data; support both shapes
+          const body = (jobListRes as { data?: unknown })?.data ?? jobListRes;
+          const list = Array.isArray((body as { data?: unknown[] })?.data)
+            ? (body as { data: unknown[] }).data
+            : Array.isArray(body)
+              ? (body as unknown[])
+              : [];
+          const job = list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+          if (job) {
+            navigate("/air/export-job/edit", { state: { job } });
+            return;
+          }
+        } catch (fetchErr) {
+          console.error("Error fetching job after generate:", fetchErr);
+        }
+        navigate("/air/export-job/edit", {
+          state: { job_details_id: responseData.data.job_details_id },
+        });
+      } else if (responseData?.success === true) {
+        ToastNotification({
+          type: "success",
+          message: "Job generated successfully",
+        });
+      } else {
+        ToastNotification({
+          type: "error",
+          message: responseData?.message || "Failed to generate job",
+        });
+      }
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      ToastNotification({
+        type: "error",
+        message: err?.response?.data?.message || err?.message || "Failed to generate job",
+      });
+    } finally {
+      setIsGeneratingJob(false);
+    }
   };
 
   const handleSelectBooking = (bookingId: number, checked: boolean) => {
@@ -545,15 +733,8 @@ function AirJobGenerationCreate() {
 
   const isReadOnly = viewMode;
 
-  const dateInputStyles = {
-    day: { width: "2.25rem", height: "2.25rem", fontSize: "0.9rem" },
-    calendarHeaderLevel: { fontSize: "1rem", fontWeight: 500, marginBottom: "0.5rem", flex: 1, textAlign: "center" as const },
-    calendarHeaderControl: { width: "2rem", height: "2rem", margin: "0 0.5rem" },
-    calendarHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" },
-  };
-
   return (
-    <Box p="md" maw={1200} mx="auto">
+    <Box px="md" py="md" w="100%">
       <Text size="xl" fw={600} c="#105476" mb="lg">
         {mode === "view"
           ? "View Air Export Job Generation"
@@ -562,18 +743,18 @@ function AirJobGenerationCreate() {
             : "Create Air Export Job Generation"}
       </Text>
 
-      <Stepper
-        color="#105476"
-        active={active}
-        onStepClick={setActive}
-        orientation="horizontal"
-        allowNextStepsSelect={false}
-      >
-        {/* Stepper 1: Job Details (like FCL stepper 1) */}
-        <Stepper.Step label="1" description="Job Details">
+      <Tabs value={String(active)} onChange={(v) => v !== null && setActive(Number(v))} color="#105476">
+        <Tabs.List mb="md" style={{ display: "flex", gap: "8px", flexWrap: "wrap", borderBottom: "none" }}>
+          <Tabs.Tab value="0" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 0 ? "3px solid #105476" : "none", color: "#105476", fontSize: 16, fontWeight: active === 0 ? 600 : 400 }}>Job Details</Tabs.Tab>
+          <Tabs.Tab value="1" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 1 ? "3px solid #105476" : "none", color: "#105476", fontSize: 16, fontWeight: active === 1 ? 600 : 400 }}>Routing Details</Tabs.Tab>
+          <Tabs.Tab value="2" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 2 ? "3px solid #105476" : "none", color: "#105476", fontSize: 16, fontWeight: active === 2 ? 600 : 400 }}>Select Bookings</Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="0">
           <Box mt="md">
+            {/* First section: Service, Agent, Origin, Destination */}
             <Grid>
-              <Grid.Col span={4}>
+              <Grid.Col span={3}>
                 <Dropdown
                   label="Service"
                   withAsterisk
@@ -583,7 +764,33 @@ function AirJobGenerationCreate() {
                   disabled
                 />
               </Grid.Col>
-              <Grid.Col span={4}>
+              <Grid.Col span={3}>
+                <SearchableSelect
+                  label="Agent"
+                  apiEndpoint={URL.agent}
+                  placeholder="Type agent name"
+                  searchFields={["customer_code", "customer_name"]}
+                  dropdownZIndex={310}
+                  displayFormat={(item: Record<string, unknown>) => {
+                    const row = item as { customer_code?: string; customer_name?: string; agent_code?: string; agent_name?: string };
+                    const code = row.customer_code ?? row.agent_code ?? "";
+                    const name = row.customer_name ?? row.agent_name ?? code;
+                    return { value: String(code), label: String(name) };
+                  }}
+                  value={jobDetailsForm.values.agent_code}
+                  displayValue={
+                    jobDetailsForm.values.agent_name
+                      ? `${jobDetailsForm.values.agent_name} (${jobDetailsForm.values.agent_code})`
+                      : jobDetailsForm.values.agent_code || ""
+                  }
+                  onChange={(value, selectedData) => {
+                    jobDetailsForm.setFieldValue("agent_code", value || "");
+                    jobDetailsForm.setFieldValue("agent_name", selectedData?.label?.split(" (")[0] ?? "");
+                  }}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
                 <SearchableSelect
                   label="Origin"
                   required
@@ -611,10 +818,11 @@ function AirJobGenerationCreate() {
                   }}
                   error={jobDetailsForm.errors.origin_code as string}
                   minSearchLength={3}
+                  additionalParams={{ transport_mode: "AIR" }}
                   disabled={isReadOnly}
                 />
               </Grid.Col>
-              <Grid.Col span={4}>
+              <Grid.Col span={3}>
                 <SearchableSelect
                   label="Destination"
                   required
@@ -642,80 +850,79 @@ function AirJobGenerationCreate() {
                   }}
                   error={jobDetailsForm.errors.destination_code as string}
                   minSearchLength={3}
+                  additionalParams={{ transport_mode: "AIR" }}
                   disabled={isReadOnly}
                 />
               </Grid.Col>
-              <Grid.Col span={4}>
-                <DateInput
-                  label="ETA"
-                  withAsterisk
-                  placeholder="YYYY-MM-DD"
-                  value={jobDetailsForm.values.eta ? dayjs(jobDetailsForm.values.eta).toDate() : null}
-                  onChange={(date) =>
-                    jobDetailsForm.setFieldValue("eta", date ? dayjs(date).format("YYYY-MM-DD") : "")
-                  }
-                  error={jobDetailsForm.errors.eta}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  size="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
+            </Grid>
+
+            {/* Second section: Master No, Master Date, Cutoff, Carrier, Flight No, Schedule */}
+            <Grid mt="sm">
+              <Grid.Col span={3}>
+                <FormTextInput
+                  label="Master No"
+                  placeholder="Enter master number"
+                  {...jobDetailsForm.getInputProps("master_no")}
                   disabled={isReadOnly}
-                  styles={dateInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={4}>
-                <DateInput
-                  label="ETD"
-                  withAsterisk
-                  placeholder="YYYY-MM-DD"
-                  value={jobDetailsForm.values.etd ? dayjs(jobDetailsForm.values.etd).toDate() : null}
-                  onChange={(date) =>
-                    jobDetailsForm.setFieldValue("etd", date ? dayjs(date).format("YYYY-MM-DD") : "")
-                  }
-                  error={jobDetailsForm.errors.etd}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  size="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="Master Date"
+                  value={jobDetailsForm.values.master_date ? dayjs(jobDetailsForm.values.master_date).toDate() : null}
+                  onChange={(date) => jobDetailsForm.setFieldValue("master_date", date ? dayjs(date).format("YYYY-MM-DD") : "")}
                   disabled={isReadOnly}
-                  styles={dateInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={4}>
-                <DateInput
+              <Grid.Col span={3}>
+                <SingleDateInput
                   label="Cutoff Date"
                   withAsterisk
-                  placeholder="YYYY-MM-DD"
-                  value={
-                    jobDetailsForm.values.cutoff_date
-                      ? dayjs(jobDetailsForm.values.cutoff_date).toDate()
-                      : null
-                  }
-                  onChange={(date) =>
-                    jobDetailsForm.setFieldValue(
-                      "cutoff_date",
-                      date ? dayjs(date).format("YYYY-MM-DD") : ""
-                    )
-                  }
-                  error={jobDetailsForm.errors.cutoff_date}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={18} />}
-                  leftSectionPointerEvents="none"
-                  radius="sm"
-                  size="sm"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
+                  value={jobDetailsForm.values.cutoff_date ? dayjs(jobDetailsForm.values.cutoff_date).toDate() : null}
+                  onChange={(date) => jobDetailsForm.setFieldValue("cutoff_date", date ? dayjs(date).format("YYYY-MM-DD") : "")}
+                  error={jobDetailsForm.errors.cutoff_date as string}
                   disabled={isReadOnly}
-                  styles={dateInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={4}>
+            </Grid>
+
+            <Grid>
+              <Grid.Col span={3}>
+                <SearchableSelect
+                  label="Carrier"
+                  required
+                  apiEndpoint={URL.carrier}
+                  placeholder="Type carrier code or name"
+                  searchFields={["carrier_code", "carrier_name"]}
+                  dropdownZIndex={310}
+                  displayFormat={(item: Record<string, unknown>) => {
+                    const row = item as { carrier_code?: string; carrier_name?: string };
+                    return { value: String(row.carrier_code ?? ""), label: String(row.carrier_name ?? row.carrier_code ?? "") };
+                  }}
+                  value={jobDetailsForm.values.carrier_code}
+                  displayValue={
+                    jobDetailsForm.values.carrier_name
+                      ? `${jobDetailsForm.values.carrier_name} (${jobDetailsForm.values.carrier_code})`
+                      : jobDetailsForm.values.carrier_code || ""
+                  }
+                  onChange={(value, selectedData) => {
+                    jobDetailsForm.setFieldValue("carrier_code", value || "");
+                    jobDetailsForm.setFieldValue("carrier_name", selectedData?.label?.split(" (")[0] ?? "");
+                  }}
+                  error={jobDetailsForm.errors.carrier_code as string}
+                  additionalParams={{ transport_mode: "AIR" }}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
+                <FormTextInput
+                  label="Flight No"
+                  placeholder="Enter flight number"
+                  {...jobDetailsForm.getInputProps("flight_no")}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
                 <Dropdown
                   label="Schedule"
                   placeholder="Select schedule"
@@ -730,23 +937,366 @@ function AirJobGenerationCreate() {
                   disabled={isReadOnly}
                 />
               </Grid.Col>
-              <Grid.Col span={4}>
-                <Dropdown
-                  label="Carrier"
-                  placeholder="Select carrier"
-                  searchable
-                  data={carrierData}
-                  nothingFoundMessage="No carriers found"
-                  {...jobDetailsForm.getInputProps("carrier_code")}
-                  onChange={(value) => {
-                    jobDetailsForm.setFieldValue("carrier_code", value || "");
-                    const selected = carrierData.find((c) => c.value === value);
-                    if (selected) jobDetailsForm.setFieldValue("carrier_name", selected.label);
+            </Grid>
+
+            {/* Third section: ETD, ETA, ATD, ATA */}
+            <Grid mt="sm">
+              <Grid.Col span={3}>
+                <DateTimeInput
+                  label="ETD"
+                  withAsterisk
+                  placeholder="YYYY-MM-DD HH:mm"
+                  value={
+                    jobDetailsForm.values.etd && dayjs.utc(jobDetailsForm.values.etd).isValid()
+                      ? dayjs.utc(jobDetailsForm.values.etd).local().toDate()
+                      : null
+                  }
+                  onChange={(value: Date | null) => {
+                    jobDetailsForm.setFieldValue("etd", value ? dayjs(value).utc().toISOString() : "");
                   }}
+                  error={jobDetailsForm.errors.etd as string}
+                  size="sm"
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
+                <DateTimeInput
+                  label="ETA"
+                  withAsterisk
+                  placeholder="YYYY-MM-DD HH:mm"
+                  value={
+                    jobDetailsForm.values.eta && dayjs.utc(jobDetailsForm.values.eta).isValid()
+                      ? dayjs.utc(jobDetailsForm.values.eta).local().toDate()
+                      : null
+                  }
+                  onChange={(value: Date | null) => {
+                    jobDetailsForm.setFieldValue("eta", value ? dayjs(value).utc().toISOString() : "");
+                  }}
+                  error={jobDetailsForm.errors.eta as string}
+                  size="sm"
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
+                <DateTimeInput
+                  label="ATD"
+                  placeholder="YYYY-MM-DD HH:mm"
+                  value={
+                    jobDetailsForm.values.atd && dayjs.utc(jobDetailsForm.values.atd).isValid()
+                      ? dayjs.utc(jobDetailsForm.values.atd).local().toDate()
+                      : null
+                  }
+                  onChange={(value: Date | null) => {
+                    jobDetailsForm.setFieldValue("atd", value ? dayjs(value).utc().toISOString() : "");
+                  }}
+                  size="sm"
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
+                <DateTimeInput
+                  label="ATA"
+                  placeholder="YYYY-MM-DD HH:mm"
+                  value={
+                    jobDetailsForm.values.ata && dayjs.utc(jobDetailsForm.values.ata).isValid()
+                      ? dayjs.utc(jobDetailsForm.values.ata).local().toDate()
+                      : null
+                  }
+                  onChange={(value: Date | null) => {
+                    jobDetailsForm.setFieldValue("ata", value ? dayjs(value).utc().toISOString() : "");
+                  }}
+                  size="sm"
                   disabled={isReadOnly}
                 />
               </Grid.Col>
             </Grid>
+
+            <Group justify="space-between" mt="xl">
+              <Button variant="outline" color="#105476" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate("/air/job-generation")}>
+                Back to List
+              </Button>
+              <Group gap="sm">
+                <Button variant="default" onClick={() => setActive((c) => c - 1)} disabled={active === 0}>Previous</Button>
+                <Button onClick={handleNext} color="#105476">Next</Button>
+                {editMode && !isReadOnly && (
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={handleGenerateJob}
+                  >
+                    Generate Job
+                  </Button>
+                )}
+              </Group>
+            </Group>
+          </Box>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="1">
+          <Box mt="md">
+            <Text size="md" fw={600} c="#105476" mb="md">
+              Routing Details
+            </Text>
+            {/* Header Row - Vessel column only when at least one route is SEA (same spacing/format as Ocean) */}
+            {(() => {
+              const hasAnySea = routingForm.values.routings.some((r) => r.transport_type === "SEA");
+              return (
+                <Grid mb="xs">
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      Transport Type
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      From Port
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      To Port
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={hasAnySea ? 1 : 1.5}>
+                    <Text size="sm" fw={500} c="#105476">
+                      Carrier
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={hasAnySea ? 1 : 1.5}>
+                    <Text size="sm" fw={500} c="#105476">
+                      Transport No
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      ETD
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      ETA
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      ATD
+                    </Text>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Text size="sm" fw={500} c="#105476">
+                      ATA
+                    </Text>
+                  </Grid.Col>
+                  {hasAnySea && (
+                    <Grid.Col span={1}>
+                      <Text size="sm" fw={500} c="#105476">
+                        Vessel
+                      </Text>
+                    </Grid.Col>
+                  )}
+                  <Grid.Col span={2}>
+                    <Text size="sm" fw={500} c="#105476">
+                      Actions
+                    </Text>
+                  </Grid.Col>
+                </Grid>
+              );
+            })()}
+            <Stack gap="xs">
+              {routingForm.values.routings.map((_, index) => (
+                <Box key={index}>
+                  <Grid>
+                    <Grid.Col span={1}>
+                      <Dropdown
+                        placeholder="Select type"
+                        searchable
+                        data={["SEA", "AIR", "ROAD", "RAIL"]}
+                        value={routingForm.values.routings[index].transport_type}
+                        onChange={(value) => {
+                          routingForm.setFieldValue(`routings.${index}.transport_type`, value || "");
+                          if (value !== "SEA") routingForm.setFieldValue(`routings.${index}.vessel`, "");
+                        }}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SearchableSelect
+                        placeholder="From port code or name"
+                        apiEndpoint={URL.portMaster}
+                        searchFields={["port_code", "port_name"]}
+                        dropdownZIndex={310}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const port = item as { port_code: string; port_name: string };
+                          return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
+                        }}
+                        value={routingForm.values.routings[index].from_code}
+                        displayValue={
+                          routingForm.values.routings[index].from_name
+                            ? `${routingForm.values.routings[index].from_name} (${routingForm.values.routings[index].from_code})`
+                            : routingForm.values.routings[index].from_code
+                        }
+                        onChange={(value, selectedData) => {
+                          routingForm.setFieldValue(`routings.${index}.from_code`, value || "");
+                          if (selectedData) routingForm.setFieldValue(`routings.${index}.from_name`, selectedData.label.split(" (")[0] || "");
+                        }}
+                        minSearchLength={3}
+                        additionalParams={
+                          getTransportMode(routingForm.values.routings[index].transport_type)
+                            ? { transport_mode: getTransportMode(routingForm.values.routings[index].transport_type)! }
+                            : undefined
+                        }
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SearchableSelect
+                        placeholder="To port code or name"
+                        apiEndpoint={URL.portMaster}
+                        searchFields={["port_code", "port_name"]}
+                        dropdownZIndex={310}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const port = item as { port_code: string; port_name: string };
+                          return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
+                        }}
+                        value={routingForm.values.routings[index].to_code}
+                        displayValue={
+                          routingForm.values.routings[index].to_name
+                            ? `${routingForm.values.routings[index].to_name} (${routingForm.values.routings[index].to_code})`
+                            : routingForm.values.routings[index].to_code
+                        }
+                        onChange={(value, selectedData) => {
+                          routingForm.setFieldValue(`routings.${index}.to_code`, value || "");
+                          if (selectedData) routingForm.setFieldValue(`routings.${index}.to_name`, selectedData.label.split(" (")[0] || "");
+                        }}
+                        minSearchLength={3}
+                        additionalParams={
+                          getTransportMode(routingForm.values.routings[index].transport_type)
+                            ? { transport_mode: getTransportMode(routingForm.values.routings[index].transport_type)! }
+                            : undefined
+                        }
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={routingForm.values.routings[index].transport_type === "SEA" ? 1 : 1.5}>
+                      <SearchableSelect
+                        placeholder="Carrier"
+                        apiEndpoint={URL.carrier}
+                        searchFields={["carrier_code", "carrier_name"]}
+                        dropdownZIndex={310}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const r = item as { carrier_code?: string; carrier_name?: string };
+                          return { value: String(r.carrier_code ?? ""), label: String(r.carrier_name ?? r.carrier_code ?? "") };
+                        }}
+                        value={routingForm.values.routings[index].carrier_code}
+                        displayValue={
+                          routingForm.values.routings[index].carrier_name
+                            ? `${routingForm.values.routings[index].carrier_name} (${routingForm.values.routings[index].carrier_code})`
+                            : routingForm.values.routings[index].carrier_code
+                        }
+                        onChange={(value, selectedData) => {
+                          routingForm.setFieldValue(`routings.${index}.carrier_code`, value || "");
+                          routingForm.setFieldValue(`routings.${index}.carrier_name`, selectedData?.label?.split(" (")[0] ?? "");
+                        }}
+                        minSearchLength={2}
+                        additionalParams={
+                          getTransportMode(routingForm.values.routings[index].transport_type)
+                            ? { transport_mode: getTransportMode(routingForm.values.routings[index].transport_type)! }
+                            : undefined
+                        }
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={routingForm.values.routings[index].transport_type === "SEA" ? 1 : 1.5}>
+                      <TextInput
+                        placeholder="Transport no"
+                        {...routingForm.getInputProps(`routings.${index}.transport_no`)}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SingleDateInput
+                        placeholder="ETD"
+                        value={routingForm.values.routings[index].etd ? dayjs(routingForm.values.routings[index].etd).toDate() : null}
+                        onChange={(date) => routingForm.setFieldValue(`routings.${index}.etd`, date ? dayjs(date).format("YYYY-MM-DD") : "")}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SingleDateInput
+                        placeholder="ETA"
+                        value={routingForm.values.routings[index].eta ? dayjs(routingForm.values.routings[index].eta).toDate() : null}
+                        onChange={(date) => routingForm.setFieldValue(`routings.${index}.eta`, date ? dayjs(date).format("YYYY-MM-DD") : "")}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SingleDateInput
+                        placeholder="ATD"
+                        value={routingForm.values.routings[index].atd ? dayjs(routingForm.values.routings[index].atd).toDate() : null}
+                        onChange={(date) => routingForm.setFieldValue(`routings.${index}.atd`, date ? dayjs(date).format("YYYY-MM-DD") : "")}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <SingleDateInput
+                        placeholder="ATA"
+                        value={routingForm.values.routings[index].ata ? dayjs(routingForm.values.routings[index].ata).toDate() : null}
+                        onChange={(date) => routingForm.setFieldValue(`routings.${index}.ata`, date ? dayjs(date).format("YYYY-MM-DD") : "")}
+                        disabled={isReadOnly}
+                      />
+                    </Grid.Col>
+                    {routingForm.values.routings[index].transport_type === "SEA" && (
+                      <Grid.Col span={1}>
+                        <TextInput
+                          placeholder="Vessel"
+                          value={routingForm.values.routings[index].vessel}
+                          onChange={(e) => routingForm.setFieldValue(`routings.${index}.vessel`, e.currentTarget.value)}
+                          disabled={isReadOnly}
+                        />
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={2}>
+                      {!isReadOnly && (
+                        <Group gap="xs" mt={4}>
+                          {index === routingForm.values.routings.length - 1 && (
+                            <Button
+                              variant="light"
+                              color="#105476"
+                              size="xs"
+                              leftSection={<IconPlus size={14} />}
+                              onClick={() => {
+                                routingForm.setFieldValue("routings", [
+                                  ...routingForm.values.routings,
+                                  {
+                                    transport_type: "",
+                                    from_code: "",
+                                    from_name: "",
+                                    to_code: "",
+                                    to_name: "",
+                                    eta: dayjs().format("YYYY-MM-DD"),
+                                    etd: dayjs().format("YYYY-MM-DD"),
+                                    ata: "",
+                                    atd: "",
+                                    carrier_code: "",
+                                    carrier_name: "",
+                                    transport_no: "",
+                                    vessel: "",
+                                  },
+                                ]);
+                              }}
+                            >
+                            </Button>
+                          )}
+                          {routingForm.values.routings.length > 1 && (
+                            <Button variant="light" color="red" size="xs" onClick={() => routingForm.removeListItem("routings", index)}><IconTrash size={14} /></Button>
+                          )}
+                        </Group>
+                      )}
+                    </Grid.Col>
+                  </Grid>
+                </Box>
+              ))}
+            </Stack>
 
             <Group justify="space-between" mt="xl">
               <Button
@@ -758,6 +1308,9 @@ function AirJobGenerationCreate() {
                 Back to List
               </Button>
               <Group gap="sm">
+                <Button variant="default" onClick={() => setActive((c) => c - 1)}>
+                  Previous
+                </Button>
                 <Button onClick={handleNext} color="#105476">
                   Next
                 </Button>
@@ -773,224 +1326,9 @@ function AirJobGenerationCreate() {
               </Group>
             </Group>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Stepper 2: Routing Details */}
-        <Stepper.Step label="2" description="Routings">
-          <Box mt="md">
-            <Text size="md" fw={600} c="#105476" mb="md">
-              Routings
-            </Text>
-            <Stack gap="md">
-              {routingForm.values.routings.map((_, index) => (
-                <Box key={index}>
-                  <Grid>
-                    <Grid.Col span={2}>
-                      <SearchableSelect
-                        label="From"
-                        required
-                        apiEndpoint={URL.portMaster}
-                        placeholder="From"
-                        searchFields={["port_code", "port_name"]}
-                        dropdownZIndex={310}
-                        displayFormat={(item: Record<string, unknown>) => {
-                          const port = item as { port_code: string; port_name: string };
-                          return {
-                            value: String(port.port_code),
-                            label: `${port.port_name} (${port.port_code})`,
-                          };
-                        }}
-                        value={routingForm.values.routings[index].from_code}
-                        displayValue={
-                          routingForm.values.routings[index].from_name
-                            ? `${routingForm.values.routings[index].from_name} (${routingForm.values.routings[index].from_code})`
-                            : routingForm.values.routings[index].from_code
-                        }
-                        onChange={(value, selectedData) => {
-                          routingForm.setFieldValue(`routings.${index}.from_code`, value || "");
-                          if (selectedData)
-                            routingForm.setFieldValue(`routings.${index}.from_name`, selectedData.label.split(" (")[0] || "");
-                        }}
-                        error={routingForm.errors[`routings.${index}.from_code`] as string}
-                        minSearchLength={2}
-                        disabled={isReadOnly}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <SearchableSelect
-                        label="To"
-                        required
-                        apiEndpoint={URL.portMaster}
-                        placeholder="To"
-                        searchFields={["port_code", "port_name"]}
-                        dropdownZIndex={310}
-                        displayFormat={(item: Record<string, unknown>) => {
-                          const port = item as { port_code: string; port_name: string };
-                          return {
-                            value: String(port.port_code),
-                            label: `${port.port_name} (${port.port_code})`,
-                          };
-                        }}
-                        value={routingForm.values.routings[index].to_code}
-                        displayValue={
-                          routingForm.values.routings[index].to_name
-                            ? `${routingForm.values.routings[index].to_name} (${routingForm.values.routings[index].to_code})`
-                            : routingForm.values.routings[index].to_code
-                        }
-                        onChange={(value, selectedData) => {
-                          routingForm.setFieldValue(`routings.${index}.to_code`, value || "");
-                          if (selectedData)
-                            routingForm.setFieldValue(`routings.${index}.to_name`, selectedData.label.split(" (")[0] || "");
-                        }}
-                        error={routingForm.errors[`routings.${index}.to_code`] as string}
-                        minSearchLength={2}
-                        disabled={isReadOnly}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <DateInput
-                        label="ETA"
-                        withAsterisk
-                        placeholder="YYYY-MM-DD"
-                        value={
-                          routingForm.values.routings[index].eta
-                            ? dayjs(routingForm.values.routings[index].eta).toDate()
-                            : null
-                        }
-                        onChange={(date) =>
-                          routingForm.setFieldValue(
-                            `routings.${index}.eta`,
-                            date ? dayjs(date).format("YYYY-MM-DD") : ""
-                          )
-                        }
-                        valueFormat="YYYY-MM-DD"
-                        leftSection={<IconCalendar size={16} />}
-                        leftSectionPointerEvents="none"
-                        radius="sm"
-                        size="sm"
-                        disabled={isReadOnly}
-                        styles={dateInputStyles}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <DateInput
-                        label="ETD"
-                        withAsterisk
-                        placeholder="YYYY-MM-DD"
-                        value={
-                          routingForm.values.routings[index].etd
-                            ? dayjs(routingForm.values.routings[index].etd).toDate()
-                            : null
-                        }
-                        onChange={(date) =>
-                          routingForm.setFieldValue(
-                            `routings.${index}.etd`,
-                            date ? dayjs(date).format("YYYY-MM-DD") : ""
-                          )
-                        }
-                        valueFormat="YYYY-MM-DD"
-                        leftSection={<IconCalendar size={16} />}
-                        leftSectionPointerEvents="none"
-                        radius="sm"
-                        size="sm"
-                        disabled={isReadOnly}
-                        styles={dateInputStyles}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                      <Dropdown
-                        label="Carrier"
-                        required
-                        placeholder="Carrier"
-                        searchable
-                        data={carrierData}
-                        nothingFoundMessage="No carriers"
-                        {...routingForm.getInputProps(`routings.${index}.carrier_code`)}
-                        onChange={(value) => {
-                          routingForm.setFieldValue(`routings.${index}.carrier_code`, value || "");
-                          const selected = carrierData.find((c) => c.value === value);
-                          if (selected)
-                            routingForm.setFieldValue(`routings.${index}.carrier_name`, selected.label);
-                        }}
-                        disabled={isReadOnly}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={1.5}>
-                      <TextInput
-                        label="Flight No"
-                        required
-                        placeholder="Flight No"
-                        {...routingForm.getInputProps(`routings.${index}.flight_no`)}
-                        disabled={isReadOnly}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={0.5}>
-                      {index === routingForm.values.routings.length - 1 && !isReadOnly && (
-                        <Button
-                          variant="light"
-                          color="#105476"
-                          mt={25}
-                          leftSection={<IconPlus size={16} />}
-                          onClick={() => {
-                            routingForm.setFieldValue("routings", [
-                              ...routingForm.values.routings,
-                              {
-                                from_code: "",
-                                from_name: "",
-                                to_code: "",
-                                to_name: "",
-                                eta: dayjs().format("YYYY-MM-DD"),
-                                etd: dayjs().format("YYYY-MM-DD"),
-                                carrier_code: "",
-                                carrier_name: "",
-                                flight_no: "",
-                              },
-                            ]);
-                          }}
-                        >
-                          Add
-                        </Button>
-                      )}
-                      {routingForm.values.routings.length > 1 && index !== routingForm.values.routings.length - 1 && !isReadOnly && (
-                        <Button
-                          variant="light"
-                          color="red"
-                          mt={25}
-                          onClick={() => routingForm.removeListItem("routings", index)}
-                        >
-                          <IconTrash size={16} />
-                        </Button>
-                      )}
-                    </Grid.Col>
-                  </Grid>
-                </Box>
-              ))}
-            </Stack>
-
-            <Group justify="space-between" mt="xl">
-              <Button variant="default" onClick={() => setActive((c) => c - 1)}>
-                Back
-              </Button>
-              <Group gap="sm">
-                <Button onClick={handleNext} color="#105476">
-                  Next
-                </Button>
-                {editMode && !isReadOnly && (
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    onClick={handleGenerateJob}
-                  >
-                    Generate Job
-                  </Button>
-                )}
-              </Group>
-            </Group>
-          </Box>
-        </Stepper.Step>
-
-        {/* Stepper 3: Select Bookings */}
-        <Stepper.Step label="3" description="Select Bookings">
+        <Tabs.Panel value="2">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
               <Text size="md" fw={600} c="#105476">
@@ -1029,11 +1367,19 @@ function AirJobGenerationCreate() {
             )}
 
             <Group justify="space-between" mt="xl">
-              <Button variant="default" onClick={() => setActive((c) => c - 1)}>
-                Back
+              <Button
+                variant="outline"
+                color="#105476"
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={() => navigate("/air/job-generation")}
+              >
+                Back to List
               </Button>
               {!isReadOnly ? (
                 <Group gap="sm">
+                  <Button variant="default" onClick={() => setActive((c) => c - 1)}>
+                    Previous
+                  </Button>
                   <Button
                     rightSection={<IconCheck size={16} />}
                     onClick={handleSaveBooking}
@@ -1041,31 +1387,38 @@ function AirJobGenerationCreate() {
                     loading={isSubmitting}
                     disabled={isSubmitting}
                   >
-                    {jobId ? "Update Booking" : "Create Booking"}
+                    {jobId ? "Update" : "Create"}
                   </Button>
                   {editMode && (
                     <Button
                       variant="outline"
                       color="#105476"
                       onClick={handleGenerateJob}
+                      loading={isGeneratingJob}
+                      disabled={isGeneratingJob}
                     >
                       Generate Job
                     </Button>
                   )}
                 </Group>
               ) : (
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  onClick={() => navigate("/air/job-generation")}
-                >
-                  Close
-                </Button>
+                <Group gap="sm">
+                  <Button variant="default" onClick={() => setActive((c) => c - 1)}>
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => navigate("/air/job-generation")}
+                  >
+                    Close
+                  </Button>
+                </Group>
               )}
             </Group>
           </Box>
-        </Stepper.Step>
-      </Stepper>
+        </Tabs.Panel>
+      </Tabs>
     </Box>
   );
 }

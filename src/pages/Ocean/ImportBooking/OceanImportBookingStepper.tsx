@@ -1,27 +1,33 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Box,
   Button,
   Group,
   Text,
   Grid,
-  TextInput,
-  NumberInput,
   Stack,
   Radio,
   Divider,
-  Textarea,
+  Loader,
 } from "@mantine/core";
-import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
-  IconCalendar,
+  IconCheck,
   IconPlus,
   IconTrash,
-  IconChevronRight,
-  IconChevronLeft,
 } from "@tabler/icons-react";
+import FormTextInput from "../../../components/FormTextInput";
+import FormNumberInput from "../../../components/FormNumberInput";
+import FormTextArea from "../../../components/FormTextArea";
+import SingleDateInput from "../../../components/SingleDateInput";
+import RequiredLabel from "../../../components/RequiredLabel";
 import { useNavigate } from "react-router-dom";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
@@ -48,7 +54,7 @@ interface ImportShipmentStepperProps {
   /** Called when quotation flow returns is_booked: true - Create should fetch booking and switch to edit */
   onQuotationAlreadyBooked?: (
     bookingMessage: string,
-    bookingId: number
+    bookingId: number,
   ) => void;
   /** Called when edit form has been fully populated with jobData (for hiding loader) */
   onEditFormPopulated?: () => void;
@@ -56,6 +62,7 @@ interface ImportShipmentStepperProps {
 
 interface CargoDetail {
   // Common fields
+  id?: number;
   no_of_packages?: number;
   gross_weight?: number;
   volume_weight?: number;
@@ -68,13 +75,28 @@ interface CargoDetail {
   no_of_containers?: number;
 }
 
+const DEFAULT_CARGO_ROW: CargoDetail = {
+  no_of_packages: undefined,
+  gross_weight: undefined,
+  volume_weight: undefined,
+  chargeable_weight: undefined,
+  volume: undefined,
+  chargeable_volume: undefined,
+  container_type_code: undefined,
+  no_of_containers: undefined,
+};
+
 interface RoutingDetail {
+  id?: number | string;
   move_type: string;
   from_location_code: string;
   to_location_code: string;
   etd: Date;
   eta: Date;
   carrier_code: string;
+  from_location_name: string;
+  to_location_name: string;
+  carrier_name: string;
   flight_no: string | null;
   status: string;
 }
@@ -97,6 +119,7 @@ interface FormValues {
   customer_service_name: string;
   is_direct: boolean;
   is_coload: boolean;
+  houseno:string;
 
   // Ocean Schedule fields
   schedule_id: string;
@@ -150,6 +173,7 @@ interface FormValues {
   pickup_address_id: string;
   planned_pickup_date: Date;
   actual_pickup_date: Date | null;
+  transporter_code: string;
   transporter_name: string;
   transporter_email: string;
 
@@ -158,6 +182,7 @@ interface FormValues {
   delivery_from_code: string;
   delivery_address_id: string;
   planned_delivery_date: Date;
+  actual_delivery_date: Date | null;
 }
 
 // Yup validation schema
@@ -177,6 +202,7 @@ const validationSchema = yup.object({
     .required("Customer service name is required"),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
+  houseno: yup.string().required("House No is required"),
 
   // Ocean Schedule fields - All optional
   schedule_id: yup.string(),
@@ -197,7 +223,7 @@ const validationSchema = yup.object({
       carrier_code: yup.string(),
       flight_no: yup.string().nullable(),
       status: yup.string(),
-    })
+    }),
   ),
 
   // Party Details fields - All optional
@@ -235,7 +261,7 @@ const validationSchema = yup.object({
       chargeable_volume: yup.number().nullable(),
       container_type_code: yup.string().nullable(),
       no_of_containers: yup.number().nullable(),
-    })
+    }),
   ),
 
   // Pickup Details - All optional
@@ -244,6 +270,7 @@ const validationSchema = yup.object({
   pickup_address_id: yup.string(),
   planned_pickup_date: yup.date(),
   actual_pickup_date: yup.date().nullable(),
+  transporter_code: yup.string(),
   transporter_name: yup.string(),
   transporter_email: yup.string().email("Invalid email format"),
 
@@ -252,6 +279,7 @@ const validationSchema = yup.object({
   delivery_from_code: yup.string(),
   delivery_address_id: yup.string(),
   planned_delivery_date: yup.date(),
+  actual_delivery_date: yup.date().nullable(),
 });
 
 // Data fetching functions
@@ -280,7 +308,7 @@ const fetchUnitMaster = async () => {
     const response = (await postAPICall(
       URL.unitMasterFilter,
       {},
-      API_HEADER
+      API_HEADER,
     )) as { data?: unknown[] };
     return response?.data || [];
   } catch (error) {
@@ -312,7 +340,10 @@ const fetchSalespersons = async (customerId: string = "") => {
 };
 
 type QuotationCharge = {
+  id: number;
+  charge_id?: number | null;
   charge_name: string;
+  pp_cc?: string | null;
   currency?: string;
   currency_country_code?: string;
   roe?: number;
@@ -353,7 +384,7 @@ type FilterGainedPayload =
   | { quotation_id: number };
 
 const fetchQuotations = async (
-  payload: FilterGainedPayload
+  payload: FilterGainedPayload,
 ): Promise<QuotationsResponse> => {
   if ("quotation_id" in payload) {
     if (!payload.quotation_id) {
@@ -373,14 +404,14 @@ const fetchQuotations = async (
   const response = (await postAPICall(
     URL.quotationFilterGained,
     payload,
-    API_HEADER
+    API_HEADER,
   )) as QuotationsResponse;
   return response;
 };
 
 // Helper function to get transport_mode based on move_type
 const getTransportMode = (
-  moveType: string | null | undefined
+  moveType: string | null | undefined,
 ): string | undefined => {
   if (!moveType) return undefined;
   const type = moveType.trim().toUpperCase();
@@ -405,28 +436,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const active = externalActive !== undefined ? externalActive : internalActive;
   const setActive = externalSetActive || setInternalActive;
 
-  // Common field styles
-  const commonFieldStyles = {
-    input: {
-      fontSize: "13px",
-      fontFamily: "Inter",
-      height: "36px",
-    },
-    label: {
-      fontSize: "13px",
-      fontWeight: 500,
-      color: "#424242",
-      marginBottom: "4px",
-      fontFamily: "Inter",
-      fontStyle: "medium",
-    },
-  };
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [charges, setCharges] = useState([
     {
-      id: 1,
+      id: undefined as number | undefined,
+      charge_id: "",
       charge_name: "",
+      pp_cc: "Collect",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -442,7 +459,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   // State for display values
   const [shipperDisplayName, setShipperDisplayName] = useState<string | null>(
-    null
+    null,
   );
   const [pickupFromDisplayName, setPickupFromDisplayName] = useState<
     string | null
@@ -472,52 +489,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     string | null
   >(null);
 
-  // Initialize routing display names from initialData if available (synchronous)
-  const initialRoutingDisplayNames = React.useMemo(() => {
-    if (
-      initialData?.routing_details &&
-      Array.isArray(initialData.routing_details) &&
-      initialData.routing_details.length > 0
-    ) {
-      return (
-        initialData.routing_details as Array<Record<string, unknown>>
-      ).map((route: Record<string, unknown>) => ({
-        from:
-          route.from_location_name && route.from_location_code
-            ? `${String(route.from_location_name)} (${String(route.from_location_code)})`
-            : route.from_location_name
-              ? String(route.from_location_name)
-              : null,
-        to:
-          route.to_location_name && route.to_location_code
-            ? `${String(route.to_location_name)} (${String(route.to_location_code)})`
-            : route.to_location_name
-              ? String(route.to_location_name)
-              : null,
-        carrier: route.carrier_name ? String(route.carrier_name) : null,
-      }));
-    }
-    return [];
-  }, [isEditMode, initialData]);
-
-  const [routingDisplayNames, setRoutingDisplayNames] = useState<
-    Array<{
-      from: string | null;
-      to: string | null;
-      carrier: string | null;
-    }>
-  >(initialRoutingDisplayNames);
-
-  // Sync routingDisplayNames when initialRoutingDisplayNames changes (e.g., when initialData loads)
-  React.useEffect(() => {
-    if (
-      initialRoutingDisplayNames.length > 0 &&
-      routingDisplayNames.length === 0
-    ) {
-      setRoutingDisplayNames(initialRoutingDisplayNames);
-    }
-  }, [initialRoutingDisplayNames, routingDisplayNames.length]);
-
   // State for address options
   const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
     Array<{ value: string; label: string }>
@@ -538,6 +509,18 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [chaAddressOptions, setChaAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
+
+  const defaultCurrency = (() => {
+    const userData = localStorage.getItem("user");
+    if (!userData) return "";
+
+    const parsed = JSON.parse(userData);
+
+    return (
+      parsed?.branches?.find((b: any) => b.is_default)?.currency
+        ?.currency_code || ""
+    );
+  })();
 
   // Terms of Shipment query (still needed for the Select component)
   const { data: termsOfShipment = [] } = useQuery({
@@ -641,10 +624,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     });
   }, [unitDataRaw]);
 
-  const updateCharge = (id: number, field: string, value: string) => {
+  const updateCharge = (index: number, field: string, value: string) => {
     setCharges(
-      charges.map((charge) => {
-        if (charge.id === id) {
+      charges.map((charge, i) => {
+        if (i === index) {
           const updatedCharge = { ...charge, [field]: value };
 
           // Calculate totals when relevant fields change
@@ -659,7 +642,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             const roe = parseFloat(updatedCharge.roe) || 1;
 
             updatedCharge.total_sell = (sellPerUnit * roe * noOfUnits).toFixed(
-              2
+              2,
             );
           }
 
@@ -674,21 +657,23 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             const roe = parseFloat(updatedCharge.roe) || 1;
 
             updatedCharge.total_cost = (costPerUnit * roe * noOfUnits).toFixed(
-              2
+              2,
             );
           }
 
           return updatedCharge;
         }
         return charge;
-      })
+      }),
     );
   };
 
   const addNewCharge = () => {
     const newCharge = {
-      id: charges.length + 1,
+      id: undefined as number | undefined,
+      charge_id: "",
       charge_name: "",
+      pp_cc: "Collect",
       currency_country_code: "",
       roe: "",
       unit: "",
@@ -702,15 +687,15 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     setCharges([...charges, newCharge]);
   };
 
-  const removeCharge = (id: number) => {
+  const removeCharge = (index: number) => {
     if (charges.length > 1) {
-      setCharges(charges.filter((charge) => charge.id !== id));
+      setCharges(charges.filter((_, i) => i !== index));
     }
   };
 
   // Function to map initial data to form values
   const mapInitialDataToFormValues = (
-    data: Record<string, unknown>
+    data: Record<string, unknown>,
   ): Partial<FormValues> => {
     if (!data) return {};
 
@@ -734,6 +719,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       customer_service_name: String(data.customer_service_name || ""),
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
+      houseno: String(data.houseno || ""),
 
       // Ocean Schedule fields
       schedule_id: String(data.schedule_id || ""),
@@ -745,19 +731,22 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       voyage_no: String(data.voyage_no || ""),
 
       // Routing Details - map from routing_details array
-      // Store codes in form values for payload submission
       routingDetails: data.routing_details
         ? (data.routing_details as Array<Record<string, unknown>>).map(
             (route: Record<string, unknown>) => ({
+              id: route.id != null ? Number(route.id) : undefined,
               move_type: String(route.move_type || ""),
               from_location_code: String(route.from_location_code || ""),
               to_location_code: String(route.to_location_code || ""),
+              from_location_name: String(route.from_location_name || ""),
+              to_location_name: String(route.to_location_name || ""),
+              carrier_code: String(route.carrier_code || ""),
+              carrier_name: String(route.carrier_name || ""),
               etd: route.etd ? new Date(String(route.etd)) : new Date(),
               eta: route.eta ? new Date(String(route.eta)) : new Date(),
-              carrier_code: String(route.carrier_code || ""),
               flight_no: route.flight_no ? String(route.flight_no) : null,
               status: String(route.status || ""),
-            })
+            }),
           )
         : [],
 
@@ -791,6 +780,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       cargo_details: data.cargo_details
         ? (data.cargo_details as Array<Record<string, unknown>>).map(
             (cargo: Record<string, unknown>) => ({
+              id: cargo.id != null ? Number(cargo.id) : undefined,
               no_of_packages: cargo.no_of_packages
                 ? Number(cargo.no_of_packages)
                 : undefined,
@@ -815,7 +805,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               no_of_containers: cargo.no_of_containers
                 ? Number(cargo.no_of_containers)
                 : undefined,
-            })
+            }),
           )
         : [
             {
@@ -840,6 +830,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       actual_pickup_date: data.actual_pickup_date
         ? new Date(String(data.actual_pickup_date))
         : null,
+      transporter_code: String(data.transporter_code ?? ""),
       transporter_name: String(data.transporter_name || ""),
       transporter_email: String(data.transporter_email || ""),
 
@@ -850,11 +841,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       planned_delivery_date: data.planned_delivery_date
         ? new Date(String(data.planned_delivery_date))
         : new Date(),
+      actual_delivery_date: data.actual_delivery_date
+        ? new Date(String(data.actual_delivery_date))
+        : null,
     };
   };
   const form = useForm<FormValues>({
     validate: yupResolver(validationSchema) as unknown as (
-      values: FormValues
+      values: FormValues,
     ) => Record<string, string>,
     initialValues: {
       // Import Shipment fields
@@ -874,6 +868,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       customer_service_name: "",
       is_direct: false,
       is_coload: false,
+      houseno:"",
 
       // Ocean Schedule fields
       schedule_id: "",
@@ -890,9 +885,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           move_type: "",
           from_location_code: "",
           to_location_code: "",
+          from_location_name: "",
+          to_location_name: "",
+          carrier_code: "",
+          carrier_name: "",
           etd: new Date(),
           eta: new Date(),
-          carrier_code: "",
           flight_no: null,
           status: "",
         },
@@ -949,6 +947,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       pickup_address_id: "",
       planned_pickup_date: new Date(),
       actual_pickup_date: null,
+      transporter_code: "",
       transporter_name: "",
       transporter_email: "",
 
@@ -957,11 +956,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       delivery_from_code: "",
       delivery_address_id: "",
       planned_delivery_date: new Date(),
+      actual_delivery_date: null,
 
       // Merge with initial data when provided (edit mode or create-from-quotation)
-      ...(initialData
-        ? mapInitialDataToFormValues(initialData)
-        : {}),
+      ...(initialData ? mapInitialDataToFormValues(initialData) : {}),
     },
   });
 
@@ -1083,17 +1081,20 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       if (lastBookedIdRef.current === bookingId) return;
       lastBookedIdRef.current = bookingId;
       onQuotationAlreadyBooked(
-        firstItem.booking_message || "This quotation is already linked to a booking.",
-        bookingId
+        firstItem.booking_message ||
+          "This quotation is already linked to a booking.",
+        bookingId,
       );
     } else if (firstItem.is_booked !== true && firstItem.charges?.length) {
       lastBookedIdRef.current = null;
       setQuotationId(String(firstItem.quotation_id || ""));
       const mappedCharges = firstItem.charges.map(
-        (charge: QuotationCharge, index: number) => ({
-          id: index + 1,
+        (charge: QuotationCharge) => ({
+          id: undefined as number | undefined,
+          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
-          currency_country_code: String(charge.currency || ""),
+          pp_cc: charge.pp_cc ? String(charge.pp_cc) : "Collect",
+          currency_country_code: String(charge.currency || charge.currency_country_code || ""),
           roe: charge.roe ? String(charge.roe) : "",
           unit: String(charge.unit || ""),
           no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
@@ -1106,15 +1107,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             : "",
           total_cost: charge.total_cost ? String(charge.total_cost) : "",
           total_sell: charge.total_sell ? String(charge.total_sell) : "",
-        })
+        }),
       );
       setCharges(mappedCharges);
     }
-  }, [
-    isFromQuotationFlow,
-    quotationsData,
-    onQuotationAlreadyBooked,
-  ]);
+  }, [isFromQuotationFlow, quotationsData, onQuotationAlreadyBooked]);
 
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
   const populatedJobIdRef = useRef<number | null>(null);
@@ -1134,27 +1131,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     const mappedData = mapInitialDataToFormValues(jobData);
     form.setValues(mappedData as FormValues);
 
-    if (jobData.routing_details && Array.isArray(jobData.routing_details)) {
-      const routingNames = (
-        jobData.routing_details as Array<Record<string, unknown>>
-      ).map((route: Record<string, unknown>) => ({
-        from:
-          route.from_location_name && route.from_location_code
-            ? `${String(route.from_location_name)} (${String(route.from_location_code)})`
-            : route.from_location_name
-              ? String(route.from_location_name)
-              : null,
-        to:
-          route.to_location_name && route.to_location_code
-            ? `${String(route.to_location_name)} (${String(route.to_location_code)})`
-            : route.to_location_name
-              ? String(route.to_location_name)
-              : null,
-        carrier: route.carrier_name ? String(route.carrier_name) : null,
-      }));
-      setRoutingDisplayNames(routingNames);
-    }
-    if (jobData.shipper_name) setShipperDisplayName(String(jobData.shipper_name));
+    if (jobData.shipper_name)
+      setShipperDisplayName(String(jobData.shipper_name));
     if (jobData.consignee_name)
       setConsigneeDisplayName(String(jobData.consignee_name));
     if (jobData.forwarder_name)
@@ -1175,21 +1153,21 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       setPickupFromDisplayName(
         jobData.pickup_from_code
           ? `${String(jobData.pickup_from)} (${String(jobData.pickup_from_code)})`
-          : String(jobData.pickup_from)
+          : String(jobData.pickup_from),
       );
     if (jobData.delivery_from)
       setDeliveryFromDisplayName(
         jobData.delivery_from_code
           ? `${String(jobData.delivery_from)} (${String(jobData.delivery_from_code)})`
-          : String(jobData.delivery_from)
+          : String(jobData.delivery_from),
       );
     if (jobData.pickup_address_text || jobData.pickup_address)
       setPickupAddressDisplayName(
-        String(jobData.pickup_address_text ?? jobData.pickup_address ?? "")
+        String(jobData.pickup_address_text ?? jobData.pickup_address ?? ""),
       );
     if (jobData.delivery_address_text || jobData.delivery_address)
       setDeliveryAddressDisplayName(
-        String(jobData.delivery_address_text ?? jobData.delivery_address ?? "")
+        String(jobData.delivery_address_text ?? jobData.delivery_address ?? ""),
       );
 
     if (jobData.shipper_address_id && jobData.shipper_address) {
@@ -1209,7 +1187,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       ]);
       form.setFieldValue(
         "consignee_address_id",
-        Number(jobData.consignee_address_id) || 0
+        Number(jobData.consignee_address_id) || 0,
       );
     }
     if (jobData.forwarder_address_id && jobData.forwarder_address) {
@@ -1242,10 +1220,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         },
       ]);
     }
-    if (
-      jobData.notify_customer_address_id &&
-      jobData.notify_customer_address
-    ) {
+    if (jobData.notify_customer_address_id && jobData.notify_customer_address) {
       setNotifyCustomerAddressOptions([
         {
           value: String(jobData.notify_customer_address_id),
@@ -1269,20 +1244,18 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     ) {
       const mappedCharges = (
         jobData.rate_details as Array<Record<string, unknown>>
-      ).map((charge: Record<string, unknown>, index: number) => ({
-        id:
-          charge.id != null
-            ? typeof charge.id === "number"
-              ? charge.id
-              : Number(charge.id)
-            : index + 1,
+      ).map((charge: Record<string, unknown>) => ({
+        id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+        charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
         charge_name: String(charge.charge_name ?? ""),
+        pp_cc: String(charge.pp_cc ?? "Collect"),
         currency_country_code: String(
-          charge.currency_country_code ?? charge.currency ?? ""
+          charge.currency_country_code ?? charge.currency ?? "",
         ),
         roe: charge.roe != null ? String(charge.roe) : "",
         unit: String(charge.unit ?? ""),
-        no_of_units: charge.no_of_units != null ? String(charge.no_of_units) : "",
+        no_of_units:
+          charge.no_of_units != null ? String(charge.no_of_units) : "",
         sell_per_unit:
           charge.sell_per_unit != null ? String(charge.sell_per_unit) : "",
         min_sell: charge.min_sell != null ? String(charge.min_sell) : "",
@@ -1296,7 +1269,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     if (jobData.shipment_terms_code && jobData.shipment_terms_name) {
       form.setFieldValue(
         "shipment_terms_name",
-        String(jobData.shipment_terms_name)
+        String(jobData.shipment_terms_name),
       );
     }
 
@@ -1312,234 +1285,208 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
     console.log("Setting up display names from initialData:", initialData);
 
-      // Set display names for SearchableSelect components
-      if (initialData.shipper_name) {
-        setShipperDisplayName(String(initialData.shipper_name));
-      }
-      if (initialData.consignee_name) {
-        setConsigneeDisplayName(String(initialData.consignee_name));
-      }
-      if (initialData.forwarder_name) {
-        setForwarderDisplayName(String(initialData.forwarder_name));
-      }
-      if (initialData.destination_agent_name) {
-        setDestinationAgentDisplayName(
-          String(initialData.destination_agent_name)
-        );
-      }
-      // Billing Customer - check for both billing_customer_name and billing_customer
-      if (initialData.billing_customer_name) {
-        setBillingCustomerDisplayName(
-          String(initialData.billing_customer_name)
-        );
-      } else if (initialData.billing_customer) {
-        setBillingCustomerDisplayName(String(initialData.billing_customer));
-      }
-      // Notify Customer - check for both notify_customer_name and notify_customer
-      if (initialData.notify_customer_name) {
-        setNotifyCustomerDisplayName(String(initialData.notify_customer_name));
-      } else if (initialData.notify_customer) {
-        setNotifyCustomerDisplayName(String(initialData.notify_customer));
-      }
-      // CHA - check for both cha_name and cha
-      if (initialData.cha_name) {
-        setChaDisplayName(String(initialData.cha_name));
-      } else if (initialData.cha) {
-        setChaDisplayName(String(initialData.cha));
-      }
+    // Set display names for SearchableSelect components
+    if (initialData.shipper_name) {
+      setShipperDisplayName(String(initialData.shipper_name));
+    }
+    if (initialData.consignee_name) {
+      setConsigneeDisplayName(String(initialData.consignee_name));
+    }
+    if (initialData.forwarder_name) {
+      setForwarderDisplayName(String(initialData.forwarder_name));
+    }
+    if (initialData.destination_agent_name) {
+      setDestinationAgentDisplayName(
+        String(initialData.destination_agent_name),
+      );
+    }
+    // Billing Customer - check for both billing_customer_name and billing_customer
+    if (initialData.billing_customer_name) {
+      setBillingCustomerDisplayName(String(initialData.billing_customer_name));
+    } else if (initialData.billing_customer) {
+      setBillingCustomerDisplayName(String(initialData.billing_customer));
+    }
+    // Notify Customer - check for both notify_customer_name and notify_customer
+    if (initialData.notify_customer_name) {
+      setNotifyCustomerDisplayName(String(initialData.notify_customer_name));
+    } else if (initialData.notify_customer) {
+      setNotifyCustomerDisplayName(String(initialData.notify_customer));
+    }
+    // CHA - check for both cha_name and cha
+    if (initialData.cha_name) {
+      setChaDisplayName(String(initialData.cha_name));
+    } else if (initialData.cha) {
+      setChaDisplayName(String(initialData.cha));
+    }
 
-      // Set Pickup From display name - check for both pickup_from and pickup_from_name
-      if (initialData.pickup_from) {
-        const pickupFromName = String(initialData.pickup_from);
-        const pickupFromCode = initialData.pickup_from_code
-          ? String(initialData.pickup_from_code)
-          : "";
-        setPickupFromDisplayName(
-          pickupFromCode
-            ? `${pickupFromName} (${pickupFromCode})`
-            : pickupFromName
-        );
-      } else if (initialData.pickup_from_name) {
-        setPickupFromDisplayName(String(initialData.pickup_from_name));
-      }
+    // Set Pickup From display name - check for both pickup_from and pickup_from_name
+    if (initialData.pickup_from) {
+      const pickupFromName = String(initialData.pickup_from);
+      const pickupFromCode = initialData.pickup_from_code
+        ? String(initialData.pickup_from_code)
+        : "";
+      setPickupFromDisplayName(
+        pickupFromCode
+          ? `${pickupFromName} (${pickupFromCode})`
+          : pickupFromName,
+      );
+    } else if (initialData.pickup_from_name) {
+      setPickupFromDisplayName(String(initialData.pickup_from_name));
+    }
 
-      // Set Delivery From display name - check for both delivery_from and delivery_from_name
-      if (initialData.delivery_from) {
-        const deliveryFromName = String(initialData.delivery_from);
-        const deliveryFromCode = initialData.delivery_from_code
-          ? String(initialData.delivery_from_code)
-          : "";
-        setDeliveryFromDisplayName(
-          deliveryFromCode
-            ? `${deliveryFromName} (${deliveryFromCode})`
-            : deliveryFromName
-        );
-      } else if (initialData.delivery_from_name) {
-        setDeliveryFromDisplayName(String(initialData.delivery_from_name));
-      }
+    // Set Delivery From display name - check for both delivery_from and delivery_from_name
+    if (initialData.delivery_from) {
+      const deliveryFromName = String(initialData.delivery_from);
+      const deliveryFromCode = initialData.delivery_from_code
+        ? String(initialData.delivery_from_code)
+        : "";
+      setDeliveryFromDisplayName(
+        deliveryFromCode
+          ? `${deliveryFromName} (${deliveryFromCode})`
+          : deliveryFromName,
+      );
+    } else if (initialData.delivery_from_name) {
+      setDeliveryFromDisplayName(String(initialData.delivery_from_name));
+    }
 
-      if (initialData.pickup_address_text || initialData.pickup_address) {
-        setPickupAddressDisplayName(
-          String(
-            initialData.pickup_address_text || initialData.pickup_address || ""
-          )
-        );
-      }
-      if (initialData.delivery_address_text || initialData.delivery_address) {
-        setDeliveryAddressDisplayName(
-          String(
-            initialData.delivery_address_text ||
-              initialData.delivery_address ||
-              ""
-          )
-        );
-      }
+    if (initialData.pickup_address_text || initialData.pickup_address) {
+      setPickupAddressDisplayName(
+        String(
+          initialData.pickup_address_text || initialData.pickup_address || "",
+        ),
+      );
+    }
+    if (initialData.delivery_address_text || initialData.delivery_address) {
+      setDeliveryAddressDisplayName(
+        String(
+          initialData.delivery_address_text ||
+            initialData.delivery_address ||
+            "",
+        ),
+      );
+    }
 
-      // Populate address options from response data for Party Details
-      // Shipper Address
-      if (initialData.shipper_address_id && initialData.shipper_address) {
-        setShipperAddressOptions([
-          {
-            value: String(initialData.shipper_address_id),
-            label: String(initialData.shipper_address),
-          },
-        ]);
-      }
+    // Populate address options from response data for Party Details
+    // Shipper Address
+    if (initialData.shipper_address_id && initialData.shipper_address) {
+      setShipperAddressOptions([
+        {
+          value: String(initialData.shipper_address_id),
+          label: String(initialData.shipper_address),
+        },
+      ]);
+    }
 
-      // Consignee Address (from quotation list address string or with id)
-      if (initialData.consignee_address) {
-        setConsigneeAddressOptions([
-          {
-            value: String(initialData.consignee_address_id || 0),
-            label: String(initialData.consignee_address),
-          },
-        ]);
-        form.setFieldValue("consignee_address_id", Number(initialData.consignee_address_id) || 0);
-      }
+    // Consignee Address (from quotation list address string or with id)
+    if (initialData.consignee_address) {
+      setConsigneeAddressOptions([
+        {
+          value: String(initialData.consignee_address_id || 0),
+          label: String(initialData.consignee_address),
+        },
+      ]);
+      form.setFieldValue(
+        "consignee_address_id",
+        Number(initialData.consignee_address_id) || 0,
+      );
+    }
 
-      // Forwarder Address
-      if (initialData.forwarder_address_id && initialData.forwarder_address) {
-        setForwarderAddressOptions([
-          {
-            value: String(initialData.forwarder_address_id),
-            label: String(initialData.forwarder_address),
-          },
-        ]);
-      }
+    // Forwarder Address
+    if (initialData.forwarder_address_id && initialData.forwarder_address) {
+      setForwarderAddressOptions([
+        {
+          value: String(initialData.forwarder_address_id),
+          label: String(initialData.forwarder_address),
+        },
+      ]);
+    }
 
-      // Destination Agent Address
-      if (
-        initialData.destination_agent_address_id &&
-        initialData.destination_agent_address
-      ) {
-        setAgentAddressOptions([
-          {
-            value: String(initialData.destination_agent_address_id),
-            label: String(initialData.destination_agent_address),
-          },
-        ]);
-      }
+    // Destination Agent Address
+    if (
+      initialData.destination_agent_address_id &&
+      initialData.destination_agent_address
+    ) {
+      setAgentAddressOptions([
+        {
+          value: String(initialData.destination_agent_address_id),
+          label: String(initialData.destination_agent_address),
+        },
+      ]);
+    }
 
-      // Billing Customer Address
-      if (
-        initialData.billing_customer_address_id &&
-        initialData.billing_customer_address
-      ) {
-        setBillingCustomerAddressOptions([
-          {
-            value: String(initialData.billing_customer_address_id),
-            label: String(initialData.billing_customer_address),
-          },
-        ]);
-      }
+    // Billing Customer Address
+    if (
+      initialData.billing_customer_address_id &&
+      initialData.billing_customer_address
+    ) {
+      setBillingCustomerAddressOptions([
+        {
+          value: String(initialData.billing_customer_address_id),
+          label: String(initialData.billing_customer_address),
+        },
+      ]);
+    }
 
-      // Notify Customer Address
-      if (
-        initialData.notify_customer_address_id &&
-        initialData.notify_customer_address
-      ) {
-        setNotifyCustomerAddressOptions([
-          {
-            value: String(initialData.notify_customer_address_id),
-            label: String(initialData.notify_customer_address),
-          },
-        ]);
-      }
+    // Notify Customer Address
+    if (
+      initialData.notify_customer_address_id &&
+      initialData.notify_customer_address
+    ) {
+      setNotifyCustomerAddressOptions([
+        {
+          value: String(initialData.notify_customer_address_id),
+          label: String(initialData.notify_customer_address),
+        },
+      ]);
+    }
 
-      // CHA Address
-      if (initialData.cha_address_id && initialData.cha_address) {
-        setChaAddressOptions([
-          {
-            value: String(initialData.cha_address_id),
-            label: String(initialData.cha_address),
-          },
-        ]);
-      }
+    // CHA Address
+    if (initialData.cha_address_id && initialData.cha_address) {
+      setChaAddressOptions([
+        {
+          value: String(initialData.cha_address_id),
+          label: String(initialData.cha_address),
+        },
+      ]);
+    }
 
-      // Set routing display names - only if not already initialized from useMemo
-      // This ensures display names are set even if initialData changes
-      if (
-        initialData.routing_details &&
-        Array.isArray(initialData.routing_details) &&
-        initialData.routing_details.length > 0 &&
-        routingDisplayNames.length === 0
-      ) {
-        const routingNames = (
-          initialData.routing_details as Array<Record<string, unknown>>
-        ).map((route: Record<string, unknown>) => ({
-          from:
-            route.from_location_name && route.from_location_code
-              ? `${String(route.from_location_name)} (${String(route.from_location_code)})`
-              : route.from_location_name
-                ? String(route.from_location_name)
-                : null,
-          to:
-            route.to_location_name && route.to_location_code
-              ? `${String(route.to_location_name)} (${String(route.to_location_code)})`
-              : route.to_location_name
-                ? String(route.to_location_name)
-                : null,
-          carrier: route.carrier_name ? String(route.carrier_name) : null,
-        }));
-        setRoutingDisplayNames(routingNames);
-      }
+    // Ensure shipment_terms_name is set if shipment_terms_code exists
+    if (initialData.shipment_terms_code && initialData.shipment_terms_name) {
+      form.setFieldValue(
+        "shipment_terms_name",
+        String(initialData.shipment_terms_name),
+      );
+    }
 
-      // Ensure shipment_terms_name is set if shipment_terms_code exists
-      if (initialData.shipment_terms_code && initialData.shipment_terms_name) {
-        form.setFieldValue(
-          "shipment_terms_name",
-          String(initialData.shipment_terms_name)
-        );
-      }
+    // Set quotation ID
+    if (initialData.quotation_id) {
+      setQuotationId(String(initialData.quotation_id));
+    }
 
-      // Set quotation ID
-      if (initialData.quotation_id) {
-        setQuotationId(String(initialData.quotation_id));
-      }
+    // Set up charges from rate_details (priority) or quotation_charges
+    let chargesData = null;
+    if (
+      initialData.rate_details &&
+      Array.isArray(initialData.rate_details) &&
+      initialData.rate_details.length > 0
+    ) {
+      chargesData = initialData.rate_details;
+    } else if (
+      initialData.quotation_charges &&
+      Array.isArray(initialData.quotation_charges)
+    ) {
+      chargesData = initialData.quotation_charges;
+    }
 
-      // Set up charges from rate_details (priority) or quotation_charges
-      let chargesData = null;
-      if (
-        initialData.rate_details &&
-        Array.isArray(initialData.rate_details) &&
-        initialData.rate_details.length > 0
-      ) {
-        chargesData = initialData.rate_details;
-      } else if (
-        initialData.quotation_charges &&
-        Array.isArray(initialData.quotation_charges)
-      ) {
-        chargesData = initialData.quotation_charges;
-      }
-
-      if (chargesData) {
-        const mappedCharges = (
-          chargesData as Array<Record<string, unknown>>
-        ).map((charge: Record<string, unknown>, index: number) => ({
-          id: index + 1,
+    if (chargesData) {
+      const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
+        (charge: Record<string, unknown>) => ({
+          id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
+          pp_cc: String(charge.pp_cc ?? "Collect"),
           currency_country_code: String(
-            charge.currency_country_code || charge.currency || ""
+            charge.currency_country_code || charge.currency || "",
           ),
           roe: charge.roe ? String(charge.roe) : "",
           unit: String(charge.unit || ""),
@@ -1553,9 +1500,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             : "",
           total_cost: charge.total_cost ? String(charge.total_cost) : "",
           total_sell: charge.total_sell ? String(charge.total_sell) : "",
-        }));
-        setCharges(mappedCharges);
-      }
+        }),
+      );
+      setCharges(mappedCharges);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, initialData, jobData]);
 
@@ -1563,7 +1511,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   useEffect(() => {
     if (form.values.shipment_terms_code && shipmentOptions.length > 0) {
       const option = shipmentOptions.find(
-        (opt) => opt.value === form.values.shipment_terms_code
+        (opt) => opt.value === form.values.shipment_terms_code,
       );
       if (option) {
         const nameFromLabel = option.label.split(" (")[0];
@@ -1595,12 +1543,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       salespersonsData.length > 0
     ) {
       const selectedSalesperson = salespersonsData.find(
-        (person) => person.value === form.values.routed_by
+        (person) => person.value === form.values.routed_by,
       );
       if (selectedSalesperson?.customer_service) {
         form.setFieldValue(
           "customer_service_name",
-          selectedSalesperson.customer_service
+          selectedSalesperson.customer_service,
         );
       }
     }
@@ -1624,7 +1572,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       const volumeInCbm = volume || 0;
       return Math.max(grossWeightInCbm, volumeInCbm);
     },
-    []
+    [],
   );
 
   // Calculate chargeable weight for AIR service (max of gross weight and volume weight)
@@ -1635,7 +1583,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       const volume = volumeWeight || 0;
       return Math.max(gross, volume);
     },
-    []
+    [],
   );
 
   // Debounced function to update chargeable volume and chargeable weight
@@ -1652,7 +1600,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         if (cargo.chargeable_volume !== chargeableVolume) {
           form.setFieldValue(
             "cargo_details.0.chargeable_volume",
-            chargeableVolume
+            chargeableVolume,
           );
         }
       } else {
@@ -1671,12 +1619,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       if (grossWeight || volumeWeight) {
         const chargeableWeight = calculateChargeableWeight(
           grossWeight,
-          volumeWeight
+          volumeWeight,
         );
         if (cargo.chargeable_weight !== chargeableWeight) {
           form.setFieldValue(
             "cargo_details.0.chargeable_weight",
-            chargeableWeight
+            chargeableWeight,
           );
         }
       } else {
@@ -1711,42 +1659,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     debouncedUpdateChargeableValues();
   }, [cargoValuesKey, debouncedUpdateChargeableValues]);
 
-  // Initialize routing display names to match routingDetails length (only for non-edit mode or when adding new routes)
-  React.useEffect(() => {
-    // Skip this effect if we're in edit mode and have initialData - the main useEffect handles that
-    if (isEditMode && initialData?.routing_details) {
-      return;
-    }
-
-    if (form.values.routingDetails && form.values.routingDetails.length > 0) {
-      // Only initialize if the lengths don't match
-      if (routingDisplayNames.length !== form.values.routingDetails.length) {
-        // If we already have some display names, preserve them and pad/trim as needed
-        const currentNames = [...routingDisplayNames];
-        const newLength = form.values.routingDetails.length;
-
-        if (currentNames.length < newLength) {
-          // Add null entries for new routing details
-          const padding = Array(newLength - currentNames.length)
-            .fill(null)
-            .map(() => ({
-              from: null,
-              to: null,
-              carrier: null,
-            }));
-          setRoutingDisplayNames([...currentNames, ...padding]);
-        } else if (currentNames.length > newLength) {
-          // Trim excess entries
-          setRoutingDisplayNames(currentNames.slice(0, newLength));
-        }
-      }
-    } else if (routingDisplayNames.length > 0) {
-      // Clear display names if routingDetails is empty
-      setRoutingDisplayNames([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routingDetails, isEditMode, initialData]);
-
   const handleSubmit = async () => {
     try {
       // Set loading state
@@ -1771,13 +1683,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
       // Check if any required fields have errors
       const hasRequiredFieldErrors = requiredFields.some(
-        (field) => validation.errors[field]
+        (field) => validation.errors[field],
       );
 
       if (hasRequiredFieldErrors) {
         console.log(
           "Required fields have validation errors:",
-          validation.errors
+          validation.errors,
         );
         ToastNotification({
           type: "error",
@@ -1815,6 +1727,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         customer_service_name: form.values.customer_service_name,
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
+        houseno: form.values.houseno,
 
         schedule_id: form.values.schedule_id,
         carrier_code: form.values.carrier_code,
@@ -1857,16 +1770,23 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         is_hazardous: form.values.is_hazardous,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
-        cargo_details: form.values.cargo_details.map((cargo) => ({
-          no_of_packages: cargo.no_of_packages || null,
-          gross_weight: cargo.gross_weight || null,
-          volume_weight: cargo.volume_weight || null,
-          chargeable_weight: cargo.chargeable_weight || null,
-          volume: cargo.volume || null,
-          chargeable_volume: cargo.chargeable_volume || null,
-          container_type_code: cargo.container_type_code || null,
-          no_of_containers: cargo.no_of_containers || null,
-        })),
+        cargo_details: form.values.cargo_details.map((cargo) => {
+          const cargoPayload: Record<string, unknown> = {
+            no_of_packages: cargo.no_of_packages || null,
+            gross_weight: cargo.gross_weight || null,
+            volume_weight: cargo.volume_weight || null,
+            chargeable_weight: cargo.chargeable_weight || null,
+            volume: cargo.volume || null,
+            chargeable_volume: cargo.chargeable_volume || null,
+            container_type_code: cargo.container_type_code || null,
+            no_of_containers: cargo.no_of_containers || null,
+          };
+          if (cargo.id != null && cargo.id !== undefined) {
+            cargoPayload.id =
+              typeof cargo.id === "number" ? cargo.id : Number(cargo.id);
+          }
+          return cargoPayload;
+        }),
 
         // Pickup Details
         pickup_location: form.values.pickup_location,
@@ -1876,6 +1796,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         actual_pickup_date: form.values.actual_pickup_date
           ? formatDate(form.values.actual_pickup_date)
           : null,
+        transporter_code: form.values.transporter_code,
         transporter_name: form.values.transporter_name,
         transporter_email: form.values.transporter_email,
 
@@ -1884,31 +1805,48 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         delivery_from_code: form.values.delivery_from_code,
         delivery_address_id: form.values.delivery_address_id || "0",
         planned_delivery_date: formatDate(form.values.planned_delivery_date),
+        actual_delivery_date: form.values.actual_delivery_date ? formatDate(form.values.actual_delivery_date) : null,
 
-        routing_details: form.values.routingDetails.map((route) => ({
-          move_type: route.move_type,
-          from_location_code: route.from_location_code,
-          to_location_code: route.to_location_code,
-          etd: formatDate(route.etd),
-          eta: formatDate(route.eta),
-          carrier_code: route.carrier_code,
-          flight_no: route.flight_no,
-          status: route.status,
-        })),
+        routing_details: form.values.routingDetails.map((route) => {
+          const routePayload: Record<string, unknown> = {
+            move_type: route.move_type,
+            from_location_code: route.from_location_code,
+            to_location_code: route.to_location_code,
+            etd: formatDate(route.etd),
+            eta: formatDate(route.eta),
+            carrier_code: route.carrier_code,
+            flight_no: route.flight_no,
+            status: route.status,
+          };
+          if (route.id != null && route.id !== undefined) {
+            routePayload.id =
+              typeof route.id === "number" ? route.id : Number(route.id);
+          }
+          return routePayload;
+        }),
 
         quotation_id: quotationId,
-        rate_details: charges.map((charge) => ({
-          charge_name: charge.charge_name,
-          currency_country_code: charge.currency_country_code,
-          roe: parseFloat(charge.roe) || 1,
-          unit: charge.unit,
-          no_of_units: parseFloat(charge.no_of_units) || 0,
-          sell_per_unit: parseFloat(charge.sell_per_unit) || 0,
-          min_sell: parseFloat(charge.min_sell) || 0,
-          cost_per_unit: parseFloat(charge.cost_per_unit) || 0,
-          total_cost: parseFloat(charge.total_cost) || 0,
-          total_sell: parseFloat(charge.total_sell) || 0,
-        })),
+        rate_details: charges.map((charge) => {
+          const chargePayload: Record<string, unknown> = {
+            charge_id: charge.charge_id ? Number(charge.charge_id) : null,
+            // charge_name: charge.charge_name,
+            pp_cc: charge.pp_cc || "",
+            currency_country_code: charge.currency_country_code,
+            roe: parseFloat(charge.roe) || 1,
+            unit: charge.unit,
+            no_of_units: parseFloat(charge.no_of_units) || 0,
+            sell_per_unit: parseFloat(charge.sell_per_unit) || 0,
+            min_sell: parseFloat(charge.min_sell) || 0,
+            cost_per_unit: parseFloat(charge.cost_per_unit) || 0,
+            total_cost: parseFloat(charge.total_cost) || 0,
+            total_sell: parseFloat(charge.total_sell) || 0,
+          };
+          // Only attach id when it was received from filter endpoint; do not send generated values
+          if (charge.id != null && charge.id !== undefined) {
+            chargePayload.id = typeof charge.id === "number" ? charge.id : Number(charge.id);
+          }
+          return chargePayload;
+        }),
       };
 
       // Add service_type and import_to_export for import bookings
@@ -1932,7 +1870,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         response = await putAPICall(
           "customer-service-shipment/",
           payload,
-          API_HEADER
+          API_HEADER,
         );
         console.log("Edit Response:", response);
       } else {
@@ -1940,7 +1878,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         response = await postAPICall(
           "customer-service-shipment/",
           payload,
-          API_HEADER
+          API_HEADER,
         );
         console.log("Create Response:", response);
       }
@@ -2000,2794 +1938,2346 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       move_type: "",
       from_location_code: "",
       to_location_code: "",
+      from_location_name: "",
+      to_location_name: "",
+      carrier_code: "",
+      carrier_name: "",
       etd: new Date(),
       eta: new Date(),
-      carrier_code: "",
       flight_no: null,
       status: "",
     });
-    // Add display name entry for new routing detail
-    setRoutingDisplayNames([
-      ...routingDisplayNames,
-      { from: null, to: null, carrier: null },
-    ]);
   };
 
   const removeRoutingDetail = (index: number) => {
     form.removeListItem("routingDetails", index);
-    // Remove corresponding display name entry
-    setRoutingDisplayNames(routingDisplayNames.filter((_, i) => i !== index));
   };
 
   return (
-    <Box style={{ padding: "24px" }}>
-      {/* Step 1: Import Booking */}
-      {active === 0 && (
-        <Box mt="md">
-          <Grid mb="xl">
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Customer Name"
-                required
-                apiEndpoint={URL.customer}
-                placeholder="Type customer name"
-                searchFields={["customer_code", "customer_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
-                value={form.values.customer_code}
-                displayValue={form.values.customer_name}
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("customer_code", value || "");
-                  form.setFieldValue(
-                    "customer_name",
-                    selectedData?.label || ""
-                  );
-                }}
-                error={form.errors.customer_code as string}
-                minSearchLength={3}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Dropdown
-                label="Service"
-                placeholder="Select service"
-                withAsterisk
-                searchable
-                data={["FCL", "LCL"]}
-                {...form.getInputProps("service")}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <DateInput
-                label="Date"
-                withAsterisk
-                placeholder="YYYY-MM-DD"
-                value={form.values.date}
-                onChange={(date) => {
-                  form.setFieldValue("date", date || new Date());
-                }}
-                error={form.errors.date}
-                valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={18} />}
-                leftSectionPointerEvents="none"
-                radius="sm"
-                size="sm"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-                styles={{
-                  input: {
-                    height: "36px",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Origin"
-                required
-                apiEndpoint={URL.portMaster}
-                placeholder="Type origin code or name"
-                searchFields={["port_code", "port_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.port_code),
-                  label: `${item.port_name} (${item.port_code})`,
-                })}
-                value={form.values.origin_code}
-                displayValue={
-                  isEditMode &&
-                  form.values.origin_name &&
-                  form.values.origin_code
-                    ? `${form.values.origin_name} (${form.values.origin_code})`
-                    : form.values.origin_name
-                }
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("origin_code", value || "");
-                  form.setFieldValue(
-                    "origin_name",
-                    selectedData?.label ? selectedData.label.split(" (")[0] : ""
-                  );
-                }}
-                error={form.errors.origin_code as string}
-                minSearchLength={2}
-                additionalParams={{ transport_mode: "SEA" }}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Destination"
-                required
-                apiEndpoint={URL.portMaster}
-                placeholder="Type destination code or name"
-                searchFields={["port_code", "port_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.port_code),
-                  label: `${item.port_name} (${item.port_code})`,
-                })}
-                value={form.values.destination_code}
-                displayValue={
-                  isEditMode &&
-                  form.values.destination_name &&
-                  form.values.destination_code
-                    ? `${form.values.destination_name} (${form.values.destination_code})`
-                    : form.values.destination_name
-                }
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("destination_code", value || "");
-                  form.setFieldValue(
-                    "destination_name",
-                    selectedData?.label ? selectedData.label.split(" (")[0] : ""
-                  );
-                }}
-                error={form.errors.destination_code as string}
-                minSearchLength={2}
-                additionalParams={{ transport_mode: "SEA" }}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Dropdown
-                label="Shipment Terms"
-                placeholder="Select shipment terms"
-                withAsterisk
-                searchable
-                data={shipmentOptions}
-                {...form.getInputProps("shipment_terms_code")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Dropdown
-                label="Freight"
-                placeholder="Select freight"
-                withAsterisk
-                searchable
-                data={["Prepaid", "Collect"]}
-                {...form.getInputProps("freight")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Dropdown
-                label="Routed"
-                placeholder="Select routed"
-                withAsterisk
-                searchable
-                data={["Self", "Agent"]}
-                {...form.getInputProps("routed")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              {form.values.routed === "Self" ? (
-                salespersonsData.length > 0 ? (
-                  <Dropdown
-                    label="Routed By"
-                    placeholder="Select salesperson"
-                    searchable
-                    withAsterisk
-                    data={salespersonsData}
-                    value={form.values.routed_by}
-                    onChange={(value) => {
-                      form.setFieldValue("routed_by", value || "");
-                      // Auto-set customer_service_name when salesperson is selected
-                      if (value) {
-                        const selectedSalesperson = salespersonsData.find(
-                          (person) => person.value === value
-                        );
-                        if (selectedSalesperson?.customer_service) {
-                          form.setFieldValue(
-                            "customer_service_name",
-                            selectedSalesperson.customer_service
-                          );
-                        }
-                      }
+    <>
+      <Box
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          borderRadius: "8px",
+          backgroundColor: "#FFFFFF",
+        }}
+      >
+        <Box style={{ padding: "24px 24px 32px" }}>
+          {/* Step 1: Import Booking */}
+          {active === 0 && (
+            <Box>
+              <Text size="md" fw={600} mb="lg" c="#105476">
+                Import Booking
+              </Text>
+              <Grid mb="lg">
+                <Grid.Col span={4}>
+                  <SearchableSelect
+                    label="Customer Name"
+                    required
+                    apiEndpoint={URL.customer}
+                    placeholder="Type customer name"
+                    searchFields={["customer_code", "customer_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.customer_code}
+                    displayValue={form.values.customer_name}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("customer_code", value || "");
+                      form.setFieldValue(
+                        "customer_name",
+                        selectedData?.label || "",
+                      );
                     }}
-                    error={form.errors.routed_by}
-                    styles={commonFieldStyles}
+                    error={form.errors.customer_code as string}
+                    minSearchLength={3}
                   />
-                ) : (
-                  <TextInput
-                    label="Routed By"
-                    placeholder="Enter routed by"
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <Dropdown
+                    label="Service"
+                    placeholder="Select service"
                     withAsterisk
-                    {...form.getInputProps("routed_by")}
-                    error={form.errors.routed_by}
-                    styles={commonFieldStyles}
+                    searchable
+                    data={["FCL", "LCL"]}
+                    value={form.values.service}
+                    onChange={(value) => {
+                      form.setFieldValue("service", value ?? "");
+                      form.setFieldValue("cargo_details", [DEFAULT_CARGO_ROW]);
+                    }}
+                    error={form.errors.service}
                   />
-                )
-              ) : form.values.routed === "Agent" ? (
-                <SearchableSelect
-                  label="Routed By"
-                  placeholder="Type agent name"
-                  apiEndpoint={URL.agent}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_name),
-                    label: String(item.customer_name),
-                  })}
-                  value={form.values.routed_by}
-                  displayValue={form.values.routed_by}
-                  onChange={(value) => {
-                    form.setFieldValue("routed_by", value || "");
-                  }}
-                  error={form.errors.routed_by as string}
-                  minSearchLength={2}
-                  required
-                  styles={commonFieldStyles}
-                />
-              ) : (
-                <TextInput
-                  label="Routed By"
-                  placeholder="Enter routed by"
-                  withAsterisk
-                  {...form.getInputProps("routed_by")}
-                  error={form.errors.routed_by}
-                  styles={commonFieldStyles}
-                />
-              )}
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Customer Service Name"
-                placeholder="Enter customer service name"
-                withAsterisk
-                value={form.values.customer_service_name}
-                onChange={(e) => {
-                  const formattedValue = toTitleCase(e.target.value);
-                  form.setFieldValue("customer_service_name", formattedValue);
-                }}
-                error={form.errors.customer_service_name}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            {(form.values.service === "AIR" ||
-              form.values.service === "FCL") && (
-              <Grid.Col span={4}>
-                <Radio.Group
-                  label="Direct"
-                  mt="md"
-                  value={form.values.is_direct ? "true" : "false"}
-                  onChange={(value) =>
-                    form.setFieldValue("is_direct", value === "true")
-                  }
-                >
-                  <Group mt="xs">
-                    <Radio value="true" label="Yes" />
-                    <Radio value="false" label="No" />
-                  </Group>
-                </Radio.Group>
-              </Grid.Col>
-            )}
-            {form.values.service === "LCL" && (
-              <Grid.Col span={4}>
-                <Radio.Group
-                  label="Coload"
-                  mt="md"
-                  value={form.values.is_coload ? "true" : "false"}
-                  onChange={(value) =>
-                    form.setFieldValue("is_coload", value === "true")
-                  }
-                >
-                  <Group mt="xs">
-                    <Radio value="true" label="Yes" />
-                    <Radio value="false" label="No" />
-                  </Group>
-                </Radio.Group>
-              </Grid.Col>
-            )}
-          </Grid>
-
-          <Grid mb="xl">
-            <Grid.Col span={4}>
-              <TextInput
-                label="Schedule ID"
-                placeholder="Enter schedule ID"
-                {...form.getInputProps("schedule_id")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Carrier"
-                placeholder="Type carrier name"
-                apiEndpoint={URL.carrier}
-                searchFields={["carrier_code", "carrier_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.carrier_code),
-                  label: String(item.carrier_name),
-                })}
-                value={form.values.carrier_code}
-                displayValue={form.values.carrier_name}
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("carrier_code", value || "");
-                  form.setFieldValue("carrier_name", selectedData?.label || "");
-                }}
-                error={form.errors.carrier_code as string}
-                minSearchLength={2}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Dropdown
-                label="Vessel Name"
-                placeholder="Select vessel"
-                // withAsterisk
-                searchable
-                data={[
-                  "MSC LORETO",
-                  "EVER GIVEN",
-                  "CMA CGM MARCO POLO",
-                  "COSCO SHIPPING UNIVERSE",
-                ]}
-                {...form.getInputProps("vessel_name")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Voyage Number"
-                placeholder="Enter voyage number"
-                // withAsterisk
-                {...form.getInputProps("voyage_no")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <DateInput
-                label="ETD (Estimated Time of Departure)"
-                // withAsterisk
-                placeholder="YYYY-MM-DD"
-                value={form.values.etd || new Date()}
-                onChange={(date) => {
-                  form.setFieldValue("etd", date || new Date());
-                }}
-                error={form.errors.etd}
-                valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={18} />}
-                leftSectionPointerEvents="none"
-                radius="sm"
-                size="sm"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-                styles={{
-                  input: {
-                    height: "36px",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <DateInput
-                label="ETA (Estimated Time of Arrival)"
-                // withAsterisk
-                placeholder="YYYY-MM-DD"
-                value={form.values.eta || new Date()}
-                onChange={(date) => {
-                  form.setFieldValue("eta", date || new Date());
-                }}
-                error={form.errors.eta}
-                valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={18} />}
-                leftSectionPointerEvents="none"
-                radius="sm"
-                size="sm"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-                styles={{
-                  input: {
-                    height: "36px",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
-              />
-            </Grid.Col>
-          </Grid>
-
-          {/* Header Row */}
-          <Grid mb="sm">
-            <Grid.Col span={1.25}>
-              <Text size="sm" fw={500} c="#105476">
-                Move Type
-              </Text>
-            </Grid.Col>
-            <Grid.Col span={1.25}>
-              <Text size="sm" fw={500} c="#105476">
-                From
-              </Text>
-            </Grid.Col>
-            <Grid.Col span={1.25}>
-              <Text size="sm" fw={500} c="#105476">
-                To
-              </Text>
-            </Grid.Col>
-            <Grid.Col span={1.25}>
-              <Text size="sm" fw={500} c="#105476">
-                ETD
-              </Text>
-            </Grid.Col>
-            <Grid.Col span={1.25}>
-              <Text size="sm" fw={500} c="#105476">
-                ETA
-              </Text>
-            </Grid.Col>
-            <Grid.Col span={1.5}>
-              <Text size="sm" fw={500} c="#105476">
-                Carrier
-              </Text>
-            </Grid.Col>
-            <Grid.Col span={1.5}>
-              <Text size="sm" fw={500} c="#105476">
-                Transport Number
-              </Text>
-            </Grid.Col>
-            <Grid.Col span={1.25}>
-              <Text size="sm" fw={500} c="#105476">
-                Status
-              </Text>
-            </Grid.Col>
-            <Grid.Col span={1.5}>
-              <Text size="sm" fw={500} c="#105476">
-                Actions
-              </Text>
-            </Grid.Col>
-          </Grid>
-
-          {/* Dynamic Form Rows */}
-          <Stack>
-            {form.values.routingDetails.map((_, index) => (
-              <Box key={index}>
-                <Grid>
-                  <Grid.Col span={1.25}>
-                    <Dropdown
-                      data={["SEA", "AIR", "ROAD", "RAIL"]}
-                      placeholder="Select move type"
-                      // withAsterisk
-                      searchable
-                      value={form.values.routingDetails[index]?.move_type || ""}
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="Date"
+                    placeholder="YYYY-MM-DD"
+                    withAsterisk
+                    value={form.values.date}
+                    onChange={(date) => {
+                      form.setFieldValue("date", date || new Date());
+                    }}
+                    error={form.errors.date}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SearchableSelect
+                    label="Origin"
+                    required
+                    apiEndpoint={URL.portMaster}
+                    placeholder="Type origin code or name"
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={form.values.origin_code}
+                    displayValue={
+                      isEditMode &&
+                      form.values.origin_name &&
+                      form.values.origin_code
+                        ? `${form.values.origin_name} (${form.values.origin_code})`
+                        : form.values.origin_name
+                    }
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("origin_code", value || "");
+                      form.setFieldValue(
+                        "origin_name",
+                        selectedData?.label
+                          ? selectedData.label.split(" (")[0]
+                          : "",
+                      );
+                    }}
+                    error={form.errors.origin_code as string}
+                    minSearchLength={2}
+                    additionalParams={{ transport_mode: "SEA" }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SearchableSelect
+                    label="Destination"
+                    required
+                    apiEndpoint={URL.portMaster}
+                    placeholder="Type destination code or name"
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={form.values.destination_code}
+                    displayValue={
+                      isEditMode &&
+                      form.values.destination_name &&
+                      form.values.destination_code
+                        ? `${form.values.destination_name} (${form.values.destination_code})`
+                        : form.values.destination_name
+                    }
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("destination_code", value || "");
+                      form.setFieldValue(
+                        "destination_name",
+                        selectedData?.label
+                          ? selectedData.label.split(" (")[0]
+                          : "",
+                      );
+                    }}
+                    error={form.errors.destination_code as string}
+                    minSearchLength={2}
+                    additionalParams={{ transport_mode: "SEA" }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <Dropdown
+                    label="Shipment Terms"
+                    placeholder="Select shipment terms"
+                    withAsterisk
+                    searchable
+                    data={shipmentOptions}
+                    {...form.getInputProps("shipment_terms_code")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <Dropdown
+                    label="Freight"
+                    placeholder="Select freight"
+                    withAsterisk
+                    searchable
+                    data={["Prepaid", "Collect"]}
+                    {...form.getInputProps("freight")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <Dropdown
+                    label="Routed"
+                    placeholder="Select routed"
+                    withAsterisk
+                    searchable
+                    data={["Self", "Agent"]}
+                    {...form.getInputProps("routed")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  {form.values.routed === "Self" ? (
+                    salespersonsData.length > 0 ? (
+                      <Dropdown
+                        label="Routed By"
+                        placeholder="Select salesperson"
+                        searchable
+                        withAsterisk
+                        data={salespersonsData}
+                        value={form.values.routed_by}
+                        onChange={(value) => {
+                          form.setFieldValue("routed_by", value || "");
+                          // Auto-set customer_service_name when salesperson is selected
+                          if (value) {
+                            const selectedSalesperson = salespersonsData.find(
+                              (person) => person.value === value,
+                            );
+                            if (selectedSalesperson?.customer_service) {
+                              form.setFieldValue(
+                                "customer_service_name",
+                                selectedSalesperson.customer_service,
+                              );
+                            }
+                          }
+                        }}
+                        error={form.errors.routed_by}
+                      />
+                    ) : (
+                      <FormTextInput
+                        label="Routed By"
+                        placeholder="Enter routed by"
+                        withAsterisk
+                        {...form.getInputProps("routed_by")}
+                        error={form.errors.routed_by}
+                      />
+                    )
+                  ) : form.values.routed === "Agent" ? (
+                    <SearchableSelect
+                      label="Routed By"
+                      placeholder="Type agent name"
+                      apiEndpoint={URL.agent}
+                      searchFields={["customer_name", "customer_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.customer_name),
+                        label: String(item.customer_name),
+                      })}
+                      value={form.values.routed_by}
+                      displayValue={form.values.routed_by}
                       onChange={(value) => {
-                        const previousMoveType =
-                          form.values.routingDetails[index]?.move_type;
-                        form.setFieldValue(
-                          `routingDetails.${index}.move_type`,
-                          value || ""
-                        );
-                        // Clear From, To, and Carrier values when move_type changes
-                        if (value && value !== previousMoveType) {
-                          form.setFieldValue(
-                            `routingDetails.${index}.from_location_code`,
-                            ""
-                          );
-                          form.setFieldValue(
-                            `routingDetails.${index}.to_location_code`,
-                            ""
-                          );
-                          form.setFieldValue(
-                            `routingDetails.${index}.carrier_code`,
-                            ""
-                          );
-                          // Clear display names
-                          setRoutingDisplayNames((prev) => {
-                            const updated = [...prev];
-                            updated[index] = {
-                              ...updated[index],
-                              from: null,
-                              to: null,
-                              carrier: null,
-                            };
-                            return updated;
-                          });
-                        }
+                        form.setFieldValue("routed_by", value || "");
                       }}
-                      error={
-                        form.errors[
-                          `routingDetails.${index}.move_type`
-                        ] as string
-                      }
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1.25}>
-                    <SearchableSelect
-                      placeholder="Type from location code or name"
-                      // required
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_code", "port_name"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.port_code),
-                        label: `${item.port_name} (${item.port_code})`,
-                      })}
-                      value={
-                        form.values.routingDetails[index]?.from_location_code ||
-                        ""
-                      }
-                      displayValue={routingDisplayNames[index]?.from || null}
-                      onChange={(value, selectedData) => {
-                        form.setFieldValue(
-                          `routingDetails.${index}.from_location_code`,
-                          value || ""
-                        );
-                        if (value && selectedData) {
-                          setRoutingDisplayNames((prev) => {
-                            const updated = [...prev];
-                            updated[index] = {
-                              ...updated[index],
-                              from: selectedData.label,
-                            };
-                            return updated;
-                          });
-                        } else {
-                          setRoutingDisplayNames((prev) => {
-                            const updated = [...prev];
-                            updated[index] = {
-                              ...updated[index],
-                              from: null,
-                            };
-                            return updated;
-                          });
-                        }
-                      }}
-                      error={
-                        form.errors[
-                          `routingDetails.${index}.from_location_code`
-                        ] as string
-                      }
-                      minSearchLength={3}
-                      styles={commonFieldStyles}
-                      additionalParams={
-                        getTransportMode(
-                          form.values.routingDetails[index]?.move_type
-                        )
-                          ? {
-                              transport_mode: getTransportMode(
-                                form.values.routingDetails[index]?.move_type
-                              )!,
-                            }
-                          : undefined
-                      }
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1.25}>
-                    <SearchableSelect
-                      placeholder="Type to location code or name"
-                      // required
-                      apiEndpoint={URL.portMaster}
-                      searchFields={["port_code", "port_name"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.port_code),
-                        label: `${item.port_name} (${item.port_code})`,
-                      })}
-                      value={
-                        form.values.routingDetails[index]?.to_location_code ||
-                        ""
-                      }
-                      displayValue={routingDisplayNames[index]?.to || null}
-                      onChange={(value, selectedData) => {
-                        form.setFieldValue(
-                          `routingDetails.${index}.to_location_code`,
-                          value || ""
-                        );
-                        if (value && selectedData) {
-                          setRoutingDisplayNames((prev) => {
-                            const updated = [...prev];
-                            updated[index] = {
-                              ...updated[index],
-                              to: selectedData.label,
-                            };
-                            return updated;
-                          });
-                        } else {
-                          setRoutingDisplayNames((prev) => {
-                            const updated = [...prev];
-                            updated[index] = { ...updated[index], to: null };
-                            return updated;
-                          });
-                        }
-                      }}
-                      error={
-                        form.errors[
-                          `routingDetails.${index}.to_location_code`
-                        ] as string
-                      }
-                      minSearchLength={3}
-                      additionalParams={
-                        getTransportMode(
-                          form.values.routingDetails[index]?.move_type
-                        )
-                          ? {
-                              transport_mode: getTransportMode(
-                                form.values.routingDetails[index]?.move_type
-                              )!,
-                            }
-                          : undefined
-                      }
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1.25}>
-                    <DateInput
-                      placeholder="YYYY-MM-DD"
-                      // withAsterisk
-                      value={
-                        form.values.routingDetails[index]?.etd || new Date()
-                      }
-                      onChange={(date) => {
-                        form.setFieldValue(
-                          `routingDetails.${index}.etd`,
-                          date || new Date()
-                        );
-                      }}
-                      valueFormat="YYYY-MM-DD"
-                      leftSection={<IconCalendar size={18} />}
-                      leftSectionPointerEvents="none"
-                      radius="sm"
-                      size="sm"
-                      nextIcon={<IconChevronRight size={16} />}
-                      previousIcon={<IconChevronLeft size={16} />}
-                      clearable
-                      styles={{
-                        input: {
-                          height: "36px",
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                        day: {
-                          width: "2.25rem",
-                          height: "2.25rem",
-                          fontSize: "0.9rem",
-                        },
-                        calendarHeaderLevel: {
-                          fontSize: "1rem",
-                          fontWeight: 500,
-                          marginBottom: "0.5rem",
-                          flex: 1,
-                          textAlign: "center",
-                        },
-                        calendarHeaderControl: {
-                          width: "2rem",
-                          height: "2rem",
-                          margin: "0 0.5rem",
-                        },
-                        calendarHeader: {
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: "0.5rem",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1.25}>
-                    <DateInput
-                      placeholder="YYYY-MM-DD"
-                      // withAsterisk
-                      value={
-                        form.values.routingDetails[index]?.eta || new Date()
-                      }
-                      onChange={(date) => {
-                        form.setFieldValue(
-                          `routingDetails.${index}.eta`,
-                          date || new Date()
-                        );
-                      }}
-                      valueFormat="YYYY-MM-DD"
-                      leftSection={<IconCalendar size={18} />}
-                      leftSectionPointerEvents="none"
-                      radius="sm"
-                      size="sm"
-                      nextIcon={<IconChevronRight size={16} />}
-                      previousIcon={<IconChevronLeft size={16} />}
-                      clearable
-                      styles={{
-                        input: {
-                          height: "36px",
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                        day: {
-                          width: "2.25rem",
-                          height: "2.25rem",
-                          fontSize: "0.9rem",
-                        },
-                        calendarHeaderLevel: {
-                          fontSize: "1rem",
-                          fontWeight: 500,
-                          marginBottom: "0.5rem",
-                          flex: 1,
-                          textAlign: "center",
-                        },
-                        calendarHeaderControl: {
-                          width: "2rem",
-                          height: "2rem",
-                          margin: "0 0.5rem",
-                        },
-                        calendarHeader: {
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: "0.5rem",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1.5}>
-                    <SearchableSelect
-                      placeholder="Type carrier name"
-                      apiEndpoint={URL.carrier}
-                      searchFields={["carrier_code", "carrier_name"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.carrier_code),
-                        label: String(item.carrier_name),
-                      })}
-                      value={
-                        form.values.routingDetails[index]?.carrier_code || ""
-                      }
-                      displayValue={routingDisplayNames[index]?.carrier || null}
-                      onChange={(value, selectedData) => {
-                        form.setFieldValue(
-                          `routingDetails.${index}.carrier_code`,
-                          value || ""
-                        );
-                        if (value && selectedData) {
-                          setRoutingDisplayNames((prev) => {
-                            const updated = [...prev];
-                            updated[index] = {
-                              ...updated[index],
-                              carrier: selectedData.label,
-                            };
-                            return updated;
-                          });
-                        } else {
-                          setRoutingDisplayNames((prev) => {
-                            const updated = [...prev];
-                            updated[index] = {
-                              ...updated[index],
-                              carrier: null,
-                            };
-                            return updated;
-                          });
-                        }
-                      }}
-                      error={
-                        form.errors[
-                          `routingDetails.${index}.carrier_code`
-                        ] as string
-                      }
+                      error={form.errors.routed_by as string}
                       minSearchLength={2}
-                      additionalParams={
-                        getTransportMode(
-                          form.values.routingDetails[index]?.move_type
-                        )
-                          ? {
-                              transport_mode: getTransportMode(
-                                form.values.routingDetails[index]?.move_type
-                              )!,
-                            }
-                          : undefined
+                      required
+                    />
+                  ) : (
+                    <FormTextInput
+                      label="Routed By"
+                      placeholder="Enter routed by"
+                      withAsterisk
+                      {...form.getInputProps("routed_by")}
+                      error={form.errors.routed_by}
+                    />
+                  )}
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Customer Service Name"
+                    placeholder="Enter customer service name"
+                    withAsterisk
+                    value={form.values.customer_service_name}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.target.value);
+                      form.setFieldValue(
+                        "customer_service_name",
+                        formattedValue,
+                      );
+                    }}
+                    error={form.errors.customer_service_name}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="House Number"
+                    placeholder="Enter House Number"
+                    withAsterisk
+                    value={form.values.houseno}
+                    onChange={(e) => {
+                      form.setFieldValue("houseno", e.target.value);
+                    }}
+                    error={form.errors.houseno}
+                  />
+                </Grid.Col>
+                {(form.values.service === "AIR" ||
+                  form.values.service === "FCL") && (
+                  <Grid.Col span={4}>
+                    <Radio.Group
+                      label="Direct"
+                      value={form.values.is_direct ? "true" : "false"}
+                      onChange={(value) =>
+                        form.setFieldValue("is_direct", value === "true")
                       }
-                      styles={commonFieldStyles}
-                    />
+                      styles={{
+                        root: { fontFamily: "Inter" },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                        },
+                      }}
+                    >
+                      <Group mt="xs">
+                        <Radio value="true" label="Yes" />
+                        <Radio value="false" label="No" />
+                      </Group>
+                    </Radio.Group>
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
-                    <TextInput
-                      placeholder={
-                        form.values.routingDetails[index]?.move_type === "AIR"
-                          ? "Enter flight number"
-                          : form.values.routingDetails[index]?.move_type ===
-                              "SEA"
-                            ? "Enter voyage number"
-                            : form.values.routingDetails[index]?.move_type ===
-                                "ROAD"
-                              ? "Enter truck number"
-                              : form.values.routingDetails[index]?.move_type ===
-                                  "RAIL"
-                                ? "Enter rail number"
-                                : "Enter transport number"
+                )}
+                {form.values.service === "LCL" && (
+                  <Grid.Col span={4}>
+                    <Radio.Group
+                      label="Coload"
+                      value={form.values.is_coload ? "true" : "false"}
+                      onChange={(value) =>
+                        form.setFieldValue("is_coload", value === "true")
                       }
-                      {...form.getInputProps(
-                        `routingDetails.${index}.flight_no`
-                      )}
-                      styles={commonFieldStyles}
-                    />
+                      styles={{
+                        root: { fontFamily: "Inter" },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                        },
+                      }}
+                    >
+                      <Group mt="xs">
+                        <Radio value="true" label="Yes" />
+                        <Radio value="false" label="No" />
+                      </Group>
+                    </Radio.Group>
                   </Grid.Col>
-                  <Grid.Col span={1.25}>
-                    <Dropdown
-                      data={["Active", "Inactive", "Pending", "Completed"]}
-                      placeholder="Select status"
-                      // withAsterisk
-                      searchable
-                      {...form.getInputProps(`routingDetails.${index}.status`)}
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1.5}>
-                    <Group gap="xs">
-                      {form.values.routingDetails.length - 1 === index && (
-                        <Button
-                          variant="light"
-                          color="#105476"
-                          size="xs"
-                          onClick={addRoutingDetail}
-                        >
-                          <IconPlus size={14} />
-                        </Button>
-                      )}
-                      {form.values.routingDetails.length > 1 && (
-                        <Button
-                          variant="light"
-                          color="red"
-                          size="xs"
-                          onClick={() => removeRoutingDetail(index)}
-                        >
-                          <IconTrash size={14} />
-                        </Button>
-                      )}
-                    </Group>
-                  </Grid.Col>
-                </Grid>
-              </Box>
-            ))}
-          </Stack>
+                )}
+              </Grid>
 
-          <Group justify="space-between" mt="xl">
-            <Button
-              variant="outline"
-              color="#105476"
-              leftSection={<IconArrowLeft size={16} />}
-              onClick={() => (isEditMode ? navigate("../") : navigate("../"))}
-            >
-              Back to List
-            </Button>
-            <Button onClick={handleNext} color="#105476">
-              Next
-            </Button>
-          </Group>
-        </Box>
-      )}
+              <Divider my="lg" />
 
-      {/* Step 2: Party Details */}
-      {active === 1 && (
-        <Box mt="md">
-          {/* Shipper Details */}
-          <Text size="sm" fw={500} mb="sm" c="#105476">
-            Shipper Details
-          </Text>
-          <Grid mb="md">
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Shipper Name"
-                placeholder="Type shipper name"
-                apiEndpoint={URL.shipper}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
-                value={form.values.shipper_code}
-                displayValue={shipperDisplayName}
-                onChange={(value, selectedData, originalData) => {
-                  form.setFieldValue("shipper_code", value || "");
-                  setShipperDisplayName(selectedData?.label || null);
-
-                  // Use originalData to populate address options
-                  if (
-                    value &&
-                    originalData &&
-                    (originalData as Record<string, unknown>).addresses_data
-                  ) {
-                    // Create address options from addresses_data
-                    const addressOptions = (
-                      (originalData as Record<string, unknown>)
-                        .addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>
-                    ).map((addr: { id: number; address: string }) => ({
-                      value: String(addr.id),
-                      label: addr.address,
-                    }));
-
-                    setShipperAddressOptions(addressOptions);
-
-                    // Reset address selection when shipper changes
-                    form.setFieldValue("shipper_address_id", 0);
-                  } else {
-                    setShipperAddressOptions([]);
-                    form.setFieldValue("shipper_address_id", 0);
-                  }
-                }}
-                returnOriginalData={true}
-                error={form.errors.shipper_code as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Dropdown
-                label="Shipper Address"
-                placeholder="Select shipper address"
-                // withAsterisk
-                searchable
-                data={shipperAddressOptions}
-                value={
-                  form.values.shipper_address_id != null
-                    ? String(form.values.shipper_address_id)
-                    : ""
-                }
-                onChange={(value) => {
-                  form.setFieldValue(
-                    "shipper_address_id",
-                    value ? parseInt(value) : 0
-                  );
-                }}
-                error={form.errors.shipper_address_id}
-                disabled={shipperAddressOptions.length === 0}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Shipper E-mail ID"
-                placeholder="Enter email address"
-                {...form.getInputProps("shipper_email")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-          </Grid>
-          <Divider mb="md" />
-
-          {/* Consignee Details */}
-          <Text size="sm" fw={500} mb="sm" c="#105476">
-            Consignee Details
-          </Text>
-          <Grid mb="md">
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Consignee Name"
-                placeholder="Type consignee name"
-                apiEndpoint={URL.consignee}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
-                value={form.values.consignee_code}
-                displayValue={consigneeDisplayName}
-                onChange={(value, selectedData, originalData) => {
-                  form.setFieldValue("consignee_code", value || "");
-                  setConsigneeDisplayName(selectedData?.label || null);
-
-                  // Use originalData to populate address options
-                  if (
-                    value &&
-                    originalData &&
-                    (originalData as Record<string, unknown>).addresses_data
-                  ) {
-                    // Create address options from addresses_data
-                    const addressOptions = (
-                      (originalData as Record<string, unknown>)
-                        .addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>
-                    ).map((addr: { id: number; address: string }) => ({
-                      value: String(addr.id),
-                      label: addr.address,
-                    }));
-
-                    setConsigneeAddressOptions(addressOptions);
-
-                    // Reset address selection when consignee changes
-                    form.setFieldValue("consignee_address_id", 0);
-                  } else {
-                    setConsigneeAddressOptions([]);
-                    form.setFieldValue("consignee_address_id", 0);
-                  }
-                }}
-                returnOriginalData={true}
-                error={form.errors.consignee_code as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Dropdown
-                label="Consignee Address"
-                placeholder="Select consignee address"
-                // withAsterisk
-                searchable
-                data={consigneeAddressOptions}
-                value={
-                  form.values.consignee_address_id != null
-                    ? String(form.values.consignee_address_id)
-                    : ""
-                }
-                onChange={(value) => {
-                  form.setFieldValue(
-                    "consignee_address_id",
-                    value ? parseInt(value) : 0
-                  );
-                }}
-                error={form.errors.consignee_address_id}
-                disabled={consigneeAddressOptions.length === 0}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Consignee Email Id"
-                placeholder="Enter email address"
-                {...form.getInputProps("consignee_email")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-          </Grid>
-          <Divider mb="md" />
-
-          {/* Forwarder Details */}
-          <Text size="sm" fw={500} mb="sm" c="#105476">
-            Forwarder Details
-          </Text>
-          <Grid mb="md">
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Forwarder Name"
-                placeholder="Type forwarder name"
-                apiEndpoint={URL.forwarder}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
-                value={form.values.forwarder_code}
-                displayValue={forwarderDisplayName}
-                onChange={(value, selectedData, originalData) => {
-                  form.setFieldValue("forwarder_code", value || "");
-                  setForwarderDisplayName(selectedData?.label || null);
-
-                  // Use originalData to populate address options
-                  if (
-                    value &&
-                    originalData &&
-                    (originalData as Record<string, unknown>).addresses_data
-                  ) {
-                    // Create address options from addresses_data
-                    const addressOptions = (
-                      (originalData as Record<string, unknown>)
-                        .addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>
-                    ).map((addr: { id: number; address: string }) => ({
-                      value: String(addr.id),
-                      label: addr.address,
-                    }));
-
-                    setForwarderAddressOptions(addressOptions);
-
-                    // Reset address selection when forwarder changes
-                    form.setFieldValue("forwarder_address_id", 0);
-                  } else {
-                    setForwarderAddressOptions([]);
-                    form.setFieldValue("forwarder_address_id", 0);
-                  }
-                }}
-                returnOriginalData={true}
-                error={form.errors.forwarder_code as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Dropdown
-                label="Forwarder Address"
-                placeholder="Select forwarder address"
-                searchable
-                data={forwarderAddressOptions}
-                value={
-                  form.values.forwarder_address_id
-                    ? String(form.values.forwarder_address_id)
-                    : ""
-                }
-                onChange={(value) => {
-                  form.setFieldValue(
-                    "forwarder_address_id",
-                    value ? parseInt(value) : 0
-                  );
-                }}
-                error={form.errors.forwarder_address_id}
-                disabled={forwarderAddressOptions.length === 0}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Forwarder Email Id"
-                placeholder="Enter email address"
-                {...form.getInputProps("forwarder_email")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-          </Grid>
-          <Divider mb="md" />
-
-          {/* Destination Agent Details */}
-          <Text size="sm" fw={500} mb="sm" c="#105476">
-            Destination Agent Details
-          </Text>
-          <Grid mb="md">
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Destination Agent Name"
-                placeholder="Type destination agent name"
-                apiEndpoint={URL.agent}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
-                value={form.values.destination_agent_code}
-                displayValue={destinationAgentDisplayName}
-                onChange={(value, selectedData, originalData) => {
-                  form.setFieldValue("destination_agent_code", value || "");
-                  setDestinationAgentDisplayName(selectedData?.label || null);
-
-                  // Use originalData to populate address options
-                  if (
-                    value &&
-                    originalData &&
-                    (originalData as Record<string, unknown>).addresses_data
-                  ) {
-                    // Create address options from addresses_data
-                    const addressOptions = (
-                      (originalData as Record<string, unknown>)
-                        .addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>
-                    ).map((addr: { id: number; address: string }) => ({
-                      value: String(addr.id),
-                      label: addr.address,
-                    }));
-
-                    setAgentAddressOptions(addressOptions);
-
-                    // Reset address selection when destination agent changes
-                    form.setFieldValue("destination_agent_address_id", 0);
-                  } else {
-                    setAgentAddressOptions([]);
-                    form.setFieldValue("destination_agent_address_id", 0);
-                  }
-                }}
-                returnOriginalData={true}
-                error={form.errors.destination_agent_code as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Dropdown
-                label="Destination Agent Address"
-                placeholder="Select destination agent address"
-                // withAsterisk
-                searchable
-                data={agentAddressOptions}
-                value={
-                  form.values.destination_agent_address_id
-                    ? String(form.values.destination_agent_address_id)
-                    : ""
-                }
-                onChange={(value) => {
-                  form.setFieldValue(
-                    "destination_agent_address_id",
-                    value ? parseInt(value) : 0
-                  );
-                }}
-                error={form.errors.destination_agent_address_id}
-                disabled={agentAddressOptions.length === 0}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Destination Agent Email Id"
-                placeholder="Enter email address"
-                {...form.getInputProps("destination_agent_email")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-          </Grid>
-          <Divider mb="md" />
-
-          {/* Billing Customer Details */}
-          <Text size="sm" fw={500} mb="sm" c="#105476">
-            Billing Customer Details
-          </Text>
-          <Grid mb="md">
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Billing Customer Name"
-                placeholder="Type billing customer name"
-                apiEndpoint={URL.customer}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
-                value={form.values.billing_customer_code}
-                displayValue={billingCustomerDisplayName}
-                onChange={(value, selectedData, originalData) => {
-                  form.setFieldValue("billing_customer_code", value || "");
-                  setBillingCustomerDisplayName(selectedData?.label || null);
-
-                  // Use originalData to populate address options
-                  if (
-                    value &&
-                    originalData &&
-                    (originalData as Record<string, unknown>).addresses_data
-                  ) {
-                    // Create address options from addresses_data
-                    const addressOptions = (
-                      (originalData as Record<string, unknown>)
-                        .addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>
-                    ).map((addr: { id: number; address: string }) => ({
-                      value: String(addr.id),
-                      label: addr.address,
-                    }));
-
-                    setBillingCustomerAddressOptions(addressOptions);
-
-                    // Reset address selection when billing customer changes
-                    form.setFieldValue("billing_customer_address_id", 0);
-                  } else {
-                    setBillingCustomerAddressOptions([]);
-                    form.setFieldValue("billing_customer_address_id", 0);
-                  }
-                }}
-                returnOriginalData={true}
-                error={form.errors.billing_customer_code as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Dropdown
-                label="Billing Customer Address"
-                placeholder="Select billing customer address"
-                // withAsterisk
-                searchable
-                data={billingCustomerAddressOptions}
-                value={
-                  form.values.billing_customer_address_id
-                    ? String(form.values.billing_customer_address_id)
-                    : ""
-                }
-                onChange={(value) => {
-                  form.setFieldValue(
-                    "billing_customer_address_id",
-                    value ? parseInt(value) : 0
-                  );
-                }}
-                error={form.errors.billing_customer_address_id}
-                disabled={billingCustomerAddressOptions.length === 0}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-          </Grid>
-          <Divider mb="md" />
-
-          {/* Notify Customer Details */}
-          <Text size="sm" fw={500} mb="sm" c="#105476">
-            Notify Customer Details
-          </Text>
-          <Grid mb="md">
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="Notify Customer Name"
-                placeholder="Type notify customer name"
-                apiEndpoint={URL.customer}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
-                value={form.values.notify_customer_code}
-                displayValue={notifyCustomerDisplayName}
-                onChange={(value, selectedData, originalData) => {
-                  form.setFieldValue("notify_customer_code", value || "");
-                  setNotifyCustomerDisplayName(selectedData?.label || null);
-
-                  // Use originalData to populate address options
-                  if (
-                    value &&
-                    originalData &&
-                    (originalData as Record<string, unknown>).addresses_data
-                  ) {
-                    // Create address options from addresses_data
-                    const addressOptions = (
-                      (originalData as Record<string, unknown>)
-                        .addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>
-                    ).map((addr: { id: number; address: string }) => ({
-                      value: String(addr.id),
-                      label: addr.address,
-                    }));
-
-                    setNotifyCustomerAddressOptions(addressOptions);
-
-                    // Reset address selection when notify customer changes
-                    form.setFieldValue("notify_customer_address_id", 0);
-                  } else {
-                    setNotifyCustomerAddressOptions([]);
-                    form.setFieldValue("notify_customer_address_id", 0);
-                  }
-                }}
-                returnOriginalData={true}
-                error={form.errors.notify_customer_code as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Dropdown
-                label="Notify Customer Address"
-                placeholder="Select notify customer address"
-                searchable
-                data={notifyCustomerAddressOptions}
-                value={
-                  form.values.notify_customer_address_id
-                    ? String(form.values.notify_customer_address_id)
-                    : ""
-                }
-                onChange={(value) => {
-                  form.setFieldValue(
-                    "notify_customer_address_id",
-                    value ? parseInt(value) : 0
-                  );
-                }}
-                error={form.errors.notify_customer_address_id}
-                disabled={notifyCustomerAddressOptions.length === 0}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Notify Customer Email Id"
-                placeholder="Enter email address"
-                {...form.getInputProps("notify_customer_email")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-          </Grid>
-          <Divider mb="md" />
-
-          {/* CHA Details */}
-          <Text size="sm" fw={500} mb="sm" c="#105476">
-            CHA Details
-          </Text>
-          <Grid mb="md">
-            <Grid.Col span={4}>
-              <SearchableSelect
-                label="CHA Name"
-                placeholder="Type CHA name"
-                apiEndpoint={URL.cha}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
-                value={form.values.cha_code}
-                displayValue={chaDisplayName}
-                onChange={(value, selectedData, originalData) => {
-                  form.setFieldValue("cha_code", value || "");
-                  setChaDisplayName(selectedData?.label || null);
-
-                  // Use originalData to populate address options
-                  if (
-                    value &&
-                    originalData &&
-                    (originalData as Record<string, unknown>).addresses_data
-                  ) {
-                    // Create address options from addresses_data
-                    const addressOptions = (
-                      (originalData as Record<string, unknown>)
-                        .addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>
-                    ).map((addr: { id: number; address: string }) => ({
-                      value: String(addr.id),
-                      label: addr.address,
-                    }));
-
-                    setChaAddressOptions(addressOptions);
-
-                    // Reset address selection when CHA changes
-                    form.setFieldValue("cha_address_id", 0);
-                  } else {
-                    setChaAddressOptions([]);
-                    form.setFieldValue("cha_address_id", 0);
-                  }
-                }}
-                returnOriginalData={true}
-                error={form.errors.cha_code as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Dropdown
-                label="CHA Address"
-                placeholder="Select CHA address"
-                searchable
-                data={chaAddressOptions}
-                value={
-                  form.values.cha_address_id
-                    ? String(form.values.cha_address_id)
-                    : ""
-                }
-                onChange={(value) => {
-                  form.setFieldValue(
-                    "cha_address_id",
-                    value ? parseInt(value) : 0
-                  );
-                }}
-                error={form.errors.cha_address_id}
-                disabled={chaAddressOptions.length === 0}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-          </Grid>
-
-          <Group justify="space-between" mt="xl">
-            <Button variant="default" onClick={handlePrevious}>
-              Back
-            </Button>
-            <Button onClick={handleNext} color="#105476">
-              Next
-            </Button>
-          </Group>
-        </Box>
-      )}
-
-      {/* Step 3: Cargo Details */}
-      {active === 2 && (
-        <Box mt="md">
-          {/* Common Fields */}
-          <Grid style={{ maxWidth: "80%" }} mb="md">
-            <Grid.Col span={6}>
-              <Radio.Group
-                label="Hazardous Cargo"
-                value={form.values.is_hazardous ? "true" : "false"}
-                onChange={(value) =>
-                  form.setFieldValue("is_hazardous", value === "true")
-                }
-              >
-                <Group mt="xs">
-                  <Radio value="true" label="Yes" />
-                  <Radio value="false" label="No" />
-                </Group>
-              </Radio.Group>
-            </Grid.Col>
-            <Grid.Col span={12}>
-              <Textarea
-                label="Commodity Description"
-                placeholder="Enter commodity description"
-                minRows={3}
-                maxRows={6}
-                value={form.values.commodity_description}
-                onChange={(e) => {
-                  const formattedValue = toTitleCase(e.currentTarget.value);
-                  form.setFieldValue("commodity_description", formattedValue);
-                }}
-                error={form.errors.commodity_description}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={12}>
-              <TextInput
-                label="Marks No"
-                placeholder="Enter marks and numbers"
-                {...form.getInputProps("marks_no")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-          </Grid>
-
-          {/* Service-specific Cargo Details - Only show when service is selected */}
-          {form.values.service && (
-            <>
-              <Text size="sm" fw={500} mb="md" c="#105476">
-                Cargo Details for {form.values.service}
+              <Text size="md" fw={600} mb="md" c="#105476">
+                Ocean Schedule
               </Text>
+              <Grid mb="lg">
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Schedule ID"
+                    placeholder="Enter schedule ID"
+                    {...form.getInputProps("schedule_id")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SearchableSelect
+                    label="Carrier"
+                    placeholder="Type carrier name"
+                    apiEndpoint={URL.carrier}
+                    searchFields={["carrier_code", "carrier_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.carrier_code),
+                      label: String(item.carrier_name),
+                    })}
+                    value={form.values.carrier_code}
+                    displayValue={form.values.carrier_name}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("carrier_code", value || "");
+                      form.setFieldValue(
+                        "carrier_name",
+                        selectedData?.label || "",
+                      );
+                    }}
+                    error={form.errors.carrier_code as string}
+                    minSearchLength={2}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Vessel Name"
+                    placeholder="Select vessel"
+                    {...form.getInputProps("vessel_name")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Voyage Number"
+                    placeholder="Enter voyage number"
+                    {...form.getInputProps("voyage_no")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="ETD (Estimated Time of Departure)"
+                    placeholder="YYYY-MM-DD"
+                    value={form.values.etd || new Date()}
+                    onChange={(date) => {
+                      form.setFieldValue("etd", date || new Date());
+                    }}
+                    error={form.errors.etd}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="ETA (Estimated Time of Arrival)"
+                    placeholder="YYYY-MM-DD"
+                    value={form.values.eta || new Date()}
+                    onChange={(date) => {
+                      form.setFieldValue("eta", date || new Date());
+                    }}
+                    error={form.errors.eta}
+                  />
+                </Grid.Col>
+              </Grid>
+              
+              <Divider my="lg" />
 
-              {/* AIR Service Cargo Details - Single Fields */}
-              {form.values.service === "AIR" && (
-                <Grid>
-                  <Grid.Col span={3}>
-                    <NumberInput
-                      label="No of Packages"
-                      placeholder="Enter number of packages"
-                      min={1}
-                      {...form.getInputProps("cargo_details.0.no_of_packages")}
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={3}>
-                    <NumberInput
-                      label="Gross Weight (kg)"
-                      placeholder="Enter gross weight"
-                      min={0}
-                      decimalScale={2}
-                      {...form.getInputProps("cargo_details.0.gross_weight")}
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={3}>
-                    <NumberInput
-                      label="Volume Weight (kg)"
-                      placeholder="Enter volume weight"
-                      min={0}
-                      decimalScale={2}
-                      {...form.getInputProps("cargo_details.0.volume_weight")}
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={3}>
-                    <NumberInput
-                      label="Chargeable Weight (kg)"
-                      // placeholder="Auto-calculated"
-                      min={0}
-                      decimalScale={2}
-                      readOnly
-                      {...form.getInputProps(
-                        "cargo_details.0.chargeable_weight"
-                      )}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                          backgroundColor: "#f5f5f5",
-                          cursor: "not-allowed",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                </Grid>
-              )}
+              <Text size="md" fw={600} mb="md" c="#105476">
+                Routings Details
+              </Text>
+              <Grid
+                mb="sm"
+                style={{ fontWeight: 600, color: "#105476" }}
+                gutter="sm"
+              >
+                <Grid.Col span={1.25}>
+                  <RequiredLabel label="Move Type" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.25}>
+                  <RequiredLabel label="From" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.25}>
+                  <RequiredLabel label="To" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="ETD" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="ETA" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel label="Carrier" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.5}>
+                  <RequiredLabel
+                    label={
+                      form.values.routingDetails[0]?.move_type === "AIR"
+                        ? "Flight Number"
+                        : form.values.routingDetails[0]?.move_type === "SEA"
+                          ? "Voyage Number"
+                          : form.values.routingDetails[0]?.move_type === "ROAD"
+                            ? "Truck Number"
+                            : form.values.routingDetails[0]?.move_type ===
+                                "RAIL"
+                              ? "Rail Number"
+                              : "Transport Number"
+                    }
+                    required={false}
+                  />
+                </Grid.Col>
+                <Grid.Col span={1.25}>
+                  <RequiredLabel label="Status" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1}>
+                  <RequiredLabel label="Actions" required={false} />
+                </Grid.Col>
+              </Grid>
 
-              {/* LCL Service Cargo Details - Single Fields */}
-              {form.values.service === "LCL" && (
-                <Grid>
-                  <Grid.Col span={3}>
-                    <NumberInput
-                      label="No of Packages"
-                      placeholder="Enter number of packages"
-                      min={1}
-                      {...form.getInputProps("cargo_details.0.no_of_packages")}
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={3}>
-                    <NumberInput
-                      label="Gross Weight (kg)"
-                      placeholder="Enter gross weight"
-                      min={0}
-                      decimalScale={2}
-                      {...form.getInputProps("cargo_details.0.gross_weight")}
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={3}>
-                    <NumberInput
-                      label="Volume (cbm)"
-                      placeholder="Enter volume"
-                      min={0}
-                      decimalScale={2}
-                      {...form.getInputProps("cargo_details.0.volume")}
-                      styles={commonFieldStyles}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={3}>
-                    <NumberInput
-                      label="Chargeable Volume (cbm)"
-                      placeholder="Auto-calculated"
-                      min={0}
-                      decimalScale={2}
-                      readOnly
-                      {...form.getInputProps(
-                        "cargo_details.0.chargeable_volume"
-                      )}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                          backgroundColor: "#f5f5f5",
-                          cursor: "not-allowed",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-                </Grid>
-              )}
-
-              {/* FCL Service Cargo Details */}
-              {form.values.service === "FCL" && (
-                <Stack gap="md">
-                  {form.values.cargo_details.map((_, cargoIndex) => (
-                    <Box key={cargoIndex}>
-                      <Grid>
-                        <Grid.Col span={3}>
-                          <Dropdown
-                            label="Container Type"
-                            placeholder="Select container type"
-                            searchable
-                            data={containerTypeOptions}
-                            nothingFoundMessage="No container types found"
-                            {...form.getInputProps(
-                              `cargo_details.${cargoIndex}.container_type_code`
-                            )}
-                            styles={commonFieldStyles}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={3}>
-                          <NumberInput
-                            label="No of Containers"
-                            placeholder="Enter number of containers"
-                            min={1}
-                            {...form.getInputProps(
-                              `cargo_details.${cargoIndex}.no_of_containers`
-                            )}
-                            styles={commonFieldStyles}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={3}>
-                          <NumberInput
-                            label="Gross Weight (kg)"
-                            placeholder="Enter gross weight"
-                            min={0}
-                            decimalScale={2}
-                            {...form.getInputProps(
-                              `cargo_details.${cargoIndex}.gross_weight`
-                            )}
-                            styles={commonFieldStyles}
-                          />
-                        </Grid.Col>
-                        {/* Add/Remove buttons */}
-                        <Grid.Col
-                          span={3}
-                          style={{
-                            gap: "8px",
-                            marginTop: "25px",
+              <Stack gap="sm">
+                {form.values.routingDetails.map((_, index) => (
+                  <Box key={index}>
+                    <Grid gutter="sm">
+                      <Grid.Col span={1.25}>
+                        <Dropdown
+                          data={["SEA", "AIR", "ROAD", "RAIL"]}
+                          placeholder="Select move type"
+                          // withAsterisk
+                          searchable
+                          value={
+                            form.values.routingDetails[index]?.move_type || ""
+                          }
+                          onChange={(value) => {
+                            const previousMoveType =
+                              form.values.routingDetails[index]?.move_type;
+                            form.setFieldValue(
+                              `routingDetails.${index}.move_type`,
+                              value || "",
+                            );
+                            if (value && value !== previousMoveType) {
+                              form.setFieldValue(
+                                `routingDetails.${index}.from_location_code`,
+                                "",
+                              );
+                              form.setFieldValue(
+                                `routingDetails.${index}.to_location_code`,
+                                "",
+                              );
+                              form.setFieldValue(
+                                `routingDetails.${index}.carrier_code`,
+                                "",
+                              );
+                              form.setFieldValue(
+                                `routingDetails.${index}.from_location_name`,
+                                "",
+                              );
+                              form.setFieldValue(
+                                `routingDetails.${index}.to_location_name`,
+                                "",
+                              );
+                              form.setFieldValue(
+                                `routingDetails.${index}.carrier_name`,
+                                "",
+                              );
+                            }
                           }}
-                        >
-                          {cargoIndex ===
-                            form.values.cargo_details.length - 1 && (
+                          error={
+                            form.errors[
+                              `routingDetails.${index}.move_type`
+                            ] as string
+                          }
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.25}>
+                        <SearchableSelect
+                          placeholder="Type from location code or name"
+                          // required
+                          apiEndpoint={URL.portMaster}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={
+                            form.values.routingDetails[index]
+                              ?.from_location_code || ""
+                          }
+                          displayValue={
+                            form.values.routingDetails[index]
+                              ?.from_location_name &&
+                            form.values.routingDetails[index]
+                              ?.from_location_code
+                              ? `${form.values.routingDetails[index].from_location_name} (${form.values.routingDetails[index].from_location_code})`
+                              : undefined
+                          }
+                          onChange={(value, selectedData) => {
+                            form.setFieldValue(
+                              `routingDetails.${index}.from_location_code`,
+                              value || "",
+                            );
+                            form.setFieldValue(
+                              `routingDetails.${index}.from_location_name`,
+                              selectedData?.label || "",
+                            );
+                          }}
+                          error={
+                            form.errors[
+                              `routingDetails.${index}.from_location_code`
+                            ] as string
+                          }
+                          minSearchLength={3}
+                          additionalParams={
+                            getTransportMode(
+                              form.values.routingDetails[index]?.move_type,
+                            )
+                              ? {
+                                  transport_mode: getTransportMode(
+                                    form.values.routingDetails[index]
+                                      ?.move_type,
+                                  )!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.25}>
+                        <SearchableSelect
+                          placeholder="Type to location code or name"
+                          // required
+                          apiEndpoint={URL.portMaster}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={
+                            form.values.routingDetails[index]
+                              ?.to_location_code || ""
+                          }
+                          displayValue={
+                            form.values.routingDetails[index]
+                              ?.to_location_name &&
+                            form.values.routingDetails[index]?.to_location_code
+                              ? `${form.values.routingDetails[index].to_location_name} (${form.values.routingDetails[index].to_location_code})`
+                              : undefined
+                          }
+                          onChange={(value, selectedData) => {
+                            form.setFieldValue(
+                              `routingDetails.${index}.to_location_code`,
+                              value || "",
+                            );
+                            form.setFieldValue(
+                              `routingDetails.${index}.to_location_name`,
+                              selectedData?.label || "",
+                            );
+                          }}
+                          error={
+                            form.errors[
+                              `routingDetails.${index}.to_location_code`
+                            ] as string
+                          }
+                          minSearchLength={3}
+                          additionalParams={
+                            getTransportMode(
+                              form.values.routingDetails[index]?.move_type,
+                            )
+                              ? {
+                                  transport_mode: getTransportMode(
+                                    form.values.routingDetails[index]
+                                      ?.move_type,
+                                  )!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.5}>
+                        <SingleDateInput
+                          placeholder="YYYY-MM-DD"
+                          value={
+                            form.values.routingDetails[index]?.etd || new Date()
+                          }
+                          onChange={(date) => {
+                            form.setFieldValue(
+                              `routingDetails.${index}.etd`,
+                              date || new Date(),
+                            );
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.5}>
+                        <SingleDateInput
+                          placeholder="YYYY-MM-DD"
+                          value={
+                            form.values.routingDetails[index]?.eta || new Date()
+                          }
+                          onChange={(date) => {
+                            form.setFieldValue(
+                              `routingDetails.${index}.eta`,
+                              date || new Date(),
+                            );
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.5}>
+                        <SearchableSelect
+                          placeholder="Type carrier name"
+                          apiEndpoint={URL.carrier}
+                          searchFields={["carrier_code", "carrier_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.carrier_code),
+                            label: String(item.carrier_name),
+                          })}
+                          value={
+                            form.values.routingDetails[index]?.carrier_code ||
+                            ""
+                          }
+                          displayValue={
+                            form.values.routingDetails[index]?.carrier_name &&
+                            form.values.routingDetails[index]?.carrier_code
+                              ? `${form.values.routingDetails[index].carrier_name}`
+                              : undefined
+                          }
+                          onChange={(value, selectedData) => {
+                            form.setFieldValue(
+                              `routingDetails.${index}.carrier_code`,
+                              value || "",
+                            );
+                            form.setFieldValue(
+                              `routingDetails.${index}.carrier_name`,
+                              selectedData?.label || "",
+                            );
+                          }}
+                          error={
+                            form.errors[
+                              `routingDetails.${index}.carrier_code`
+                            ] as string
+                          }
+                          minSearchLength={2}
+                          additionalParams={
+                            getTransportMode(
+                              form.values.routingDetails[index]?.move_type,
+                            )
+                              ? {
+                                  transport_mode: getTransportMode(
+                                    form.values.routingDetails[index]
+                                      ?.move_type,
+                                  )!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.5}>
+                        <FormTextInput
+                          placeholder={
+                            form.values.routingDetails[index]?.move_type ===
+                            "AIR"
+                              ? "Enter flight number"
+                              : form.values.routingDetails[index]?.move_type ===
+                                  "SEA"
+                                ? "Enter voyage number"
+                                : form.values.routingDetails[index]
+                                      ?.move_type === "ROAD"
+                                  ? "Enter truck number"
+                                  : form.values.routingDetails[index]
+                                        ?.move_type === "RAIL"
+                                    ? "Enter rail number"
+                                    : "Enter transport number"
+                          }
+                          {...form.getInputProps(
+                            `routingDetails.${index}.flight_no`,
+                          )}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.25}>
+                        <Dropdown
+                          data={["Active", "Inactive", "Pending", "Completed"]}
+                          placeholder="Select status"
+                          searchable
+                          {...form.getInputProps(
+                            `routingDetails.${index}.status`,
+                          )}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <Group gap="xs">
+                          {form.values.routingDetails.length - 1 === index && (
                             <Button
                               variant="light"
                               color="#105476"
-                              size="xs"
-                              onClick={() => {
-                                form.insertListItem("cargo_details", {
-                                  no_of_packages: undefined,
-                                  gross_weight: undefined,
-                                  volume_weight: undefined,
-                                  chargeable_weight: undefined,
-                                  volume: undefined,
-                                  chargeable_volume: undefined,
-                                  container_type_code: undefined,
-                                  no_of_containers: undefined,
-                                });
-                              }}
+                              size="sm"
+                              px={12}
+                              onClick={addRoutingDetail}
                             >
                               <IconPlus size={14} />
                             </Button>
                           )}
-                          {form.values.cargo_details.length > 1 && (
+                          {form.values.routingDetails.length > 1 && (
                             <Button
                               variant="light"
                               color="red"
-                              size="xs"
-                              onClick={() =>
-                                form.removeListItem("cargo_details", cargoIndex)
-                              }
+                              size="sm"
+                              px={12}
+                              onClick={() => removeRoutingDetail(index)}
                             >
                               <IconTrash size={14} />
                             </Button>
                           )}
-                        </Grid.Col>
-                      </Grid>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </>
+                        </Group>
+                      </Grid.Col>
+                    </Grid>
+                  </Box>
+                ))}
+              </Stack>
+            </Box>
           )}
 
-          {/* Show message when no service is selected */}
-          {/* {!form.values.service && (
+          {/* Step 2: Party Details */}
+          {active === 1 && (
+            <Box>
+              <Text size="md" fw={600} mb="lg" c="#105476">
+                Party Details
+              </Text>
+              {/* Shipper Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Shipper Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={5}>
+                  <SearchableSelect
+                    label="Shipper Name"
+                    placeholder="Type shipper name"
+                    apiEndpoint={URL.shipper}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.shipper_code}
+                    displayValue={shipperDisplayName}
+                    onChange={(value, selectedData, originalData) => {
+                      form.setFieldValue("shipper_code", value || "");
+                      setShipperDisplayName(selectedData?.label || null);
+
+                      // Use originalData to populate address options
+                      if (
+                        value &&
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
+                        // Create address options from addresses_data
+                        const addressOptions = (
+                          (originalData as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            id: number;
+                            address: string;
+                          }>
+                        ).map((addr: { id: number; address: string }) => ({
+                          value: String(addr.id),
+                          label: addr.address,
+                        }));
+
+                        setShipperAddressOptions(addressOptions);
+
+                        // Reset address selection when shipper changes
+                        form.setFieldValue("shipper_address_id", 0);
+                      } else {
+                        setShipperAddressOptions([]);
+                        form.setFieldValue("shipper_address_id", 0);
+                      }
+                    }}
+                    returnOriginalData={true}
+                    error={form.errors.shipper_code as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={7}>
+                  <Dropdown
+                    label="Shipper Address"
+                    placeholder="Select shipper address"
+                    // withAsterisk
+                    searchable
+                    data={shipperAddressOptions}
+                    value={
+                      form.values.shipper_address_id != null
+                        ? String(form.values.shipper_address_id)
+                        : ""
+                    }
+                    onChange={(value) => {
+                      form.setFieldValue(
+                        "shipper_address_id",
+                        value ? parseInt(value) : 0,
+                      );
+                    }}
+                    error={form.errors.shipper_address_id}
+                    disabled={shipperAddressOptions.length === 0}
+                  />
+                </Grid.Col>
+                <Grid.Col span={5}>
+                  <FormTextInput
+                    label="Shipper E-mail ID"
+                    placeholder="Enter email address"
+                    {...form.getInputProps("shipper_email")}
+                  />
+                </Grid.Col>
+              </Grid>
+
+              <Divider my="md" />
+
+              {/* Consignee Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Consignee Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={5}>
+                  <SearchableSelect
+                    label="Consignee Name"
+                    placeholder="Type consignee name"
+                    apiEndpoint={URL.consignee}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.consignee_code}
+                    displayValue={consigneeDisplayName}
+                    onChange={(value, selectedData, originalData) => {
+                      form.setFieldValue("consignee_code", value || "");
+                      setConsigneeDisplayName(selectedData?.label || null);
+
+                      // Use originalData to populate address options
+                      if (
+                        value &&
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
+                        // Create address options from addresses_data
+                        const addressOptions = (
+                          (originalData as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            id: number;
+                            address: string;
+                          }>
+                        ).map((addr: { id: number; address: string }) => ({
+                          value: String(addr.id),
+                          label: addr.address,
+                        }));
+
+                        setConsigneeAddressOptions(addressOptions);
+
+                        // Reset address selection when consignee changes
+                        form.setFieldValue("consignee_address_id", 0);
+                      } else {
+                        setConsigneeAddressOptions([]);
+                        form.setFieldValue("consignee_address_id", 0);
+                      }
+                    }}
+                    returnOriginalData={true}
+                    error={form.errors.consignee_code as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={7}>
+                  <Dropdown
+                    label="Consignee Address"
+                    placeholder="Select consignee address"
+                    // withAsterisk
+                    searchable
+                    data={consigneeAddressOptions}
+                    value={
+                      form.values.consignee_address_id != null
+                        ? String(form.values.consignee_address_id)
+                        : ""
+                    }
+                    onChange={(value) => {
+                      form.setFieldValue(
+                        "consignee_address_id",
+                        value ? parseInt(value) : 0,
+                      );
+                    }}
+                    error={form.errors.consignee_address_id}
+                    disabled={consigneeAddressOptions.length === 0}
+                  />
+                </Grid.Col>
+                <Grid.Col span={5}>
+                  <FormTextInput
+                    label="Consignee Email Id"
+                    placeholder="Enter email address"
+                    {...form.getInputProps("consignee_email")}
+                  />
+                </Grid.Col>
+              </Grid>
+
+              <Divider my="md" />
+
+              {/* Forwarder Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Forwarder Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={5}>
+                  <SearchableSelect
+                    label="Forwarder Name"
+                    placeholder="Type forwarder name"
+                    apiEndpoint={URL.forwarder}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.forwarder_code}
+                    displayValue={forwarderDisplayName}
+                    onChange={(value, selectedData, originalData) => {
+                      form.setFieldValue("forwarder_code", value || "");
+                      setForwarderDisplayName(selectedData?.label || null);
+
+                      // Use originalData to populate address options
+                      if (
+                        value &&
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
+                        // Create address options from addresses_data
+                        const addressOptions = (
+                          (originalData as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            id: number;
+                            address: string;
+                          }>
+                        ).map((addr: { id: number; address: string }) => ({
+                          value: String(addr.id),
+                          label: addr.address,
+                        }));
+
+                        setForwarderAddressOptions(addressOptions);
+
+                        // Reset address selection when forwarder changes
+                        form.setFieldValue("forwarder_address_id", 0);
+                      } else {
+                        setForwarderAddressOptions([]);
+                        form.setFieldValue("forwarder_address_id", 0);
+                      }
+                    }}
+                    returnOriginalData={true}
+                    error={form.errors.forwarder_code as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={7}>
+                  <Dropdown
+                    label="Forwarder Address"
+                    placeholder="Select forwarder address"
+                    searchable
+                    data={forwarderAddressOptions}
+                    value={
+                      form.values.forwarder_address_id
+                        ? String(form.values.forwarder_address_id)
+                        : ""
+                    }
+                    onChange={(value) => {
+                      form.setFieldValue(
+                        "forwarder_address_id",
+                        value ? parseInt(value) : 0,
+                      );
+                    }}
+                    error={form.errors.forwarder_address_id}
+                    disabled={forwarderAddressOptions.length === 0}
+                  />
+                </Grid.Col>
+                <Grid.Col span={5}>
+                  <FormTextInput
+                    label="Forwarder Email Id"
+                    placeholder="Enter email address"
+                    {...form.getInputProps("forwarder_email")}
+                  />
+                </Grid.Col>
+              </Grid>
+
+              <Divider my="md" />
+
+              {/* Destination Agent Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Destination Agent Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={5}>
+                  <SearchableSelect
+                    label="Destination Agent Name"
+                    placeholder="Type destination agent name"
+                    apiEndpoint={URL.agent}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.destination_agent_code}
+                    displayValue={destinationAgentDisplayName}
+                    onChange={(value, selectedData, originalData) => {
+                      form.setFieldValue("destination_agent_code", value || "");
+                      setDestinationAgentDisplayName(
+                        selectedData?.label || null,
+                      );
+
+                      // Use originalData to populate address options
+                      if (
+                        value &&
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
+                        // Create address options from addresses_data
+                        const addressOptions = (
+                          (originalData as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            id: number;
+                            address: string;
+                          }>
+                        ).map((addr: { id: number; address: string }) => ({
+                          value: String(addr.id),
+                          label: addr.address,
+                        }));
+
+                        setAgentAddressOptions(addressOptions);
+
+                        // Reset address selection when destination agent changes
+                        form.setFieldValue("destination_agent_address_id", 0);
+                      } else {
+                        setAgentAddressOptions([]);
+                        form.setFieldValue("destination_agent_address_id", 0);
+                      }
+                    }}
+                    returnOriginalData={true}
+                    error={form.errors.destination_agent_code as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={7}>
+                  <Dropdown
+                    label="Destination Agent Address"
+                    placeholder="Select destination agent address"
+                    // withAsterisk
+                    searchable
+                    data={agentAddressOptions}
+                    value={
+                      form.values.destination_agent_address_id
+                        ? String(form.values.destination_agent_address_id)
+                        : ""
+                    }
+                    onChange={(value) => {
+                      form.setFieldValue(
+                        "destination_agent_address_id",
+                        value ? parseInt(value) : 0,
+                      );
+                    }}
+                    error={form.errors.destination_agent_address_id}
+                    disabled={agentAddressOptions.length === 0}
+                  />
+                </Grid.Col>
+                <Grid.Col span={5}>
+                  <FormTextInput
+                    label="Destination Agent Email Id"
+                    placeholder="Enter email address"
+                    {...form.getInputProps("destination_agent_email")}
+                  />
+                </Grid.Col>
+              </Grid>
+
+              <Divider mb="md" />
+
+              {/* Billing Customer Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Billing Customer Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={5}>
+                  <SearchableSelect
+                    label="Billing Customer Name"
+                    placeholder="Type billing customer name"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.billing_customer_code}
+                    displayValue={billingCustomerDisplayName}
+                    onChange={(value, selectedData, originalData) => {
+                      form.setFieldValue("billing_customer_code", value || "");
+                      setBillingCustomerDisplayName(
+                        selectedData?.label || null,
+                      );
+
+                      // Use originalData to populate address options
+                      if (
+                        value &&
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
+                        // Create address options from addresses_data
+                        const addressOptions = (
+                          (originalData as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            id: number;
+                            address: string;
+                          }>
+                        ).map((addr: { id: number; address: string }) => ({
+                          value: String(addr.id),
+                          label: addr.address,
+                        }));
+
+                        setBillingCustomerAddressOptions(addressOptions);
+
+                        // Reset address selection when billing customer changes
+                        form.setFieldValue("billing_customer_address_id", 0);
+                      } else {
+                        setBillingCustomerAddressOptions([]);
+                        form.setFieldValue("billing_customer_address_id", 0);
+                      }
+                    }}
+                    returnOriginalData={true}
+                    error={form.errors.billing_customer_code as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={7}>
+                  <Dropdown
+                    label="Billing Customer Address"
+                    placeholder="Select billing customer address"
+                    // withAsterisk
+                    searchable
+                    data={billingCustomerAddressOptions}
+                    value={
+                      form.values.billing_customer_address_id
+                        ? String(form.values.billing_customer_address_id)
+                        : ""
+                    }
+                    onChange={(value) => {
+                      form.setFieldValue(
+                        "billing_customer_address_id",
+                        value ? parseInt(value) : 0,
+                      );
+                    }}
+                    error={form.errors.billing_customer_address_id}
+                    disabled={billingCustomerAddressOptions.length === 0}
+                  />
+                </Grid.Col>
+              </Grid>
+
+              <Divider my="md" />
+
+              {/* Notify Customer Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Notify Customer Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={5}>
+                  <SearchableSelect
+                    label="Notify Customer Name"
+                    placeholder="Type notify customer name"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.notify_customer_code}
+                    displayValue={notifyCustomerDisplayName}
+                    onChange={(value, selectedData, originalData) => {
+                      form.setFieldValue("notify_customer_code", value || "");
+                      setNotifyCustomerDisplayName(selectedData?.label || null);
+
+                      // Use originalData to populate address options
+                      if (
+                        value &&
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
+                        // Create address options from addresses_data
+                        const addressOptions = (
+                          (originalData as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            id: number;
+                            address: string;
+                          }>
+                        ).map((addr: { id: number; address: string }) => ({
+                          value: String(addr.id),
+                          label: addr.address,
+                        }));
+
+                        setNotifyCustomerAddressOptions(addressOptions);
+
+                        // Reset address selection when notify customer changes
+                        form.setFieldValue("notify_customer_address_id", 0);
+                      } else {
+                        setNotifyCustomerAddressOptions([]);
+                        form.setFieldValue("notify_customer_address_id", 0);
+                      }
+                    }}
+                    returnOriginalData={true}
+                    error={form.errors.notify_customer_code as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={7}>
+                  <Dropdown
+                    label="Notify Customer Address"
+                    placeholder="Select notify customer address"
+                    searchable
+                    data={notifyCustomerAddressOptions}
+                    value={
+                      form.values.notify_customer_address_id
+                        ? String(form.values.notify_customer_address_id)
+                        : ""
+                    }
+                    onChange={(value) => {
+                      form.setFieldValue(
+                        "notify_customer_address_id",
+                        value ? parseInt(value) : 0,
+                      );
+                    }}
+                    error={form.errors.notify_customer_address_id}
+                    disabled={notifyCustomerAddressOptions.length === 0}
+                  />
+                </Grid.Col>
+                <Grid.Col span={5}>
+                  <FormTextInput
+                    label="Notify Customer Email Id"
+                    placeholder="Enter email address"
+                    {...form.getInputProps("notify_customer_email")}
+                  />
+                </Grid.Col>
+              </Grid>
+
+              <Divider my="md" />
+
+              {/* CHA Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                CHA Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={5}>
+                  <SearchableSelect
+                    label="CHA Name"
+                    placeholder="Type CHA name"
+                    apiEndpoint={URL.cha}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.cha_code}
+                    displayValue={chaDisplayName}
+                    onChange={(value, selectedData, originalData) => {
+                      form.setFieldValue("cha_code", value || "");
+                      setChaDisplayName(selectedData?.label || null);
+
+                      // Use originalData to populate address options
+                      if (
+                        value &&
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
+                        // Create address options from addresses_data
+                        const addressOptions = (
+                          (originalData as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            id: number;
+                            address: string;
+                          }>
+                        ).map((addr: { id: number; address: string }) => ({
+                          value: String(addr.id),
+                          label: addr.address,
+                        }));
+
+                        setChaAddressOptions(addressOptions);
+
+                        // Reset address selection when CHA changes
+                        form.setFieldValue("cha_address_id", 0);
+                      } else {
+                        setChaAddressOptions([]);
+                        form.setFieldValue("cha_address_id", 0);
+                      }
+                    }}
+                    returnOriginalData={true}
+                    error={form.errors.cha_code as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={7}>
+                  <Dropdown
+                    label="CHA Address"
+                    placeholder="Select CHA address"
+                    searchable
+                    data={chaAddressOptions}
+                    value={
+                      form.values.cha_address_id
+                        ? String(form.values.cha_address_id)
+                        : ""
+                    }
+                    onChange={(value) => {
+                      form.setFieldValue(
+                        "cha_address_id",
+                        value ? parseInt(value) : 0,
+                      );
+                    }}
+                    error={form.errors.cha_address_id}
+                    disabled={chaAddressOptions.length === 0}
+                  />
+                </Grid.Col>
+              </Grid>
+            </Box>
+          )}
+
+          {/* Step 3: Cargo Details */}
+          {active === 2 && (
+            <Box>
+              <Text size="md" fw={600} mb="lg" c="#105476">
+                Cargo Details
+              </Text>
+
+              {/* Common Fields */}
+              <Grid mb="xl">
+                <Grid.Col span={12}>
+                  <FormTextArea
+                    label="Commodity Description"
+                    placeholder="Enter commodity description"
+                    minRows={3}
+                    maxRows={6}
+                    value={form.values.commodity_description}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue(
+                        "commodity_description",
+                        formattedValue,
+                      );
+                    }}
+                    error={form.errors.commodity_description}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <FormTextInput
+                    label="Marks No"
+                    placeholder="Enter marks and numbers"
+                    {...form.getInputProps("marks_no")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Radio.Group
+                    label="Hazardous Cargo"
+                    value={form.values.is_hazardous ? "true" : "false"}
+                    onChange={(value) =>
+                      form.setFieldValue("is_hazardous", value === "true")
+                    }
+                    styles={{
+                      root: { fontFamily: "Inter" },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                      },
+                    }}
+                  >
+                    <Group mt="xs">
+                      <Radio value="true" label="Yes" />
+                      <Radio value="false" label="No" />
+                    </Group>
+                  </Radio.Group>
+                </Grid.Col>
+              </Grid>
+
+              <Divider my="md" />
+
+              {/* Service-specific Cargo Details - Only show when service is selected */}
+              {form.values.service && (
+                <>
+                  <Text size="sm" fw={500} mb="md" c="#105476">
+                    Cargo Details for {form.values.service}
+                  </Text>
+
+                  {/* AIR Service Cargo Details - Single Fields */}
+                  {form.values.service === "AIR" && (
+                    <Grid>
+                      <Grid.Col span={3}>
+                        <FormNumberInput
+                          label="No of Packages"
+                          placeholder="Enter number of packages"
+                          min={1}
+                          {...form.getInputProps(
+                            "cargo_details.0.no_of_packages",
+                          )}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3}>
+                        <FormNumberInput
+                          label="Gross Weight (kg)"
+                          placeholder="Enter gross weight"
+                          min={0}
+                          decimalScale={2}
+                          {...form.getInputProps(
+                            "cargo_details.0.gross_weight",
+                          )}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3}>
+                        <FormNumberInput
+                          label="Volume Weight (kg)"
+                          placeholder="Enter volume weight"
+                          min={0}
+                          decimalScale={2}
+                          {...form.getInputProps(
+                            "cargo_details.0.volume_weight",
+                          )}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3}>
+                        <FormNumberInput
+                          label="Chargeable Weight (kg)"
+                          // placeholder="Auto-calculated"
+                          min={0}
+                          decimalScale={2}
+                          readOnly
+                          {...form.getInputProps(
+                            "cargo_details.0.chargeable_weight",
+                          )}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                              backgroundColor: "#f5f5f5",
+                              cursor: "not-allowed",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  )}
+
+                  {/* LCL Service Cargo Details - Single Fields */}
+                  {form.values.service === "LCL" && (
+                    <Grid>
+                      <Grid.Col span={3}>
+                        <FormNumberInput
+                          label="No of Packages"
+                          placeholder="Enter number of packages"
+                          min={1}
+                          {...form.getInputProps(
+                            "cargo_details.0.no_of_packages",
+                          )}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3}>
+                        <FormNumberInput
+                          label="Gross Weight (kg)"
+                          placeholder="Enter gross weight"
+                          min={0}
+                          decimalScale={2}
+                          {...form.getInputProps(
+                            "cargo_details.0.gross_weight",
+                          )}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3}>
+                        <FormNumberInput
+                          label="Volume (cbm)"
+                          placeholder="Enter volume"
+                          min={0}
+                          decimalScale={2}
+                          {...form.getInputProps("cargo_details.0.volume")}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3}>
+                        <FormNumberInput
+                          label="Chargeable Volume (cbm)"
+                          placeholder="Auto-calculated"
+                          min={0}
+                          decimalScale={2}
+                          readOnly
+                          {...form.getInputProps(
+                            "cargo_details.0.chargeable_volume",
+                          )}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                              backgroundColor: "#f5f5f5",
+                              cursor: "not-allowed",
+                            },
+                            label: {
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "#424242",
+                              marginBottom: "4px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  )}
+
+                  {/* FCL Service Cargo Details */}
+                  {form.values.service === "FCL" && (
+                    <>
+                      <Grid
+                        mb="sm"
+                        style={{
+                          fontWeight: 600,
+                          color: "#105476",
+                        }}
+                        gutter="sm"
+                      >
+                        <Grid.Col span={3}>
+                          <RequiredLabel
+                            label="Container Type"
+                            required={false}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={3}>
+                          <RequiredLabel
+                            label="No of Containers"
+                            required={false}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={3}>
+                          <RequiredLabel
+                            label="Gross Weight"
+                            required={false}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={3}>
+                          <RequiredLabel label="Actions" required={false} />
+                        </Grid.Col>
+                      </Grid>
+                      <Stack gap="md">
+                        {form.values.cargo_details.map((_, cargoIndex) => (
+                          <Box key={cargoIndex}>
+                            <Grid gutter={"sm"}>
+                              <Grid.Col span={3}>
+                                <Dropdown
+                                  placeholder="Select container type"
+                                  searchable
+                                  data={containerTypeOptions}
+                                  nothingFoundMessage="No container types found"
+                                  {...form.getInputProps(
+                                    `cargo_details.${cargoIndex}.container_type_code`,
+                                  )}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={3}>
+                                <FormNumberInput
+                                  placeholder="Enter number of containers"
+                                  min={1}
+                                  {...form.getInputProps(
+                                    `cargo_details.${cargoIndex}.no_of_containers`,
+                                  )}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={3}>
+                                <FormNumberInput
+                                  placeholder="Enter gross weight"
+                                  min={0}
+                                  decimalScale={2}
+                                  {...form.getInputProps(
+                                    `cargo_details.${cargoIndex}.gross_weight`,
+                                  )}
+                                />
+                              </Grid.Col>
+                              {/* Add/Remove buttons */}
+                              <Grid.Col span={3}>
+                                {cargoIndex ===
+                                  form.values.cargo_details.length - 1 && (
+                                  <Button
+                                    variant="light"
+                                    color="#105476"
+                                    size="sm"
+                                    px={12}
+                                    onClick={() => {
+                                      form.insertListItem("cargo_details", {
+                                        no_of_packages: undefined,
+                                        gross_weight: undefined,
+                                        volume_weight: undefined,
+                                        chargeable_weight: undefined,
+                                        volume: undefined,
+                                        chargeable_volume: undefined,
+                                        container_type_code: undefined,
+                                        no_of_containers: undefined,
+                                      });
+                                    }}
+                                  >
+                                    <IconPlus size={14} />
+                                  </Button>
+                                )}
+                                {form.values.cargo_details.length > 1 && (
+                                  <Button
+                                    variant="light"
+                                    color="red"
+                                    size="sm"
+                                    px={12}
+                                    onClick={() =>
+                                      form.removeListItem(
+                                        "cargo_details",
+                                        cargoIndex,
+                                      )
+                                    }
+                                  >
+                                    <IconTrash size={14} />
+                                  </Button>
+                                )}
+                              </Grid.Col>
+                            </Grid>
+                          </Box>
+                        ))}
+                      </Stack>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Show message when no service is selected */}
+              {/* {!form.values.service && (
               <Text size="sm" c="dimmed" ta="center" py="xl">
                 Please select a service type in Step 1 to see cargo details form
               </Text>
             )} */}
+            </Box>
+          )}
 
-          <Group justify="space-between" mt="xl">
-            <Button variant="default" onClick={handlePrevious}>
-              Back
-            </Button>
-            <Button onClick={handleNext} color="#105476">
-              Next
-            </Button>
-          </Group>
-        </Box>
-      )}
-
-      {/* Step 4: Pickup/Delivery */}
-      {active === 3 && (
-        <Box mt="md">
-          <Grid style={{ maxWidth: "80%" }}>
-            {/* Pickup Details Section */}
-            <Grid.Col span={12}>
-              <Text size="sm" fw={500} mb="md" c="#105476">
+          {/* Step 4: Pickup/Delivery */}
+          {active === 3 && (
+            <Box>
+              {/* Pickup Details Section */}
+              <Text size="md" fw={600} mb="lg" c="#105476">
+                Pickup/Delivery Details
+              </Text>
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Pickup Details
               </Text>
-            </Grid.Col>
 
-            {/* Row 1: Pickup Location & Pickup From */}
-            <Grid.Col span={6}>
-              <TextInput
-                label="Pickup Location"
-                placeholder="Enter pickup location"
-                value={form.values.pickup_location}
-                onChange={(e) => {
-                  const formattedValue = toTitleCase(e.target.value);
-                  form.setFieldValue("pickup_location", formattedValue);
-                }}
-                error={form.errors.pickup_location}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <SearchableSelect
-                label="Pickup From"
-                placeholder="Type port name or code"
-                apiEndpoint={URL.portMaster}
-                searchFields={["port_code", "port_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.port_code),
-                  label: `${item.port_name} (${item.port_code})`,
-                })}
-                value={form.values.pickup_from_code}
-                displayValue={pickupFromDisplayName}
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("pickup_from_code", value || "");
-                  setPickupFromDisplayName(selectedData?.label || null);
-                }}
-                error={form.errors.pickup_from_code as string}
-                minSearchLength={2}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
+              <Grid mb="lg" gutter={"sm"}>
+                {/* Row 1: Pickup Location & Pickup From */}
+                <Grid.Col span={6}>
+                  <FormTextInput
+                    label="Pickup Location"
+                    placeholder="Enter pickup location"
+                    value={form.values.pickup_location}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.target.value);
+                      form.setFieldValue("pickup_location", formattedValue);
+                    }}
+                    error={form.errors.pickup_location}
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <SearchableSelect
+                    label="Pickup From"
+                    placeholder="Type port name or code"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={form.values.pickup_from_code}
+                    displayValue={pickupFromDisplayName}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("pickup_from_code", value || "");
+                      setPickupFromDisplayName(selectedData?.label || null);
+                    }}
+                    error={form.errors.pickup_from_code as string}
+                    minSearchLength={2}
+                  />
+                </Grid.Col>
 
-            {/* Row 2: Pickup Address & Planned Pickup Date */}
-            <Grid.Col span={6}>
-              <SearchableSelect
-                label="Pickup Address"
-                placeholder="Type customer name"
-                apiEndpoint={URL.customer}
-                searchFields={["customer_code", "customer_name"]}
-                displayFormat={(item: Record<string, unknown>) => {
-                  // Get the first address from addresses_data
-                  const addressesData =
-                    (item.addresses_data as Array<Record<string, unknown>>) ||
-                    [];
-                  const firstAddress = addressesData[0];
-                  if (firstAddress) {
-                    return {
-                      value: String(firstAddress.id),
-                      label: `${firstAddress.address} - ${item.customer_name}`,
-                    };
-                  }
-                  return {
-                    value: String(item.id || ""),
-                    label: String(item.customer_name || ""),
-                  };
-                }}
-                value={form.values.pickup_address_id}
-                displayValue={pickupAddressDisplayName}
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("pickup_address_id", value || "");
-                  setPickupAddressDisplayName(selectedData?.label || null);
-                }}
-                error={form.errors.pickup_address_id as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <DateInput
-                label="Planned Pickup Date"
-                placeholder="YYYY-MM-DD"
-                value={form.values.planned_pickup_date}
-                onChange={(date) => {
-                  form.setFieldValue("planned_pickup_date", date || new Date());
-                }}
-                error={form.errors.planned_pickup_date}
-                valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={18} />}
-                leftSectionPointerEvents="none"
-                radius="sm"
-                size="sm"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-                styles={{
-                  input: {
-                    height: "36px",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
-              />
-            </Grid.Col>
+                {/* Row 2: Pickup Address & Planned Pickup Date */}
+                <Grid.Col span={12}>
+                  <SearchableSelect
+                    label="Pickup Address"
+                    placeholder="Type customer name"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_code", "customer_name"]}
+                    displayFormat={(item: Record<string, unknown>) => {
+                      // Get the first address from addresses_data
+                      const addressesData =
+                        (item.addresses_data as Array<
+                          Record<string, unknown>
+                        >) || [];
+                      const firstAddress = addressesData[0];
+                      if (firstAddress) {
+                        return {
+                          value: String(firstAddress.id),
+                          label: `${firstAddress.address} - ${item.customer_name}`,
+                        };
+                      }
+                      return {
+                        value: String(item.id || ""),
+                        label: String(item.customer_name || ""),
+                      };
+                    }}
+                    value={form.values.pickup_address_id}
+                    displayValue={pickupAddressDisplayName}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("pickup_address_id", value || "");
+                      setPickupAddressDisplayName(selectedData?.label || null);
+                    }}
+                    error={form.errors.pickup_address_id as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={3}>
+                  <SingleDateInput
+                    label="Planned Pickup Date"
+                    placeholder="YYYY-MM-DD"
+                    value={form.values.planned_pickup_date}
+                    onChange={(date) => {
+                      form.setFieldValue(
+                        "planned_pickup_date",
+                        date || new Date(),
+                      );
+                    }}
+                    error={form.errors.planned_pickup_date}
+                  />
+                </Grid.Col>
 
-            {/* Row 3: Actual Pickup Date, Transporter Name, Transporter Email */}
-            <Grid.Col span={4}>
-              <DateInput
-                label="Actual Pickup Date"
-                placeholder="YYYY-MM-DD"
-                valueFormat="YYYY-MM-DD"
-                value={form.values.actual_pickup_date}
-                onChange={(date) => {
-                  form.setFieldValue("actual_pickup_date", date);
-                }}
-                leftSection={<IconCalendar size={18} />}
-                leftSectionPointerEvents="none"
-                radius="sm"
-                size="sm"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-                styles={{
-                  input: {
-                    height: "36px",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Transporter Name"
-                placeholder="Enter transporter name"
-                value={form.values.transporter_name}
-                onChange={(e) => {
-                  const formattedValue = toTitleCase(e.target.value);
-                  form.setFieldValue("transporter_name", formattedValue);
-                }}
-                error={form.errors.transporter_name}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="Transporter Email Id"
-                placeholder="Enter transporter email"
-                type="email"
-                {...form.getInputProps("transporter_email")}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>{/* Empty column for spacing */}</Grid.Col>
+                {/* Row 3: Actual Pickup Date, Transporter Name, Transporter Email */}
+                <Grid.Col span={3}>
+                  <SingleDateInput
+                    label="Actual Pickup Date"
+                    placeholder="YYYY-MM-DD"
+                    value={form.values.actual_pickup_date}
+                    onChange={(date) => {
+                      form.setFieldValue(
+                        "actual_pickup_date",
+                        date,
+                      );
+                    }}
+                    error={form.errors.actual_pickup_date}
+                  />
+                </Grid.Col>
+                <Grid.Col span={3}>
+                  <SearchableSelect
+                    label="Transporter Name"
+                    placeholder="Type transporter / customer name"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_code", "customer_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.transporter_code}
+                    displayValue={form.values.transporter_name}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("transporter_code", value || "");
+                      form.setFieldValue("transporter_name", selectedData?.label || "");
+                    }}
+                    error={form.errors.transporter_code as string}
+                    minSearchLength={2}
+                  />
+                </Grid.Col>
+                <Grid.Col span={3}>
+                  <FormTextInput
+                    label="Transporter Email Id"
+                    placeholder="Enter transporter email"
+                    type="email"
+                    {...form.getInputProps("transporter_email")}
+                  />
+                </Grid.Col>
+              </Grid>
 
-            {/* Line Break */}
-            <Grid.Col span={12}>
               <Divider my="md" />
-            </Grid.Col>
-
-            {/* Delivery Details Section */}
-            <Grid.Col span={12}>
-              <Text size="sm" fw={500} mb="md" c="#105476">
+              
+              {/* Delivery Details Section */}
+              <Text size="sm" fw={500} mb="sm" mt="lg" c="#105476">
                 Delivery Details
               </Text>
-            </Grid.Col>
 
-            {/* Delivery Location & Delivery From */}
-            <Grid.Col span={6}>
-              <TextInput
-                label="Delivery Location"
-                placeholder="Enter delivery location"
-                value={form.values.delivery_location}
-                onChange={(e) => {
-                  const formattedValue = toTitleCase(e.target.value);
-                  form.setFieldValue("delivery_location", formattedValue);
-                }}
-                error={form.errors.delivery_location}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <SearchableSelect
-                label="Delivery From"
-                placeholder="Type port name or code"
-                apiEndpoint={URL.portMaster}
-                searchFields={["port_code", "port_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.port_code),
-                  label: `${item.port_name} (${item.port_code})`,
-                })}
-                value={form.values.delivery_from_code}
-                displayValue={deliveryFromDisplayName}
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("delivery_from_code", value || "");
-                  setDeliveryFromDisplayName(selectedData?.label || null);
-                }}
-                error={form.errors.delivery_from_code as string}
-                minSearchLength={2}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
+              <Grid gutter={"sm"}>
+                {/* Delivery Location & Delivery From */}
+                <Grid.Col span={6}>
+                  <FormTextInput
+                    label="Delivery Location"
+                    placeholder="Enter delivery location"
+                    value={form.values.delivery_location}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.target.value);
+                      form.setFieldValue("delivery_location", formattedValue);
+                    }}
+                    error={form.errors.delivery_location}
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <SearchableSelect
+                    label="Delivery From"
+                    placeholder="Type port name or code"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={form.values.delivery_from_code}
+                    displayValue={deliveryFromDisplayName}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("delivery_from_code", value || "");
+                      setDeliveryFromDisplayName(selectedData?.label || null);
+                    }}
+                    error={form.errors.delivery_from_code as string}
+                    minSearchLength={2}
+                  />
+                </Grid.Col>
 
-            {/* Delivery Address */}
-            <Grid.Col span={6}>
-              <SearchableSelect
-                label="Delivery Address"
-                placeholder="Type delivery address"
-                apiEndpoint={URL.customer}
-                searchFields={["customer_code", "customer_name"]}
-                displayFormat={(item: Record<string, unknown>) => {
-                  // Get the first address from addresses_data
-                  const addressesData =
-                    (item.addresses_data as Array<Record<string, unknown>>) ||
-                    [];
-                  const firstAddress = addressesData[0];
-                  if (firstAddress) {
-                    return {
-                      value: String(firstAddress.id),
-                      label: `${firstAddress.address} - ${item.customer_name}`,
-                    };
-                  }
-                  return {
-                    value: String(item.id || ""),
-                    label: String(item.customer_name || ""),
-                  };
-                }}
-                value={form.values.delivery_address_id}
-                displayValue={deliveryAddressDisplayName}
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("delivery_address_id", value || "");
-                  setDeliveryAddressDisplayName(selectedData?.label || null);
-                }}
-                error={form.errors.delivery_address_id as string}
-                minSearchLength={3}
-                styles={commonFieldStyles}
-              />
-            </Grid.Col>
-
-            {/* Planned & Actual Delivery Dates */}
-            <Grid.Col span={6}>
-              <DateInput
-                label="Planned Delivery Date"
-                placeholder="YYYY-MM-DD"
-                value={form.values.planned_delivery_date}
-                onChange={(date) => {
-                  form.setFieldValue(
-                    "planned_delivery_date",
-                    date || new Date()
-                  );
-                }}
-                error={form.errors.planned_delivery_date}
-                valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={18} />}
-                leftSectionPointerEvents="none"
-                radius="sm"
-                size="sm"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-                styles={{
-                  input: { fontSize: "12px" },
-                  label: {
-                    fontSize: "12px",
-                    fontWeight: 500,
-                    color: "#495057",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <DateInput
-                label="Actual Delivery Date"
-                placeholder="YYYY-MM-DD"
-                defaultValue={new Date()}
-                valueFormat="YYYY-MM-DD"
-                clearable
-                leftSection={<IconCalendar size={18} />}
-                leftSectionPointerEvents="none"
-                radius="sm"
-                size="sm"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                styles={{
-                  input: {
-                    height: "36px",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                    fontStyle: "medium",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
-              />
-            </Grid.Col>
-
-            {/* Line Break */}
-            <Grid.Col span={12}>
-              <Divider my="md" />
-            </Grid.Col>
-          </Grid>
-
-          <Group justify="space-between" mt="xl">
-            <Button variant="default" onClick={handlePrevious}>
-              Back
-            </Button>
-            <Button onClick={handleNext} color="#105476">
-              Next
-            </Button>
-          </Group>
-        </Box>
-      )}
-
-      {/* Step 5: Rate Details */}
-      {active === 4 && (
-        <Box mt="md">
-          <Text size="md" fw={600} mb="md" c="#105476">
-            Rate Details
-          </Text>
-
-          {/* Quotation/Contract No - Separate common field */}
-          <Grid mb="md">
-            <Grid.Col span={4}>
-              <Dropdown
-                label="Quotation/Contract No"
-                placeholder="Select quotation"
-                searchable
-                data={quotationOptions}
-                value={quotationId}
-                disabled={isEditMode}
-                styles={commonFieldStyles}
-                onChange={(value) => {
-                  if (isEditMode) return; // Prevent changes in edit mode
-                  setQuotationId(value || "");
-                  // Map charges when quotation is selected
-                  if (value && quotationsData?.status && quotationsData.data) {
-                    const selectedQuotation = quotationsData.data.find(
-                      (item: QuotationItem) =>
-                        String(item.quotation_id) === value
-                    );
-                    if (selectedQuotation?.charges) {
-                      const mappedCharges = selectedQuotation.charges.map(
-                        (charge: QuotationCharge, index: number) => ({
-                          id: index + 1,
-                          charge_name: String(charge.charge_name || ""),
-                          currency_country_code: String(charge.currency || ""),
-                          roe: charge.roe ? String(charge.roe) : "",
-                          unit: String(charge.unit || ""),
-                          no_of_units: charge.no_of_units
-                            ? String(charge.no_of_units)
-                            : "",
-                          sell_per_unit: charge.sell_per_unit
-                            ? String(charge.sell_per_unit)
-                            : "",
-                          min_sell: charge.min_sell
-                            ? String(charge.min_sell)
-                            : "",
-                          cost_per_unit: charge.cost_per_unit
-                            ? String(charge.cost_per_unit)
-                            : "",
-                          total_cost: charge.total_cost
-                            ? String(charge.total_cost)
-                            : "",
-                          total_sell: charge.total_sell
-                            ? String(charge.total_sell)
-                            : "",
-                        })
+                {/* Delivery Address */}
+                <Grid.Col span={12}>
+                  <SearchableSelect
+                    label="Delivery Address"
+                    placeholder="Type delivery address"
+                    apiEndpoint={URL.customer}
+                    searchFields={["customer_code", "customer_name"]}
+                    displayFormat={(item: Record<string, unknown>) => {
+                      // Get the first address from addresses_data
+                      const addressesData =
+                        (item.addresses_data as Array<
+                          Record<string, unknown>
+                        >) || [];
+                      const firstAddress = addressesData[0];
+                      if (firstAddress) {
+                        return {
+                          value: String(firstAddress.id),
+                          label: `${firstAddress.address} - ${item.customer_name}`,
+                        };
+                      }
+                      return {
+                        value: String(item.id || ""),
+                        label: String(item.customer_name || ""),
+                      };
+                    }}
+                    value={form.values.delivery_address_id}
+                    displayValue={deliveryAddressDisplayName}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("delivery_address_id", value || "");
+                      setDeliveryAddressDisplayName(
+                        selectedData?.label || null,
                       );
-                      setCharges(mappedCharges);
-                    }
-                  }
-                }}
-              />
-            </Grid.Col>
-          </Grid>
+                    }}
+                    error={form.errors.delivery_address_id as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
 
-          {/* Charges Table */}
-          <Stack justify="lg" px={0}>
-            {charges.length > 0 && (
+                {/* Planned & Actual Delivery Dates */}
+                <Grid.Col span={3}>
+                  <SingleDateInput
+                    label="Planned Delivery Date"
+                    placeholder="YYYY-MM-DD"
+                    value={form.values.planned_delivery_date}
+                    onChange={(date) => {
+                      form.setFieldValue(
+                        "planned_delivery_date",
+                        date || new Date(),
+                      );
+                    }}
+                    error={form.errors.planned_delivery_date}
+                  />
+                </Grid.Col>
+                <Grid.Col span={3}>
+                  <SingleDateInput
+                    label="Actual Delivery Date"
+                    placeholder="YYYY-MM-DD"
+                    value={form.values.actual_delivery_date}
+                    onChange={(date) => {
+                      form.setFieldValue(
+                        "actual_delivery_date",
+                        date,
+                      );
+                    }}
+                    error={form.errors.actual_delivery_date}
+                  />
+                </Grid.Col>
+              </Grid>
+            </Box>
+          )}
+
+          {/* Step 5: Rate Details */}
+          {active === 4 && (
+            <Box>
+              <Text size="md" fw={600} mb="md" c="#105476">
+                Rate Details
+              </Text>
+
+              {/* Quotation/Contract No - Separate common field */}
+              <Grid mb="md">
+                <Grid.Col span={4}>
+                  {quotationOptions && quotationOptions.length > 0 ? (
+                    <Dropdown
+                      label="Quotation/Contract No"
+                      placeholder="Select quotation"
+                      searchable
+                      data={quotationOptions}
+                      value={quotationId}
+                      disabled={isEditMode}
+                      onChange={(value) => {
+                        if (isEditMode) return; // Prevent changes in edit mode
+                        setQuotationId(value || "");
+                        // Map charges when quotation is selected
+                        if (
+                          value &&
+                          quotationsData?.status &&
+                          quotationsData.data
+                        ) {
+                          const selectedQuotation = quotationsData.data.find(
+                            (item: QuotationItem) =>
+                              String(item.quotation_id) === value,
+                          );
+                          if (selectedQuotation?.charges) {
+                            const mappedCharges = selectedQuotation.charges.map(
+                              (charge: QuotationCharge) => ({
+                                id: undefined as number | undefined,
+                                charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
+                                charge_name: String(charge.charge_name || ""),
+                                pp_cc: charge.pp_cc
+                                  ? String(charge.pp_cc)
+                                  : "Collect",
+                                currency_country_code: String(
+                                  charge.currency || charge.currency_country_code || "",
+                                ),
+                                roe: charge.roe ? String(charge.roe) : "",
+                                unit: String(charge.unit || ""),
+                                no_of_units: charge.no_of_units
+                                  ? String(charge.no_of_units)
+                                  : "",
+                                sell_per_unit: charge.sell_per_unit
+                                  ? String(charge.sell_per_unit)
+                                  : "",
+                                min_sell: charge.min_sell
+                                  ? String(charge.min_sell)
+                                  : "",
+                                cost_per_unit: charge.cost_per_unit
+                                  ? String(charge.cost_per_unit)
+                                  : "",
+                                total_cost: charge.total_cost
+                                  ? String(charge.total_cost)
+                                  : "",
+                                total_sell: charge.total_sell
+                                  ? String(charge.total_sell)
+                                  : "",
+                              }),
+                            );
+                            setCharges(mappedCharges);
+                          }
+                        }
+                      }}
+                      styles={{
+                        label: {
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#105476",
+                          marginBottom: 8,
+                        },
+                      }}
+                    />
+                  ) : (
+                    <FormTextInput
+                      label="Quotation/Contract No"
+                      placeholder="Enter quotation number"
+                      value={quotationId}
+                      onChange={(event) =>
+                        setQuotationId(event.currentTarget.value)
+                      }
+                      disabled={isEditMode}
+                      styles={{
+                        label: {
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#105476",
+                          marginBottom: 8,
+                        },
+                      }}
+                    />
+                  )}
+                </Grid.Col>
+              </Grid>
+
+              {/* Charges Table */}
+              <Stack justify="lg" px={0}>
+                {charges.length > 0 && (
+                  <Grid
+                    style={{
+                      fontWeight: 600,
+                      color: "#105476",
+                    }}
+                    gutter="sm"
+                  >
+                    <Grid.Col span={1.5}>
+                      <RequiredLabel label="Charge Name" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={0.95}>
+                      <RequiredLabel label="Prepaid/Collect" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={0.8}>
+                      <RequiredLabel label="Currency" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={0.8}>
+                      <RequiredLabel label="ROE" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <RequiredLabel label="Unit" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={0.8}>
+                      <RequiredLabel label="No of Units" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <RequiredLabel label="Sell Per Unit" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <RequiredLabel label="Min Sell" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <RequiredLabel label="Cost Per Unit" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={1}>
+                      <RequiredLabel label={`Total Sell (${defaultCurrency})`} required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={1.05}>
+                      <RequiredLabel label={`Total Cost (${defaultCurrency})`} required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={1.1}>
+                      <RequiredLabel label="Actions" required={false} />
+                    </Grid.Col>
+                  </Grid>
+                )}
+                {/* Dynamic Charge Rows */}
+                {charges.map((charge, index) => (
+                  <Box key={index}>
+                    <Grid gutter="sm">
+                      <Grid.Col span={1.5}>
+                        <SearchableSelect
+                          apiEndpoint={URL.chargeMaster}
+                          placeholder="Charge Name"
+                          dropdownZIndex={1000}
+                          value={charge.charge_id || null}
+                          displayValue={charge.charge_name || null}
+                          minSearchLength={1}
+                          size="xs"
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.id ?? ""),
+                            label: String(item.charge_name ?? ""),
+                          })}
+                          onChange={(val, selectedItem) => {
+                            setCharges((prev) =>
+                              prev.map((c, i) =>
+                                i === index
+                                  ? {
+                                      ...c,
+                                      charge_id: val ?? "",
+                                      charge_name: val ? (selectedItem?.label ?? "") : "",
+                                    }
+                                  : c
+                              )
+                            );
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <Dropdown
+                          placeholder="Prepaid/Collect"
+                          searchable
+                          data={["Prepaid", "Collect"]}
+                          value={charge.pp_cc}
+                          onChange={(value) =>
+                            updateCharge(index, "pp_cc", value || "")
+                          }
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={0.8}>
+                        <Dropdown
+                          placeholder="Select Currency"
+                          searchable
+                          value={charge.currency_country_code}
+                          onChange={(value) =>
+                            updateCharge(index, "currency_country_code", value || "")
+                          }
+                          data={currencyOptions}
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={0.8}>
+                        <FormTextInput
+                          placeholder="ROE"
+                          value={charge.roe}
+                          onChange={(event) =>
+                            updateCharge(index, "roe", event.currentTarget.value)
+                          }
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <Dropdown
+                          placeholder="Select Unit"
+                          searchable
+                          value={charge.unit}
+                          onChange={(value) =>
+                            updateCharge(index, "unit", value || "")
+                          }
+                          data={unitOptions}
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={0.8}>
+                        <FormTextInput
+                          placeholder="0"
+                          value={charge.no_of_units}
+                          onChange={(event) =>
+                            updateCharge(index, "no_of_units", event.currentTarget.value)
+                          }
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <FormTextInput
+                          placeholder="0.00"
+                          value={charge.sell_per_unit}
+                          onChange={(event) =>
+                            updateCharge(index, "sell_per_unit", event.currentTarget.value)
+                          }
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <FormTextInput
+                          placeholder="0.00"
+                          value={charge.min_sell}
+                          onChange={(event) =>
+                            updateCharge(index, "min_sell", event.currentTarget.value)
+                          }
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <FormTextInput
+                          placeholder="0.00"
+                          value={charge.cost_per_unit}
+                          onChange={(event) =>
+                            updateCharge(index, "cost_per_unit", event.currentTarget.value)
+                          }
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <FormTextInput
+                          value={charge.total_sell || ""}
+                          readOnly
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <FormTextInput
+                          value={charge.total_cost || ""}
+                          readOnly
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.1}>
+                        <Group gap="xs">
+                          {index === charges.length - 1 && (
+                            <Button
+                              radius="sm"
+                              size="sm"
+                              px={12}
+                              variant="light"
+                              color="#105476"
+                              onClick={addNewCharge}
+                            >
+                              <IconPlus size={16} />
+                            </Button>
+                          )}
+                          {charges.length > 1 && (
+                            <Button
+                              variant="light"
+                              color="red"
+                              size="sm"
+                              px={12}
+                              onClick={() => removeCharge(index)}
+                            >
+                              <IconTrash size={16} />
+                            </Button>
+                          )}
+                        </Group>
+                      </Grid.Col>
+                    </Grid>
+                  </Box>
+                ))}
+              </Stack>
+
+              {/* Totals */}
               <Grid
                 style={{
                   fontWeight: 600,
                   color: "#105476",
+                  paddingTop: "0.5rem",
                 }}
-                gutter="sm"
               >
-                <Grid.Col span={1.5}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Charge Name
+                <Grid.Col span={1} offset={7.9} pl={8}>
+                  <Text size="sm" fw={600} mb="md" c="#105476">
+                    Total :
+                  </Text>
+                </Grid.Col>
+                <Grid.Col span={1} pl={8}>
+                  <Text size="sm" fw={600} mb="md" c="#105476">
+                    {charges
+                      .reduce((sum, charge) => {
+                        const totalSell = parseFloat(charge.total_sell) || 0;
+                        return sum + totalSell;
+                      }, 0)
+                      .toFixed(2)}
                   </Text>
                 </Grid.Col>
                 <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Currency
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    ROE
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Unit
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    No of Units
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Sell Per Unit
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Min Sell
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Cost Per Unit
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Total Sell
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Total Cost
-                  </Text>
-                </Grid.Col>
-                <Grid.Col span={1}>
-                  <Text
-                    style={{
-                      fontFamily: "Inter",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#000000",
-                    }}
-                  >
-                    Actions
+                  <Text size="sm" fw={600} mb="md" c="#105476">
+                    {charges
+                      .reduce((sum, charge) => {
+                        const totalCost = parseFloat(charge.total_cost) || 0;
+                        return sum + totalCost;
+                      }, 0)
+                      .toFixed(2)}
                   </Text>
                 </Grid.Col>
               </Grid>
-            )}
-            {/* Dynamic Charge Rows */}
-            {charges.map((charge, index) => (
-              <Box key={charge.id}>
-                <Grid gutter="sm">
-                  <Grid.Col span={1.5}>
-                    <TextInput
-                      placeholder="Charge Name"
-                      value={charge.charge_name}
-                      onChange={(event) =>
-                        updateCharge(
-                          charge.id,
-                          "charge_name",
-                          event.currentTarget.value
-                        )
-                      }
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <Dropdown
-                      placeholder="Select Currency"
-                      searchable
-                      value={charge.currency_country_code}
-                      onChange={(value) =>
-                        updateCharge(
-                          charge.id,
-                          "currency_country_code",
-                          value || ""
-                        )
-                      }
-                      data={currencyOptions}
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <TextInput
-                      placeholder="ROE"
-                      value={charge.roe}
-                      onChange={(event) =>
-                        updateCharge(
-                          charge.id,
-                          "roe",
-                          event.currentTarget.value
-                        )
-                      }
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <Dropdown
-                      placeholder="Select Unit"
-                      searchable
-                      value={charge.unit}
-                      onChange={(value) =>
-                        updateCharge(charge.id, "unit", value || "")
-                      }
-                      data={unitOptions}
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <TextInput
-                      placeholder="0"
-                      value={charge.no_of_units}
-                      onChange={(event) =>
-                        updateCharge(
-                          charge.id,
-                          "no_of_units",
-                          event.currentTarget.value
-                        )
-                      }
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <TextInput
-                      placeholder="0.00"
-                      value={charge.sell_per_unit}
-                      onChange={(event) =>
-                        updateCharge(
-                          charge.id,
-                          "sell_per_unit",
-                          event.currentTarget.value
-                        )
-                      }
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <TextInput
-                      placeholder="0.00"
-                      value={charge.min_sell}
-                      onChange={(event) =>
-                        updateCharge(
-                          charge.id,
-                          "min_sell",
-                          event.currentTarget.value
-                        )
-                      }
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <TextInput
-                      placeholder="0.00"
-                      value={charge.cost_per_unit}
-                      onChange={(event) =>
-                        updateCharge(
-                          charge.id,
-                          "cost_per_unit",
-                          event.currentTarget.value
-                        )
-                      }
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <TextInput
-                      value={charge.total_sell || ""}
-                      readOnly
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={1}>
-                    <TextInput
-                      value={charge.total_cost || ""}
-                      readOnly
-                      size="xs"
-                    />
-                  </Grid.Col>
-                  <Grid.Col
-                    span={1}
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      alignItems: "center",
-                      justifyContent: "flex-end",
-                      height: "100%",
-                    }}
-                  >
-                    {index === charges.length - 1 && (
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color="#105476"
-                        onClick={addNewCharge}
-                      >
-                        <IconPlus size={16} />
-                      </Button>
-                    )}
-                    {charges.length > 1 && (
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color="red"
-                        onClick={() => removeCharge(charge.id)}
-                      >
-                        <IconTrash size={16} />
-                      </Button>
-                    )}
-                  </Grid.Col>
-                </Grid>
-              </Box>
-            ))}
-          </Stack>
-
-          {/* Totals */}
-          <Grid
-            style={{
-              fontWeight: 600,
-              color: "#105476",
-              paddingTop: "0.5rem",
-            }}
-          >
-            <Grid.Col span={7.5} />
-            <Grid.Col span={1} ml={10}>
-              Total:
-            </Grid.Col>
-            <Grid.Col span={1}>
-              {charges
-                .reduce((sum, charge) => {
-                  const totalSell = parseFloat(charge.total_sell) || 0;
-                  return sum + totalSell;
-                }, 0)
-                .toFixed(2)}
-            </Grid.Col>
-            <Grid.Col span={1}>
-              {charges
-                .reduce((sum, charge) => {
-                  const totalCost = parseFloat(charge.total_cost) || 0;
-                  return sum + totalCost;
-                }, 0)
-                .toFixed(2)}
-            </Grid.Col>
-          </Grid>
-
-          <Group justify="space-between" mt="xl">
-            <Button variant="default" onClick={handlePrevious}>
-              Back
-            </Button>
-            <Button
-              onClick={handleNext}
-              color="#105476"
-              loading={isSubmitting}
-              disabled={isSubmitting}
-            >
-              {isSubmitting
-                ? isEditMode
-                  ? "Updating booking..."
-                  : "Creating booking..."
-                : "Submit"}
-            </Button>
-          </Group>
+            </Box>
+          )}
         </Box>
-      )}
-    </Box>
+      </Box>
+      <Box
+        style={{
+          borderRadius: "8px",
+          backgroundColor: "#FFFFFF",
+          minHeight: 60,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          padding: "20px 48px 20px 24px",
+        }}
+      >
+        <Group justify="space-between" gap={8}>
+          <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconArrowLeft size={16} />}
+            onClick={() => navigate("../")}
+          >
+            Back to List
+          </Button>
+          <Button
+            variant="outline"
+            color="#105476"
+            onClick={handlePrevious}
+            disabled={active === 0}
+          >
+            Previous
+          </Button>
+        </Group>
+        <Button
+          rightSection={
+            active === 4 &&
+            (isSubmitting ? <Loader size={16} /> : <IconCheck size={16} />)
+          }
+          onClick={handleNext}
+          color="#105476"
+          disabled={active === 4 && isSubmitting}
+        >
+          {active === 4
+            ? isSubmitting
+              ? isEditMode
+                ? "Updating booking..."
+                : "Creating booking..."
+              : "Submit"
+            : "Next"}
+        </Button>
+      </Box>
+    </>
   );
 };
 
