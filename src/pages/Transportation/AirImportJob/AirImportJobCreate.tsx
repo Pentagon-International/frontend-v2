@@ -1813,7 +1813,7 @@ function AirImportJobCreate() {
     setInvoiceListLoading(true);
     postAPICall(
       URL.invoiceCombined,
-      { filters: { "shipment_no": jobData.id , "is_agent": true } },
+      { filters: { "shipment_no": jobData.job_id , "is_agent": true } },
       API_HEADER
     )
       .then((res: unknown) => {
@@ -2016,10 +2016,22 @@ function AirImportJobCreate() {
                       }}
                       onClick={() => {
                         const allCollectCharges = hawbDetails.flatMap((hawb) =>
-                          (hawb.charges ?? []).filter(
-                            (c) =>
-                              String(c.pp_cc ?? "").trim().toUpperCase() === "CC"
-                          )
+                          (hawb.charges ?? [])
+                            .filter(
+                              (c) =>
+                                String(c.pp_cc ?? "").trim().toUpperCase() === "CC"
+                            )
+                            .map((c) => ({
+                              ...c,
+                              shipment_id:
+                                (hawb as { shipment_id?: string }).shipment_id ??
+                                (hawb as { shipment_no?: string }).shipment_no ??
+                                "",
+                              shipper_id:
+                                (hawb as { shipper_code?: string }).shipper_code ??
+                                (hawb as { shipper_id?: string }).shipper_id ??
+                                "",
+                            }))
                         );
 
                         const firstHouse = hawbDetails[0];
@@ -2036,6 +2048,7 @@ function AirImportJobCreate() {
                             hawbDetails: housingDetailsForInvoice,
                             housingDetails: housingDetailsForInvoice,
                             is_agent: true,
+                            fromJobLevel: true,
                             ...(jobData && { job: jobData }),
                             ...(location.state?.mawbDetails && {
                               mawbDetails: location.state.mawbDetails,

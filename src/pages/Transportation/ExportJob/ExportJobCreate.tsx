@@ -955,7 +955,7 @@ function ExportJobCreate() {
     setInvoiceListLoading(true);
     postAPICall(
       URL.invoiceCombined,
-      { filters: { "shipment_no": jobData.id , "is_agent": true } },
+      { filters: { "shipment_no": jobData.job_id , "is_agent": true } },
       API_HEADER
     )
       .then((res: unknown) => {
@@ -2095,10 +2095,22 @@ function ExportJobCreate() {
                       }}
                       onClick={() => {
                         const allCollectCharges = housingDetails.flatMap((house) =>
-                          (house.charges ?? []).filter(
-                            (c) =>
-                              String(c.pp_cc ?? "").trim().toUpperCase() === "CC"
-                          )
+                          (house.charges ?? [])
+                            .filter(
+                              (c) =>
+                                String(c.pp_cc ?? "").trim().toUpperCase() === "CC"
+                            )
+                            .map((c) => ({
+                              ...c,
+                              shipment_id:
+                                (house as { shipment_id?: string }).shipment_id ??
+                                (house as { shipment_no?: string }).shipment_no ??
+                                "",
+                              shipper_id:
+                                (house as { shipper_code?: string }).shipper_code ??
+                                (house as { shipper_id?: string }).shipper_id ??
+                                "",
+                            }))
                         );
 
                         const firstHouse = housingDetails[0];
@@ -2115,6 +2127,7 @@ function ExportJobCreate() {
                             hawbDetails: housingDetailsForInvoice,
                             housingDetails: housingDetailsForInvoice,
                             is_agent: true,
+                            fromJobLevel: true,
                             ...(jobData && { job: jobData }),
                             ...(location.state?.mblDetails && {
                               mblDetails: location.state.mblDetails,

@@ -422,7 +422,7 @@ function HouseCreate() {
   useEffect(() => {
     if (active !== 4) return;
     setInvoiceListLoading(true);
-    postAPICall(URL.invoiceCombined, { filters: {"shipment_no": editData?.shipment_id } }, API_HEADER)
+    postAPICall(URL.invoiceCombined, { filters: {"shipment_no": editData?.shipment_id, "is_agent":false } }, API_HEADER)
       .then((res: unknown) => {
         const data = (res as { data?: InvoiceListItem[] })?.data;
         setInvoiceList(Array.isArray(data) ? data : []);

@@ -283,7 +283,7 @@ function HouseCreate() {
     setInvoiceListLoading(true);
     postAPICall(
       URL.invoiceCombined,
-      { filters: { shipment_no: editData?.shipment_id } },
+      { filters: { shipment_no: editData?.shipment_id , "is_agent":false} },
       API_HEADER,
     )
       .then((res: unknown) => {
