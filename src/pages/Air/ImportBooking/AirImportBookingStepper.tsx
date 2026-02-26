@@ -300,7 +300,9 @@ const fetchUnitMaster = async (serviceType: string = "AIR") => {
 
 type QuotationCharge = {
   id: number;
+  charge_id?: number | null;
   charge_name: string;
+  pp_cc?: string | null;
   currency: string;
   roe?: string;
   unit?: string;
@@ -399,6 +401,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [charges, setCharges] = useState([
     {
       id: 1,
+      charge_id: "",
       charge_name: "",
       pp_cc: "",
       currency_country_code: "",
@@ -637,6 +640,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const addNewCharge = () => {
     const newCharge = {
       id: charges.length + 1,
+      charge_id: "",
       charge_name: "",
       pp_cc: "",
       currency_country_code: "",
@@ -1035,6 +1039,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       const mappedCharges = firstItem.charges.map(
         (charge: QuotationCharge, index: number) => ({
           id: index + 1,
+          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
           pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
           currency_country_code: String(charge.currency || ""),
@@ -1234,6 +1239,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           jobData.rate_details as Array<Record<string, unknown>>
         ).map((charge: Record<string, unknown>, index: number) => ({
           id: charge.id ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : index + 1,
+          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name ?? ""),
           pp_cc: String(charge.pp_cc ?? ""),
           currency_country_code: String(
@@ -1460,6 +1466,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 ? charge.id
                 : Number(charge.id)
               : index + 1,
+          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
           pp_cc: String(charge.pp_cc ?? ""),
           currency_country_code: String(
@@ -1871,7 +1878,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         quotation_id: quotationId,
         rate_details: charges.map((charge) => {
           const chargePayload: Record<string, unknown> = {
-            charge_name: charge.charge_name,
+            charge_id: charge.charge_id ? Number(charge.charge_id) : null,
+            // charge_name: charge.charge_name,
             pp_cc: charge.pp_cc || "",
             currency_country_code: charge.currency_country_code,
             roe: parseFloat(charge.roe) || 1,
@@ -3848,6 +3856,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                             const mappedCharges = selectedQuotation.charges.map(
                               (charge: QuotationCharge, index: number) => ({
                                 id: index + 1,
+                                charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
                                 charge_name: String(charge.charge_name || ""),
                                 pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
                                 currency_country_code: String(
@@ -3964,17 +3973,31 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <Box key={charge.id}>
                     <Grid gutter="sm">
                       <Grid.Col span={1.5}>
-                        <FormTextInput
+                        <SearchableSelect
+                          apiEndpoint={URL.chargeMaster}
                           placeholder="Charge Name"
-                          value={charge.charge_name}
-                          onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "charge_name",
-                              event.currentTarget.value
-                            )
-                          }
+                          dropdownZIndex={1000}
+                          value={charge.charge_id || null}
+                          displayValue={charge.charge_name || null}
+                          minSearchLength={1}
                           size="xs"
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.id ?? ""),
+                            label: String(item.charge_name ?? ""),
+                          })}
+                          onChange={(val, selectedItem) => {
+                            setCharges((prev) =>
+                              prev.map((c) =>
+                                c.id === charge.id
+                                  ? {
+                                      ...c,
+                                      charge_id: val ?? "",
+                                      charge_name: val ? (selectedItem?.label ?? "") : "",
+                                    }
+                                  : c
+                              )
+                            );
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
