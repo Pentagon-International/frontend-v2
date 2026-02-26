@@ -258,7 +258,7 @@ const validationSchema = yup.object({
   delivery_from_code: yup.string(),
   delivery_address_id: yup.string(),
   planned_delivery_date: yup.date(),
-  actual_delivery_date: yup.date(),
+  actual_delivery_date: yup.date().nullable(),
 });
 
 // Data fetching functions
@@ -312,7 +312,9 @@ type SalespersonsResponse = {
 
 type QuotationCharge = {
   id: number;
+  charge_id?: number | null;
   charge_name: string;
+  pp_cc?: string | null;
   currency: string;
   roe: number;
   no_of_units: number;
@@ -420,6 +422,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [charges, setCharges] = useState([
     {
       id: 1,
+      charge_id: "",
       charge_name: "",
       pp_cc: "",
       currency_country_code: "",
@@ -613,6 +616,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const addNewCharge = () => {
     const newCharge = {
       id: charges.length + 1,
+      charge_id: "",
       charge_name: "",
       pp_cc: "",
       currency_country_code: "",
@@ -797,7 +801,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         : new Date(),
       actual_delivery_date: data.actual_delivery_date
         ? new Date(String(data.actual_delivery_date))
-        : new Date(),
+        : null,
     };
   };
 
@@ -903,7 +907,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       delivery_from_code: "",
       delivery_address_id: "",
       planned_delivery_date: new Date(),
-      actual_delivery_date: "",
+      actual_delivery_date: null,
 
       // Merge with initial data when provided (edit mode or create-from-quotation)
       ...(initialData ? mapInitialDataToFormValues(initialData) : {}),
@@ -1057,7 +1061,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const mappedCharges = firstItem.charges.map(
         (charge: QuotationCharge, index: number) => ({
           id: index + 1,
+          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
+          pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
           currency_country_code: String(charge.currency || ""),
           roe: charge.roe ? String(charge.roe) : "",
           unit: String(charge.unit || ""),
@@ -1215,6 +1221,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               ? charge.id
               : Number(charge.id)
             : index + 1,
+        charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
         charge_name: String(charge.charge_name ?? ""),
         pp_cc: String(charge.pp_cc ?? ""),
         currency_country_code: String(
@@ -1454,6 +1461,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
         (charge: Record<string, unknown>, index: number) => ({
           id: index + 1,
+          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
           pp_cc: String(charge.pp_cc ?? ""),
           currency_country_code: String(
@@ -1748,7 +1756,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         delivery_from_code: form.values.delivery_from_code,
         delivery_address_id: form.values.delivery_address_id || "0",
         planned_delivery_date: formatDate(form.values.planned_delivery_date),
-        actual_delivery_date: formatDate(form.values.actual_delivery_date),
+        actual_delivery_date: form.values.actual_delivery_date ? formatDate(form.values.actual_delivery_date) : null,
 
         routing_details: form.values.routingDetails.map((route) => ({
           move_type: route.move_type,
@@ -1762,19 +1770,28 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         })),
 
         quotation_id: quotationId,
-        rate_details: charges.map((charge) => ({
-          charge_name: charge.charge_name,
-          pp_cc: charge.pp_cc || "",
-          currency_country_code: charge.currency_country_code,
-          roe: parseFloat(charge.roe) || 1,
-          unit: charge.unit,
-          no_of_units: parseFloat(charge.no_of_units) || 0,
-          sell_per_unit: parseFloat(charge.sell_per_unit) || 0,
-          min_sell: parseFloat(charge.min_sell) || 0,
-          cost_per_unit: parseFloat(charge.cost_per_unit) || 0,
-          total_cost: parseFloat(charge.total_cost) || 0,
-          total_sell: parseFloat(charge.total_sell) || 0,
-        })),
+        rate_details: charges.map((charge) => {
+         const chargePayload: Record<string, unknown> = {
+            charge_id: charge.charge_id ? Number(charge.charge_id) : null,
+            // charge_name: charge.charge_name,
+            pp_cc: charge.pp_cc || "",
+            currency_country_code: charge.currency_country_code,
+            roe: parseFloat(charge.roe) || 1,
+            unit: charge.unit,
+            no_of_units: parseFloat(charge.no_of_units) || 0,
+            sell_per_unit: parseFloat(charge.sell_per_unit) || 0,
+            min_sell: parseFloat(charge.min_sell) || 0,
+            cost_per_unit: parseFloat(charge.cost_per_unit) || 0,
+            total_cost: parseFloat(charge.total_cost) || 0,
+            total_sell: parseFloat(charge.total_sell) || 0,
+          };
+          // Include id only in edit mode if it exists
+          if (isEditMode && charge.id !== undefined && charge.id !== null) {
+            chargePayload.id =
+              typeof charge.id === "number" ? charge.id : Number(charge.id);
+          }
+          return chargePayload;
+        }),
       };
 
       // Add service_type and import_to_export for export bookings
@@ -3816,6 +3833,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             const mappedCharges = selectedQuotation.charges.map(
                               (charge: QuotationCharge, index: number) => ({
                                 id: index + 1,
+                                charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
                                 charge_name: String(charge.charge_name || ""),
                                 pp_cc: charge.pp_cc
                                   ? String(charge.pp_cc)
@@ -3933,17 +3951,31 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <Box key={charge.id}>
                     <Grid gutter="sm">
                       <Grid.Col span={1.5}>
-                        <FormTextInput
+                        <SearchableSelect
+                          apiEndpoint={URL.chargeMaster}
                           placeholder="Charge Name"
-                          value={charge.charge_name}
-                          onChange={(event) =>
-                            updateCharge(
-                              charge.id,
-                              "charge_name",
-                              event.currentTarget.value,
-                            )
-                          }
+                          dropdownZIndex={1000}
+                          value={charge.charge_id || null}
+                          displayValue={charge.charge_name || null}
+                          minSearchLength={1}
                           size="xs"
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.id ?? ""),
+                            label: String(item.charge_name ?? ""),
+                          })}
+                          onChange={(val, selectedItem) => {
+                            setCharges((prev) =>
+                              prev.map((c) =>
+                                c.id === charge.id
+                                  ? {
+                                      ...c,
+                                      charge_id: val ?? "",
+                                      charge_name: val ? (selectedItem?.label ?? "") : "",
+                                    }
+                                  : c
+                              )
+                            );
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
