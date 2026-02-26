@@ -90,6 +90,17 @@ interface CargoDetail {
   no_of_containers?: number;
 }
 
+const DEFAULT_CARGO_ROW: CargoDetail = {
+  no_of_packages: undefined,
+  gross_weight: undefined,
+  volume_weight: undefined,
+  chargeable_weight: undefined,
+  volume: undefined,
+  chargeable_volume: undefined,
+  container_type_code: undefined,
+  no_of_containers: undefined,
+};
+
 interface FormValues {
   // Export Shipment fields
   customer_code: string;
@@ -1939,7 +1950,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     searchable
                     withAsterisk
                     data={["FCL", "LCL"]}
-                    {...form.getInputProps("service")}
+                    value={form.values.service}
+                    onChange={(value) => {
+                      form.setFieldValue("service", value ?? "");
+                      form.setFieldValue("cargo_details", [DEFAULT_CARGO_ROW]);
+                    }}
+                    error={form.errors.service}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
