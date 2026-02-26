@@ -19,7 +19,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -66,6 +66,7 @@ type JobDetailsForm = {
 };
 
 type ContainerDetail = {
+  id?: number;
   container_number: string;
   container_type: string;
   custom_seal_number: string;
@@ -84,6 +85,7 @@ type BookingData = {
 };
 
 type RoutingDetail = {
+  id?: number;
   transport_type: string;
   from_port_code: string;
   to_port_code: string;
@@ -195,6 +197,13 @@ function OceanJobGenerationCreate() {
     new Set(),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingJob, setIsGeneratingJob] = useState(false);
+  // Stores the latest job data returned from create/update API
+  // so we can reuse nested IDs (equipment, routing, booking_details) in PUT payloads.
+  const [createdJobData, setCreatedJobData] = useState<any | null>(null);
+  const [existingBookingDetails, setExistingBookingDetails] = useState<
+    Record<number, number>
+  >({});
   const [routingDetails, setRoutingDetails] = useState<RoutingDetail[]>([
     {
       transport_type: "",
@@ -213,6 +222,7 @@ function OceanJobGenerationCreate() {
   const [bookingContainerMap, setBookingContainerMap] = useState<
     Record<number, string>
   >({});
+  const hasFetchedBookingsRef = useRef(false);
 
   // Job Details Form - Initialize with serviceType immediately
   const jobDetailsForm = useForm<JobDetailsForm>({
@@ -257,6 +267,7 @@ function OceanJobGenerationCreate() {
     initialValues: {
       containers: [
         {
+          id: undefined,
           container_number: "",
           container_type: "",
           custom_seal_number: "",
@@ -289,6 +300,9 @@ function OceanJobGenerationCreate() {
         setJobId(jobData.id);
       }
 
+      // Also store jobData locally so we can reuse nested IDs in later payloads
+      setCreatedJobData(jobData as any);
+
       // Populate job details - map from API response structure
       jobDetailsForm.setValues({
         service: jobData.service || serviceType || "",
@@ -319,6 +333,7 @@ function OceanJobGenerationCreate() {
         jobData.equipment_details.length > 0
       ) {
         const mappedContainers = jobData.equipment_details.map((eq: any) => ({
+          id: eq.id,
           container_number: eq.container_no || "",
           container_type: eq.container_type_code_read || "",
           custom_seal_number: eq.customer_seal_no || "",
@@ -327,12 +342,64 @@ function OceanJobGenerationCreate() {
         containerForm.setFieldValue("containers", mappedContainers);
       }
 
+      // Populate routing details if exists
+      if (
+        jobData.routing_details &&
+        Array.isArray(jobData.routing_details) &&
+        jobData.routing_details.length > 0
+      ) {
+        const mappedRoutes = jobData.routing_details.map((route: any) => ({
+          id: route.id,
+          transport_type: route.transport_type || "",
+          from_port_code: route.from_port_code || "",
+          to_port_code: route.to_port_code || "",
+          carrier_code: route.carrier_code || "",
+          transport_no: route.transport_no || "",
+          etd: route.etd || "",
+          eta: route.eta || "",
+          atd: route.atd || "",
+          ata: route.ata || "",
+          vessel: route.vessel || "",
+        }));
+        setRoutingDetails(mappedRoutes);
+      }
+
       // Set selected bookings from shipment_details
       if (jobData.shipment_details && Array.isArray(jobData.shipment_details)) {
         const shipmentIds = jobData.shipment_details
           .map((shipment: any) => shipment.customer_service_shipment_id_read)
           .filter((id: number) => id != null);
         setSelectedBookings(new Set(shipmentIds));
+      }
+
+      // Map existing booking_details (for edit payload IDs & container mapping)
+      const sourceBookingDetails =
+        jobData.booking_details &&
+        Array.isArray(jobData.booking_details) &&
+        jobData.booking_details.length > 0
+          ? jobData.booking_details
+          : null;
+
+      if (sourceBookingDetails) {
+        const idMap: Record<number, number> = {};
+        const containerMap: Record<number, string> = {};
+
+        sourceBookingDetails.forEach((detail: any) => {
+          const bookingId =
+            detail.booking_id ?? detail.booking_data?.id ?? null;
+          if (bookingId != null) {
+            if (detail.id) {
+              idMap[bookingId] = detail.id;
+            }
+            if (detail.container_no) {
+              containerMap[bookingId] = detail.container_no;
+            }
+          }
+        });
+
+        setExistingBookingDetails(idMap);
+        // Prefill container selections for existing bookings
+        setBookingContainerMap((prev) => ({ ...containerMap, ...prev }));
       }
     }
   }, [jobData, mode, serviceType]);
@@ -364,32 +431,41 @@ function OceanJobGenerationCreate() {
     }));
   }, [rawContainerData]);
 
-  // Fetch booking list when reaching Select Bookings step
+  // Fetch booking list once when page is rendered (not on every navigation to step 3)
   useEffect(() => {
-    if (active === 3) {
-      // In view/edit mode, load bookings from jobData.shipment_details
-      if ((mode === "view" || mode === "edit") && jobData?.shipment_details) {
-        const bookings = jobData.shipment_details.map((shipment: any) => {
-          const shipmentData = shipment.customer_service_shipment_data || {};
-          return {
-            id: shipment.customer_service_shipment_id_read,
-            shipment_code: shipmentData.shipment_code || "",
-            service_type: shipmentData.service_type || "",
-            customer_name: shipmentData.customer_name || "",
-            origin_name: shipmentData.origin_name || "",
-            destination_name: shipmentData.destination_name || "",
-            freight: shipmentData.freight || "",
-            selected: true, // All are selected in view/edit mode
-          };
-        });
-        setBookingList(bookings);
-        setIsLoadingBookings(false);
-      } else {
-        // In create mode, fetch from API
-        fetchBookingList();
-      }
+    // In view/edit mode, load bookings from jobData.shipment_details when we have it
+    if ((mode === "view" || mode === "edit") && jobData?.shipment_details) {
+      const bookings = jobData.shipment_details.map((shipment: any) => {
+        const shipmentData = shipment.customer_service_shipment_data || {};
+        return {
+          id: shipment.customer_service_shipment_id_read,
+          shipment_code: shipmentData.shipment_code || "",
+          service_type: shipmentData.service_type || "",
+          customer_name: shipmentData.customer_name || "",
+          origin_name: shipmentData.origin_name || "",
+          destination_name: shipmentData.destination_name || "",
+          freight: shipmentData.freight || "",
+          selected: true, // All are selected in view/edit mode
+        };
+      });
+      setBookingList(bookings);
+      setIsLoadingBookings(false);
+      return;
     }
-  }, [active, mode, jobData]);
+    // In create mode, fetch from API once when page has required fields (hit on render, not on every step navigation)
+    if (mode !== "create") return;
+    const formValues = jobDetailsForm.values;
+    if (
+      !formValues.service ||
+      !formValues.origin_code ||
+      !formValues.destination_code
+    ) {
+      return;
+    }
+    if (hasFetchedBookingsRef.current) return;
+    hasFetchedBookingsRef.current = true;
+    fetchBookingList();
+  }, [mode, jobData, jobDetailsForm.values.service, jobDetailsForm.values.origin_code, jobDetailsForm.values.destination_code]);
 
   const fetchBookingList = async () => {
     const formValues = jobDetailsForm.values;
@@ -456,6 +532,82 @@ function OceanJobGenerationCreate() {
     setActive((current) => current + 1);
   };
 
+  const buildPayload = (status: "PENDING" | "GENERATED") => {
+    // Prefer the latest job payload from the API (createdJobData)
+    // for nested collections where backend has already assigned IDs.
+    const sourceJobData = (createdJobData || jobData) as any | null;
+
+    // Use backend-sourced booking_details when available so we send correct
+    // booking_id and preserve existing booking_detail IDs.
+    const backendBookingDetails =
+      sourceJobData &&
+      sourceJobData.booking_details &&
+      Array.isArray(sourceJobData.booking_details) &&
+      sourceJobData.booking_details.length > 0
+        ? (sourceJobData.booking_details as any[])
+        : null;
+
+    return {
+      service: jobDetailsForm.values.service,
+      service_type: "EXPORT",
+      status,
+      agent_code: jobDetailsForm.values.agent_code || undefined,
+      origin_code: jobDetailsForm.values.origin_code,
+      destination_code: jobDetailsForm.values.destination_code,
+      schedule: jobDetailsForm.values.schedule,
+      vessel: jobDetailsForm.values.vessel,
+      voyage: jobDetailsForm.values.voyage,
+      carrier_code: jobDetailsForm.values.carrier_code,
+      cut_off_date: jobDetailsForm.values.cutoff_date,
+      eta: jobDetailsForm.values.eta,
+      etd: jobDetailsForm.values.etd,
+      ata: jobDetailsForm.values.ata,
+      atd: jobDetailsForm.values.atd,
+      master_no: jobDetailsForm.values.master_no,
+      master_date: jobDetailsForm.values.master_date,
+      equipment_details: containerForm.values.containers.map((container) => ({
+        ...(container.id ? { id: container.id } : {}),
+        container_type_code: container.container_type,
+        container_no: container.container_number,
+        customer_seal_no: container.custom_seal_number,
+        actual_seal_no: container.actual_seal_number,
+      })),
+      routing_details: routingDetails.map((route) => ({
+        ...(route.id ? { id: route.id } : {}),
+        transport_type: route.transport_type,
+        from_port_code: route.from_port_code,
+        to_port_code: route.to_port_code,
+        carrier_code: route.carrier_code,
+        transport_no: route.transport_no,
+        etd: route.etd,
+        eta: route.eta,
+        atd: route.atd,
+        ata: route.ata,
+        vessel: route.transport_type === "SEA" ? (route.vessel || undefined) : undefined,
+      })),
+      // booking_details:
+      // - When we have backend booking_details (from create/edit API),
+      //   use those so booking_id and internal IDs are correct.
+      // - Otherwise, fall back to selected bookings from the UI.
+      booking_details: backendBookingDetails
+        ? backendBookingDetails.map((detail: any) => ({
+            ...(detail.id ? { id: detail.id } : {}),
+            booking_id:
+              detail.booking_id ??
+              (detail.booking_data && detail.booking_data.id) ??
+              null,
+            container_no: detail.container_no || "",
+          }))
+        : Array.from(selectedBookings).map((bookingId) => ({
+            ...(existingBookingDetails[bookingId]
+              ? { id: existingBookingDetails[bookingId] }
+              : {}),
+            booking_id: bookingId,
+            container_no: bookingContainerMap[bookingId] || "",
+          })),
+    };
+  };
+
   const handleSaveBooking = async () => {
     // Don't allow submit in view mode
     if (viewMode) {
@@ -483,48 +635,7 @@ function OceanJobGenerationCreate() {
     }
 
     // Prepare payload according to API structure
-    const payload = {
-      service: jobDetailsForm.values.service,
-      service_type: "EXPORT",
-      status: "PENDING",
-      agent_code: jobDetailsForm.values.agent_code || undefined,
-      origin_code: jobDetailsForm.values.origin_code,
-      destination_code: jobDetailsForm.values.destination_code,
-      schedule: jobDetailsForm.values.schedule,
-      vessel: jobDetailsForm.values.vessel,
-      voyage: jobDetailsForm.values.voyage,
-      carrier_code: jobDetailsForm.values.carrier_code,
-      cut_off_date: jobDetailsForm.values.cutoff_date,
-      eta: jobDetailsForm.values.eta,
-      etd: jobDetailsForm.values.etd,
-      ata: jobDetailsForm.values.ata,
-      atd: jobDetailsForm.values.atd,
-      master_no: jobDetailsForm.values.master_no,
-      master_date: jobDetailsForm.values.master_date,
-      equipment_details: containerForm.values.containers.map((container) => ({
-        container_type_code: container.container_type,
-        container_no: container.container_number,
-        customer_seal_no: container.custom_seal_number,
-        actual_seal_no: container.actual_seal_number,
-      })),
-      routing_details: routingDetails.map((route) => ({
-        transport_type: route.transport_type,
-        from_port_code: route.from_port_code,
-        to_port_code: route.to_port_code,
-        carrier_code: route.carrier_code,
-        transport_no: route.transport_no,
-        etd: route.etd,
-        eta: route.eta,
-        atd: route.atd,
-        ata: route.ata,
-        vessel: route.transport_type === "SEA" ? (route.vessel || undefined) : undefined,
-      })),
-      // booking_details maps selected bookings to chosen container numbers
-      booking_details: Array.from(selectedBookings).map((bookingId) => ({
-        booking_id: bookingId,
-        container_no: bookingContainerMap[bookingId] || "",
-      })),
-    };
+    const payload = buildPayload("PENDING");
 
     setIsSubmitting(true);
 
@@ -561,6 +672,11 @@ function OceanJobGenerationCreate() {
         responseData = response as any;
 
         if (responseData?.success === true) {
+          // Store full job data from create response so that subsequent
+          // Generate Job calls can reuse nested IDs (including booking_details).
+          if (responseData?.data) {
+            setCreatedJobData(responseData.data);
+          }
           ToastNotification({
             type: "success",
             message: "Booking created successfully",
@@ -598,20 +714,121 @@ function OceanJobGenerationCreate() {
     }
   };
 
-  const handleGenerateJob = () => {
-    if (!editMode || viewMode) {
+  const handleGenerateJob = async () => {
+    // Only allow generate in edit mode (existing booking) and not in view mode
+    if (!editMode || viewMode || !jobId) {
       return;
     }
-    ToastNotification({
-      type: "info",
-      message: "Generate Job action will be implemented soon.",
-    });
+
+    // Reuse same validations as save
+    const jobValidation = jobDetailsForm.validate();
+    const containerValidation = containerForm.validate();
+
+    if (jobValidation.hasErrors || containerValidation.hasErrors) {
+      ToastNotification({
+        type: "error",
+        message: "Please complete all required fields",
+      });
+      return;
+    }
+
+    if (selectedBookings.size === 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Please select at least one booking",
+      });
+      return;
+    }
+
+    const payload = buildPayload("GENERATED");
+
+    setIsGeneratingJob(true);
+
+    try {
+      const { putAPICall } = await import("../../../service/putApiCall");
+      const { API_HEADER } = await import("../../../store/storeKeys");
+
+      const putPayload = {
+        id: jobId,
+        ...payload,
+      };
+
+      const response = await putAPICall(URL.booking, putPayload, API_HEADER);
+      const responseData = response as {
+        success?: boolean;
+        message?: string;
+        data?: { job_details_id?: number };
+      };
+
+      if (responseData?.success === true && responseData?.data?.job_details_id) {
+        ToastNotification({
+          type: "success",
+          message: "Job generated successfully",
+        });
+        try {
+          ToastNotification({
+            type: "info",
+            message: "Redirecting to Ocean job page...",
+          });
+          const jobListRes = await getAPICall(
+            `${URL.jobCreate}${responseData.data.job_details_id}/`,
+            API_HEADER
+          );
+          // GET: axios returns full response so body = response.data; support both shapes
+          const body = (jobListRes as { data?: unknown })?.data ?? jobListRes;
+          const list = Array.isArray((body as { data?: unknown[] })?.data)
+            ? (body as { data: unknown[] }).data
+            : Array.isArray(body)
+              ? (body as unknown[])
+              : [];
+          const job = list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+          if (job) {
+            navigate("/SeaExport/export-job/edit", { state: { job } });
+            return;
+          }
+        } catch (fetchErr) {
+          console.error("Error fetching job after generate:", fetchErr);
+        }
+        navigate("/SeaExport/export-job/edit", {
+          state: { job_details_id: responseData.data.job_details_id },
+        });
+      } else if (responseData?.success === true) {
+        ToastNotification({
+          type: "success",
+          message: "Job generated successfully",
+        });
+      } else {
+        ToastNotification({
+          type: "error",
+          message: responseData?.message || "Failed to generate job",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error generating job:", error);
+      ToastNotification({
+        type: "error",
+        message:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Failed to generate job",
+      });
+    } finally {
+      setIsGeneratingJob(false);
+    }
   };
 
   const handleSelectBooking = (bookingId: number, checked: boolean) => {
     const newSelection = new Set(selectedBookings);
     if (checked) {
       newSelection.add(bookingId);
+      // If only one container in equipment section, auto-set it for this booking
+      const containers = containerForm.values.containers;
+      if (containers.length === 1 && containers[0].container_number) {
+        setBookingContainerMap((prev) => ({
+          ...prev,
+          [bookingId]: containers[0].container_number,
+        }));
+      }
     } else {
       newSelection.delete(bookingId);
       // Clear container selection when booking is unselected
@@ -628,6 +845,18 @@ function OceanJobGenerationCreate() {
     if (checked) {
       const allIds = new Set(bookingList.map((b) => b.id));
       setSelectedBookings(allIds);
+      // If only one container, set it for all selected bookings
+      const containers = containerForm.values.containers;
+      if (containers.length === 1 && containers[0].container_number) {
+        const containerNo = containers[0].container_number;
+        setBookingContainerMap((prev) => {
+          const next = { ...prev };
+          allIds.forEach((id) => {
+            next[id] = containerNo;
+          });
+          return next;
+        });
+      }
     } else {
       setSelectedBookings(new Set());
       // Clear all container selections when none are selected
@@ -1819,6 +2048,8 @@ function OceanJobGenerationCreate() {
                       variant="outline"
                       color="#105476"
                       onClick={handleGenerateJob}
+                      loading={isGeneratingJob}
+                      disabled={isGeneratingJob}
                     >
                       Generate Job
                     </Button>

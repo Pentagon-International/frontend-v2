@@ -41,6 +41,7 @@ import {
   useMantineReactTable,
 } from "mantine-react-table";
 import { API_HEADER } from "../../../store/storeKeys";
+import { getAPICall } from "../../../service/getApiCall";
 import { Checkbox } from "@mantine/core";
 
 type JobDetailsForm = {
@@ -65,6 +66,7 @@ type JobDetailsForm = {
 };
 
 type RoutingDetail = {
+  id?: number;
   transport_type: string;
   from_code: string;
   from_name: string;
@@ -164,6 +166,10 @@ function AirJobGenerationCreate() {
     new Set()
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingJob, setIsGeneratingJob] = useState(false);
+  const [existingBookingDetails, setExistingBookingDetails] = useState<
+    Record<number, number>
+  >({});
 
   const jobDetailsForm = useForm<JobDetailsForm>({
     initialValues: {
@@ -255,6 +261,7 @@ function AirJobGenerationCreate() {
       });
 
       const apiRoutings = jobData.routing_details as Array<{
+        id?: number;
         transport_type?: string;
         from_code?: string;
         from_name?: string;
@@ -273,6 +280,7 @@ function AirJobGenerationCreate() {
         routingForm.setFieldValue(
           "routings",
           apiRoutings.map((r) => ({
+            id: r.id,
             transport_type: r.transport_type || "",
             from_code: r.from_code || "",
             from_name: r.from_name || "",
@@ -296,6 +304,16 @@ function AirJobGenerationCreate() {
           .map((s) => s.customer_service_shipment_id_read)
           .filter((id): id is number => id != null);
         setSelectedBookings(new Set(ids));
+      }
+
+      const bookingDetails = jobData.booking_details as Array<{ id?: number; booking_id?: number }> | undefined;
+      if (bookingDetails && Array.isArray(bookingDetails)) {
+        const idMap: Record<number, number> = {};
+        bookingDetails.forEach((d) => {
+          const bid = d.booking_id;
+          if (bid != null && d.id != null) idMap[bid] = d.id;
+        });
+        setExistingBookingDetails(idMap);
       }
     }
   }, [jobData, mode]);
@@ -387,6 +405,44 @@ function AirJobGenerationCreate() {
     setActive((current) => current + 1);
   };
 
+  const buildPayload = (status: "PENDING" | "GENERATED") => ({
+    service: jobDetailsForm.values.service,
+    service_type: "EXPORT",
+    status,
+    agent_code: jobDetailsForm.values.agent_code || undefined,
+    origin_code: jobDetailsForm.values.origin_code,
+    destination_code: jobDetailsForm.values.destination_code,
+    schedule: jobDetailsForm.values.schedule,
+    carrier_code: jobDetailsForm.values.carrier_code,
+    cut_off_date: jobDetailsForm.values.cutoff_date,
+    eta: jobDetailsForm.values.eta,
+    etd: jobDetailsForm.values.etd,
+    ata: jobDetailsForm.values.ata || undefined,
+    atd: jobDetailsForm.values.atd || undefined,
+    master_no: jobDetailsForm.values.master_no || undefined,
+    master_date: jobDetailsForm.values.master_date || undefined,
+    flight_no: jobDetailsForm.values.flight_no || undefined,
+    routing_details: routingForm.values.routings.map((r) => ({
+      ...(r.id != null ? { id: r.id } : {}),
+      transport_type: r.transport_type || undefined,
+      from_port_code: r.from_code,
+      to_port_code: r.to_code,
+      eta: r.eta || undefined,
+      etd: r.etd || undefined,
+      ata: r.ata || undefined,
+      atd: r.atd || undefined,
+      carrier_code: r.carrier_code,
+      transport_no: r.transport_no || undefined,
+      vessel: r.transport_type === "SEA" ? (r.vessel || undefined) : undefined,
+    })),
+    booking_details: Array.from(selectedBookings).map((booking_id) => ({
+      ...(existingBookingDetails[booking_id] != null
+        ? { id: existingBookingDetails[booking_id] }
+        : {}),
+      booking_id,
+    })),
+  });
+
   const handleSaveBooking = async () => {
     if (viewMode) return;
 
@@ -408,37 +464,7 @@ function AirJobGenerationCreate() {
       return;
     }
 
-    const payload = {
-      service: jobDetailsForm.values.service,
-      service_type: "EXPORT",
-      status: "PENDING",
-      agent_code: jobDetailsForm.values.agent_code || undefined,
-      origin_code: jobDetailsForm.values.origin_code,
-      destination_code: jobDetailsForm.values.destination_code,
-      schedule: jobDetailsForm.values.schedule,
-      carrier_code: jobDetailsForm.values.carrier_code,
-      cut_off_date: jobDetailsForm.values.cutoff_date,
-      eta: jobDetailsForm.values.eta,
-      etd: jobDetailsForm.values.etd,
-      ata: jobDetailsForm.values.ata || undefined,
-      atd: jobDetailsForm.values.atd || undefined,
-      master_no: jobDetailsForm.values.master_no || undefined,
-      master_date: jobDetailsForm.values.master_date || undefined,
-      flight_no: jobDetailsForm.values.flight_no || undefined,
-      routing_details: routingForm.values.routings.map((r) => ({
-        transport_type: r.transport_type || undefined,
-        from_port_code: r.from_code,
-        to_port_code: r.to_code,
-        eta: r.eta || undefined,
-        etd: r.etd || undefined,
-        ata: r.ata || undefined,
-        atd: r.atd || undefined,
-        carrier_code: r.carrier_code,
-        transport_no: r.transport_no || undefined,
-        vessel: r.transport_type === "SEA" ? (r.vessel || undefined) : undefined,
-      })),
-      booking_details: Array.from(selectedBookings).map((booking_id) => ({ booking_id })),
-    };
+    const payload = buildPayload("PENDING");
 
     setIsSubmitting(true);
 
@@ -501,12 +527,89 @@ function AirJobGenerationCreate() {
     }
   };
 
-  const handleGenerateJob = () => {
-    if (!editMode || viewMode) return;
-    ToastNotification({
-      type: "info",
-      message: "Generate Job action will be implemented soon.",
-    });
+  const handleGenerateJob = async () => {
+    if (!editMode || viewMode || !jobId) return;
+
+    const jobValidation = jobDetailsForm.validate();
+    const routingValidation = routingForm.validate();
+    if (jobValidation.hasErrors || routingValidation.hasErrors) {
+      ToastNotification({
+        type: "error",
+        message: "Please complete all required fields",
+      });
+      return;
+    }
+    if (selectedBookings.size === 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Please select at least one booking",
+      });
+      return;
+    }
+
+    const payload = buildPayload("GENERATED");
+    setIsGeneratingJob(true);
+    try {
+      const { putAPICall } = await import("../../../service/putApiCall");
+      const putPayload = { id: jobId, ...payload };
+      const response = await putAPICall(URL.booking, putPayload, API_HEADER);
+      const responseData = response as {
+        success?: boolean;
+        message?: string;
+        data?: { job_details_id?: number };
+      };
+      if (responseData?.success === true && responseData?.data?.job_details_id) {
+        ToastNotification({
+          type: "success",
+          message: "Job generated successfully",
+        });
+        try {
+          ToastNotification({
+            type: "info",
+            message: "Redirecting to Air job page...",
+          });
+          const jobListRes = await getAPICall(
+            `${URL.jobCreate}${responseData.data.job_details_id}/`,
+            API_HEADER
+          );
+          // GET: axios returns full response so body = response.data; support both shapes
+          const body = (jobListRes as { data?: unknown })?.data ?? jobListRes;
+          const list = Array.isArray((body as { data?: unknown[] })?.data)
+            ? (body as { data: unknown[] }).data
+            : Array.isArray(body)
+              ? (body as unknown[])
+              : [];
+          const job = list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+          if (job) {
+            navigate("/air/export-job/edit", { state: { job } });
+            return;
+          }
+        } catch (fetchErr) {
+          console.error("Error fetching job after generate:", fetchErr);
+        }
+        navigate("/air/export-job/edit", {
+          state: { job_details_id: responseData.data.job_details_id },
+        });
+      } else if (responseData?.success === true) {
+        ToastNotification({
+          type: "success",
+          message: "Job generated successfully",
+        });
+      } else {
+        ToastNotification({
+          type: "error",
+          message: responseData?.message || "Failed to generate job",
+        });
+      }
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      ToastNotification({
+        type: "error",
+        message: err?.response?.data?.message || err?.message || "Failed to generate job",
+      });
+    } finally {
+      setIsGeneratingJob(false);
+    }
   };
 
   const handleSelectBooking = (bookingId: number, checked: boolean) => {
@@ -1257,6 +1360,8 @@ function AirJobGenerationCreate() {
                       variant="outline"
                       color="#105476"
                       onClick={handleGenerateJob}
+                      loading={isGeneratingJob}
+                      disabled={isGeneratingJob}
                     >
                       Generate Job
                     </Button>
