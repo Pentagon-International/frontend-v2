@@ -57,6 +57,7 @@ import {
   ToastNotification,
   ServiceDetailsSlider,
   Dropdown,
+  SearchableSelect,
 } from "../../components";
 import { useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -132,6 +133,8 @@ const destinationOptionSchema = Yup.object().shape({
 
 type ChargeType = {
   charge_name: string;
+  // charge master id (optional for legacy/default charges)
+  charge_id?: number | string | null;
   currency_country_code: string;
   roe: number | string;
   unit: string;
@@ -615,6 +618,7 @@ function QuotationCreate({
       charges: [
         {
           charge_name: "",
+          charge_id: null,
           currency_country_code: "",
           roe: 1,
           unit: "",
@@ -675,6 +679,7 @@ function QuotationCreate({
       if (quotationData.charges && quotationData.charges.length > 0) {
         const formattedCharges = quotationData.charges.map((charge: any) => ({
           charge_name: charge.charge_name || "",
+          charge_id: charge.charge_id ?? null,
           currency_country_code: charge.currency || "",
           roe: charge.roe != null ? String(charge.roe) : "1",
           unit: charge.unit || "",
@@ -715,6 +720,7 @@ function QuotationCreate({
       charges: [
         {
           charge_name: "",
+          charge_id: null,
           currency_country_code: "",
           roe: 1,
           unit: "",
@@ -990,6 +996,7 @@ function QuotationCreate({
               const mappedCharges =
                 quotation.charges?.map((charge: any) => ({
                   charge_name: charge.charge_name || "",
+                  charge_id: charge.charge_id ?? null,
                   currency_country_code: charge.currency || "",
                   roe: charge.roe != null ? String(charge.roe) : "1",
                   unit: charge.unit || "",
@@ -1084,6 +1091,7 @@ function QuotationCreate({
         console.log("Charges found in quotation:", quotation.charges);
         const mappedCharges = quotation.charges.map((charge: any) => ({
           charge_name: charge.charge_name || "",
+          charge_id: charge.charge_id ?? null,
           currency_country_code: charge.currency || "",
           roe: Number(charge.roe) || 1,
           unit: charge.unit || "",
@@ -1178,6 +1186,7 @@ function QuotationCreate({
 
         return {
           charge_name: charge.charge_name ?? "",
+          charge_id: (charge as any).charge_id ?? null,
           currency_country_code: charge.currency ?? "",
           roe: roe,
           unit: unit,
@@ -1205,6 +1214,7 @@ function QuotationCreate({
           : [
               {
                 charge_name: "",
+                charge_id: null,
                 currency_country_code: "",
                 roe: 0,
                 unit: "",
@@ -1316,6 +1326,7 @@ function QuotationCreate({
 
           const mappedCharge = {
             charge_name: charge.charge_name || "",
+            charge_id: charge.charge_id ?? null,
             currency_country_code: charge.currency_code || "INR",
             roe: 1,
             unit: charge.unit || "",
@@ -1492,6 +1503,7 @@ function QuotationCreate({
 
         return {
           charge_name: charge.charge_name || "",
+          charge_id: charge.charge_id ?? null,
           currency_country_code: charge.currency_country_code || "INR",
           roe: charge.roe != null ? charge.roe : 1.0,
           unit: charge.unit || "",
@@ -2104,6 +2116,8 @@ function QuotationCreate({
       // Quotation primary key (id) for filter-gained API - row id from filter_quotations list (e.g. 163), NOT quotation_service_id (197)
       quotation_primary_id: actualEnquiryData?.id,
     };
+    console.log("bookingData---",bookingData);
+    
 
     const trade =
       quotationForService.trade || selectedService.trade;
@@ -2154,10 +2168,13 @@ function QuotationCreate({
     }, 0);
     const profit = netSell - netCost;
 
-    // Transform charges to new format
+    // Transform charges for CURRENT service to API format
     const transformedCharges = charges.map((charge: any) => {
       const base: any = {
-        charge_name: charge.charge_name,
+        charge_id:
+          charge.charge_id !== undefined && charge.charge_id !== null
+            ? Number(charge.charge_id)
+            : undefined,
         currency_country_code: charge.currency_country_code,
         roe: parseFloat(charge.roe.toString()) || 1.0,
         unit: charge.unit,
@@ -2165,11 +2182,11 @@ function QuotationCreate({
         sell_per_unit: parseFloat(charge.sell_per_unit) || 0.0,
         min_sell: parseFloat(charge.min_sell) || 0.0,
         cost_per_unit: parseFloat(charge.cost_per_unit) || 0.0,
-        total_sell: parseFloat(charge.total_sell ?? "0") || 0.0,
-        total_cost: parseFloat(charge.total_cost ?? "0") || 0.0,
+        total_sell: parseFloat(charge.total_sell || "0") || 0.0,
+        total_cost: parseFloat(charge.total_cost || "0") || 0.0,
         // min_cost: parseFloat(charge.min_cost) || 0.0,
       };
-      // Include the quotation charge id only for existing charges
+      // Include the quotation charge line id only for existing charges
       if (charge.id !== undefined && charge.id !== null) base.id = charge.id;
       return base;
     });
@@ -2318,7 +2335,10 @@ function QuotationCreate({
             data.quotationForm.quote_currency_country_code,
           charges: serviceCharges.map((charge: any) => {
             const base: any = {
-              charge_name: charge.charge_name,
+              charge_id:
+                charge.charge_id !== undefined && charge.charge_id !== null
+                  ? Number(charge.charge_id)
+                  : undefined,
               currency_country_code: charge.currency_country_code,
               roe: parseFloat(charge.roe.toString()) || 1.0,
               unit: charge.unit,
@@ -2330,7 +2350,7 @@ function QuotationCreate({
               total_cost: parseFloat(charge.total_cost ?? "0") || 0.0,
               // min_cost: parseFloat(charge.min_cost) || 0.0,
             };
-            // Include the quotation charge id when present (existing charge)
+            // Include the quotation charge line id when present (existing charge)
             if (charge.id !== undefined && charge.id !== null)
               base.id = charge.id;
             return base;
@@ -2803,6 +2823,7 @@ function QuotationCreate({
               : [
                   {
                     charge_name: "",
+                charge_id: null,
                     currency_country_code: "",
                     roe: 1,
                     unit: "",
@@ -4976,21 +4997,76 @@ function QuotationCreate({
                       >
                         <Grid gutter="sm">
                           <Grid.Col span={2}>
-                            {/* <Select
-                  label="Charge Name"
-                  key={
-                    dynamicForm.values.charges[index].charge_name ||
-                    `unit-${index}-charge_name`
-                  }
-                  placeholder="Enter Charge name"
-                  // data={chargesData}
-                  {...dynamicForm.getInputProps(`charges.${index}.charge_name`)}
-                /> */}
-                            <TextInput
-                              key={`charge-name-${index}`}
-                              // label="Charge Name"
+                            <SearchableSelect
                               placeholder="Charge Name"
-                              // data={quoteCurrency}
+                              apiEndpoint={URL.chargeMaster}
+                              dropdownZIndex={310}
+                              searchFields={["charge_code", "charge_name"]}
+                              displayFormat={(item: Record<string, unknown>) => {
+                                const charge = item as {
+                                  id?: number;
+                                  charge_name?: string;
+                                };
+                                const name = charge.charge_name || "";
+                                return {
+                                  value: String(charge.id ?? ""),
+                                  label: name,
+                                };
+                              }}
+                              value={
+                                dynamicForm.values.charges[index]?.charge_id != null
+                                  ? String(dynamicForm.values.charges[index].charge_id)
+                                  : null
+                              }
+                              displayValue={
+                                dynamicForm.values.charges[index]?.charge_name || ""
+                              }
+                              onChange={(
+                                value,
+                                selected,
+                                originalData
+                              ) => {
+                                if (isViewMode) return;
+                                const original = (originalData ||
+                                  {}) as {
+                                  id?: number;
+                                  charge_name?: string;
+                                };
+                                const name =
+                                  original.charge_name !== undefined &&
+                                  original.charge_name !== null
+                                    ? original.charge_name
+                                    : selected?.label
+                                      ? selected.label.split(" (")[0]
+                                      : "";
+                                dynamicForm.setFieldValue(
+                                  `charges.${index}.charge_name`,
+                                  name
+                                );
+                                if (original.id != null) {
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.charge_id`,
+                                    original.id
+                                  );
+                                } else if (value) {
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.charge_id`,
+                                    Number(value)
+                                  );
+                                } else {
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.charge_id`,
+                                    null
+                                  );
+                                }
+                              }}
+                              readOnly={isViewMode}
+                              disabled={isViewMode}
+                              error={
+                                (dynamicForm.errors as any)?.charges?.[index]
+                                  ?.charge_name as string | undefined
+                              }
+                              returnOriginalData
                               styles={{
                                 input: {
                                   fontSize: "14px",
@@ -4998,11 +5074,6 @@ function QuotationCreate({
                                   height: "36px",
                                 },
                               }}
-                              {...dynamicForm.getInputProps(
-                                `charges.${index}.charge_name`
-                              )}
-                              readOnly={isViewMode}
-                              disabled={isViewMode}
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
@@ -6264,22 +6335,79 @@ function QuotationCreate({
                   {dynamicForm.values.charges.map((_, index) => (
                     <Box key={index}>
                       <Grid gutter="sm">
-                        <Grid.Col span={2}>
-                          <TextInput
-                            key={`charge-name-${index}`}
-                            placeholder="Charge Name"
-                            styles={{
-                              input: {
-                                fontSize: "14px",
-                                fontFamily: "Inter",
-                                height: "36px",
-                              },
-                            }}
-                            {...dynamicForm.getInputProps(
-                              `charges.${index}.charge_name`
-                            )}
-                          />
-                        </Grid.Col>
+                      <Grid.Col span={2}>
+                        <SearchableSelect
+                          placeholder="Charge Name"
+                          apiEndpoint={URL.chargeMaster}
+                          dropdownZIndex={310}
+                          searchFields={["charge_code", "charge_name"]}
+                          displayFormat={(item: Record<string, unknown>) => {
+                            const charge = item as {
+                              id?: number;
+                              charge_name?: string;
+                            };
+                            const name = charge.charge_name || "";
+                            return {
+                              value: String(charge.id ?? ""),
+                              label: name,
+                            };
+                          }}
+                          value={
+                            dynamicForm.values.charges[index]?.charge_id != null
+                              ? String(dynamicForm.values.charges[index].charge_id)
+                              : null
+                          }
+                          displayValue={
+                            dynamicForm.values.charges[index]?.charge_name || ""
+                          }
+                          onChange={(value, selected, originalData) => {
+                            const original = (originalData ||
+                              {}) as {
+                              id?: number;
+                              charge_name?: string;
+                            };
+                            const name =
+                              original.charge_name !== undefined &&
+                              original.charge_name !== null
+                                ? original.charge_name
+                                : selected?.label
+                                  ? selected.label.split(" (")[0]
+                                  : "";
+                            dynamicForm.setFieldValue(
+                              `charges.${index}.charge_name`,
+                              name
+                            );
+                            if (original.id != null) {
+                              dynamicForm.setFieldValue(
+                                `charges.${index}.charge_id`,
+                                original.id
+                              );
+                            } else if (value) {
+                              dynamicForm.setFieldValue(
+                                `charges.${index}.charge_id`,
+                                Number(value)
+                              );
+                            } else {
+                              dynamicForm.setFieldValue(
+                                `charges.${index}.charge_id`,
+                                null
+                              );
+                            }
+                          }}
+                          error={
+                            (dynamicForm.errors as any)?.charges?.[index]
+                              ?.charge_name as string | undefined
+                          }
+                          returnOriginalData
+                          styles={{
+                            input: {
+                              fontSize: "14px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
                         <Grid.Col span={1}>
                           <Dropdown
                             placeholder="Select Currency"
