@@ -812,7 +812,7 @@ function AirImportBookingMaster() {
           }}
         >
           <Box mb="md">
-            <Group justify="space-between" align="center" mb="md">
+            <Group justify="space-between" align="center">
               <Text
                 size="md"
                 fw={600}

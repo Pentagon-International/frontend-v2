@@ -300,16 +300,16 @@ function AirExportBookingCreate() {
 
       <Box p="sm" mx="auto" style={{ backgroundColor: "#F8F8F8" }}>
         <Flex
-          gap="md"
+          gap="sm"
           align="flex-start"
           style={{ height: "calc(100vh - 112px)", width: "100%" }}
         >
           {/* Vertical Stepper Sidebar */}
           <Box
             style={{
-              minWidth: 240,
+              minWidth: 200,
               width: "100%",
-              maxWidth: 250,
+              maxWidth: 210,
               height: "100%",
               alignSelf: "stretch",
               borderRadius: "8px",
@@ -754,14 +754,6 @@ function AirExportBookingCreate() {
               gap: "8px",
             }}
           >
-            <Box
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                borderRadius: "8px",
-                backgroundColor: "#FFFFFF",
-              }}
-            >
               <AirExportBookingStepper
                 onStepChange={handleStepChange}
                 onComplete={handleComplete}
@@ -777,7 +769,6 @@ function AirExportBookingCreate() {
                   isEditMode && jobData ? handleEditFormPopulated : undefined
                 }
               />
-            </Box>
           </Box>
         </Flex>
       </Box>

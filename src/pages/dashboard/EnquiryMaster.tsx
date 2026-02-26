@@ -355,15 +355,11 @@ function EnquiryMaster() {
         ? buildPreviewFilterPayload
         : buildFilterPayload();
       const requestBody = { filters: { ...filterPayload } };
-      console.log("Detailed view excel payload---",filterPayload);
-      
-      
       const response: any = await postAPICall(
         `${URL.enquiryDownloadExcel}`,
         requestBody,
         { responseType: "blob" }
       );
-      console.log("Detailed view excel response---",response);
       const blob = response?.data instanceof Blob ? response.data : response;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
