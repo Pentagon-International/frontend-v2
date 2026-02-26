@@ -490,29 +490,63 @@ function AirJobGenerationCreate() {
         }
       } else {
         const response = await apiCallProtected.post(URL.booking, payload);
-        responseData = response as { success?: boolean; message?: string; data?: { id?: number; booking_id?: number } } ;
+        type CreateResponseData = {
+          id?: number;
+          booking_id?: number;
+          routing_details?: Array<{ id?: number }>;
+          booking_details?: Array<{ id?: number; booking_id?: number }>;
+        };
+        type CreateResponse = {
+          success?: boolean;
+          message?: string;
+          data?: CreateResponseData;
+          id?: number;
+          booking_id?: number;
+        };
+        const createResponse = response as CreateResponse;
+        responseData = createResponse;
 
-        if (responseData?.success === true) {
+        if (createResponse?.success === true) {
           ToastNotification({
             type: "success",
             message: "Booking created successfully",
           });
 
+          const resData = createResponse?.data;
           const createdId =
-            (responseData as any)?.data?.id ??
-            (responseData as any)?.id ??
-            (responseData as any)?.data?.booking_id ??
-            (responseData as any)?.booking_id;
+            resData?.id ??
+            createResponse?.id ??
+            resData?.booking_id ??
+            createResponse?.booking_id;
 
           if (createdId) {
             setJobId(createdId);
             setEditMode(true);
             setViewMode(false);
           }
+
+          // Map create response to edit payload ids: routing_details[].id and booking_details[].id
+          if (resData?.routing_details && Array.isArray(resData.routing_details)) {
+            routingForm.setFieldValue(
+              "routings",
+              routingForm.values.routings.map((r, i) => ({
+                ...r,
+                id: resData.routing_details?.[i]?.id ?? r.id,
+              }))
+            );
+          }
+          if (resData?.booking_details && Array.isArray(resData.booking_details)) {
+            const idMap: Record<number, number> = {};
+            resData.booking_details.forEach((bd: { id?: number; booking_id?: number }) => {
+              const bid = bd.booking_id;
+              if (bid != null && bd.id != null) idMap[bid] = bd.id;
+            });
+            setExistingBookingDetails((prev) => ({ ...prev, ...idMap }));
+          }
         } else {
           ToastNotification({
             type: "error",
-            message: responseData?.message || "Failed to create booking",
+            message: createResponse?.message || "Failed to create booking",
           });
         }
       }
