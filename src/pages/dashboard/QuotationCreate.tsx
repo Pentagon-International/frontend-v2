@@ -3631,6 +3631,7 @@ function QuotationCreate({
 
             return {
               charge_name: charge.charge_name || "",
+              charge_id: charge.charge_id ?? null,
               currency_country_code: currencyCode,
               roe: calculatedRoe,
               unit: unit,
