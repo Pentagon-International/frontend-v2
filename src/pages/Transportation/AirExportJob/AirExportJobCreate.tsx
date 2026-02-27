@@ -188,9 +188,9 @@ const getTransportMode = (
 ): string | undefined => {
   if (!transportType) return undefined;
   const type = transportType.trim();
-  if (type === "Air") return "AIR";
-  if (type === "Sea" || type === "FCL" || type === "LCL") return "SEA";
-  if (type === "Road") return "LAND";
+  if (type === "AIR") return "AIR";
+  if (type === "SEA" || type === "FCL" || type === "LCL") return "SEA";
+  if (type === "ROAD") return "LAND";
   return undefined;
 };
 
@@ -873,7 +873,7 @@ function AirExportJobCreate() {
         }
 
         // Validate transport-type-specific required fields
-        if (routing.transport_type === "Sea") {
+        if (routing.transport_type === "SEA") {
           if (vessel === "" || voyageNumber === "") {
             ToastNotification({
               type: "error",
@@ -882,7 +882,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Air") {
+        } else if (routing.transport_type === "AIR") {
           if (carrierCode === "" || flight === "") {
             ToastNotification({
               type: "error",
@@ -890,7 +890,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Road") {
+        } else if (routing.transport_type === "ROAD") {
           if (carrierCode === "" || truckNo === "") {
             ToastNotification({
               type: "error",
@@ -898,7 +898,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Rail") {
+        } else if (routing.transport_type === "RAIL") {
           const carrierName = routing.carrier_name?.trim() || "";
           if (carrierName === "" || railNo === "") {
             ToastNotification({
@@ -925,7 +925,7 @@ function AirExportJobCreate() {
             ...location.state,
             // Save current MAWB form values
             mawbDetails: {
-              service: mawbDetailsForm.values.service || "Air",
+              service: mawbDetailsForm.values.service || "AIR",
               origin_agent: mawbDetailsForm.values.origin_agent || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
               origin_name: mawbDetailsForm.values.origin_name || "",
@@ -962,7 +962,7 @@ function AirExportJobCreate() {
             ...location.state,
             // Save current MAWB form values
             mawbDetails: {
-              service: mawbDetailsForm.values.service || "Air",
+              service: mawbDetailsForm.values.service || "AIR",
               origin_agent: mawbDetailsForm.values.origin_agent || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
               origin_name: mawbDetailsForm.values.origin_name || "",
@@ -1003,7 +1003,7 @@ function AirExportJobCreate() {
           ...location.state,
           // Save current MAWB form values
           mawbDetails: {
-            service: mawbDetailsForm.values.service || "Air",
+            service: mawbDetailsForm.values.service || "AIR",
             origin_agent: mawbDetailsForm.values.origin_agent || "",
             origin_code: mawbDetailsForm.values.origin_code || "",
             origin_name: mawbDetailsForm.values.origin_name || "",
@@ -1116,7 +1116,7 @@ function AirExportJobCreate() {
         if (shouldRestore && savedMawbDetails) {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
-            service: savedMawbDetails.service || "Air",
+            service: savedMawbDetails.service || "AIR",
             origin_agent: savedMawbDetails.origin_agent || "",
             origin_code: savedMawbDetails.origin_code || "",
             origin_name: savedMawbDetails.origin_name || "",
@@ -1249,7 +1249,7 @@ function AirExportJobCreate() {
 
       // Prepare MAWB details with ALL current form values including origin_name and destination_name
       const mawbDetailsToPass = {
-        service: mawbDetailsForm.values.service || "Air",
+        service: mawbDetailsForm.values.service || "AIR",
         origin_agent:
           mawbDetailsForm.values.origin_agent ||
           location.state?.mawbDetails?.origin_agent ||
@@ -1519,17 +1519,17 @@ function AirExportJobCreate() {
           };
 
           // Map fields based on transport type
-          if (routing.transport_type === "Sea") {
+          if (routing.transport_type === "SEA") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.vessel = routing.vessel || null;
             routingPayload.voyage_number = routing.voyage_number || null;
-          } else if (routing.transport_type === "Air") {
+          } else if (routing.transport_type === "AIR") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.flight = routing.flight || null;
-          } else if (routing.transport_type === "Road") {
+          } else if (routing.transport_type === "ROAD") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.truck_no = routing.truck_no || null;
-          } else if (routing.transport_type === "Rail") {
+          } else if (routing.transport_type === "RAIL") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.rail_no = routing.rail_no || null;
           } else {
@@ -2072,7 +2072,7 @@ function AirExportJobCreate() {
                         placeholder="Select Transport Type"
                         searchable
                         clearable
-                        data={["Air", "Sea", "Road", "Rail"]}
+                        data={["AIR", "SEA", "ROAD", "RAIL"]}
                         value={
                           routingsForm.values.routings[index]?.transport_type ||
                           null
@@ -2224,7 +2224,7 @@ function AirExportJobCreate() {
                     </Grid.Col>
 
                     {/* Dynamic field labels based on transport type */}
-                    {routing.transport_type === "Sea" && (
+                    {routing.transport_type === "SEA" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -2297,7 +2297,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Air" && (
+                    {routing.transport_type === "AIR" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -2347,7 +2347,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Road" && (
+                    {routing.transport_type === "ROAD" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -2397,7 +2397,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Rail" && (
+                    {routing.transport_type === "RAIL" && (
                       <>
                         <Grid.Col span={2}>
                           <FormTextInput

@@ -68,10 +68,10 @@ type JobDetailsForm = {
 type RoutingDetail = {
   id?: number;
   transport_type: string;
-  from_code: string;
-  from_name: string;
-  to_code: string;
-  to_name: string;
+  from_port_code: string;
+  from_port_name: string;
+  to_port_code: string;
+  to_port_name: string;
   eta: string;
   etd: string;
   ata: string;
@@ -117,7 +117,10 @@ const jobDetailsSchema = yup.object({
   cutoff_date: yup.string().required("Cutoff date is required"),
   schedule: yup.string().required("Schedule is required"),
   carrier_code: yup.string().required("Carrier is required"),
-  master_no: yup.string().optional(),
+  master_no: yup
+  .string()
+    .required("MAWB Number is required")
+    .matches(/^[A-Za-z0-9]{11}$/, "MAWB Number must be exactly 11 characters"),
   master_date: yup.string().optional(),
   flight_no: yup.string().optional(),
 });
@@ -128,8 +131,8 @@ const routingDetailsSchema = yup.object({
     .of(
       yup.object({
         transport_type: yup.string().optional(),
-        from_code: yup.string().required("From is required"),
-        to_code: yup.string().required("To is required"),
+        from_port_code: yup.string().required("From is required"),
+        to_port_code: yup.string().required("To is required"),
         eta: yup.string().required("ETA is required"),
         etd: yup.string().required("ETD is required"),
         ata: yup.string().optional(),
@@ -147,7 +150,7 @@ function AirJobGenerationCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const jobData = location.state?.job as Record<string, unknown> | undefined;
-
+  console.log("Job Data-------------------------------------",jobData)
   const mode = useMemo(() => {
     if (location.state?.mode) return location.state.mode as string;
     const pathname = location.pathname.toLowerCase();
@@ -200,10 +203,10 @@ function AirJobGenerationCreate() {
       routings: [
         {
           transport_type: "",
-          from_code: "",
-          from_name: "",
-          to_code: "",
-          to_name: "",
+          from_port_code: "",
+          from_port_name: "",
+          to_port_code: "",
+          to_port_name: "",
           eta: dayjs().format("YYYY-MM-DD"),
           etd: dayjs().format("YYYY-MM-DD"),
           ata: "",
@@ -241,11 +244,11 @@ function AirJobGenerationCreate() {
       const atdStr = (jobData.atd as string) || "";
       jobDetailsForm.setValues({
         service: (jobData.service as string) || "AIR",
-        agent_code: (jobData.agent_code_read as string) || (jobData.agent_code as string) || "",
+        agent_code: (jobData.agent_code as string) || (jobData.agent_code as string) || "",
         agent_name: (jobData.agent_name as string) || "",
-        origin_code: (jobData.origin_code_read as string) || "",
+        origin_code: (jobData.origin_code as string) || "",
         origin_name: (jobData.origin_name as string) || "",
-        destination_code: (jobData.destination_code_read as string) || "",
+        destination_code: (jobData.destination_code as string) || "",
         destination_name: (jobData.destination_name as string) || "",
         eta: etaStr || dayjs().utc().toISOString(),
         etd: etdStr || dayjs().utc().toISOString(),
@@ -253,7 +256,7 @@ function AirJobGenerationCreate() {
         atd: atdStr || "",
         cutoff_date: (jobData.cut_off_date as string) || dayjs().format("YYYY-MM-DD"),
         schedule: (jobData.schedule as string) || "",
-        carrier_code: (jobData.carrier_code_read as string) || "",
+        carrier_code: (jobData.carrier_code as string) || "",
         carrier_name: (jobData.carrier_name as string) || "",
         master_no: (jobData.master_no as string) || "",
         master_date: (jobData.master_date as string) || "",
@@ -263,10 +266,10 @@ function AirJobGenerationCreate() {
       const apiRoutings = jobData.routing_details as Array<{
         id?: number;
         transport_type?: string;
-        from_code?: string;
-        from_name?: string;
-        to_code?: string;
-        to_name?: string;
+        from_port_code?: string;
+        from_port_name?: string;
+        to_port_code?: string;
+        to_port_name?: string;
         eta?: string;
         etd?: string;
         ata?: string;
@@ -282,10 +285,10 @@ function AirJobGenerationCreate() {
           apiRoutings.map((r) => ({
             id: r.id,
             transport_type: r.transport_type || "",
-            from_code: r.from_code || "",
-            from_name: r.from_name || "",
-            to_code: r.to_code || "",
-            to_name: r.to_name || "",
+            from_port_code: r.from_port_code || "",
+            from_port_name: r.from_port_name || "",
+            to_port_code: r.to_port_code || "",
+            to_port_name: r.to_port_name || "",
             eta: r.eta ? dayjs(r.eta).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
             etd: r.etd ? dayjs(r.etd).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
             ata: r.ata ? dayjs(r.ata).format("YYYY-MM-DD") : "",
@@ -425,8 +428,8 @@ function AirJobGenerationCreate() {
     routing_details: routingForm.values.routings.map((r) => ({
       ...(r.id != null ? { id: r.id } : {}),
       transport_type: r.transport_type || undefined,
-      from_port_code: r.from_code,
-      to_port_code: r.to_code,
+      from_port_code: r.from_port_code,
+      to_port_code: r.to_port_code,
       eta: r.eta || undefined,
       etd: r.etd || undefined,
       ata: r.ata || undefined,
@@ -780,7 +783,7 @@ function AirJobGenerationCreate() {
                   value={jobDetailsForm.values.agent_code}
                   displayValue={
                     jobDetailsForm.values.agent_name
-                      ? `${jobDetailsForm.values.agent_name} (${jobDetailsForm.values.agent_code})`
+                      ? `${jobDetailsForm.values.agent_name}`
                       : jobDetailsForm.values.agent_code || ""
                   }
                   onChange={(value, selectedData) => {
@@ -862,6 +865,7 @@ function AirJobGenerationCreate() {
                 <FormTextInput
                   label="Master No"
                   placeholder="Enter master number"
+                  maxLength={11}
                   {...jobDetailsForm.getInputProps("master_no")}
                   disabled={isReadOnly}
                 />
@@ -902,7 +906,7 @@ function AirJobGenerationCreate() {
                   value={jobDetailsForm.values.carrier_code}
                   displayValue={
                     jobDetailsForm.values.carrier_name
-                      ? `${jobDetailsForm.values.carrier_name} (${jobDetailsForm.values.carrier_code})`
+                      ? `${jobDetailsForm.values.carrier_name}`
                       : jobDetailsForm.values.carrier_code || ""
                   }
                   onChange={(value, selectedData) => {
@@ -1129,15 +1133,15 @@ function AirJobGenerationCreate() {
                           const port = item as { port_code: string; port_name: string };
                           return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
                         }}
-                        value={routingForm.values.routings[index].from_code}
+                        value={routingForm.values.routings[index].from_port_code}
                         displayValue={
-                          routingForm.values.routings[index].from_name
-                            ? `${routingForm.values.routings[index].from_name} (${routingForm.values.routings[index].from_code})`
-                            : routingForm.values.routings[index].from_code
+                          routingForm.values.routings[index].from_port_name
+                            ? `${routingForm.values.routings[index].from_port_name} (${routingForm.values.routings[index].from_port_code})`
+                            : routingForm.values.routings[index].from_port_code
                         }
                         onChange={(value, selectedData) => {
-                          routingForm.setFieldValue(`routings.${index}.from_code`, value || "");
-                          if (selectedData) routingForm.setFieldValue(`routings.${index}.from_name`, selectedData.label.split(" (")[0] || "");
+                          routingForm.setFieldValue(`routings.${index}.from_port_code`, value || "");
+                          if (selectedData) routingForm.setFieldValue(`routings.${index}.from_port_name`, selectedData.label.split(" (")[0] || "");
                         }}
                         minSearchLength={3}
                         additionalParams={
@@ -1158,15 +1162,15 @@ function AirJobGenerationCreate() {
                           const port = item as { port_code: string; port_name: string };
                           return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
                         }}
-                        value={routingForm.values.routings[index].to_code}
+                        value={routingForm.values.routings[index].to_port_code}
                         displayValue={
-                          routingForm.values.routings[index].to_name
-                            ? `${routingForm.values.routings[index].to_name} (${routingForm.values.routings[index].to_code})`
-                            : routingForm.values.routings[index].to_code
+                          routingForm.values.routings[index].to_port_name
+                            ? `${routingForm.values.routings[index].to_port_name} (${routingForm.values.routings[index].to_port_code})`
+                            : routingForm.values.routings[index].to_port_code
                         }
                         onChange={(value, selectedData) => {
-                          routingForm.setFieldValue(`routings.${index}.to_code`, value || "");
-                          if (selectedData) routingForm.setFieldValue(`routings.${index}.to_name`, selectedData.label.split(" (")[0] || "");
+                          routingForm.setFieldValue(`routings.${index}.to_port_code`, value || "");
+                          if (selectedData) routingForm.setFieldValue(`routings.${index}.to_port_name`, selectedData.label.split(" (")[0] || "");
                         }}
                         minSearchLength={3}
                         additionalParams={
@@ -1190,7 +1194,7 @@ function AirJobGenerationCreate() {
                         value={routingForm.values.routings[index].carrier_code}
                         displayValue={
                           routingForm.values.routings[index].carrier_name
-                            ? `${routingForm.values.routings[index].carrier_name} (${routingForm.values.routings[index].carrier_code})`
+                            ? `${routingForm.values.routings[index].carrier_name}`
                             : routingForm.values.routings[index].carrier_code
                         }
                         onChange={(value, selectedData) => {
@@ -1269,10 +1273,10 @@ function AirJobGenerationCreate() {
                                   ...routingForm.values.routings,
                                   {
                                     transport_type: "",
-                                    from_code: "",
-                                    from_name: "",
-                                    to_code: "",
-                                    to_name: "",
+                                    from_port_code: "",
+                                    from_port_name: "",
+                                    to_port_code: "",
+                                    to_port_name: "",
                                     eta: dayjs().format("YYYY-MM-DD"),
                                     etd: dayjs().format("YYYY-MM-DD"),
                                     ata: "",
