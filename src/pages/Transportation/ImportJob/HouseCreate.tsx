@@ -663,7 +663,9 @@ function HouseCreate() {
       form.setFieldValue("routed_by", String(rb.routed_by));
     }
 
-    // Cargo details - from cargo_details array OR top-level fields
+    // Cargo details - from cargo_details array when service is FCL
+    const serviceType = String(rb.service || "").toUpperCase();
+    const isFCL = serviceType === "FCL";
     const cargoDetailsData = rb.cargo_details as Array<Record<string, unknown>> | undefined;
     const isHazardous = (rb as { is_hazardous?: boolean }).is_hazardous;
     const hazValue = isHazardous === true ? true : isHazardous === false ? false : null;
@@ -674,10 +676,22 @@ function HouseCreate() {
       return Number.isNaN(n) ? null : n;
     };
 
-    if (cargoDetailsData && Array.isArray(cargoDetailsData) && cargoDetailsData.length > 0) {
+    if (isFCL && cargoDetailsData && Array.isArray(cargoDetailsData) && cargoDetailsData.length > 0) {
       const mapped = cargoDetailsData.map((c) => ({
         container_number: String(c.container_no ?? c.container_number ?? ""),
-        no_of_packages: toNum(c.no_of_packages ?? rb.no_of_packages),
+        // FCL API uses no_of_containers; map to No of Packages
+        no_of_packages: toNum(c.no_of_containers ?? c.no_of_packages ?? rb.no_of_packages),
+        gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
+        // Volume left null - user will enter manually
+        volume: null,
+        chargeable_weight: null,
+        haz: (c.haz as boolean) ?? hazValue,
+      }));
+      setCargoDetails(mapped.length > 0 ? mapped : []);
+    } else if (cargoDetailsData && Array.isArray(cargoDetailsData) && cargoDetailsData.length > 0) {
+      const mapped = cargoDetailsData.map((c) => ({
+        container_number: String(c.container_no ?? c.container_number ?? ""),
+        no_of_packages: toNum(c.no_of_packages ?? c.no_of_containers ?? rb.no_of_packages),
         gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
         volume: toNum(c.volume) ?? toNum(c.volume_weight) ?? toNum(rb.volume) ?? toNum(rb.volume_weight),
         chargeable_weight: toNum(c.chargeable_volume) ?? toNum(c.chargeable_weight) ?? toNum(rb.chargeable_volume) ?? toNum(rb.chargeable_weight),
