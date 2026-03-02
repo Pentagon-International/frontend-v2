@@ -560,6 +560,7 @@ function HouseCreate() {
           {
             filters: {
               service_type: "IMPORT",
+              service: location.state?.mblDetails?.service,
               houseno: hblNo.trim(),
               destination_agent_code: agentCode.trim(),
             },

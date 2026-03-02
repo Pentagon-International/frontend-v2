@@ -4978,6 +4978,20 @@ function EnquiryCreate() {
                                     ] as string
                                   }
                                   minSearchLength={3}
+                                  additionalParams={(() => {
+                                    const serviceName =
+                                      serviceForm.values.service_details[serviceIndex]?.service?.toLowerCase();
+
+                                    if (serviceName === "fcl" || serviceName === "lcl") {
+                                      return { transport_mode: "SEA" };
+                                    }
+
+                                    if (serviceName === "air") {
+                                      return { transport_mode: "AIR" };
+                                    }
+
+                                    return undefined;
+                                  })()}
                                 />
                               </Grid.Col>
                               <Grid.Col span={6}>
@@ -5140,6 +5154,20 @@ function EnquiryCreate() {
                                     ] as string
                                   }
                                   minSearchLength={3}
+                                  additionalParams={(() => {
+                                    const serviceName =
+                                      serviceForm.values.service_details[serviceIndex]?.service?.toLowerCase();
+
+                                    if (serviceName === "fcl" || serviceName === "lcl") {
+                                      return { transport_mode: "SEA" };
+                                    }
+
+                                    if (serviceName === "air") {
+                                      return { transport_mode: "AIR" };
+                                    }
+
+                                    return undefined;
+                                  })()}
                                 />
                               </Grid.Col>
 

@@ -240,9 +240,9 @@ const getTransportMode = (
 ): string | undefined => {
   if (!transportType) return undefined;
   const type = transportType.trim();
-  if (type === "Air") return "AIR";
-  if (type === "Sea" || type === "FCL" || type === "LCL") return "SEA";
-  if (type === "Road") return "LAND";
+  if (type === "AIR") return "AIR";
+  if (type === "SEA" || type === "FCL" || type === "LCL") return "SEA";
+  if (type === "ROAD") return "LAND";
   return undefined;
 };
 
@@ -599,9 +599,7 @@ function ExportJobCreate() {
                           // Handle mbl_charges structure: unit can be in charge.unit or charge.unit_details.unit_code
                           const unitCode = charge.unit_code
                             ? String(charge.unit_code)
-                            : charge.unit
-                              ? String(charge.unit)
-                              : (charge.unit_details as Record<string, unknown>)
+                            : (charge.unit_details as Record<string, unknown>)
                                     ?.unit_code
                                 ? String(
                                     (
@@ -699,6 +697,7 @@ function ExportJobCreate() {
                     : [],
             })
           );
+          console.log("mappedHousingDetails..................",mappedHousingDetails)
           setHousingDetails(mappedHousingDetails);
         }
 
@@ -722,28 +721,28 @@ function ExportJobCreate() {
               let voyage_number = "";
               let flightVoyageNumber = "";
 
-              if (transportType === "sea" || transportType === "vessel") {
+              if (transportType === "SEA" || transportType === "vessel") {
                 voyage_number = routing.voyage_number
                   ? String(routing.voyage_number)
                   : routing.flight_voyage_number
                     ? String(routing.flight_voyage_number)
                     : "";
                 flightVoyageNumber = voyage_number;
-              } else if (transportType === "air") {
+              } else if (transportType === "AIR") {
                 flight = routing.flight
                   ? String(routing.flight)
                   : routing.flight_voyage_number
                     ? String(routing.flight_voyage_number)
                     : "";
                 flightVoyageNumber = flight;
-              } else if (transportType === "road") {
+              } else if (transportType === "ROAD") {
                 truck_no = routing.truck_no
                   ? String(routing.truck_no)
                   : routing.flight_voyage_number
                     ? String(routing.flight_voyage_number)
                     : "";
                 flightVoyageNumber = truck_no;
-              } else if (transportType === "rail") {
+              } else if (transportType === "RAIL") {
                 rail_no = routing.rail_no
                   ? String(routing.rail_no)
                   : routing.flight_voyage_number
@@ -1145,7 +1144,7 @@ function ExportJobCreate() {
         }
 
         // Validate transport-type-specific required fields using correct field names
-        if (routing.transport_type === "Sea") {
+        if (routing.transport_type === "SEA") {
           const voyageNumber = routing.voyage_number?.trim() || "";
           if (vessel === "" || voyageNumber === "") {
             ToastNotification({
@@ -1155,7 +1154,7 @@ function ExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Air") {
+        } else if (routing.transport_type === "AIR") {
           const flight = routing.flight?.trim() || "";
           if (carrierCode === "" || flight === "") {
             ToastNotification({
@@ -1164,7 +1163,7 @@ function ExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Road") {
+        } else if (routing.transport_type === "ROAD") {
           const truckNo = routing.truck_no?.trim() || "";
           if (carrierCode === "" || truckNo === "") {
             ToastNotification({
@@ -1173,7 +1172,7 @@ function ExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Rail") {
+        } else if (routing.transport_type === "RAIL") {
           const railNo = routing.rail_no?.trim() || "";
           if (carrierCode === "" || railNo === "") {
             ToastNotification({
@@ -1731,16 +1730,16 @@ function ExportJobCreate() {
             routing.transport_type || ""
           ).toLowerCase();
 
-          if (transportType === "sea" || transportType === "vessel") {
+          if (transportType === "SEA" || transportType === "vessel") {
             routingPayload.vessel = routing.vessel || null;
             routingPayload.voyage_number = routing.voyage_number || null;
-          } else if (transportType === "air") {
+          } else if (transportType === "AIR") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.flight = routing.flight || null;
-          } else if (transportType === "road") {
+          } else if (transportType === "ROAD") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.truck_no = routing.truck_no || null;
-          } else if (transportType === "rail") {
+          } else if (transportType === "RAIL") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.rail_no = routing.rail_no || null;
           } else {
@@ -2431,7 +2430,7 @@ function ExportJobCreate() {
                         placeholder="Select Transport Type"
                         searchable
                         clearable
-                        data={["Air", "Sea", "Road", "Rail"]}
+                        data={["AIR", "SEA", "ROAD", "RAIL"]}
                         value={
                           routingsForm.values.routings[index]?.transport_type ||
                           null
@@ -2549,7 +2548,7 @@ function ExportJobCreate() {
                     </Grid.Col>
 
                     {/* Dynamic field labels based on transport type */}
-                    {routing.transport_type === "Sea" && (
+                    {routing.transport_type === "SEA" && (
                       <>
                         <Grid.Col span={2.4}>
                           <FormTextInput
@@ -2601,7 +2600,7 @@ function ExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Air" && (
+                    {routing.transport_type === "AIR" && (
                       <>
                         <Grid.Col span={2.4}>
                           <SearchableSelect
@@ -2666,7 +2665,7 @@ function ExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Road" && (
+                    {routing.transport_type === "ROAD" && (
                       <>
                         <Grid.Col span={2.4}>
                           <SearchableSelect
@@ -2731,7 +2730,7 @@ function ExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Rail" && (
+                    {routing.transport_type === "RAIL" && (
                       <>
                         <Grid.Col span={2.4}>
                           <FormTextInput
