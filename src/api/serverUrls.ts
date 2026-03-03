@@ -151,5 +151,8 @@ export const URL = {
     pipelineReportProduct: "pipeline/dashboard/product/",
     expected: "expected/",
     booking: "customer-service-shipment/formatted-list/",
+    gainedQuotationsWithoutBooking:
+      "pipeline/gained-quotations-without-booking/",
+    gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",
   },
 };
