@@ -74,6 +74,7 @@ import EnquirySection from "./EnquirySection";
 import BudgetSection from "./BudgetSection";
 import PipelineReport from "../PipelineReport/index";
 import Booking from "../Booking/index";
+import CustomerServiceReport from "../CustomerServiceReport";
 
 interface AggregatedData {
   totalOutstanding: number;
@@ -7450,7 +7451,7 @@ const Dashboard = () => {
   const toMonthOptions = getToMonthOptions(selectedYear);
 
   return (
-    <Box p="xs" h="50vh">
+    <Box p="xs" h="calc(100vh - 95px)" style={{display:"flex", flexDirection:"column"}}>
       {/* Filter Section - Single Row */}
 
       {/* Tabs and Search Row - Available in all drill levels */}
@@ -7494,7 +7495,7 @@ const Dashboard = () => {
                 padding: "4px 12px",
               }}
             >
-              Overall
+              Sales
             </Button>
             <Button
               variant={activeTab === "pipeline-Report" ? "filled" : "subtle"}
@@ -7525,12 +7526,34 @@ const Dashboard = () => {
               style={{
                 backgroundColor:
                   activeTab === "booking" ? "#ffffff" : "transparent",
-                color: activeTab === "booking" ? "#000000" : "#666",
-                fontWeight: activeTab === "booking" ? 600 : 400,
+                  color: activeTab === "booking" ? "#000000" : "#666",
+                  fontWeight: activeTab === "booking" ? 600 : 400,
+                  border: "none",
+                  borderRadius: "4px",
+                  boxShadow:
+                  activeTab === "booking"
+                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    : "none",
+                    transition: "all 0.2s ease",
+                    fontSize: "12px",
+                    padding: "4px 12px",
+                  }}
+            >
+              Booking
+            </Button>
+            <Button
+              variant={activeTab === "customer-service" ? "filled" : "subtle"}
+              onClick={() => setActiveTab("customer-service")}
+              size="xs"
+              style={{
+                backgroundColor:
+                  activeTab === "customer-service" ? "#ffffff" : "transparent",
+                color: activeTab === "customer-service" ? "#000000" : "#666",
+                fontWeight: activeTab === "customer-service" ? 600 : 400,
                 border: "none",
                 borderRadius: "4px",
                 boxShadow:
-                  activeTab === "booking"
+                  activeTab === "customer-service"
                     ? "0 1px 2px rgba(0, 0, 0, 0.1)"
                     : "none",
                 transition: "all 0.2s ease",
@@ -7538,7 +7561,7 @@ const Dashboard = () => {
                 padding: "4px 12px",
               }}
             >
-              Booking
+              Customer Service
             </Button>
           </Group>
         )}
@@ -7663,12 +7686,18 @@ const Dashboard = () => {
           list: {
             display: "none",
           },
+          root:{
+            flex:1,
+            display:"flex",
+            flexDirection:"column"
+          }
         }}
       >
         <Tabs.List style={{ display: "none" }}>
           <Tabs.Tab value="overall">Overall</Tabs.Tab>
           <Tabs.Tab value="pipeline-Report">Pipeline Report</Tabs.Tab>
           <Tabs.Tab value="booking">Booking</Tabs.Tab>
+          <Tabs.Tab value="customer-service">Customer Service</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="overall" pt="sm">
@@ -7857,6 +7886,14 @@ const Dashboard = () => {
 
         <Tabs.Panel value="booking" pt="md">
           <Booking
+            key={tabsRefreshKey}
+            globalSearch={globalSearch}
+            fromDate={customerInteractionFromDate}
+            toDate={customerInteractionToDate}
+          />
+        </Tabs.Panel>
+        <Tabs.Panel value="customer-service" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
+          <CustomerServiceReport
             key={tabsRefreshKey}
             globalSearch={globalSearch}
             fromDate={customerInteractionFromDate}

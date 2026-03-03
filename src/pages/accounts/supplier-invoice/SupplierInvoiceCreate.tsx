@@ -517,6 +517,16 @@ export default function SupplierInvoiceCreate({
     }));
   }, [daybookData]);
 
+  const selectedDaybookLabel =
+    daybookOptions.find((o) => o.value === String(form.values.day_book_id))
+      ?.label ?? "";
+  const selectedDaybookLabelUpper = selectedDaybookLabel.toUpperCase();
+  const isOverseasCrjDaybook = selectedDaybookLabelUpper.includes("OVERSEAS");
+  const vendorApiEndpoint = isOverseasCrjDaybook ? URL.agent : URL.supplierByType;
+
+  const isDaybookSelected = !!form.values.day_book_id;
+  const isVendorSelected = !!form.values.agent_code;
+
   const chargeOptions = useMemo(() => {
     const data = chargeData as {
       id?: number;
@@ -877,6 +887,7 @@ export default function SupplierInvoiceCreate({
     setIsSubmitting(true);
     try {
       const payload = buildPayload(values);
+      (payload as Record<string, unknown>).is_agent = isOverseasCrjDaybook ? true : false;
       const isEdit = saveResponse?.id != null;
       // Reversal create: include source invoice's crj_number (required by API)
       if (isReversal && !isEdit && invoiceFromState) {
@@ -1032,6 +1043,8 @@ export default function SupplierInvoiceCreate({
     setIsSubmitting(true);
     try {
       const payload = buildPayload(form.values, "POSTED");
+      (payload as Record<string, unknown>).is_agent =
+        isOverseasCrjDaybook ? true : false;
       // putAPICall appends payload.id/ to the URL, so pass base URL only
       const postUrl = isReversal
         ? URL.reverseSupplierInvoice
@@ -1263,7 +1276,12 @@ export default function SupplierInvoiceCreate({
                 }
                 data={daybookOptions}
                 value={form.values.day_book_id || null}
-                onChange={(v) => form.setFieldValue("day_book_id", v ?? "")}
+                onChange={(v) => {
+                  form.setFieldValue("day_book_id", v ?? "");
+                  form.setFieldValue("agent_code", "");
+                  setAgentDisplayName(null);
+                  form.setFieldValue("state_id", "");
+                }}
                 searchable
                 withAsterisk
                 error={form.errors.day_book_id}
@@ -1282,15 +1300,15 @@ export default function SupplierInvoiceCreate({
                 }}
                 withAsterisk
                 error={form.errors.date ? String(form.errors.date) : undefined}
-                disabled={daybookDateDisabled}
+                disabled={daybookDateDisabled || !isVendorSelected}
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
               <SearchableSelect
                 label="Vendor/Supplier"
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isDaybookSelected}
                 placeholder="Type supplier name"
-                apiEndpoint={URL.supplierByType}
+                apiEndpoint={vendorApiEndpoint}
                 searchFields={["customer_name", "customer_code"]}
                 displayFormat={(item: Record<string, unknown>) => ({
                   value: String(item.customer_code ?? item.id ?? ""),
@@ -1325,14 +1343,19 @@ export default function SupplierInvoiceCreate({
                 searchable
                 withAsterisk
                 error={form.errors.state_id}
-                disabled={isStateLoading || isReadOnly || reversalFormDisabled}
+                disabled={
+                  isStateLoading ||
+                  isReadOnly ||
+                  reversalFormDisabled ||
+                  !isVendorSelected
+                }
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
             <Grid.Col span={1.25}>
               <TextInput
                 label="TDS Section Code"
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 placeholder="TDS Section Code"
                 value={form.values.tds_section_code}
                 onChange={(e) =>
@@ -1350,7 +1373,7 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("customer_gst_no", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
             <Grid.Col span={1.25}>
@@ -1362,7 +1385,7 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("location_gst_no", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
             <Grid.Col span={1.25}>
@@ -1373,7 +1396,7 @@ export default function SupplierInvoiceCreate({
                 onChange={(e) => form.setFieldValue("note", e.target.value)}
                 rows={2}
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
             <Grid.Col span={1.25}>
@@ -1386,7 +1409,7 @@ export default function SupplierInvoiceCreate({
                 }
                 rows={2}
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
           </Grid>
@@ -1405,7 +1428,7 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("Inv_Crn_note", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
             <Grid.Col span={1}>
@@ -1417,7 +1440,7 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("Inv_Crn_no", e.target.value)
                 }
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
             <Grid.Col span={0.75}>
@@ -1432,7 +1455,12 @@ export default function SupplierInvoiceCreate({
                 searchable
                 withAsterisk
                 error={form.errors.currency_id}
-                disabled={isCurrencyLoading || isReadOnly || reversalFormDisabled}
+                disabled={
+                  isCurrencyLoading ||
+                  isReadOnly ||
+                  reversalFormDisabled ||
+                  !isVendorSelected
+                }
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
@@ -1440,7 +1468,7 @@ export default function SupplierInvoiceCreate({
             <Grid.Col span={1}>
               <NumberInput
                 label="Inv/Crn Amount"
-                disabled={isReadOnly || reversalFormDisabled}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 placeholder="0"
                 value={form.values.Inv_crn_amount ?? undefined}
                 onChange={(v) =>

@@ -219,6 +219,8 @@ type ChargeItem = {
   id?: number | null; // primary key from API when editing existing charge
   charge_id: number | null; // id from charge master (value when selecting charge)
   charge_name: string; // display label for charge
+  shipment_id?: string; // per-charge shipment id (when from job level, from corresponding HAWB)
+  shipper_id?: string; // per-charge shipper id/code (from corresponding HAWB)
   unit_code: string;
   unit_id?: string; // from house / dropdown value when using id
   no_of_unit: number | null;
@@ -319,6 +321,8 @@ type InvoiceDataFromApi = {
     id?: number;
     charge_id?: number;
     charge_name?: string;
+    shipment_id?: string;
+    shipper_id?: string;
     unit_id?: string;
     unit_code?: string;
     no_of_unit?: string | number;
@@ -442,6 +446,25 @@ function InvoiceCreate() {
   useEffect(() => {
     isAgentInvoiceRef.current = isAgentInvoice;
   }, [isAgentInvoice]);
+
+  // When opened from Air Export Job Create (job level): show "Job id" instead of "Shipment No"
+  // When opened from Air House Create (house level): show "Shipment No"
+  const isFromAirExportJob = useMemo(
+    () =>
+      (location.state as { fromJobLevel?: boolean } | null)?.fromJobLevel === true,
+    [location.state]
+  );
+
+  // Show "Shipment id" column in charges tab when from Air/Sea Export/Import Job Create (job level), hide when from House Create
+  const showShipmentIdInCharges = useMemo(
+    () =>
+      isFromAirExportJob &&
+      (location.pathname.includes("/air/export-job") ||
+        location.pathname.includes("/air/import-job") ||
+        location.pathname.includes("/SeaExport/export-job") ||
+        location.pathname.includes("/SeaExport/import-job")),
+    [isFromAirExportJob, location.pathname]
+  );
 
   // User's local currency code (for ROE = 1 when billing currency matches)
   const userLocalCurrency = useMemo(() => {
@@ -753,8 +776,10 @@ function InvoiceCreate() {
           }
         }
 
-        // Set shipment_id from housing to shipment_no field
-        if (firstHawb.shipment_id) {
+        // Set shipment_no: when from Air Export Job use job.id, else use firstHawb.shipment_id
+        if (isFromAirExportJob ) {
+          form.setFieldValue("shipment_no", String((job as { job_id: number }).job_id));
+        } else if (firstHawb.shipment_id) {
           form.setFieldValue("shipment_no", String(firstHawb.shipment_id));
         }
 
@@ -879,6 +904,20 @@ function InvoiceCreate() {
                   ? Number(charge.charge_id ?? charge.id)
                   : null,
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
+              shipment_id:
+                charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+                  ? String(charge.shipment_id)
+                  : charge.shipment_no != null && String(charge.shipment_no).trim() !== ""
+                    ? String(charge.shipment_no)
+                    :  firstHawb.shipment_id ? firstHawb.shipment_id: null,
+              shipper_id:
+                charge.shipper_id != null
+                  ? String(charge.shipper_id)
+                  : charge.shipper_code != null
+                    ? String(charge.shipper_code)
+                    : (firstHawb as { shipper_code?: string }).shipper_code
+                      ? String((firstHawb as { shipper_code: string }).shipper_code)
+                      : "",
               unit_code: unitCode,
               unit_id,
               no_of_unit: noOfUnit,
@@ -959,6 +998,13 @@ function InvoiceCreate() {
         }
       }
     } else {
+      if (
+        isFromAirExportJob &&
+        job &&
+        (job as { id?: number }).id != null
+      ) {
+        form.setFieldValue("shipment_no", String((job as { id: number }).id));
+      }
       form.setFieldValue("charges", [
         {
           charge_id: null,
@@ -983,6 +1029,7 @@ function InvoiceCreate() {
     location.state?.job,
     location.state?.hawbDetails,
     location.state?.housingDetails,
+    isFromAirExportJob,
   ]);
 
   // When opening invoice view screen from Accounts table (route has :id), fetch latest invoice details
@@ -1058,6 +1105,8 @@ function InvoiceCreate() {
               id: c.id != null ? Number(c.id) : null,
               charge_id: c.charge_id != null ? Number(c.charge_id) : null,
               charge_name: c.charge_name ?? "",
+              shipment_id: c.shipment_id ? String(c.shipment_id) : c.shipment_no ? String(c.shipment_no) : "",
+              shipper_id: c.shipper_id ?? "",
               unit_id:
                 c.unit_id != null && String(c.unit_id).trim() !== ""
                   ? String(c.unit_id)
@@ -1689,7 +1738,12 @@ function InvoiceCreate() {
             : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
-          shipment_no: values.shipment_no,
+          shipment_no:
+            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+              ? String(charge.shipment_id)
+              : null,
+              // : values.shipment_no,
+          ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
           no_of_unit: charge.no_of_unit ?? 0,
@@ -1714,9 +1768,12 @@ function InvoiceCreate() {
       const isAgent =
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
         (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+      const job = (location.state as { job?: { job_id?: number; id?: number } } | null)?.job;
+      const jobId = job && (job.job_id != null || job.id != null) ? (job.job_id ?? job.id) : undefined;
 
       const payload = {
         ...(isUpdate ? { id: saveResponse.id } : {}),
+        ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
         address: values.address,
         state_id: isAgent ? (stateId != null && stateId > 0 ? stateId : null) : stateId,
@@ -1985,7 +2042,12 @@ function InvoiceCreate() {
             : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
-          shipment_no: values.shipment_no,
+          shipment_no:
+            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+              ? String(charge.shipment_id)
+              :null,
+              // : values.shipment_no,
+          ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
           no_of_unit: charge.no_of_unit ?? 0,
@@ -2027,8 +2089,11 @@ function InvoiceCreate() {
             };
           });
       const allChargesPayload = isAgentPost ? chargesPayload : [...chargesPayload, ...taxCharges];
+      const jobForPost = (location.state as { job?: { job_id?: number; id?: number } } | null)?.job;
+      const jobIdForPost = jobForPost && (jobForPost.job_id != null || jobForPost.id != null) ? (jobForPost.job_id ?? jobForPost.id) : undefined;
       const payload = {
         id: saveResponse.id,
+        ...(jobIdForPost != null ? { job_id: jobIdForPost } : {}),
         bill_to: values.bill_to,
         address: values.address,
         state_id: isAgentPost ? (stateId != null && stateId > 0 ? stateId : null) : stateId,
@@ -2130,6 +2195,8 @@ function InvoiceCreate() {
               id: c.id ?? undefined,
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
+              shipment_id: (c as { shipment_id?: string }).shipment_id ? String((c as { shipment_id: string }).shipment_id) : (c as { shipment_no?: string }).shipment_no ? String((c as { shipment_no: string }).shipment_no) : "",
+              shipper_id: (c as { shipper_id?: string }).shipper_id ?? "",
               unit_code: c.unit_code ?? "",
               unit_id: c.unit_id != null ? String(c.unit_id) : undefined,
               no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
@@ -2434,11 +2501,15 @@ function InvoiceCreate() {
               />
             </Grid.Col>
 
-            {/* Shipment No */}
+            {/* Shipment No / Job id - Job id when from Air Export Job */}
             <Grid.Col span={2}>
               <TextInput
-                label="Shipment No"
-                placeholder="Enter shipment number"
+                label={isFromAirExportJob ? "Job id" : "Shipment No"}
+                placeholder={
+                  isFromAirExportJob
+                    ? "Job id"
+                    : "Enter shipment number"
+                }
                 readOnly={isReadOnly}
                 // disabled={isReadOnly}
                 value={form.values.shipment_no}
@@ -2823,7 +2894,12 @@ function InvoiceCreate() {
                     color: "#105476",
                   }}
                 >
-                  <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                  {showShipmentIdInCharges && (
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                      Shipment id
+                    </Grid.Col>
+                  )}
+                  <Grid.Col span={showShipmentIdInCharges ? 1.3 : 1.5} style={{ fontSize: "13px" }}>
                     Charge
                   </Grid.Col>
                   <Grid.Col span={1} style={{ fontSize: "13px" }}>
@@ -2890,7 +2966,23 @@ function InvoiceCreate() {
                     gutter="xs"
                     mt={index !== 0 ? "sm" : 0}
                   >
-                    <Grid.Col span={1.5}>
+                    {showShipmentIdInCharges && (
+                      <Grid.Col span={1}>
+                        <TextInput
+                          value={charge.shipment_id ?? ""}
+                          readOnly
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                              backgroundColor: "var(--mantine-color-gray-0)",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={showShipmentIdInCharges ? 1.3 : 1.5}>
                       <SearchableSelect
                         placeholder="Type charge name"
                         apiEndpoint={URL.chargeMaster}
@@ -3787,6 +3879,8 @@ function InvoiceCreate() {
                                 form.insertListItem("charges", {
                                   charge_id: null,
                                   charge_name: "",
+                                  shipment_id: undefined,
+                                  shipper_id: "",
                                   unit_code: "",
                                   unit_id: "",
                                   no_of_unit: null,
@@ -4072,10 +4166,20 @@ function InvoiceCreate() {
         opened={previewOpen}
         onClose={handleClosePreview}
         title="PDF Preview"
-        size="xl"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
         styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
           body: {
             padding: 0,
+            height: "100%",
           },
         }}
       >

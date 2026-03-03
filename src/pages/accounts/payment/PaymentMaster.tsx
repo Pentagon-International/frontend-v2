@@ -85,7 +85,7 @@ export default function PaymentMaster() {
     queryKey: ["payment", listCurrentPage, listPageSize, search],
     queryFn: async (): Promise<PaymentListResult> => {
       try {
-        const payload = { filters: {} as Record<string, unknown> };
+        const payload = { filters: {is_agent:false} as Record<string, unknown> };
         if (search?.trim()) {
           payload.filters.search = search.trim();
         }

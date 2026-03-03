@@ -15,6 +15,7 @@ import {
   Loader,
   Menu,
   Select,
+  type SelectProps,
   Stack,
   Text,
   UnstyledButton,
@@ -33,34 +34,33 @@ import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 
-type ReceiptRow = Record<string, unknown> & {
+type PaymentRow = Record<string, unknown> & {
   id?: number | string;
   sno?: number;
   day_book_name?: string;
-  receipt_no?: string;
+  payment_no?: string;
   type?: string;
   status?: string;
   amount?: number | string;
   [key: string]: unknown;
 };
 
-type ReceiptFilterResponse = {
+type PaymentFilterResponse = {
   status?: boolean;
   message?: string;
   index?: number;
   limit?: number;
   total?: number;
-  data?: ReceiptRow[];
+  data?: PaymentRow[];
 };
 
-type ReceiptListResult = {
-  list: ReceiptRow[];
+type PaymentListResult = {
+  list: PaymentRow[];
   total: number;
 };
 
-export default function ReceiptMaster() {
+export default function OverseasPaymentMaster() {
   const navigate = useNavigate();
-  // 1-based current page and page size, same as EnquiryMaster
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
   const [search] = useState("");
@@ -77,25 +77,25 @@ export default function ReceiptMaster() {
   };
 
   const {
-    data: receiptResult,
-    isLoading: receiptLoading,
-    isFetching: receiptFetching,
-    error: receiptError,
+    data: paymentResult,
+    isLoading: paymentLoading,
+    isFetching: paymentFetching,
+    error: paymentError,
   } = useQuery({
-    queryKey: ["receipt", listCurrentPage, listPageSize, search],
-    queryFn: async (): Promise<ReceiptListResult> => {
+    queryKey: ["payment", listCurrentPage, listPageSize, search],
+    queryFn: async (): Promise<PaymentListResult> => {
       try {
-        const payload = { filters: {"is_agent": false} as Record<string, unknown> };
+        const payload = { filters: {is_agent:true} as Record<string, unknown> };
         if (search?.trim()) {
           payload.filters.search = search.trim();
         }
         const response = await apiCallProtected.post(
-          `${URL.receiptFilter}?index=${index}&limit=${listPageSize}`,
+          `${URL.paymentFilter}?index=${index}&limit=${listPageSize}`,
           payload,
         );
         const body =
           response?.data != null
-            ? (response.data as ReceiptFilterResponse)
+            ? (response.data as PaymentFilterResponse)
             : null;
         if (!body) {
           return { list: [], total: 0 };
@@ -103,7 +103,7 @@ export default function ReceiptMaster() {
         const list = Array.isArray(body.data)
           ? body.data
           : Array.isArray(body)
-            ? (body as unknown as ReceiptRow[])
+            ? (body as unknown as PaymentRow[])
             : [];
         const total = body.total != null ? Number(body.total) : list.length;
         return { list, total };
@@ -113,7 +113,7 @@ export default function ReceiptMaster() {
         if (status === 404) {
           return { list: [], total: 0 };
         }
-        console.error("Error fetching receipt data:", err);
+        console.error("Error fetching payment data:", err);
         return { list: [], total: 0 };
       }
     },
@@ -122,16 +122,16 @@ export default function ReceiptMaster() {
     refetchOnMount: "always",
   });
 
-  const isLoading = receiptFetching || receiptLoading;
-  const tableData = receiptResult?.list ?? [];
-  const listTotalRecords = receiptResult?.total ?? 0;
+  const isLoading = paymentFetching || paymentLoading;
+  const tableData = paymentResult?.list ?? [];
+  const listTotalRecords = paymentResult?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(listTotalRecords / listPageSize));
   const pagination = {
     pageIndex: listCurrentPage - 1,
     pageSize: listPageSize,
   };
 
-  const columns = useMemo<MRT_ColumnDef<ReceiptRow>[]>(
+  const columns = useMemo<MRT_ColumnDef<PaymentRow>[]>(
     () => [
       {
         id: "sno",
@@ -147,8 +147,8 @@ export default function ReceiptMaster() {
         size: 160,
       },
       {
-        accessorKey: "receipt_no",
-        header: "Receipt No",
+        accessorKey: "payment_no",
+        header: "Payment No",
         size: 160,
       },
       {
@@ -199,8 +199,8 @@ export default function ReceiptMaster() {
         size: 80,
         Cell: ({ row }) => {
           const status = String(row.original?.status ?? "").toUpperCase();
-          const isPosted = status === "POSTED";
           const isUnposted = status === "UNPOSTED";
+          const isPosted = status === "POSTED";
           return (
             <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
               <Menu.Target>
@@ -212,7 +212,7 @@ export default function ReceiptMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/receipt/view", { state: row.original })
+                      navigate("/payment/view", { state: row.original })
                     }
                   >
                     <Group gap="sm">
@@ -230,7 +230,7 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/edit", { state: row.original })
+                        navigate("/payment/edit", { state: row.original })
                       }
                     >
                       <Group gap="sm">
@@ -249,7 +249,7 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/reversal/create", {
+                        navigate("/payment/reversal/create", {
                           state: row.original,
                         })
                       }
@@ -263,7 +263,7 @@ export default function ReceiptMaster() {
                           size="sm"
                           style={{ fontFamily: "Inter, sans-serif" }}
                         >
-                          Create Receipt Reversal
+                          Create payment reversal
                         </Text>
                       </Group>
                     </UnstyledButton>
@@ -402,7 +402,7 @@ export default function ReceiptMaster() {
             c="#444955"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
-            Receipt List
+           Overseas Payment List
           </Text>
 
           <Group gap="xs" wrap="nowrap">
@@ -422,7 +422,7 @@ export default function ReceiptMaster() {
                   },
                 },
               }}
-              onClick={() => navigate("/receipt/create")}
+              onClick={() => navigate("/overseas-payment/create")}
             >
               Create New
             </Button>
@@ -434,21 +434,20 @@ export default function ReceiptMaster() {
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
-            <Text c="dimmed">Loading receipt data...</Text>
+            <Text c="dimmed">Loading payment data...</Text>
           </Stack>
         </Center>
-      ) : receiptError ? (
+      ) : paymentError ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
             <Text c="dimmed">
-              Error loading receipt data. Please try refreshing the page.
+              Error loading payment data. Please try refreshing the page.
             </Text>
           </Stack>
         </Center>
       ) : (
         <>
           <MantineReactTable table={table} />
-          {/* Pagination bar: same layout as EnquiryMaster – left: rows per page + range; right: page nav */}
           <Group
             w="100%"
             justify="space-between"
@@ -470,7 +469,7 @@ export default function ReceiptMaster() {
                   handlePageSizeChange(Number(val));
                 }}
                 w={110}
-                styles={{ input: { fontSize: 12, height: 30 } } as any}
+                styles={{ input: { fontSize: 12, height: 30 } } as SelectProps["styles"]}
               />
               <Text size="sm" c="dimmed">
                 {listTotalRecords === 0

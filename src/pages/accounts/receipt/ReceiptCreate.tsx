@@ -186,7 +186,7 @@ const fetchFilterInvoice = async (
 ): Promise<InvoiceCombinedItem[]> => {
   const response = await postAPICall(
     URL.filterInvoice,
-    { filters: { status: "POSTED", bill_to: billTo } },
+    { filters: { status: "POSTED", bill_to: billTo,"is_agent": false} },
     API_HEADER,
   );
   const res = response as
@@ -1196,6 +1196,7 @@ export default function ReceiptCreate({
             status: "UNPOSTED",
             detailsOverride: detailsForPayload,
           });
+          payload.is_agent = false;
           const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
           const wrap = raw as {
             data?: {
@@ -1227,6 +1228,7 @@ export default function ReceiptCreate({
           const payload = buildReversalPayload(values, {
             detailsOverride: detailsForPayload,
           });
+          payload.is_agent = false;
           // Create receipt reversal: POST
           const raw = await postAPICall(
             URL.reverseReceipt,
@@ -1293,7 +1295,7 @@ export default function ReceiptCreate({
       const payload = isUpdate
         ? buildReceiptPayload(values, { status: "UNPOSTED" })
         : buildReceiptPayload(values);
-
+payload.is_agent = false;
       if (isUpdate) {
         const raw = await putAPICall(URL.receipt, payload, API_HEADER);
         const response =
@@ -1401,6 +1403,7 @@ export default function ReceiptCreate({
         receiptNo: reverseReceiptSaveResponse.receipt_no ?? "",
         status: "POSTED",
       });
+      payload.is_agent = false;
       const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
       const wrap = raw as {
         data?: {
@@ -1450,6 +1453,7 @@ export default function ReceiptCreate({
     setIsPosting(true);
     try {
       const payload = buildReceiptPayload(form.values, { status: "POSTED" });
+      payload.is_agent = false;
       const raw = await putAPICall(URL.receipt, payload, API_HEADER);
       const response =
         (

@@ -4587,6 +4587,23 @@ function EnquiryCreate() {
                                       value || ""
                                     );
 
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.origin_code`,
+                                      ""
+                                    )
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.origin_name`,
+                                      ""
+                                    )
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.destination_code`,
+                                      ""
+                                    )
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.destination_name`,
+                                      ""
+                                    )
+
                                     // Clear service_code and service_name when service changes
                                     if (value !== "OTHERS") {
                                       serviceForm.setFieldValue(

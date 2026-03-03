@@ -155,6 +155,7 @@ type ChargeItem = {
   id?: number | null;
   charge_id: number | null;
   charge_name: string;
+  shipment_id?: string;
   unit_code: string;
   no_of_unit: number | null;
   currency: string;
@@ -227,10 +228,13 @@ type ReversableDataResponse = {
   total?: string | number;
   header_total?: string | number;
   Dr_Cr?: string;
+  is_agent?: boolean;
   charges?: Array<{
     id?: number;
     charge_id?: number;
     charge_name?: string;
+    shipment_id?: string;
+    shipment_no?: string;
     unit_code?: string;
     currency_code?: string;
     no_of_unit?: string | number;
@@ -288,6 +292,7 @@ function InvoiceReverse() {
   const [addressOptions, setAddressOptions] = useState<
     { value: string; label: string }[]
   >([]);
+  const [isAgentInvoice, setIsAgentInvoice] = useState(false);
 
   const [gstRatesByChargeIndex, setGstRatesByChargeIndex] = useState<
     Record<number, GstRates | null>
@@ -300,6 +305,8 @@ function InvoiceReverse() {
 
   const jobServiceId =
     (location.state as { job?: { service_id?: number } })?.job?.service_id ?? null;
+  const job = (location.state as { job?: { job_id?: number; id?: number } } | null)?.job;
+  const jobId = job && (job.job_id != null || job.id != null) ? (job.job_id ?? job.id) : undefined;
 
   const isReadOnly = invoiceIsPosted;
 
@@ -622,7 +629,8 @@ function InvoiceReverse() {
     postAPICall(URL.invoiceReversableData, { document_no: docNo }, API_HEADER)
       .then((res) => {
         if (cancelled) return;
-        const data = res as ReversableDataResponse;
+        const data = ((res as { data?: ReversableDataResponse })?.data ?? res) as ReversableDataResponse;
+        setIsAgentInvoice(data.is_agent === true);
         const roeNum =
           data.roe != null
             ? typeof data.roe === "string"
@@ -686,6 +694,7 @@ function InvoiceReverse() {
                     id: c.id ?? null,
                     charge_id: c.charge_id ?? null,
                     charge_name: c.charge_name ?? "",
+                    shipment_id: c.shipment_id ?? c.shipment_no ?? "",
                     unit_code: c.unit_code ?? "",
                     no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
                     currency: c.currency_code ?? "",
@@ -836,7 +845,11 @@ function InvoiceReverse() {
         const sgstAmt = sameState && sgstRate > 0 ? clampAmount(headerAmount * (sgstRate / 100)) : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
-          shipment_no: values.shipment_no,
+          shipment_no:
+            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+              ? String(charge.shipment_id)
+              : null,
+              // : values.shipment_no,
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
           no_of_unit: charge.no_of_unit ?? 0,
@@ -877,7 +890,9 @@ function InvoiceReverse() {
       const allChargesPayload = [...chargesPayload, ...taxCharges];
       const payload = {
         id: saveResponse.id,
+        ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
+        is_agent: isAgentInvoice,
         address: values.address,
         state_id: stateId,
         gstn: values.gstn || null,
@@ -907,6 +922,8 @@ function InvoiceReverse() {
           }> }
         | undefined;
       if (response) {
+        const resWithAgent = response as { is_agent?: boolean };
+        if (resWithAgent.is_agent === true) setIsAgentInvoice(true);
         setSaveResponse((prev) => ({
           ...prev,
           id: response.id,
@@ -926,6 +943,7 @@ function InvoiceReverse() {
             return {
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
+              shipment_id: (c as { shipment_id?: string; shipment_no?: string }).shipment_id ?? (c as { shipment_id?: string; shipment_no?: string }).shipment_no ?? "",
               unit_code: c.unit_code ?? "",
               no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
               currency: c.currency_code ?? "",
@@ -1098,7 +1116,11 @@ function InvoiceReverse() {
         const sgstAmt = sameState && sgstRate > 0 ? clampAmount(headerAmount * (sgstRate / 100)) : 0;
         return {
           ...(isUpdate && charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
-          shipment_no: values.shipment_no,
+          shipment_no:
+            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+              ? String(charge.shipment_id)
+              : null,
+              // : values.shipment_no,
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
           no_of_unit: charge.no_of_unit ?? 0,
@@ -1120,7 +1142,9 @@ function InvoiceReverse() {
       });
       const payload = {
         ...(isUpdate ? { id: saveResponse.id } : {}),
+        ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
+                is_agent: isAgentInvoice,
         address: values.address,
         state_id: stateId,
         gstn: values.gstn || null,
@@ -1150,8 +1174,10 @@ function InvoiceReverse() {
             customer_id?: number;
             document_no?: string;
             status?: string;
+            is_agent?: boolean;
             charges?: Array<{ id?: number }>;
           };
+          if (res.is_agent === true) setIsAgentInvoice(true);
           setSaveResponse((prev) => ({
             ...prev,
             id: res.id ?? prev?.id,
@@ -1179,8 +1205,10 @@ function InvoiceReverse() {
             customer_id?: number;
             document_no?: string;
             status?: string;
+            is_agent?: boolean;
             charges?: Array<{ id?: number }>;
           };
+          if (res.is_agent === true) setIsAgentInvoice(true);
           setSaveResponse({
             id: res.id,
             customer_id: res.customer_id,
@@ -1392,8 +1420,8 @@ function InvoiceReverse() {
             </Grid.Col>
             <Grid.Col span={2}>
               <TextInput
-                label="Shipment No"
-                placeholder="Shipment No"
+                label={isAgentInvoice ? "Job id" : "Shipment No"}
+                placeholder={isAgentInvoice ? "Job id" : "Shipment No"}
                 value={form.values.shipment_no}
                 onChange={(e) => form.setFieldValue("shipment_no", e.target.value)}
                 // disabled={isReadOnly}
@@ -1573,7 +1601,10 @@ function InvoiceReverse() {
                       color: "#105476",
                     }}
                   >
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>Charge</Grid.Col>
+                    {isAgentInvoice && (
+                      <Grid.Col span={1} style={{ fontSize: "13px" }}>Shipment id</Grid.Col>
+                    )}
+                    <Grid.Col span={isAgentInvoice ? 1.3 : 1.5} style={{ fontSize: "13px" }}>Charge</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Unit</Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency</Grid.Col>
                     <Grid.Col span={0.45} style={{ fontSize: "13px" }}>ROE</Grid.Col>
@@ -1606,7 +1637,23 @@ function InvoiceReverse() {
                       gutter="sm"
                       mt={index !== 0 ? "sm" : 0}
                     >
-                      <Grid.Col span={1.5}>
+                      {isAgentInvoice && (
+                        <Grid.Col span={1}>
+                          <TextInput
+                            value={charge.shipment_id ?? form.values.shipment_no ?? ""}
+                            readOnly
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                                backgroundColor: "var(--mantine-color-gray-0)",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                      )}
+                      <Grid.Col span={isAgentInvoice ? 1.3 : 1.5}>
                         <SearchableSelect
                           placeholder="Type charge name"
                           apiEndpoint={URL.chargeMaster}

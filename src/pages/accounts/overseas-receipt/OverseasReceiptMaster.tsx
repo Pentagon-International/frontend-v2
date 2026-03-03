@@ -58,7 +58,7 @@ type ReceiptListResult = {
   total: number;
 };
 
-export default function ReceiptMaster() {
+export default function OverseasReceiptMaster() {
   const navigate = useNavigate();
   // 1-based current page and page size, same as EnquiryMaster
   const [listCurrentPage, setListCurrentPage] = useState(1);
@@ -85,7 +85,7 @@ export default function ReceiptMaster() {
     queryKey: ["receipt", listCurrentPage, listPageSize, search],
     queryFn: async (): Promise<ReceiptListResult> => {
       try {
-        const payload = { filters: {"is_agent": false} as Record<string, unknown> };
+        const payload = { filters: {"is_agent": true} as Record<string, unknown> };
         if (search?.trim()) {
           payload.filters.search = search.trim();
         }
@@ -212,7 +212,7 @@ export default function ReceiptMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/receipt/view", { state: row.original })
+                      navigate("/overseas-receipt/view", { state: row.original })
                     }
                   >
                     <Group gap="sm">
@@ -230,7 +230,7 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/edit", { state: row.original })
+                        navigate("/overseas-receipt/edit", { state: row.original })
                       }
                     >
                       <Group gap="sm">
@@ -249,7 +249,7 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/reversal/create", {
+                        navigate("/overseas-receipt/reversal/create", {
                           state: row.original,
                         })
                       }
@@ -402,7 +402,7 @@ export default function ReceiptMaster() {
             c="#444955"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
-            Receipt List
+            Overseas Receipt List
           </Text>
 
           <Group gap="xs" wrap="nowrap">
@@ -422,7 +422,7 @@ export default function ReceiptMaster() {
                   },
                 },
               }}
-              onClick={() => navigate("/receipt/create")}
+              onClick={() => navigate("/overseas-receipt/create")}
             >
               Create New
             </Button>
