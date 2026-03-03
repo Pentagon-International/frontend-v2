@@ -108,7 +108,7 @@ interface FormValues {
   customer_service_name: string;
   is_direct: boolean;
   is_coload: boolean;
-  houseno:string;
+  houseno: string;
 
   // Routing Details
   routingDetails: RoutingDetail[];
@@ -161,18 +161,18 @@ interface FormValues {
 // Yup validation schema
 const validationSchema = yup.object({
   // Import Shipment fields - Only these are required
-  customer_code: yup.string().required("Customer is required"),
-  service: yup.string().required("Service is required"),
+  customer_code: yup.string().trim().required("Customer is required"),
+  service: yup.string().trim().required("Service is required"),
   date: yup.date().required("Date is required"),
-  origin_code: yup.string().required("Origin is required"),
-  destination_code: yup.string().required("Destination is required"),
-  shipment_terms_code: yup.string().required("Shipment terms are required"),
-  freight: yup.string().required("Freight is required"),
-  routed: yup.string().required("Routed is required"),
-  routed_by: yup.string().required("Routed by is required"),
+  origin_code: yup.string().trim().required("Origin is required"),
+    destination_code: yup.string().trim().required("Destination is required").notOneOf([yup.ref("origin_code")], "Origin and destination cannot be same"),
+    shipment_terms_code: yup.string().trim().required("Shipment terms are required"),
+    freight: yup.string().trim().required("Freight is required"),
+    routed: yup.string().trim().required("Routed is required"),
+    routed_by: yup.string().trim().required("Routed by is required"),
   customer_service_name: yup
     .string()
-    .required("Customer service name is required"),
+    .trim().required("Customer service name is required"),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
   houseno: yup.string().required("House No is required"),
@@ -184,31 +184,56 @@ const validationSchema = yup.object({
       from_location_code: yup.string(),
       to_location_code: yup.string(),
       etd: yup.date(),
-      eta: yup.date(),
+      eta: yup
+            .date()
+            .min(yup.ref("etd"), "ETA must be after ETD"),
       carrier_code: yup.string(),
       flight_no: yup.string().nullable(),
       status: yup.string(),
+      from_location_name: yup.string(),
+      to_location_name: yup.string(),
+      carrier_name: yup.string(),
     })
-  ),
+  ).min(1, "At least one routing leg required"),
 
   // Party Details fields - All optional
   shipper_code: yup.string(),
   shipper_address_id: yup.number(),
-  shipper_email: yup.string().email("Invalid email format"),
+  shipper_email: yup
+                .string()
+                .email("Invalid email format")
+                .nullable()
+                .notRequired(),
   consignee_code: yup.string(),
   consignee_address_id: yup.number(),
-  consignee_email: yup.string().email("Invalid email format"),
+  consignee_email: yup
+                  .string()
+                  .email("Invalid email format")
+                  .nullable()
+                  .notRequired(),
   forwarder_code: yup.string(),
   forwarder_address_id: yup.number(),
-  forwarder_email: yup.string().email("Invalid email format"),
+  forwarder_email: yup
+                  .string()
+                  .email("Invalid email format")
+                  .nullable()
+                  .notRequired(),
   destination_agent_code: yup.string(),
   destination_agent_address_id: yup.number(),
-  destination_agent_email: yup.string().email("Invalid email format"),
+  destination_agent_email: yup
+                          .string()
+                          .email("Invalid email format")
+                          .nullable()
+                          .notRequired(),
   billing_customer_code: yup.string(),
   billing_customer_address_id: yup.number(),
   notify_customer_code: yup.string(),
   notify_customer_address_id: yup.number(),
-  notify_customer_email: yup.string().email("Invalid email format"),
+  notify_customer_email: yup
+                        .string()
+                        .email("Invalid email format")
+                        .nullable()
+                        .notRequired(),
   cha_code: yup.string(),
   cha_address_id: yup.number(),
 
@@ -218,18 +243,34 @@ const validationSchema = yup.object({
   marks_no: yup.string(),
   cargo_details: yup.array().of(
     yup.object({
-      no_of_packages: yup.number().nullable(),
-      gross_weight: yup.number().nullable(),
+      no_of_packages: yup.number().when("$service", {
+        is: (val: string) => val === "AIR" || val === "LCL",
+        then: (schema) => schema.required("No of packages required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
+      gross_weight: yup.number().when("$service", {
+        is: (val: string) => val === "AIR",
+        then: (schema) => schema.required("Gross weight required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
+      container_type_code: yup.string().when("$service", {
+        is: "FCL",
+        then: (schema) => schema.required("Container type required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
+      no_of_containers: yup.number().when("$service", {
+        is: "FCL",
+        then: (schema) => schema.required("No of containers required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
       volume_weight: yup.number().nullable(),
       chargeable_weight: yup.number().nullable(),
       volume: yup.number().nullable(),
       chargeable_volume: yup.number().nullable(),
-      container_type_code: yup.string().nullable(),
-      no_of_containers: yup.number().nullable(),
     })
   ),
 
-  // Pickup Details - All optional
+  // Pickup Details - All optional (pickup_address_id is string per FormValues)
   pickup_location: yup.string(),
   pickup_from_code: yup.string(),
   pickup_address_id: yup.string(),
@@ -237,13 +278,17 @@ const validationSchema = yup.object({
   actual_pickup_date: yup.date().nullable(),
   transporter_code: yup.string(),
   transporter_name: yup.string(),
-  transporter_email: yup.string().email("Invalid email format"),
+  transporter_email: yup
+    .string()
+    .email("Invalid email format")
+    .nullable()
+    .notRequired(),
 
-  // Delivery Details - All optional
+  // Delivery Details - All optional (delivery_address_id is string per FormValues)
   delivery_location: yup.string(),
   delivery_from_code: yup.string(),
   delivery_address_id: yup.string(),
-  planned_delivery_date: yup.date(),
+  planned_delivery_date: yup.date().min(yup.ref("planned_pickup_date"), "Delivery must be after pickup"),
 });
 
 // Data fetching functions
@@ -304,12 +349,13 @@ type QuotationCharge = {
   charge_name: string;
   pp_cc?: string | null;
   currency: string;
-  roe?: string;
+  roe?: number;
   unit?: string;
   no_of_units?: number;
   sell_per_unit?: number;
   min_sell?: number;
   cost_per_unit?: number;
+  min_cost?: number | null;
   total_cost?: number;
   total_sell?: number;
 };
@@ -601,7 +647,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     });
   }, [unitDataRaw]);
 
-  const updateCharge = (index: number, field: string, value: string) => {
+  const updateCharge = (index: number, field: string, value: string | number) => {
     setCharges(
       charges.map((charge, i) => {
         if (i === index) {
@@ -844,6 +890,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     validate: yupResolver(validationSchema) as unknown as (
       values: FormValues
     ) => Record<string, string>,
+    validateInputOnBlur: true,
+    validateInputOnChange: false,
     initialValues: {
       // Import Shipment fields
       customer_code: "",
@@ -862,7 +910,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       customer_service_name: "",
       is_direct: false,
       is_coload: false,
-      houseno:"",
+      houseno: "",
 
       // Routing Details - start with one empty row
       routingDetails: [
@@ -1691,6 +1739,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
+        "houseno",
       ];
 
       const validation = form.validate();
@@ -3364,6 +3413,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         <FormNumberInput
                           label="No of Packages"
                           placeholder="Enter number of packages"
+                          required
                           min={1}
                           {...form.getInputProps("cargo_details.0.no_of_packages")}
                         />
@@ -3372,6 +3422,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         <FormNumberInput
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
+                          required
                           min={0}
                           decimalScale={2}
                           {...form.getInputProps("cargo_details.0.gross_weight")}
@@ -3456,6 +3507,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                 label="Container Type"
                                 placeholder="Select container type"
                                 searchable
+                                required
                                 data={containerTypeOptions}
                                 nothingFoundMessage="No container types found"
                                 {...form.getInputProps(
@@ -3468,6 +3520,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                 label="No of Containers"
                                 placeholder="Enter number of containers"
                                 min={1}
+                                required
                                 {...form.getInputProps(
                                   `cargo_details.${cargoIndex}.no_of_containers`
                                 )}
@@ -4018,13 +4071,19 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         />
                       </Grid.Col>
                       <Grid.Col span={0.8}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="ROE"
                           value={charge.roe}
-                          onChange={(event) =>
-                            updateCharge(index, "roe", event.currentTarget.value)
+                          onChange={(val) =>
+                            updateCharge(
+                              typeof charge.id === "number"
+                                ? charge.id
+                                : Number(charge.id) || 0,
+                              "roe",
+                              val || "")
                           }
                           size="xs"
+                          decimalScale={2}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -4040,55 +4099,82 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         />
                       </Grid.Col>
                       <Grid.Col span={0.8}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="0"
                           value={charge.no_of_units}
-                          onChange={(event) =>
-                            updateCharge(index, "no_of_units", event.currentTarget.value)
+                          onChange={(val) =>
+                            updateCharge(
+                              typeof charge.id === "number"
+                                ? charge.id
+                                : Number(charge.id) || 0,
+                              "no_of_units",
+                              val || "")
                           }
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="0.00"
                           value={charge.sell_per_unit}
-                          onChange={(event) =>
-                            updateCharge(index, "sell_per_unit", event.currentTarget.value)
+                          decimalScale={2}
+                          onChange={(val) =>
+                            updateCharge(
+                              typeof charge.id === "number"
+                                ? charge.id
+                                : Number(charge.id) || 0,
+                              "sell_per_unit",
+                              val || "")
                           }
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="0.00"
                           value={charge.min_sell}
-                          onChange={(event) =>
-                            updateCharge(index, "min_sell", event.currentTarget.value)
+                          decimalScale={2}
+                          onChange={(val) =>
+                            updateCharge(
+                              typeof charge.id === "number"
+                                ? charge.id
+                                : Number(charge.id) || 0,
+                              "min_sell",
+                              val || ""
+                            )
                           }
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="0.00"
                           value={charge.cost_per_unit}
-                          onChange={(event) =>
-                            updateCharge(index, "cost_per_unit", event.currentTarget.value)
+                          decimalScale={2}
+                          onChange={(val) =>
+                            updateCharge(
+                              typeof charge.id === "number"
+                                ? charge.id
+                                : Number(charge.id) || 0,
+                              "cost_per_unit",
+                              val || ""
+                            )
                           }
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           value={charge.total_sell || ""}
+                          decimalScale={2}
                           readOnly
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           value={charge.total_cost || ""}
+                          decimalScale={2}
                           readOnly
                           size="xs"
                         />
@@ -4178,7 +4264,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate("../")}
+            onClick={() => navigate(-1)}
           >
             Back to List
           </Button>

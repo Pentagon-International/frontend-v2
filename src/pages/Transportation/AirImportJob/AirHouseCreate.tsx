@@ -39,6 +39,7 @@ import {
   useRef,
   Fragment,
 } from "react";
+import { useDebouncedCallback } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -69,6 +70,7 @@ type HAWBDetailsForm = {
   destination_name: string;
   customer_service: string;
   trade: string;
+  origin_agent: string; // Stores customer_code for API filter
   origin_agent_name: string;
   origin_agent_address: string;
   origin_agent_email: string;
@@ -148,7 +150,7 @@ const fetchUnitMaster = async (serviceType: string = "AIR") => {
   try {
     const payload = {
       filters: {
-        service_type: serviceType,
+        // service_type: serviceType,
       },
     };
     const response = (await postAPICall(
@@ -378,6 +380,7 @@ function HouseCreate() {
           : ""),
       customer_service: editData?.customer_service || "",
       trade: editData?.trade || "",
+      origin_agent: editData?.origin_agent || "",
       origin_agent_name: editData?.origin_agent_name || "",
       origin_agent_address: editData?.origin_agent_address || "",
       origin_agent_email: editData?.origin_agent_email || "",
@@ -407,6 +410,215 @@ function HouseCreate() {
 
   // Memoize additionalParams to prevent SearchableSelect from recreating fetchData on every render
   const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
+
+  // Similar booking check - modal and API (Air Import Job Create flow only)
+  const [similarBookingModalOpen, setSimilarBookingModalOpen] = useState(false);
+  const [similarBookingData, setSimilarBookingData] = useState<Record<string, unknown> | null>(null);
+
+  const fetchSimilarBookings = useCallback(
+    async (hawbNo: string, agentCode: string) => {
+      if (!hawbNo?.trim() || !agentCode?.trim()) return;
+      try {
+        const response = (await postAPICall(
+          URL.customerServiceShipmentFilter,
+          {
+            filters: {
+              service_type: "IMPORT",
+              service:"AIR",
+              houseno: hawbNo.trim(),
+              destination_agent_code: agentCode.trim(),
+            },
+          },
+          API_HEADER
+        )) as { success?: boolean; data?: unknown[] };
+        if (response?.success && Array.isArray(response.data) && response.data.length > 0) {
+          setSimilarBookingData(response.data[0] as Record<string, unknown>);
+          setSimilarBookingModalOpen(true);
+        }
+      } catch {
+        // Silent fail for optional feature
+      }
+    },
+    []
+  );
+
+  const debouncedFetchSimilarBookings = useDebouncedCallback(
+    (hawbNo: string, agentCode: string) => {
+      fetchSimilarBookings(hawbNo, agentCode);
+    },
+    2000
+  );
+
+  useEffect(() => {
+    if (isEditMode) return;
+    const hawbNo = form.values.hawb_number?.trim();
+    const agentCode = form.values.origin_agent?.trim();
+    if (hawbNo && agentCode) {
+      debouncedFetchSimilarBookings(hawbNo, agentCode);
+    }
+  }, [isEditMode, form.values.hawb_number, form.values.origin_agent, debouncedFetchSimilarBookings]);
+
+  const fillFormFromSimilarBooking = useCallback(() => {
+    const b = similarBookingData;
+    if (!b) return;
+    setSimilarBookingModalOpen(false);
+    setSimilarBookingData(null);
+
+    const rb = b as Record<string, unknown>;
+
+    // Party details (booking uses shipper/consignee or customer when null)
+    const shipperCode = rb.shipper_code || "";
+    const shipperName = rb.shipper_name || "";
+    const consigneeCode = rb.consignee_code || "";
+    const consigneeName = rb.consignee_name || "";
+    form.setFieldValue("shipper_code", String(shipperCode || ""));
+    form.setFieldValue("shipper_name", String(shipperName || ""));
+    form.setFieldValue("consignee_code", String(consigneeCode || ""));
+    form.setFieldValue("consignee_name", String(consigneeName || ""));
+    form.setFieldValue(
+      "commodity_description",
+      String(rb.commodity_description || ""),
+    );
+    form.setFieldValue("marks_no", String(rb.marks_no || ""));
+
+    // Customer service name, routed, routed_by
+    if (rb.customer_service_name) {
+      form.setFieldValue("customer_service", String(rb.customer_service_name));
+    }
+    if (rb.routed) {
+      const routed = String(rb.routed).toLowerCase();
+      form.setFieldValue("routed", routed === "self" || routed === "agent" ? routed : "self");
+    }
+    if (rb.routed_by) {
+      form.setFieldValue("routed_by", String(rb.routed_by));
+    }
+
+    // Notify customer name / address / email
+    if (rb.notify_customer) {
+      form.setFieldValue("notify_customer1_name", String(rb.notify_customer));
+    }
+    if (rb.notify_customer_address) {
+      form.setFieldValue(
+        "notify_customer1_address",
+        String(rb.notify_customer_address),
+      );
+    }
+    if (rb.notify_customer_email) {
+      form.setFieldValue(
+        "notify_customer1_email",
+        String(rb.notify_customer_email),
+      );
+    }
+
+    // Shipper/consignee addresses - try addresses from API if available
+    const shipperAddr = rb.shipper_address;
+    const consigneeAddr = rb.consignee_address;
+    if (shipperAddr) {
+      form.setFieldValue("shipper_address", String(shipperAddr));
+    }
+    if (consigneeAddr) {
+      form.setFieldValue("consignee_address", String(consigneeAddr));
+    }
+
+    const shipperEmail = rb.shipper_email;
+    const consigneeEmail = rb.consignee_email;
+    if (shipperEmail) {
+      form.setFieldValue("shipper_email", String(shipperEmail));
+    }
+    if (consigneeEmail) {
+      form.setFieldValue("consignee_email", String(consigneeEmail));
+    }
+
+    // Origin agent address and email (booking uses destination_agent_* for import)
+    if (rb.destination_agent_address) {
+      form.setFieldValue("origin_agent_address", String(rb.destination_agent_address));
+    }
+    if (rb.destination_agent_email) {
+      form.setFieldValue("origin_agent_email", String(rb.destination_agent_email));
+    }
+
+    // Cargo details - from cargo_details array OR top-level fields
+    const cargoDetailsData = rb.cargo_details as
+      | Array<Record<string, unknown>>
+      | undefined;
+    const isHazardous = (rb as { is_hazardous?: boolean }).is_hazardous;
+    const haz = isHazardous === true ? "Yes" : isHazardous === false ? "No" : "";
+
+    const toNum = (v: unknown): number | null => {
+      if (v == null) return null;
+      const n = parseFloat(String(v));
+      return Number.isNaN(n) ? null : n;
+    };
+
+    if (cargoDetailsData && Array.isArray(cargoDetailsData) && cargoDetailsData.length > 0) {
+      const mapped = cargoDetailsData.map((c) => {
+        const no_of_packages = toNum(c.no_of_packages ?? rb.no_of_packages);
+        const gross_weight = toNum(c.gross_weight ?? rb.gross_weight);
+        const volumeFromRow =
+          toNum(c.volume) ??
+          toNum(c.volume_weight) ??
+          toNum(rb.volume_weight) ??
+          toNum(rb.volume);
+        const chargeable_weight =
+          toNum(c.chargeable_volume) ??
+          toNum(c.chargeable_weight) ??
+          toNum(rb.chargeable_volume) ??
+          toNum(rb.chargeable_weight);
+        return {
+          no_of_packages,
+          gross_weight,
+          volume: volumeFromRow,
+          chargeable_weight,
+          haz,
+        };
+      });
+      setCargoDetails(mapped.length > 0 ? mapped : []);
+    } else {
+      // Top-level cargo fields when cargo_details array absent
+      const row = {
+        no_of_packages: toNum(rb.no_of_packages),
+        gross_weight: toNum(rb.gross_weight),
+        volume: toNum(rb.volume) ?? toNum(rb.volume_weight),
+        chargeable_weight: toNum(rb.chargeable_volume) ?? toNum(rb.chargeable_weight),
+        haz,
+      };
+      setCargoDetails([row]);
+    }
+
+    // Charges from rate_details - use unit_id, currency_id from API
+    const rateDetails = rb.rate_details as
+      | Array<Record<string, unknown>>
+      | undefined;
+    if (rateDetails && Array.isArray(rateDetails) && rateDetails.length > 0) {
+      const mappedCharges = rateDetails.map((r) => {
+        const unitId =
+          r.unit_id != null ? String(r.unit_id) : r.unit != null ? String(r.unit) : "";
+        const currencyId =
+          (r as { currency_id?: unknown }).currency_id != null
+            ? String((r as { currency_id?: unknown }).currency_id)
+            : (r as { currency_country_code?: string }).currency_country_code != null
+              ? String((r as { currency_country_code?: string }).currency_country_code)
+              : "";
+        return {
+          charge_id: r.charge_id != null ? Number(r.charge_id) : null,
+          charge_name: String(r.charge_name || ""),
+          pp_cc: String(r.pp_cc || ""),
+          unit_id: unitId,
+          no_of_unit: r.no_of_units != null ? Number(r.no_of_units) : null,
+          currency_id: currencyId,
+          roe: r.roe != null ? Number(r.roe) : null,
+          amount_per_unit: r.sell_per_unit != null ? Number(r.sell_per_unit) : null,
+          amount: r.total_sell != null ? Number(r.total_sell) : null,
+        };
+      });
+      chargesForm.setValues({ charges: mappedCharges });
+    }
+  }, [similarBookingData, form, chargesForm]);
+
+  const dismissSimilarBookingModal = useCallback(() => {
+    setSimilarBookingModalOpen(false);
+    setSimilarBookingData(null);
+  }, []);
 
   // Auto-calculate chargeable weight when gross weight or volume weight changes
   const cargoGrossWeights = cargoDetails.map((c) => c.gross_weight).join(",");
@@ -500,6 +712,7 @@ function HouseCreate() {
         destination_name: editData.destination_name || "",
         customer_service: editData.customer_service || "",
         trade: editData.trade || "",
+        origin_agent: editData.origin_agent || "",
         origin_agent_name: editData.origin_agent_name || "",
         origin_agent_address: editData.origin_agent_address || "",
         origin_agent_email: editData.origin_agent_email || "",
@@ -1174,6 +1387,7 @@ function HouseCreate() {
       | undefined;
 
     if (mawbOriginAgentCode && mawbOriginAgentCode.trim() !== "") {
+      form.setFieldValue("origin_agent", mawbOriginAgentCode);
       // Origin Agent Name in house = customer name (for display and for payload agent_name)
       form.setFieldValue(
         "origin_agent_name",
@@ -1447,6 +1661,7 @@ function HouseCreate() {
       destination_name: v.destination_name,
       customer_service: v.customer_service,
       trade: v.trade,
+      origin_agent: v.origin_agent,
       origin_agent_name: v.origin_agent_name,
       origin_agent_address: v.origin_agent_address,
       origin_agent_email: v.origin_agent_email,
@@ -1518,6 +1733,7 @@ function HouseCreate() {
       destination_name: currentFormValues.destination_name,
       customer_service: currentFormValues.customer_service,
       trade: currentFormValues.trade,
+      origin_agent: currentFormValues.origin_agent,
       origin_agent_name: currentFormValues.origin_agent_name,
       origin_agent_address: currentFormValues.origin_agent_address,
       origin_agent_email: currentFormValues.origin_agent_email,
@@ -2631,9 +2847,13 @@ function HouseCreate() {
                   value={form.values.origin_agent_name}
                   displayValue={form.values.origin_agent_name}
                   onChange={(value, _selectedData, originalData) => {
-                    const previousValue = form.values.origin_agent_name;
                     const newValue = value || "";
+                    const code = (originalData as Record<string, unknown> | undefined)
+                      ?.customer_code
+                      ? String((originalData as Record<string, unknown>).customer_code)
+                      : "";
 
+                    form.setFieldValue("origin_agent", code);
                     form.setFieldValue("origin_agent_name", newValue);
 
                     // Use originalData to populate address options
@@ -3096,8 +3316,8 @@ function HouseCreate() {
                       placeholder="Select PP/CC"
                       searchable
                       data={[
-                        { value: "PP", label: "Prepaid" },
-                        { value: "CC", label: "Collect" },
+                        { value: "Prepaid", label: "Prepaid" },
+                        { value: "Collect", label: "Collect" },
                       ]}
                       value={charge.pp_cc || null}
                       onChange={(value) => {
@@ -4189,6 +4409,29 @@ function HouseCreate() {
           )}
         </Group>
       </Group>
+
+      {/* Similar booking found modal */}
+      <Modal
+        opened={similarBookingModalOpen}
+        onClose={dismissSimilarBookingModal}
+        title="Similar booking found"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            A similar booking is found for the house number. Do you want to add it
+            to the house?
+          </Text>
+          <Group justify="flex-end" mt="md">
+            <Button variant="outline" onClick={dismissSimilarBookingModal}>
+              No
+            </Button>
+            <Button color="#105476" onClick={fillFormFromSimilarBooking}>
+              Yes
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* PDF Preview Modal */}
       <Modal

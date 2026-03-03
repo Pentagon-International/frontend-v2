@@ -180,7 +180,7 @@ const fetchUnitMaster = async () => {
   try {
     const payload = {
       filters: {
-        service_type: "SEA",
+        // service_type: "SEA",
       },
     };
     const response = (await postAPICall(
@@ -2954,8 +2954,8 @@ function HouseCreate() {
                       placeholder="Select PP/CC"
                       searchable
                       data={[
-                        { value: "PP", label: "Prepaid" },
-                        { value: "CC", label: "Collect" },
+                        { value: "Prepaid", label: "Prepaid" },
+                        { value: "Collect", label: "Collect" },
                       ]}
                       value={charge.pp_cc || null}
                       onChange={(value) => {
@@ -3034,50 +3034,32 @@ function HouseCreate() {
                       placeholder="No of Unit"
                       min={0}
                       hideControls
-                      {...(() => {
-                        const inputProps = chargesForm.getInputProps(
+                      {...chargesForm.getInputProps(`charges.${index}.no_of_unit`)}
+                      value={
+                        chargesForm.values.charges[index].no_of_unit ?? undefined
+                      }
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(
                           `charges.${index}.no_of_unit`,
+                          value
                         );
-                        return {
-                          value: inputProps.value as number | undefined,
-                          onChange: (value: number | string | null) => {
-                            chargesForm.setFieldValue(
-                              `charges.${index}.no_of_unit`,
-                              value as number | null,
-                            );
-                            // Auto-calculate amount if amount_per_unit is provided
-                            const currentCharge =
-                              chargesForm.values.charges[index];
-                            if (
-                              currentCharge.amount_per_unit !== null &&
-                              currentCharge.amount_per_unit !== undefined &&
-                              currentCharge.amount_per_unit > 0
-                            ) {
-                              const roe =
-                                currentCharge.roe !== null &&
-                                currentCharge.roe !== undefined
-                                  ? currentCharge.roe
-                                  : 0;
-                              const noOfUnit =
-                                value !== null && value !== undefined
-                                  ? typeof value === "number"
-                                    ? value
-                                    : Number(value)
-                                  : 0;
-                              const amountPerUnit =
-                                currentCharge.amount_per_unit;
-                              const calculatedAmount =
-                                roe * noOfUnit * amountPerUnit;
-                              if (calculatedAmount > 0) {
-                                chargesForm.setFieldValue(
-                                  `charges.${index}.amount`,
-                                  calculatedAmount,
-                                );
-                              }
-                            }
-                          },
-                        };
-                      })()}
+
+                        const currentCharge = chargesForm.values.charges[index];
+
+                        if (
+                          currentCharge.amount_per_unit &&
+                          value
+                        ) {
+                          const roe = currentCharge.roe ?? 0;
+                          const calculatedAmount =
+                            roe * Number(value) * currentCharge.amount_per_unit;
+
+                          chargesForm.setFieldValue(
+                            `charges.${index}.amount`,
+                            calculatedAmount
+                          );
+                        }
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={1.5}>

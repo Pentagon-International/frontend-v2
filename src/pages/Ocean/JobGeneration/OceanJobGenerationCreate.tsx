@@ -88,8 +88,11 @@ type RoutingDetail = {
   id?: number;
   transport_type: string;
   from_port_code: string;
+  from_port_name: string;
   to_port_code: string;
+  to_port_name: string;
   carrier_code: string;
+  carrier_name: string;
   transport_no: string;
   etd: string;
   eta: string;
@@ -208,8 +211,11 @@ function OceanJobGenerationCreate() {
     {
       transport_type: "",
       from_port_code: "",
+      from_port_name: "",
       to_port_code: "",
+      to_port_name: "",
       carrier_code: "",
+      carrier_name: "",
       transport_no: "",
       etd: "",
       eta: "",
@@ -303,24 +309,28 @@ function OceanJobGenerationCreate() {
       // Also store jobData locally so we can reuse nested IDs in later payloads
       setCreatedJobData(jobData as any);
 
-      // Populate job details - map from API response structure
+      // Populate job details - map from API response (code as value, name as display)
+      const etaStr = jobData.eta ? dayjs(jobData.eta).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
+      const etdStr = jobData.etd ? dayjs(jobData.etd).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
+      const ataStr = jobData.ata ? dayjs(jobData.ata).format("YYYY-MM-DD") : "";
+      const atdStr = jobData.atd ? dayjs(jobData.atd).format("YYYY-MM-DD") : "";
       jobDetailsForm.setValues({
         service: jobData.service || serviceType || "",
-        agent_code: jobData.agent_code_read || jobData.agent_code || "",
+        agent_code: jobData.agent_code || jobData.agent_code_read || "",
         agent_name: jobData.agent_name || "",
-        origin_code: jobData.origin_code_read || "",
+        origin_code: jobData.origin_code || jobData.origin_code_read || "",
         origin_name: jobData.origin_name || "",
-        destination_code: jobData.destination_code_read || "",
+        destination_code: jobData.destination_code || jobData.destination_code_read || "",
         destination_name: jobData.destination_name || "",
-        eta: jobData.eta || dayjs().format("YYYY-MM-DD"),
-        etd: jobData.etd || dayjs().format("YYYY-MM-DD"),
-        ata: jobData.ata || "",
-        atd: jobData.atd || "",
+        eta: etaStr,
+        etd: etdStr,
+        ata: ataStr,
+        atd: atdStr,
         cutoff_date: jobData.cut_off_date || dayjs().format("YYYY-MM-DD"),
         vessel: jobData.vessel || "",
         voyage: jobData.voyage || "",
         schedule: jobData.schedule || "",
-        carrier_code: jobData.carrier_code_read || "",
+        carrier_code: jobData.carrier_code || jobData.carrier_code_read || "",
         carrier_name: jobData.carrier_name || "",
         master_no: jobData.master_no || "",
         master_date: jobData.master_date || "",
@@ -335,14 +345,14 @@ function OceanJobGenerationCreate() {
         const mappedContainers = jobData.equipment_details.map((eq: any) => ({
           id: eq.id,
           container_number: eq.container_no || "",
-          container_type: eq.container_type_code_read || "",
+          container_type: eq.container_type_code || eq.container_type_code_read || "",
           custom_seal_number: eq.customer_seal_no || "",
           actual_seal_number: eq.actual_seal_no || "",
         }));
         containerForm.setFieldValue("containers", mappedContainers);
       }
 
-      // Populate routing details if exists
+      // Populate routing details if exists (code as value, name as display)
       if (
         jobData.routing_details &&
         Array.isArray(jobData.routing_details) &&
@@ -352,24 +362,32 @@ function OceanJobGenerationCreate() {
           id: route.id,
           transport_type: route.transport_type || "",
           from_port_code: route.from_port_code || "",
+          from_port_name: route.from_port_name || "",
           to_port_code: route.to_port_code || "",
+          to_port_name: route.to_port_name || "",
           carrier_code: route.carrier_code || "",
+          carrier_name: route.carrier_name || "",
           transport_no: route.transport_no || "",
-          etd: route.etd || "",
-          eta: route.eta || "",
-          atd: route.atd || "",
-          ata: route.ata || "",
+          etd: route.etd ? dayjs(route.etd).format("YYYY-MM-DD") : "",
+          eta: route.eta ? dayjs(route.eta).format("YYYY-MM-DD") : "",
+          atd: route.atd ? dayjs(route.atd).format("YYYY-MM-DD") : "",
+          ata: route.ata ? dayjs(route.ata).format("YYYY-MM-DD") : "",
           vessel: route.vessel || "",
         }));
         setRoutingDetails(mappedRoutes);
       }
 
-      // Set selected bookings from shipment_details
+      // Set selected bookings from shipment_details or booking_details
       if (jobData.shipment_details && Array.isArray(jobData.shipment_details)) {
         const shipmentIds = jobData.shipment_details
           .map((shipment: any) => shipment.customer_service_shipment_id_read)
           .filter((id: number) => id != null);
         setSelectedBookings(new Set(shipmentIds));
+      } else if (jobData.booking_details && Array.isArray(jobData.booking_details)) {
+        const bookingIds = jobData.booking_details
+          .map((d: any) => d.booking_id ?? d.booking_data?.id)
+          .filter((id: number) => id != null);
+        setSelectedBookings(new Set(bookingIds));
       }
 
       // Map existing booking_details (for edit payload IDs & container mapping)
@@ -433,24 +451,44 @@ function OceanJobGenerationCreate() {
 
   // Fetch booking list once when page is rendered (not on every navigation to step 3)
   useEffect(() => {
-    // In view/edit mode, load bookings from jobData.shipment_details when we have it
-    if ((mode === "view" || mode === "edit") && jobData?.shipment_details) {
-      const bookings = jobData.shipment_details.map((shipment: any) => {
-        const shipmentData = shipment.customer_service_shipment_data || {};
-        return {
-          id: shipment.customer_service_shipment_id_read,
-          shipment_code: shipmentData.shipment_code || "",
-          service_type: shipmentData.service_type || "",
-          customer_name: shipmentData.customer_name || "",
-          origin_name: shipmentData.origin_name || "",
-          destination_name: shipmentData.destination_name || "",
-          freight: shipmentData.freight || "",
-          selected: true, // All are selected in view/edit mode
-        };
-      });
-      setBookingList(bookings);
-      setIsLoadingBookings(false);
-      return;
+    // In view/edit mode, load bookings from jobData.shipment_details or jobData.booking_details
+    if (mode === "view" || mode === "edit") {
+      if (jobData?.shipment_details && Array.isArray(jobData.shipment_details) && jobData.shipment_details.length > 0) {
+        const bookings = jobData.shipment_details.map((shipment: any) => {
+          const shipmentData = shipment.customer_service_shipment_data || {};
+          return {
+            id: shipment.customer_service_shipment_id_read,
+            shipment_code: shipmentData.shipment_code || "",
+            service_type: shipmentData.service_type || "",
+            customer_name: shipmentData.customer_name || "",
+            origin_name: shipmentData.origin_name || "",
+            destination_name: shipmentData.destination_name || "",
+            freight: shipmentData.freight || "",
+            selected: true,
+          };
+        });
+        setBookingList(bookings);
+        setIsLoadingBookings(false);
+        return;
+      }
+      if (jobData?.booking_details && Array.isArray(jobData.booking_details) && jobData.booking_details.length > 0) {
+        const bookings = jobData.booking_details.map((bd: any) => {
+          const data = bd.booking_data || {};
+          return {
+            id: bd.booking_id ?? data.id,
+            shipment_code: data.shipment_code || "",
+            service_type: data.service_type || "",
+            customer_name: data.customer_name || "",
+            origin_name: data.origin_name || "",
+            destination_name: data.destination_name || "",
+            freight: data.freight || "",
+            selected: true,
+          };
+        });
+        setBookingList(bookings);
+        setIsLoadingBookings(false);
+        return;
+      }
     }
     // In create mode, fetch from API once when page has required fields (hit on render, not on every step navigation)
     if (mode !== "create") return;
@@ -1167,7 +1205,7 @@ function OceanJobGenerationCreate() {
                   value={jobDetailsForm.values.agent_code}
                   displayValue={
                     jobDetailsForm.values.agent_name
-                      ? `${jobDetailsForm.values.agent_name} (${jobDetailsForm.values.agent_code})`
+                      ? `${jobDetailsForm.values.agent_name}`
                       : jobDetailsForm.values.agent_code || ""
                   }
                   onChange={(value, selectedData) => {
@@ -1319,7 +1357,7 @@ function OceanJobGenerationCreate() {
                   value={jobDetailsForm.values.carrier_code}
                   displayValue={
                     jobDetailsForm.values.carrier_name
-                      ? `${jobDetailsForm.values.carrier_name} (${jobDetailsForm.values.carrier_code})`
+                      ? `${jobDetailsForm.values.carrier_name}`
                       : jobDetailsForm.values.carrier_code || ""
                   }
                   onChange={(value, selectedData) => {
@@ -1741,9 +1779,18 @@ function OceanJobGenerationCreate() {
                           return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
                         }}
                         value={route.from_port_code}
-                        onChange={(value) => {
+                        displayValue={
+                          route.from_port_name
+                            ? `${route.from_port_name} (${route.from_port_code})`
+                            : route.from_port_code
+                        }
+                        onChange={(value, selectedData) => {
                           const updated = [...routingDetails];
-                          updated[index] = { ...updated[index], from_port_code: value || "" };
+                          updated[index] = {
+                            ...updated[index],
+                            from_port_code: value || "",
+                            from_port_name: selectedData?.label?.split(" (")[0] ?? "",
+                          };
                           setRoutingDetails(updated);
                         }}
                         minSearchLength={3}
@@ -1766,9 +1813,18 @@ function OceanJobGenerationCreate() {
                           return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
                         }}
                         value={route.to_port_code}
-                        onChange={(value) => {
+                        displayValue={
+                          route.to_port_name
+                            ? `${route.to_port_name} (${route.to_port_code})`
+                            : route.to_port_code
+                        }
+                        onChange={(value, selectedData) => {
                           const updated = [...routingDetails];
-                          updated[index] = { ...updated[index], to_port_code: value || "" };
+                          updated[index] = {
+                            ...updated[index],
+                            to_port_code: value || "",
+                            to_port_name: selectedData?.label?.split(" (")[0] ?? "",
+                          };
                           setRoutingDetails(updated);
                         }}
                         minSearchLength={3}
@@ -1791,10 +1847,18 @@ function OceanJobGenerationCreate() {
                           return { value: String(r.carrier_code ?? ""), label: String(r.carrier_name ?? r.carrier_code ?? "") };
                         }}
                         value={route.carrier_code}
-                        displayValue={route.carrier_code ? `${route.carrier_code}` : ""}
-                        onChange={(value) => {
+                        displayValue={
+                          route.carrier_name
+                            ? `${route.carrier_name}`
+                            : route.carrier_code
+                        }
+                        onChange={(value, selectedData) => {
                           const updated = [...routingDetails];
-                          updated[index] = { ...updated[index], carrier_code: value || "" };
+                          updated[index] = {
+                            ...updated[index],
+                            carrier_code: value || "",
+                            carrier_name: selectedData?.label?.split(" (")[0] ?? "",
+                          };
                           setRoutingDetails(updated);
                         }}
                         minSearchLength={2}
@@ -1913,8 +1977,11 @@ function OceanJobGenerationCreate() {
                                   {
                                     transport_type: "",
                                     from_port_code: "",
+                                    from_port_name: "",
                                     to_port_code: "",
+                                    to_port_name: "",
                                     carrier_code: "",
+                                    carrier_name: "",
                                     transport_no: "",
                                     etd: "",
                                     eta: "",
