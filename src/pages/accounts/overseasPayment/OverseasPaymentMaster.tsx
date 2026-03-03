@@ -59,7 +59,7 @@ type PaymentListResult = {
   total: number;
 };
 
-export default function PaymentMaster() {
+export default function OverseasPaymentMaster() {
   const navigate = useNavigate();
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
@@ -85,7 +85,7 @@ export default function PaymentMaster() {
     queryKey: ["payment", listCurrentPage, listPageSize, search],
     queryFn: async (): Promise<PaymentListResult> => {
       try {
-        const payload = { filters: {is_agent:false} as Record<string, unknown> };
+        const payload = { filters: {is_agent:true} as Record<string, unknown> };
         if (search?.trim()) {
           payload.filters.search = search.trim();
         }
@@ -402,7 +402,7 @@ export default function PaymentMaster() {
             c="#444955"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
-            Payment List
+           Overseas Payment List
           </Text>
 
           <Group gap="xs" wrap="nowrap">
@@ -422,7 +422,7 @@ export default function PaymentMaster() {
                   },
                 },
               }}
-              onClick={() => navigate("/payment/create")}
+              onClick={() => navigate("/overseas-payment/create")}
             >
               Create New
             </Button>

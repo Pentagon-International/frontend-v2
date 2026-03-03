@@ -137,6 +137,8 @@ import PaymentMaster from "../pages/accounts/payment/PaymentMaster";
 import PaymentCreate from "../pages/accounts/payment/PaymentCreate";
 import PaymentReversal from "../pages/accounts/reverse-payment/PaymentReversal";
 import PaymentReversalMaster from "../pages/accounts/reverse-payment/PaymentReversalMaster";
+import OverseasPaymentMaster from "../pages/accounts/overseasPayment/OverseasPaymentMaster";
+import OverseasPaymentCreate from "../pages/accounts/overseasPayment/OverseasPaymentCreate";
 import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
 import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
@@ -299,6 +301,22 @@ const NavigationRoutes = () => {
         <Route path="/payment/reversal/view" element={<PaymentReversal />} />
         <Route path="/payment/reversal/edit" element={<PaymentReversal />} />
         <Route path="/payment/reversal/create" element={<PaymentReversal />} />
+        <Route path="/overseas-payment" element={<OverseasPaymentMaster />} />
+        <Route path="/overseas-payment/view" element={<OverseasPaymentCreate />} />
+        <Route path="/overseas-payment/edit" element={<OverseasPaymentCreate />} />
+        <Route path="/overseas-payment/create" element={<OverseasPaymentCreate />} />
+        <Route
+          path="/overseas-payment/reversal/create"
+          element={<OverseasPaymentCreate isReversal />}
+        />
+        <Route
+          path="/overseas-payment/reversal/edit"
+          element={<OverseasPaymentCreate isReversal />}
+        />
+        <Route
+          path="/overseas-payment/reversal/view"
+          element={<OverseasPaymentCreate isReversal />}
+        />
         <Route path="/supplier-invoice" element={<SupplierInvoiceMaster />} />
         <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/view" element={<SupplierInvoiceCreate />} />

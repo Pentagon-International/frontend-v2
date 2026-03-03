@@ -641,6 +641,19 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Accounts"
+                    label="Overseas Payment"
+                    icon={IconReceiptTax}
+                    path="/overseas-payment"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Accounts"
                     label="Payment Reversal"
                     icon={IconReceiptTax}
                     path="/payment/reversal"

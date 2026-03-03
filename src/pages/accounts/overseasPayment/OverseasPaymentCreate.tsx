@@ -395,9 +395,9 @@ type PaymentCreateProps = {
   isReversal?: boolean;
 };
 
-export default function PaymentCreate({
-  titleOverride = "Create Payment",
-  backPath = "/payment",
+export default function OverseasPaymentCreate({
+  titleOverride = "Create Overseas Payment",
+  backPath = "/overseas-payment",
   isReversal: _isReversal = false,
 }: PaymentCreateProps = {}) {
   const navigate = useNavigate();
@@ -416,10 +416,11 @@ export default function PaymentCreate({
 
   const defaultBranch =
     user?.branches?.find((b) => b.is_default) || user?.branches?.[0];
-  const localCurrency =
-    (defaultBranch as { currency?: { currency_code?: string } } | undefined)
-      ?.currency?.currency_code ?? "";
+//   const localCurrency =
+//     (defaultBranch as { currency?: { currency_code?: string } } | undefined)
+//       ?.currency?.currency_code ?? "";
 
+  const localCurrency = 'USD';
   const [dropdownZIndex] = useState(300);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const [invoiceModalDetailRowIndex, setInvoiceModalDetailRowIndex] = useState<
@@ -1295,7 +1296,7 @@ export default function PaymentCreate({
       const payload = isUpdate
         ? buildPaymentPayload(values, { status: "UNPOSTED" })
         : buildPaymentPayload(values);
-payload.is_agent = false ;
+payload.is_agent = true;
       if (isUpdate) {
         const updateUrl = `${URL.payment}`;
         const raw = await putAPICall(updateUrl, payload, API_HEADER);
@@ -1460,7 +1461,7 @@ payload.is_agent = false ;
     setIsPosting(true);
     try {
       const payload = buildPaymentPayload(form.values, { status: "POSTED" });
-      payload.is_agent = false;
+      payload.is_agent = true;
       const postUpdateUrl = `${URL.payment}`;
       const raw = await putAPICall(postUpdateUrl, payload, API_HEADER);
       const response =
@@ -1539,18 +1540,32 @@ payload.is_agent = false ;
       ? reversalNonEditableStyles
       : inputStyles;
 
-  const pageTitle = pathname.includes("/payment/reversal/view")
+//   const pageTitle = pathname.includes("/payment/reversal/view")
+//     ? "View Payment Reversal"
+//     : pathname.includes("/payment/reversal/edit")
+//       ? "Edit Payment Reversal"
+//       : pathname.includes("/payment/reversal/create")
+//         ? "Create Payment Reversal"
+//         : pathname.includes("/payment/view")
+//           ? "View Payment"
+//           : pathname.includes("/payment/edit")
+//             ? "Edit Payment"
+//             : pathname.includes("/payment/create")
+//               ? "Create Payment"
+//               : titleOverride;
+
+                const pageTitle = pathname.includes("/payment/reversal/view")
     ? "View Payment Reversal"
     : pathname.includes("/payment/reversal/edit")
       ? "Edit Payment Reversal"
       : pathname.includes("/payment/reversal/create")
         ? "Create Payment Reversal"
-        : pathname.includes("/payment/view")
-          ? "View Payment"
-          : pathname.includes("/payment/edit")
-            ? "Edit Payment"
-            : pathname.includes("/payment/create")
-              ? "Create Payment"
+        : pathname.includes("/overseas-payment/view")
+          ? "View Overseas Payment"
+          : pathname.includes("/overseas-payment/edit")
+            ? "Edit Overseas Payment"
+            : pathname.includes("/overseas-payment/create")
+              ? "Create Overseas Payment"
               : titleOverride;
 
   return (
@@ -1950,7 +1965,7 @@ payload.is_agent = false ;
                           <SearchableSelect
                             key={partyKey}
                             placeholder="Account Name"
-                            apiEndpoint={URL.supplierByType}
+                            apiEndpoint={URL.agent}
                             value={row?.customer_code || null}
                             displayValue={row?.customer_display || null}
                             disabled={useNonEditableStyleOnly ? false : isReadOnly}
