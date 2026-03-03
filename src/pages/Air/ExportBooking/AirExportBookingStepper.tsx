@@ -75,8 +75,8 @@ interface ExportShipmentStepperProps {
 interface RoutingDetail {
   id?: number | string;
   move_type: string;
-  etd: Date;
-  eta: Date;
+  etd: Date | null;
+  eta: Date | null;
   from_location_code: string;
   to_location_code: string;
   carrier_code: string;
@@ -872,8 +872,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   : Number(route.id)
                 : undefined,
               move_type: String(route.move_type || ""),
-              etd: route.etd ? new Date(String(route.etd)) : new Date(),
-              eta: route.eta ? new Date(String(route.eta)) : new Date(),
+              etd: route.etd ? new Date(String(route.etd)) : null,
+              eta: route.eta ? new Date(String(route.eta)) : null,
               from_location_code: route.from_location_code || "",
               to_location_code: route.to_location_code || "",
               carrier_code: route.carrier_code || "",
@@ -1108,8 +1108,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       routingDetails: [
         {
           move_type: "",
-          etd: new Date(),
-          eta: new Date(),
+          etd: null,
+          eta: null,
           carrier_code: "",
           from_location_code: "",
           to_location_code: "",
@@ -1978,13 +1978,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.routed, user?.full_name]);
 
-  // Auto-set customer_service_name when salesperson is selected in self mode
+  // Auto-set customer_service_name in self mode
   useEffect(() => {
-    if (
-      form.values.routed === "Self" &&
-      form.values.routed_by &&
-      salespersonsData.length > 0
-    ) {
+    if (form.values.routed !== "Self") return;
+
+    // For create-from-quotation flow, default customer_service_name to logged-in user
+    if (isFromQuotationFlow && user?.full_name && !form.values.customer_service_name) {
+      form.setFieldValue("customer_service_name", user.full_name);
+      return;
+    }
+
+    // Fallback: derive customer_service_name from selected salesperson
+    if (form.values.routed_by && salespersonsData.length > 0) {
       const selectedSalesperson = salespersonsData.find(
         (person) => person.value === form.values.routed_by
       );
@@ -1996,7 +2001,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routed, form.values.routed_by, salespersonsData]);
+  }, [form.values.routed, form.values.routed_by, form.values.customer_service_name, salespersonsData]);
 
   // Clear routed_by and customer_service_name when routed changes to "Agent" (but not on initial load)
   useEffect(() => {
@@ -2394,8 +2399,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       move_type: "",
       from_location_code: "",
       to_location_code: "",
-      etd: new Date(),
-      eta: new Date(),
+      etd: null,
+      eta: null,
       carrier_code: "",
       flight_no: null,
       status: "",
@@ -3460,12 +3465,12 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <SingleDateInput
                           placeholder="YYYY-MM-DD"
                           value={
-                            form.values.routingDetails[index]?.etd || new Date()
+                            form.values.routingDetails[index]?.etd ?? undefined
                           }
                           onChange={(date) => {
                             form.setFieldValue(
                               `routingDetails.${index}.etd`,
-                              date || new Date()
+                              date ?? null
                             );
                           }}
                         />
@@ -3474,12 +3479,12 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <SingleDateInput
                           placeholder="YYYY-MM-DD"
                           value={
-                            form.values.routingDetails[index]?.eta || new Date()
+                            form.values.routingDetails[index]?.eta ?? undefined
                           }
                           onChange={(date) => {
                             form.setFieldValue(
                               `routingDetails.${index}.eta`,
-                              date || new Date()
+                              date ?? null
                             );
                           }}
                         />

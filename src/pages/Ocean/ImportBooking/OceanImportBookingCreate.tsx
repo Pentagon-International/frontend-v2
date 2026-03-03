@@ -64,17 +64,17 @@ function OceanImportBookingCreate() {
       carrier_code: quotationData.carrier_code || "",
       carrier_name: quotationData.carrier || "",
       date: new Date(),
-      freight: "PREPAID", // Default value
-      routed: "YES", // Default value
-      routed_by: enquiryData.sales_person || "",
-      customer_service_name: "", // Will be filled by user
+      freight: (quotationData.freight as string) || "Prepaid", // From quotation (Prepaid/Collect)
+      routed: "Self", // Default to Self routing
+      routed_by: "", // Let stepper auto-set from logged-in user for Self
+      customer_service_name: "", // Will be auto-set from user in Self mode or filled by user
       is_direct: true,
       is_coload: false,
 
       // Ocean Schedule fields
       schedule_id: "",
-      eta: new Date(),
-      etd: new Date(),
+      eta: null,
+      etd: null,
       vessel_name: "",
       voyage_no: "",
 
@@ -86,8 +86,8 @@ function OceanImportBookingCreate() {
           from_location_name: "",
           to_location_code: "",
           to_location_name: "",
-          etd: new Date(),
-          eta: new Date(),
+          etd: null,
+          eta: null,
           carrier_code: "",
           carrier_name: "",
           flight_no: null,

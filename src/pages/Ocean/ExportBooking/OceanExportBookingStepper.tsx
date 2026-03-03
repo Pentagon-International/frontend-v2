@@ -82,8 +82,8 @@ interface RoutingDetail {
   move_type: string;
   from_location_code: string;
   to_location_code: string;
-  etd: Date;
-  eta: Date;
+  etd: Date | null;
+  eta: Date | null;
   carrier_code: string;
   from_location_name: string;
   to_location_name: string;
@@ -141,8 +141,8 @@ interface FormValues {
   schedule_id: string;
   carrier_code: string;
   carrier_name: string;
-  eta: Date;
-  etd: Date;
+  eta: Date | null;
+  etd: Date | null;
   vessel_name: string;
   voyage_no: string;
 
@@ -247,8 +247,8 @@ const validationSchema = yup.object({
   // Ocean Schedule fields - All optional
   schedule_id: yup.string(),
   carrier_code: yup.string(),
-  eta: yup.date(),
-  etd: yup.date(),
+  eta: yup.date().nullable(),
+  etd: yup.date().nullable(),
   vessel_name: yup.string(),
   voyage_no: yup.string(),
 
@@ -258,8 +258,8 @@ const validationSchema = yup.object({
       move_type: yup.string(),
       from_location_code: yup.string(),
       to_location_code: yup.string(),
-      etd: yup.date(),
-      eta: yup.date(),
+      etd: yup.date().nullable(),
+      eta: yup.date().nullable(),
       carrier_code: yup.string(),
       flight_no: yup.string().nullable(),
       status: yup.string(),
@@ -819,8 +819,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       schedule_id: String(data.schedule_id || ""),
       carrier_code: String(data.carrier_code || ""),
       carrier_name: String(data.carrier_name || ""),
-      eta: data.eta ? new Date(String(data.eta)) : new Date(),
-      etd: data.etd ? new Date(String(data.etd)) : new Date(),
+      eta: data.eta ? new Date(String(data.eta)) : null,
+      etd: data.etd ? new Date(String(data.etd)) : null,
       vessel_name: String(data.vessel_name || ""),
       voyage_no: String(data.voyage_no || ""),
 
@@ -836,8 +836,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               to_location_name: String(route.to_location_name || ""),
               carrier_code: String(route.carrier_code || ""),
               carrier_name: String(route.carrier_name || ""),
-              etd: route.etd ? new Date(String(route.etd)) : new Date(),
-              eta: route.eta ? new Date(String(route.eta)) : new Date(),
+              etd: route.etd ? new Date(String(route.etd)) : null,
+              eta: route.eta ? new Date(String(route.eta)) : null,
               flight_no: route.flight_no ? String(route.flight_no) : null,
               status: String(route.status || ""),
             }),
@@ -1060,8 +1060,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       schedule_id: "",
       carrier_code: "",
       carrier_name: "",
-      eta: new Date(),
-      etd: new Date(),
+      eta: null,
+      etd: null,
       vessel_name: "",
       voyage_no: "",
 
@@ -1075,8 +1075,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           to_location_name: "",
           carrier_code: "",
           carrier_name: "",
-          etd: new Date(),
-          eta: new Date(),
+          etd: null,
+          eta: null,
           flight_no: null,
           status: "",
         },
@@ -2003,13 +2003,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.routed, user?.full_name]);
 
-  // Auto-set customer_service_name when salesperson is selected in self mode
+  // Auto-set customer_service_name in self mode
   useEffect(() => {
-    if (
-      form.values.routed === "Self" &&
-      form.values.routed_by &&
-      salespersonsData.length > 0
-    ) {
+    if (form.values.routed !== "Self") return;
+
+    // For create-from-quotation flow, default customer_service_name to logged-in user
+    if (isFromQuotationFlow && user?.full_name && !form.values.customer_service_name) {
+      form.setFieldValue("customer_service_name", user.full_name);
+      return;
+    }
+
+    // Fallback: derive customer_service_name from selected salesperson
+    if (form.values.routed_by && salespersonsData.length > 0) {
       const selectedSalesperson = salespersonsData.find(
         (person) => person.value === form.values.routed_by,
       );
@@ -2021,7 +2026,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routed, form.values.routed_by, salespersonsData]);
+  }, [form.values.routed, form.values.routed_by, form.values.customer_service_name, salespersonsData]);
 
   // Clear routed_by and customer_service_name when routed changes to "Agent"
   useEffect(() => {
@@ -2389,8 +2394,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       to_location_name: "",
       carrier_code: "",
       carrier_name: "",
-      etd: new Date(),
-      eta: new Date(),
+      etd: null,
+      eta: null,
       flight_no: null,
       status: "",
     });
@@ -3353,9 +3358,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETD (Estimated Time of Departure)"
                     placeholder="YYYY-MM-DD"
-                    value={form.values.etd || new Date()}
+                    value={form.values.etd ?? undefined}
                     onChange={(date) => {
-                      form.setFieldValue("etd", date || new Date());
+                      form.setFieldValue("etd", date ?? null);
                     }}
                     error={form.errors.etd}
                   />
@@ -3364,9 +3369,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETA (Estimated Time of Arrival)"
                     placeholder="YYYY-MM-DD"
-                    value={form.values.eta || new Date()}
+                    value={form.values.eta ?? undefined}
                     onChange={(date) => {
-                      form.setFieldValue("eta", date || new Date());
+                      form.setFieldValue("eta", date ?? null);
                     }}
                     error={form.errors.eta}
                   />
@@ -3577,12 +3582,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <SingleDateInput
                           placeholder="YYYY-MM-DD"
                           value={
-                            form.values.routingDetails[index]?.etd || new Date()
+                            form.values.routingDetails[index]?.etd ?? undefined
                           }
                           onChange={(date) => {
                             form.setFieldValue(
                               `routingDetails.${index}.etd`,
-                              date || new Date(),
+                              date ?? null,
                             );
                           }}
                         />
@@ -3591,12 +3596,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <SingleDateInput
                           placeholder="YYYY-MM-DD"
                           value={
-                            form.values.routingDetails[index]?.eta || new Date()
+                            form.values.routingDetails[index]?.eta ?? undefined
                           }
                           onChange={(date) => {
                             form.setFieldValue(
                               `routingDetails.${index}.eta`,
-                              date || new Date(),
+                              date ?? null,
                             );
                           }}
                         />

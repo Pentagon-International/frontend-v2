@@ -94,7 +94,7 @@ const dynamicFormSchema = Yup.object().shape({
           .typeError("Must be a number")
           .nullable()
           .transform((value, originalValue) =>
-            originalValue === "" ? null : value
+            originalValue === "" ? null : value,
           ),
         sell_per_unit: Yup.number()
           .typeError("Sell per unit is required")
@@ -103,13 +103,13 @@ const dynamicFormSchema = Yup.object().shape({
           .typeError("Must be a number")
           .nullable()
           .transform((value, originalValue) =>
-            originalValue === "" ? null : value
+            originalValue === "" ? null : value,
           ),
         cost_per_unit: Yup.number()
           .typeError("Must be a number")
           .nullable()
           .transform((value, originalValue) =>
-            originalValue === "" ? null : value
+            originalValue === "" ? null : value,
           ),
         // min_cost: Yup.number()
         //   .typeError("Must be a number")
@@ -117,7 +117,7 @@ const dynamicFormSchema = Yup.object().shape({
         //   .transform((value, originalValue) =>
         //     originalValue === "" ? null : value
         //   ),
-      })
+      }),
     )
     .min(1, "At least one charge is required"),
 });
@@ -314,7 +314,7 @@ function QuotationCreate({
       // Default fallback
       return 1;
     },
-    [user?.country?.country_code]
+    [user?.country?.country_code],
   );
   const [carrierComparisonData, setCarrierComparisonData] =
     useState<CarrierComparisonData | null>(null);
@@ -396,7 +396,7 @@ function QuotationCreate({
 
   // Check if this is view mode (read-only) from dashboard
   const isViewMode = Boolean(
-    location.state?.viewMode || quotationData?.viewMode
+    location.state?.viewMode || quotationData?.viewMode,
   );
 
   // Check if this is edit mode (standalone route with quotation data)
@@ -409,7 +409,7 @@ function QuotationCreate({
       !!quotationId) &&
     !isViewMode; // Not edit mode if in view mode
   const isEmbeddedEditMode = Boolean(
-    enquiryData && enquiryData.actionType === "editQuotation"
+    enquiryData && enquiryData.actionType === "editQuotation",
   );
   const isEditMode = (isStandaloneEdit || isEmbeddedEditMode) && !isViewMode;
   const quotationIdForEdit =
@@ -648,7 +648,7 @@ function QuotationCreate({
     (quotationData: any, carrierData: any, currencyData: any) => {
       // Find carrier code by matching carrier name
       const matchedCarrier = carrierData.find(
-        (carrier: any) => carrier.label === quotationData.carrier
+        (carrier: any) => carrier.label === quotationData.carrier,
       );
       const carrierCode = matchedCarrier?.value || "";
 
@@ -658,7 +658,7 @@ function QuotationCreate({
         ? data.find(
             (currency: any) =>
               currency.name === quotationData.quote_currency ||
-              currency.code === quotationData.quote_currency
+              currency.code === quotationData.quote_currency,
           )
         : null;
       const currencyCode =
@@ -701,7 +701,7 @@ function QuotationCreate({
         resetFormsToDefaults();
       }
     },
-    [quotationForm, dynamicForm]
+    [quotationForm, dynamicForm],
   );
 
   // Helper function to reset forms to defaults
@@ -905,7 +905,7 @@ function QuotationCreate({
       services,
       quotationIdForEdit,
       navigate,
-    ]
+    ],
   );
 
   // Effect to ensure form isolation when switching services
@@ -966,7 +966,7 @@ function QuotationCreate({
         try {
           const response = (await getAPICall(
             `${URL.quotation}${quotationId}/`,
-            API_HEADER
+            API_HEADER,
           )) as any;
           console.log("Fetched quotation details:", response);
 
@@ -1074,7 +1074,7 @@ function QuotationCreate({
       const matchedCarrier = carrierData.find(
         (carrier: any) =>
           carrier.label.trim().toLowerCase() ===
-          quotation.carrier_name?.trim().toLowerCase()
+          quotation.carrier_name?.trim().toLowerCase(),
       );
       console.log("matchedCarrier----", matchedCarrier);
 
@@ -1085,7 +1085,7 @@ function QuotationCreate({
       const matchedQuote = quoteCurrency.find(
         (quote: any) =>
           quote.label.trim().toLowerCase() ===
-          quotation.quote_currency?.trim().toLowerCase()
+          quotation.quote_currency?.trim().toLowerCase(),
       );
       console.log("matchedQuote---", matchedQuote);
       const quoteCurrency_code = matchedQuote?.value || "";
@@ -1138,7 +1138,7 @@ function QuotationCreate({
           });
           console.log(
             "Dynamic form values after setting charges:",
-            dynamicForm.values
+            dynamicForm.values,
           );
         }, 0);
       } else {
@@ -1164,7 +1164,7 @@ function QuotationCreate({
       location.state.charges
     ) {
       console.log(
-        "Charges from location state detected, using those instead of chargesData"
+        "Charges from location state detected, using those instead of chargesData",
       );
       return; // Skip this useEffect when we have charges from location state
     }
@@ -1194,7 +1194,7 @@ function QuotationCreate({
             ? calculateNoOfUnits(
                 selectedService.service,
                 unit,
-                selectedService.id
+                selectedService.id,
               )
             : "";
 
@@ -1244,7 +1244,7 @@ function QuotationCreate({
 
     console.log(
       "dynamicForm.setValues called with charges:",
-      mappedCharges.length > 0 ? mappedCharges : []
+      mappedCharges.length > 0 ? mappedCharges : [],
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargesData, location.state, selectedService, isEditMode]);
@@ -1275,7 +1275,7 @@ function QuotationCreate({
     const hasChanges = updatedCharges.some(
       (charge, index) =>
         charge.total_sell !== dynamicForm.values.charges[index]?.total_sell ||
-        charge.total_cost !== dynamicForm.values.charges[index]?.total_cost
+        charge.total_cost !== dynamicForm.values.charges[index]?.total_cost,
     );
 
     if (hasChanges) {
@@ -1312,7 +1312,7 @@ function QuotationCreate({
       location.state.quotationData
     ) {
       console.log(
-        "=== QuotationCreate received data from destination page ==="
+        "=== QuotationCreate received data from destination page ===",
       );
       console.log("Location state data:", location.state);
 
@@ -1321,14 +1321,14 @@ function QuotationCreate({
       // Set carrier code
       quotationForm.setFieldValue(
         "carrier_code",
-        quotationData.carrier_code || ""
+        quotationData.carrier_code || "",
       );
       quotationForm.setFieldValue("quote_type", "Standard");
 
       console.log("Charges from destination:", quotationData.charges);
       console.log(
         "No of containers from destination:",
-        quotationData.no_of_containers
+        quotationData.no_of_containers,
       );
 
       if (quotationData.charges && Array.isArray(quotationData.charges)) {
@@ -1374,7 +1374,7 @@ function QuotationCreate({
           console.log("✅ Charges successfully set to dynamicForm");
           console.log(
             "Current dynamicForm.values.charges:",
-            dynamicForm.values.charges
+            dynamicForm.values.charges,
           );
 
           // Log each charge to verify data
@@ -1410,7 +1410,7 @@ function QuotationCreate({
   useEffect(() => {
     if (location.state && location.state.actionType === "create") {
       console.log(
-        "=== QuotationCreate received quotation data from location state ==="
+        "=== QuotationCreate received quotation data from location state ===",
       );
       console.log("Location state data:", location.state);
 
@@ -1425,11 +1425,11 @@ function QuotationCreate({
       // Set form values from quotation data
       quotationForm.setFieldValue(
         "carrier_code",
-        quotationData.carrier_code || ""
+        quotationData.carrier_code || "",
       );
       quotationForm.setFieldValue(
         "quote_type",
-        quotationData.quote_type || "Standard"
+        quotationData.quote_type || "Standard",
       );
 
       console.log("Charges from quotation data:", quotationData.charges);
@@ -1439,7 +1439,7 @@ function QuotationCreate({
         const serviceType = quotationData.service || "FCL";
         console.log(
           "Service type for charges mapping in first useEffect:",
-          serviceType
+          serviceType,
         );
 
         // Map charges from quotation data format to the format expected by the form
@@ -1476,7 +1476,7 @@ function QuotationCreate({
         console.log("setCharges called with:", [formattedChargesData]);
       } else {
         console.log(
-          "No charges found in quotation data or charges is not an array"
+          "No charges found in quotation data or charges is not an array",
         );
       }
 
@@ -1493,7 +1493,7 @@ function QuotationCreate({
       location.state.charges
     ) {
       console.log(
-        "=== Populating dynamic form with charges from location state ==="
+        "=== Populating dynamic form with charges from location state ===",
       );
       console.log("state---", location.state);
       console.log("Charges from location state:", location.state.charges);
@@ -1597,30 +1597,30 @@ function QuotationCreate({
     // Set form values from chatbot data
     quotationForm.setFieldValue(
       "carrier_code",
-      quotationData.carrier_code || ""
+      quotationData.carrier_code || "",
     );
     quotationForm.setFieldValue(
       "quote_type",
-      quotationData.quote_type || "Standard"
+      quotationData.quote_type || "Standard",
     );
     quotationForm.setFieldValue(
       "quote_currency_country_code",
-      quotationData.quote_currency_country_code || "INR"
+      quotationData.quote_currency_country_code || "INR",
     );
     quotationForm.setFieldValue(
       "valid_upto",
       quotationData.valid_upto ||
         new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
           .toISOString()
-          .split("T")[0]
+          .split("T")[0],
     );
     quotationForm.setFieldValue(
       "multi_carrier",
-      quotationData.multi_carrier ? "true" : "false"
+      quotationData.multi_carrier ? "true" : "false",
     );
     quotationForm.setFieldValue(
       "status",
-      quotationData.status || "QUOTE CREATED"
+      quotationData.status || "QUOTE CREATED",
     );
 
     console.log("Charges from quotation data:", quotationData.charges);
@@ -1898,7 +1898,7 @@ function QuotationCreate({
                   }));
                   console.log(
                     "Mapped FCL details:",
-                    servicePayload.fcl_details
+                    servicePayload.fcl_details,
                   );
                 } else {
                   console.log("⚠️ No FCL data found for FCL service!");
@@ -1944,14 +1944,14 @@ function QuotationCreate({
 
           console.log(
             "Complete enquiry payload:",
-            JSON.stringify(enquiryPayload, null, 2)
+            JSON.stringify(enquiryPayload, null, 2),
           );
 
           // Create enquiry
           const enquiryResponse = (await postAPICall(
             URL.enquiry,
             enquiryPayload,
-            API_HEADER
+            API_HEADER,
           )) as {
             enquiry_id?: string;
             id?: number;
@@ -2004,7 +2004,7 @@ function QuotationCreate({
             (actualEnquiryData as any).services = enquiryResponse.services;
             console.log(
               "Updated services with new IDs:",
-              enquiryResponse.services
+              enquiryResponse.services,
             );
           }
 
@@ -2087,7 +2087,7 @@ function QuotationCreate({
 
     // Get the quotation data for the selected service
     const quotationForService = actualEnquiryData?.quotation?.find(
-      (q: any) => q.service_id === selectedService.id
+      (q: any) => q.service_id === selectedService.id,
     );
 
     if (!quotationForService) {
@@ -2101,15 +2101,29 @@ function QuotationCreate({
     // Merge quotation codes into service details so booking form can prefill origin, destination, shipment terms
     const serviceDetails = {
       ...selectedService,
-      origin_code: quotationForService.origin_code ?? selectedService.origin_code_read,
-      origin_code_read: quotationForService.origin_code ?? selectedService.origin_code_read,
+      origin_code:
+        quotationForService.origin_code ?? selectedService.origin_code_read,
+      origin_code_read:
+        quotationForService.origin_code ?? selectedService.origin_code_read,
       origin_name: quotationForService.origin ?? selectedService.origin_name,
-      destination_code: quotationForService.destination_code ?? selectedService.destination_code_read,
-      destination_code_read: quotationForService.destination_code ?? selectedService.destination_code_read,
-      destination_name: quotationForService.destination ?? selectedService.destination_name,
-      shipment_terms_code: quotationForService.shipment_terms_code ?? selectedService.shipment_terms_code_read,
-      shipment_terms_code_read: quotationForService.shipment_terms_code ?? selectedService.shipment_terms_code_read,
-      shipment_terms_name: quotationForService.shipment_terms ?? quotationForService.shipment_terms_name ?? selectedService.shipment_terms_name,
+      destination_code:
+        quotationForService.destination_code ??
+        selectedService.destination_code_read,
+      destination_code_read:
+        quotationForService.destination_code ??
+        selectedService.destination_code_read,
+      destination_name:
+        quotationForService.destination ?? selectedService.destination_name,
+      shipment_terms_code:
+        quotationForService.shipment_terms_code ??
+        selectedService.shipment_terms_code_read,
+      shipment_terms_code_read:
+        quotationForService.shipment_terms_code ??
+        selectedService.shipment_terms_code_read,
+      shipment_terms_name:
+        quotationForService.shipment_terms ??
+        quotationForService.shipment_terms_name ??
+        selectedService.shipment_terms_name,
     };
 
     const bookingData = {
@@ -2130,11 +2144,9 @@ function QuotationCreate({
       // Quotation primary key (id) for filter-gained API - row id from filter_quotations list (e.g. 163), NOT quotation_service_id (197)
       quotation_primary_id: actualEnquiryData?.id,
     };
-    console.log("bookingData---",bookingData);
-    
+    console.log("bookingData---", bookingData);
 
-    const trade =
-      quotationForService.trade || selectedService.trade;
+    const trade = quotationForService.trade || selectedService.trade;
     const serviceType =
       quotationForService.service_type || selectedService.service;
 
@@ -2246,7 +2258,7 @@ function QuotationCreate({
     // Filter out empty notes and conditions
     const filteredNotes = notesToUse.filter((note) => note.trim() !== "");
     const filteredConditions = conditionsToUse.filter(
-      (condition) => condition.trim() !== ""
+      (condition) => condition.trim() !== "",
     );
 
     // Create service data for current service
@@ -2288,14 +2300,14 @@ function QuotationCreate({
             const cost = parseFloat(item.total_cost || "0");
             return sum + (isNaN(cost) ? 0 : cost);
           },
-          0
+          0,
         );
         const serviceNetSell = serviceCharges.reduce(
           (sum: number, item: any) => {
             const sell = parseFloat(item.total_sell || "0");
             return sum + (isNaN(sell) ? 0 : sell);
           },
-          0
+          0,
         );
         const serviceProfit = serviceNetSell - serviceNetCost;
 
@@ -2326,10 +2338,10 @@ function QuotationCreate({
             fetchedNotesConditions[parseInt(originalServiceId)];
           if (fetchedData) {
             serviceNotes = fetchedData.notes.filter(
-              (note) => note.trim() !== ""
+              (note) => note.trim() !== "",
             );
             serviceConditions = fetchedData.conditions.filter(
-              (condition) => condition.trim() !== ""
+              (condition) => condition.trim() !== "",
             );
           }
         }
@@ -2379,7 +2391,7 @@ function QuotationCreate({
           notes: serviceNotes,
           conditions: serviceConditions,
         };
-      }
+      },
     );
 
     const payload = {
@@ -2540,7 +2552,7 @@ function QuotationCreate({
       (item: { carrier_code: string; carrier_name: string }) => ({
         value: String(item.carrier_code),
         label: item.carrier_name,
-      })
+      }),
     );
   }, [carrierRes]);
 
@@ -2553,7 +2565,7 @@ function QuotationCreate({
       (item: any) =>
         item.country_code &&
         item.country_code.toUpperCase() ===
-          user.country.country_code.toUpperCase()
+          user.country.country_code.toUpperCase(),
     );
     return match ? match.code : null;
   }, [user?.country?.country_code, currencyData]);
@@ -2569,7 +2581,7 @@ function QuotationCreate({
     ) {
       // Find currency that matches user's country code
       const matchingCurrency = quoteCurrency.find(
-        (currency) => currency.country_code === user.country.country_code
+        (currency) => currency.country_code === user.country.country_code,
       );
 
       if (matchingCurrency) {
@@ -2578,7 +2590,7 @@ function QuotationCreate({
         // );
         quotationForm.setFieldValue(
           "quote_currency_country_code",
-          matchingCurrency.value
+          matchingCurrency.value,
         );
       } else {
         // Fallback to INR if no matching currency found
@@ -2639,7 +2651,7 @@ function QuotationCreate({
             actualEnquiryData?.quotation ||
             fetchedQuotationData?.quotation;
           const quotationForService = quotationDataToUse?.find(
-            (q: any) => q.service_id === newService.id
+            (q: any) => q.service_id === newService.id,
           );
 
           if (quotationForService) {
@@ -2647,7 +2659,7 @@ function QuotationCreate({
             loadQuotationDataForService(
               quotationForService,
               carrierData,
-              currencyData
+              currencyData,
             );
           } else {
             // Reset forms for new service with completely fresh data
@@ -2672,7 +2684,7 @@ function QuotationCreate({
       carrierData,
       currencyData,
       loadQuotationDataForService,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -2706,7 +2718,7 @@ function QuotationCreate({
             },
             hasQuotation: Boolean((value as any).hasQuotation),
           };
-        }
+        },
       );
 
       if (Object.keys(normalizedState).length === 0) {
@@ -2717,7 +2729,7 @@ function QuotationCreate({
 
       const serviceWithData =
         services.find(
-          (service) => service?.id && normalizedState[service.id]
+          (service) => service?.id && normalizedState[service.id],
         ) || services[0];
 
       if (serviceWithData && normalizedState[serviceWithData.id]) {
@@ -2726,12 +2738,12 @@ function QuotationCreate({
         });
         dynamicForm.setValues({
           charges: normalizedState[serviceWithData.id].dynamicForm.charges.map(
-            (charge: any) => ({ ...charge })
+            (charge: any) => ({ ...charge }),
           ),
         });
 
         const serviceIndex = services.findIndex(
-          (service) => service.id === serviceWithData.id
+          (service) => service.id === serviceWithData.id,
         );
         if (serviceIndex >= 0) {
           setSelectedServiceIndex(serviceIndex);
@@ -2775,24 +2787,22 @@ function QuotationCreate({
 
       services.forEach((service) => {
         const quotationForService = quotationDataToUse?.find(
-          (q: any) => q.service_id === service.id
+          (q: any) => q.service_id === service.id,
         );
 
         if (quotationForService) {
           const matchedCarrier = carrierList.find(
-            (carrier: any) => carrier.label === quotationForService.carrier
+            (carrier: any) => carrier.label === quotationForService.carrier,
           );
           const carrierCode = matchedCarrier?.value || "";
 
           const matchedCurrency = currencyList.find(
             (currency: any) =>
               currency.name === quotationForService.quote_currency ||
-              currency.code === quotationForService.quote_currency
+              currency.code === quotationForService.quote_currency,
           );
           const currencyCode =
-            matchedCurrency?.code ||
-            quotationForService.quote_currency ||
-            "";
+            matchedCurrency?.code || quotationForService.quote_currency || "";
 
           // Prepare form data for this service
           const quotationForm = {
@@ -2844,7 +2854,7 @@ function QuotationCreate({
               : [
                   {
                     charge_name: "",
-                charge_id: null,
+                    charge_id: null,
                     currency_country_code: "",
                     roe: 1,
                     unit: "",
@@ -2910,7 +2920,7 @@ function QuotationCreate({
     enquiryID: any,
     carrierVal: any,
     service: any,
-    serviceId: any
+    serviceId: any,
   ) {
     try {
       // Get ICD from selected service details (from enquiry)
@@ -2952,7 +2962,7 @@ function QuotationCreate({
       const response = await postAPICall(
         URL.carrierComparison,
         payload,
-        API_HEADER
+        API_HEADER,
       );
       console.log("Carrier comparison response:", response);
       setCarrierComparisonData(response as CarrierComparisonData);
@@ -2993,7 +3003,7 @@ function QuotationCreate({
       const response: any = await postAPICall(
         URL.conditionalNotes,
         payload,
-        API_HEADER
+        API_HEADER,
       );
 
       console.log("Notes and conditions response:", response);
@@ -3068,7 +3078,7 @@ function QuotationCreate({
 
     // Find the quotation for the current service
     const quotationForService = quotationDataToUse.find(
-      (q: any) => q.service_id === selectedService.id
+      (q: any) => q.service_id === selectedService.id,
     );
 
     if (!quotationForService?.quotation_service_id) {
@@ -3093,7 +3103,7 @@ function QuotationCreate({
       const response: any = await postAPICall(
         URL.quotationChargeHistory,
         payload,
-        API_HEADER
+        API_HEADER,
       );
 
       console.log("Charge history response:", response);
@@ -3139,7 +3149,7 @@ function QuotationCreate({
     // In edit mode, check if quotation already has notes/conditions for this service
     if (isEditMode && actualEnquiryData?.quotation) {
       const quotationForService = actualEnquiryData.quotation.find(
-        (q: any) => q.service_id === selectedService.id
+        (q: any) => q.service_id === selectedService.id,
       );
 
       if (
@@ -3151,13 +3161,13 @@ function QuotationCreate({
           Array.isArray(quotationForService.notes) &&
             quotationForService.notes.length > 0
             ? quotationForService.notes
-            : [""]
+            : [""],
         );
         setConditions(
           Array.isArray(quotationForService.conditions) &&
             quotationForService.conditions.length > 0
             ? quotationForService.conditions
-            : [""]
+            : [""],
         );
         setNotesConditionsModalOpened(true);
         return;
@@ -3183,7 +3193,7 @@ function QuotationCreate({
     // Filter out empty strings
     const filteredNotes = notes.filter((note) => note.trim() !== "");
     const filteredConditions = conditions.filter(
-      (condition) => condition.trim() !== ""
+      (condition) => condition.trim() !== "",
     );
 
     // Update state with filtered values
@@ -3395,7 +3405,7 @@ function QuotationCreate({
         const matchingCargo = cargoDetails.find(
           (cargo: any) =>
             (cargo.container_type_code || "").toUpperCase() === unitUpper ||
-            (cargo.container_type || "").toUpperCase() === unitUpper
+            (cargo.container_type || "").toUpperCase() === unitUpper,
         );
 
         if (matchingCargo) {
@@ -3405,7 +3415,7 @@ function QuotationCreate({
 
       return "";
     },
-    [actualEnquiryData, selectedService, isEditMode]
+    [actualEnquiryData, selectedService, isEditMode],
   );
 
   // Fetch unit data based on service type
@@ -3421,7 +3431,7 @@ function QuotationCreate({
         const response: any = await postAPICall(
           URL.unitMasterFilter,
           payload,
-          API_HEADER
+          API_HEADER,
         );
         console.log("Unit data response:", response);
 
@@ -3440,7 +3450,7 @@ function QuotationCreate({
             // First, try to get from actualEnquiryData.services (create mode from enquiry)
             if (actualEnquiryData?.services) {
               const fclServiceFromEnquiry = actualEnquiryData.services.find(
-                (service: any) => service.service === "FCL"
+                (service: any) => service.service === "FCL",
               );
               if (
                 fclServiceFromEnquiry?.cargo_details &&
@@ -3476,12 +3486,12 @@ function QuotationCreate({
                   cargoDetails
                     .map(
                       (cargo: any) =>
-                        cargo.container_type_code || cargo.container_type
+                        cargo.container_type_code || cargo.container_type,
                     )
                     .filter(
                       (code: string) =>
-                        code !== null && code !== undefined && code !== ""
-                    )
+                        code !== null && code !== undefined && code !== "",
+                    ),
                 ),
               ];
               containerTypeCodes.push(...codes);
@@ -3489,7 +3499,7 @@ function QuotationCreate({
 
             console.log(
               "Container type codes from enquiry:",
-              containerTypeCodes
+              containerTypeCodes,
             );
 
             // Filter unit master response to include:
@@ -3524,7 +3534,7 @@ function QuotationCreate({
         setIsLoadingUnitData(false);
       }
     },
-    [actualEnquiryData, selectedService]
+    [actualEnquiryData, selectedService],
   );
 
   // Fetch unit data when selected service changes
@@ -3561,7 +3571,7 @@ function QuotationCreate({
         // Check if saved charges have meaningful data (at least one charge with a name)
         const hasMeaningfulCharges = savedData.dynamicForm.charges.some(
           (charge: any) =>
-            charge.charge_name && charge.charge_name.trim() !== ""
+            charge.charge_name && charge.charge_name.trim() !== "",
         );
         if (hasMeaningfulCharges) {
           console.log("Service already has charges data, skipping fetch");
@@ -3574,7 +3584,7 @@ function QuotationCreate({
       if (currentCharges.length > 0) {
         const hasMeaningfulCharges = currentCharges.some(
           (charge: any) =>
-            charge.charge_name && charge.charge_name.trim() !== ""
+            charge.charge_name && charge.charge_name.trim() !== "",
         );
         if (hasMeaningfulCharges) {
           console.log("Form already has charges data, skipping fetch");
@@ -3595,14 +3605,14 @@ function QuotationCreate({
         "Fetching default charges for service:",
         selectedService.id,
         "with payload:",
-        payload
+        payload,
       );
 
       try {
         const response: any = await postAPICall(
           URL.quotationDefaultChargesFilter,
           payload,
-          API_HEADER
+          API_HEADER,
         );
 
         console.log("Default charges response:", response);
@@ -3625,7 +3635,7 @@ function QuotationCreate({
               ? calculateNoOfUnits(
                   selectedService.service,
                   unit,
-                  selectedService.id
+                  selectedService.id,
                 )
               : "";
 
@@ -3695,7 +3705,7 @@ function QuotationCreate({
 
       console.log(
         "Fetching notes and conditions for service:",
-        selectedService.id
+        selectedService.id,
       );
 
       // Fetch notes and conditions
@@ -3746,7 +3756,7 @@ function QuotationCreate({
               carrierVal,
               service,
               icdVal,
-              currentServiceId
+              currentServiceId,
             );
             console.log("All-Inclusive response----", response);
 
@@ -3788,7 +3798,7 @@ function QuotationCreate({
               setSelectedCarrierCode(tempSelectedCarrier.carrier_code);
               quotationForm.setFieldValue(
                 "carrier_code",
-                tempSelectedCarrier.carrier_code
+                tempSelectedCarrier.carrier_code,
               );
               setTempSelectedCarrier(null);
             }
@@ -3803,7 +3813,7 @@ function QuotationCreate({
               carrierVal,
               service,
               icdVal,
-              currentServiceId
+              currentServiceId,
             );
             console.log("Container response----", response);
 
@@ -3853,7 +3863,7 @@ function QuotationCreate({
               setSelectedCarrierCode(tempSelectedCarrier.carrier_code);
               quotationForm.setFieldValue(
                 "carrier_code",
-                tempSelectedCarrier.carrier_code
+                tempSelectedCarrier.carrier_code,
               );
               setTempSelectedCarrier(null);
             }
@@ -3868,7 +3878,7 @@ function QuotationCreate({
               carrierVal,
               service,
               icdVal,
-              currentServiceId
+              currentServiceId,
             );
             console.log("Charges----", response);
             const tariffResponse = response as ChargesDataItem;
@@ -3879,7 +3889,7 @@ function QuotationCreate({
               setSelectedCarrierCode(tempSelectedCarrier.carrier_code);
               quotationForm.setFieldValue(
                 "carrier_code",
-                tempSelectedCarrier.carrier_code
+                tempSelectedCarrier.carrier_code,
               );
               setTempSelectedCarrier(null);
             }
@@ -4129,7 +4139,7 @@ function QuotationCreate({
                         "isEmbeddedEditMode:",
                         isEmbeddedEditMode,
                         "isStandaloneEdit:",
-                        isStandaloneEdit
+                        isStandaloneEdit,
                       );
                       if (goToStep && typeof goToStep === "function") {
                         // Navigate to service details step (step 1) in enquiry-create flow
@@ -4138,7 +4148,7 @@ function QuotationCreate({
                       } else if (isEmbeddedEditMode) {
                         // If embedded but goToStep not available, navigate to enquiry-create
                         console.log(
-                          "Embedded mode but goToStep missing, navigating to enquiry-create step 1"
+                          "Embedded mode but goToStep missing, navigating to enquiry-create step 1",
                         );
                         navigateToEnquiryStep(1);
                       } else if (isStandaloneEdit) {
@@ -4380,7 +4390,7 @@ function QuotationCreate({
                           },
                         }}
                         {...quotationForm.getInputProps(
-                          "quote_currency_country_code"
+                          "quote_currency_country_code",
                         )}
                         readOnly={isViewMode}
                         disabled={isViewMode}
@@ -4404,7 +4414,7 @@ function QuotationCreate({
                                 : "";
                               quotationForm.setFieldValue(
                                 "valid_upto",
-                                formatted
+                                formatted,
                               );
                             }
                           }}
@@ -4468,7 +4478,7 @@ function QuotationCreate({
                           if (!isViewMode) {
                             quotationForm.setFieldValue(
                               "multi_carrier",
-                              event.currentTarget.checked ? "true" : "false"
+                              event.currentTarget.checked ? "true" : "false",
                             );
                           }
                         }}
@@ -4585,11 +4595,11 @@ function QuotationCreate({
                             onChange={(e) => {
                               if (!isViewMode) {
                                 const formattedValue = toTitleCase(
-                                  e.target.value
+                                  e.target.value,
                                 );
                                 quotationForm.setFieldValue(
                                   "remark",
-                                  formattedValue
+                                  formattedValue,
                                 );
                               }
                             }}
@@ -5024,7 +5034,9 @@ function QuotationCreate({
                               apiEndpoint={URL.chargeMaster}
                               dropdownZIndex={310}
                               searchFields={["charge_code", "charge_name"]}
-                              displayFormat={(item: Record<string, unknown>) => {
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => {
                                 const charge = item as {
                                   id?: number;
                                   charge_name?: string;
@@ -5036,21 +5048,21 @@ function QuotationCreate({
                                 };
                               }}
                               value={
-                                dynamicForm.values.charges[index]?.charge_id != null
-                                  ? String(dynamicForm.values.charges[index].charge_id)
+                                dynamicForm.values.charges[index]?.charge_id !=
+                                null
+                                  ? String(
+                                      dynamicForm.values.charges[index]
+                                        .charge_id,
+                                    )
                                   : null
                               }
                               displayValue={
-                                dynamicForm.values.charges[index]?.charge_name || ""
+                                dynamicForm.values.charges[index]
+                                  ?.charge_name || ""
                               }
-                              onChange={(
-                                value,
-                                selected,
-                                originalData
-                              ) => {
+                              onChange={(value, selected, originalData) => {
                                 if (isViewMode) return;
-                                const original = (originalData ||
-                                  {}) as {
+                                const original = (originalData || {}) as {
                                   id?: number;
                                   charge_name?: string;
                                 };
@@ -5063,22 +5075,22 @@ function QuotationCreate({
                                       : "";
                                 dynamicForm.setFieldValue(
                                   `charges.${index}.charge_name`,
-                                  name
+                                  name,
                                 );
                                 if (original.id != null) {
                                   dynamicForm.setFieldValue(
                                     `charges.${index}.charge_id`,
-                                    original.id
+                                    original.id,
                                   );
                                 } else if (value) {
                                   dynamicForm.setFieldValue(
                                     `charges.${index}.charge_id`,
-                                    Number(value)
+                                    Number(value),
                                   );
                                 } else {
                                   dynamicForm.setFieldValue(
                                     `charges.${index}.charge_id`,
-                                    null
+                                    null,
                                   );
                                 }
                               }}
@@ -5115,21 +5127,21 @@ function QuotationCreate({
                                 },
                               }}
                               {...dynamicForm.getInputProps(
-                                `charges.${index}.currency_country_code`
+                                `charges.${index}.currency_country_code`,
                               )}
                               onChange={(value) => {
                                 if (!isViewMode) {
                                   // Set currency value
                                   dynamicForm.setFieldValue(
                                     `charges.${index}.currency_country_code`,
-                                    value || ""
+                                    value || "",
                                   );
                                   // Automatically set ROE based on currency and user's country
                                   if (value) {
                                     const calculatedRoe = getRoeValue(value);
                                     dynamicForm.setFieldValue(
                                       `charges.${index}.roe`,
-                                      calculatedRoe
+                                      calculatedRoe,
                                     );
                                   }
                                 }
@@ -5154,7 +5166,7 @@ function QuotationCreate({
                                 },
                               }}
                               {...dynamicForm.getInputProps(
-                                `charges.${index}.roe`
+                                `charges.${index}.roe`,
                               )}
                               readOnly={isViewMode}
                               disabled={isViewMode}
@@ -5177,14 +5189,14 @@ function QuotationCreate({
                                 },
                               }}
                               {...dynamicForm.getInputProps(
-                                `charges.${index}.unit`
+                                `charges.${index}.unit`,
                               )}
                               onChange={(value) => {
                                 if (!isViewMode) {
                                   // Set unit value
                                   dynamicForm.setFieldValue(
                                     `charges.${index}.unit`,
-                                    value || ""
+                                    value || "",
                                   );
 
                                   // Auto-calculate and set no_of_units based on service and unit
@@ -5193,12 +5205,12 @@ function QuotationCreate({
                                       calculateNoOfUnits(
                                         selectedService.service,
                                         value,
-                                        selectedService.id
+                                        selectedService.id,
                                       );
                                     if (calculatedNoOfUnits) {
                                       dynamicForm.setFieldValue(
                                         `charges.${index}.no_of_units`,
-                                        calculatedNoOfUnits
+                                        calculatedNoOfUnits,
                                       );
                                     }
                                   }
@@ -5221,7 +5233,7 @@ function QuotationCreate({
                                 },
                               }}
                               {...dynamicForm.getInputProps(
-                                `charges.${index}.no_of_units`
+                                `charges.${index}.no_of_units`,
                               )}
                               readOnly={isViewMode}
                               disabled={
@@ -5246,7 +5258,7 @@ function QuotationCreate({
                                 },
                               }}
                               {...dynamicForm.getInputProps(
-                                `charges.${index}.sell_per_unit`
+                                `charges.${index}.sell_per_unit`,
                               )}
                               readOnly={isViewMode}
                               disabled={isViewMode}
@@ -5273,7 +5285,7 @@ function QuotationCreate({
                                 },
                               }}
                               {...dynamicForm.getInputProps(
-                                `charges.${index}.min_sell`
+                                `charges.${index}.min_sell`,
                               )}
                             />
                           </Grid.Col>
@@ -5298,7 +5310,7 @@ function QuotationCreate({
                                 },
                               }}
                               {...dynamicForm.getInputProps(
-                                `charges.${index}.cost_per_unit`
+                                `charges.${index}.cost_per_unit`,
                               )}
                             />
                           </Grid.Col>
@@ -5642,7 +5654,7 @@ function QuotationCreate({
                         } else {
                           // Default: navigate back to originating list (quotation or approval)
                           navigateToPreferredList(
-                            location.state?.preserveFilters
+                            location.state?.preserveFilters,
                           );
                         }
                       }}
@@ -5763,7 +5775,7 @@ function QuotationCreate({
                         },
                       }}
                       {...quotationForm.getInputProps(
-                        "quote_currency_country_code"
+                        "quote_currency_country_code",
                       )}
                     />
                   </Grid.Col>
@@ -5840,7 +5852,7 @@ function QuotationCreate({
                       onChange={(event) => {
                         quotationForm.setFieldValue(
                           "multi_carrier",
-                          event.currentTarget.checked ? "true" : "false"
+                          event.currentTarget.checked ? "true" : "false",
                         );
                       }}
                       styles={{
@@ -5949,7 +5961,7 @@ function QuotationCreate({
                             const formattedValue = toTitleCase(e.target.value);
                             quotationForm.setFieldValue(
                               "remark",
-                              formattedValue
+                              formattedValue,
                             );
                           }}
                           styles={{
@@ -6357,79 +6369,82 @@ function QuotationCreate({
                   {dynamicForm.values.charges.map((_, index) => (
                     <Box key={index}>
                       <Grid gutter="sm">
-                      <Grid.Col span={2}>
-                        <SearchableSelect
-                          placeholder="Charge Name"
-                          apiEndpoint={URL.chargeMaster}
-                          dropdownZIndex={310}
-                          searchFields={["charge_code", "charge_name"]}
-                          displayFormat={(item: Record<string, unknown>) => {
-                            const charge = item as {
-                              id?: number;
-                              charge_name?: string;
-                            };
-                            const name = charge.charge_name || "";
-                            return {
-                              value: String(charge.id ?? ""),
-                              label: name,
-                            };
-                          }}
-                          value={
-                            dynamicForm.values.charges[index]?.charge_id != null
-                              ? String(dynamicForm.values.charges[index].charge_id)
-                              : null
-                          }
-                          displayValue={
-                            dynamicForm.values.charges[index]?.charge_name || ""
-                          }
-                          onChange={(value, selected, originalData) => {
-                            const original = (originalData ||
-                              {}) as {
-                              id?: number;
-                              charge_name?: string;
-                            };
-                            const name =
-                              original.charge_name !== undefined &&
-                              original.charge_name !== null
-                                ? original.charge_name
-                                : selected?.label
-                                  ? selected.label.split(" (")[0]
-                                  : "";
-                            dynamicForm.setFieldValue(
-                              `charges.${index}.charge_name`,
-                              name
-                            );
-                            if (original.id != null) {
-                              dynamicForm.setFieldValue(
-                                `charges.${index}.charge_id`,
-                                original.id
-                              );
-                            } else if (value) {
-                              dynamicForm.setFieldValue(
-                                `charges.${index}.charge_id`,
-                                Number(value)
-                              );
-                            } else {
-                              dynamicForm.setFieldValue(
-                                `charges.${index}.charge_id`,
-                                null
-                              );
+                        <Grid.Col span={2}>
+                          <SearchableSelect
+                            placeholder="Charge Name"
+                            apiEndpoint={URL.chargeMaster}
+                            dropdownZIndex={310}
+                            searchFields={["charge_code", "charge_name"]}
+                            displayFormat={(item: Record<string, unknown>) => {
+                              const charge = item as {
+                                id?: number;
+                                charge_name?: string;
+                              };
+                              const name = charge.charge_name || "";
+                              return {
+                                value: String(charge.id ?? ""),
+                                label: name,
+                              };
+                            }}
+                            value={
+                              dynamicForm.values.charges[index]?.charge_id !=
+                              null
+                                ? String(
+                                    dynamicForm.values.charges[index].charge_id,
+                                  )
+                                : null
                             }
-                          }}
-                          error={
-                            (dynamicForm.errors as any)?.charges?.[index]
-                              ?.charge_name as string | undefined
-                          }
-                          returnOriginalData
-                          styles={{
-                            input: {
-                              fontSize: "14px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
+                            displayValue={
+                              dynamicForm.values.charges[index]?.charge_name ||
+                              ""
+                            }
+                            onChange={(value, selected, originalData) => {
+                              const original = (originalData || {}) as {
+                                id?: number;
+                                charge_name?: string;
+                              };
+                              const name =
+                                original.charge_name !== undefined &&
+                                original.charge_name !== null
+                                  ? original.charge_name
+                                  : selected?.label
+                                    ? selected.label.split(" (")[0]
+                                    : "";
+                              dynamicForm.setFieldValue(
+                                `charges.${index}.charge_name`,
+                                name,
+                              );
+                              if (original.id != null) {
+                                dynamicForm.setFieldValue(
+                                  `charges.${index}.charge_id`,
+                                  original.id,
+                                );
+                              } else if (value) {
+                                dynamicForm.setFieldValue(
+                                  `charges.${index}.charge_id`,
+                                  Number(value),
+                                );
+                              } else {
+                                dynamicForm.setFieldValue(
+                                  `charges.${index}.charge_id`,
+                                  null,
+                                );
+                              }
+                            }}
+                            error={
+                              (dynamicForm.errors as any)?.charges?.[index]
+                                ?.charge_name as string | undefined
+                            }
+                            returnOriginalData
+                            styles={{
+                              input: {
+                                fontSize: "14px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
                         <Grid.Col span={1}>
                           <Dropdown
                             placeholder="Select Currency"
@@ -6444,18 +6459,18 @@ function QuotationCreate({
                               },
                             }}
                             {...dynamicForm.getInputProps(
-                              `charges.${index}.currency_country_code`
+                              `charges.${index}.currency_country_code`,
                             )}
                             onChange={(value) => {
                               dynamicForm.setFieldValue(
                                 `charges.${index}.currency_country_code`,
-                                value || ""
+                                value || "",
                               );
                               if (value) {
                                 const calculatedRoe = getRoeValue(value);
                                 dynamicForm.setFieldValue(
                                   `charges.${index}.roe`,
-                                  calculatedRoe
+                                  calculatedRoe,
                                 );
                               }
                             }}
@@ -6473,7 +6488,7 @@ function QuotationCreate({
                               },
                             }}
                             {...dynamicForm.getInputProps(
-                              `charges.${index}.roe`
+                              `charges.${index}.roe`,
                             )}
                           />
                         </Grid.Col>
@@ -6491,23 +6506,23 @@ function QuotationCreate({
                               },
                             }}
                             {...dynamicForm.getInputProps(
-                              `charges.${index}.unit`
+                              `charges.${index}.unit`,
                             )}
                             onChange={(value) => {
                               dynamicForm.setFieldValue(
                                 `charges.${index}.unit`,
-                                value || ""
+                                value || "",
                               );
                               if (value && selectedService) {
                                 const calculatedNoOfUnits = calculateNoOfUnits(
                                   selectedService.service,
                                   value,
-                                  selectedService.id
+                                  selectedService.id,
                                 );
                                 if (calculatedNoOfUnits) {
                                   dynamicForm.setFieldValue(
                                     `charges.${index}.no_of_units`,
-                                    calculatedNoOfUnits
+                                    calculatedNoOfUnits,
                                   );
                                 }
                               }
@@ -6527,7 +6542,7 @@ function QuotationCreate({
                               },
                             }}
                             {...dynamicForm.getInputProps(
-                              `charges.${index}.no_of_units`
+                              `charges.${index}.no_of_units`,
                             )}
                             disabled={
                               dynamicForm.values.charges[index]?.toBeDisabled
@@ -6546,7 +6561,7 @@ function QuotationCreate({
                               },
                             }}
                             {...dynamicForm.getInputProps(
-                              `charges.${index}.sell_per_unit`
+                              `charges.${index}.sell_per_unit`,
                             )}
                           />
                         </Grid.Col>
@@ -6565,7 +6580,7 @@ function QuotationCreate({
                               },
                             }}
                             {...dynamicForm.getInputProps(
-                              `charges.${index}.min_sell`
+                              `charges.${index}.min_sell`,
                             )}
                           />
                         </Grid.Col>
@@ -6584,7 +6599,7 @@ function QuotationCreate({
                               },
                             }}
                             {...dynamicForm.getInputProps(
-                              `charges.${index}.cost_per_unit`
+                              `charges.${index}.cost_per_unit`,
                             )}
                           />
                         </Grid.Col>
@@ -6890,7 +6905,7 @@ function QuotationCreate({
                         });
                       } else {
                         navigateToPreferredList(
-                          location.state?.preserveFilters
+                          location.state?.preserveFilters,
                         );
                       }
                     }}
@@ -7468,7 +7483,7 @@ function QuotationCreate({
                         </Card>
                       </Grid.Col>
                     );
-                  }
+                  },
                 )}
               </Grid>
             ) : (
@@ -7555,7 +7570,7 @@ function QuotationCreate({
                         </Card>
                       </Grid.Col>
                     );
-                  }
+                  },
                 )}
               </Grid>
             ) : (
@@ -7864,7 +7879,7 @@ function QuotationCreate({
                       <Table.Td style={{ textAlign: "center" }}>
                         {historyItem.action_timestamp
                           ? dayjs(historyItem.action_timestamp).format(
-                              "DD-MM-YYYY HH:mm:ss"
+                              "DD-MM-YYYY HH:mm:ss",
                             )
                           : "-"}
                       </Table.Td>

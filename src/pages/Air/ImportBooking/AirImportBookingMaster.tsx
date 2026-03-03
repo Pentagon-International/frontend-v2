@@ -64,6 +64,7 @@ type ImportShipmentData = {
   destination_name: string;
   destination_code_read: string;
   customer_service_name: string;
+  status?: string;
   freight?: string;
   routed?: string;
   routed_by?: string;
@@ -150,6 +151,17 @@ function AirImportBookingMaster() {
   const [destinationDisplayName, setDestinationDisplayName] = useState<
     string | null
   >(null);
+
+  // Map booking status to badge label and color
+  const getStatusBadge = (statusRaw: string | undefined | null) => {
+    const statusUpper = (statusRaw || "").toUpperCase();
+    const label = statusUpper || "GENERATED";
+    let color: string = "#105476";
+    if (label === "BOOKED") color = "green";
+    else if (label === "GENERATED") color = "#105476";
+    else color = "gray";
+    return { label, color } as const;
+  };
 
   const filterForm = useForm<FilterState>({
     initialValues: {
@@ -650,6 +662,32 @@ function AirImportBookingMaster() {
         accessorKey: "customer_service_name",
         header: "Customer Service",
         size: 150,
+      },
+      {
+        id: "status",
+        accessorKey: "status",
+        header: "Status",
+        size: 140,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string | null>();
+          const { label, color } = getStatusBadge(value ?? undefined);
+          return (
+            <Badge
+              size="sm"
+              variant="light"
+              color={color}
+              styles={{
+                root: {
+                  textTransform: "none",
+                  minWidth: "fit-content",
+                  whiteSpace: "nowrap",
+                },
+              }}
+            >
+              {label}
+            </Badge>
+          );
+        },
       },
       {
         id: "actions",
