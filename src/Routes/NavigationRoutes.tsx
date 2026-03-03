@@ -131,6 +131,8 @@ import ReceiptMaster from "../pages/accounts/receipt/ReceiptMaster";
 import ReceiptCreate from "../pages/accounts/receipt/ReceiptCreate";
 import ReceiptReversal from "../pages/accounts/reverse-receipt/ReceiptReversal";
 import ReceiptReversalMaster from "../pages/accounts/reverse-receipt/ReceiptReversalMaster";
+import OverseasReceiptMaster from "../pages/accounts/overseas-receipt/OverseasReceiptMaster";
+import OverseasReceiptCreate from "../pages/accounts/overseas-receipt/OverseasReceiptCreate";
 import PaymentMaster from "../pages/accounts/payment/PaymentMaster";
 import PaymentCreate from "../pages/accounts/payment/PaymentCreate";
 import PaymentReversal from "../pages/accounts/reverse-payment/PaymentReversal";
@@ -282,6 +284,13 @@ const NavigationRoutes = () => {
         <Route path="/receipt/reversal/view" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/edit" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/create" element={<ReceiptReversal />} />
+        <Route path="/overseas-receipt" element={<OverseasReceiptMaster />} />
+        <Route path="/overseas-receipt/view" element={<OverseasReceiptCreate />} />
+        <Route path="/overseas-receipt/edit" element={<OverseasReceiptCreate />} />
+        <Route path="/overseas-receipt/create" element={<OverseasReceiptCreate />} />
+        <Route path="/overseas-receipt/reversal/create" element={<OverseasReceiptCreate isReversal />} />
+        <Route path="/overseas-receipt/reversal/edit" element={<OverseasReceiptCreate isReversal />} />
+        <Route path="/overseas-receipt/reversal/view" element={<OverseasReceiptCreate isReversal />} />
         <Route path="/payment" element={<PaymentMaster />} />
         <Route path="/payment/view" element={<PaymentCreate />} />
         <Route path="/payment/edit" element={<PaymentCreate />} />

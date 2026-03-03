@@ -69,9 +69,9 @@ const Navbar = ({
   const [isAirOpen, setIsAirOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
 
-  // Keep Accounts expanded when on receipt, payment or supplier-invoice routes
+  // Keep Accounts expanded when on receipt, payment, overseas-receipt or supplier-invoice routes
   useEffect(() => {
-    if (location.pathname.startsWith("/receipt") || location.pathname.startsWith("/payment") || location.pathname.startsWith("/supplier-invoice")) {
+    if (location.pathname.startsWith("/receipt") || location.pathname.startsWith("/payment") || location.pathname.startsWith("/supplier-invoice") || location.pathname.startsWith("/overseas-receipt")) {
       setIsAccountsOpen(true);
     }
   }, [location.pathname]);
@@ -605,6 +605,19 @@ const Navbar = ({
                     label="Receipt Reversal"
                     icon={IconReceiptTax}
                     path="/receipt/reversal"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Accounts"
+                    label="Overseas Receipt"
+                    icon={IconReceiptTax}
+                    path="/overseas-receipt"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,

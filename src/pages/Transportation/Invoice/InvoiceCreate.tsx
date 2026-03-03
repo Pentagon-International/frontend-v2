@@ -909,9 +909,7 @@ function InvoiceCreate() {
                   ? String(charge.shipment_id)
                   : charge.shipment_no != null && String(charge.shipment_no).trim() !== ""
                     ? String(charge.shipment_no)
-                    : ((firstHawb as { shipment_id?: string }).shipment_id ?? "").toString().trim() !== ""
-                      ? String((firstHawb as { shipment_id: string }).shipment_id)
-                      : "",
+                    : null,
               shipper_id:
                 charge.shipper_id != null
                   ? String(charge.shipper_id)
@@ -1107,7 +1105,7 @@ function InvoiceCreate() {
               id: c.id != null ? Number(c.id) : null,
               charge_id: c.charge_id != null ? Number(c.charge_id) : null,
               charge_name: c.charge_name ?? "",
-              shipment_id: c.shipment_id ?? "",
+              shipment_id: c.shipment_id ? String(c.shipment_id) : c.shipment_no ? String(c.shipment_no) : "",
               shipper_id: c.shipper_id ?? "",
               unit_id:
                 c.unit_id != null && String(c.unit_id).trim() !== ""
@@ -1743,7 +1741,8 @@ function InvoiceCreate() {
           shipment_no:
             charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
               ? String(charge.shipment_id)
-              : values.shipment_no,
+              : null,
+              // : values.shipment_no,
           ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
@@ -2046,7 +2045,8 @@ function InvoiceCreate() {
           shipment_no:
             charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
               ? String(charge.shipment_id)
-              : values.shipment_no,
+              :null,
+              // : values.shipment_no,
           ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
@@ -2195,7 +2195,7 @@ function InvoiceCreate() {
               id: c.id ?? undefined,
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
-              shipment_id: (c as { shipment_id?: string }).shipment_id ?? "",
+              shipment_id: (c as { shipment_id?: string }).shipment_id ? String((c as { shipment_id: string }).shipment_id) : (c as { shipment_no?: string }).shipment_no ? String((c as { shipment_no: string }).shipment_no) : "",
               shipper_id: (c as { shipper_id?: string }).shipper_id ?? "",
               unit_code: c.unit_code ?? "",
               unit_id: c.unit_id != null ? String(c.unit_id) : undefined,
@@ -2969,9 +2969,7 @@ function InvoiceCreate() {
                     {showShipmentIdInCharges && (
                       <Grid.Col span={1}>
                         <TextInput
-                          value={
-                            charge.shipment_id ?? form.values.shipment_no ?? ""
-                          }
+                          value={charge.shipment_id ?? ""}
                           readOnly
                           styles={{
                             input: {
@@ -3881,9 +3879,7 @@ function InvoiceCreate() {
                                 form.insertListItem("charges", {
                                   charge_id: null,
                                   charge_name: "",
-                                  shipment_id: showShipmentIdInCharges
-                                    ? form.values.shipment_no || ""
-                                    : undefined,
+                                  shipment_id: undefined,
                                   shipper_id: "",
                                   unit_code: "",
                                   unit_id: "",
