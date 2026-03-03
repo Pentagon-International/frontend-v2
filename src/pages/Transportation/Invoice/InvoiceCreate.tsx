@@ -909,7 +909,7 @@ function InvoiceCreate() {
                   ? String(charge.shipment_id)
                   : charge.shipment_no != null && String(charge.shipment_no).trim() !== ""
                     ? String(charge.shipment_no)
-                    : null,
+                    :  firstHawb.shipment_id ? firstHawb.shipment_id: null,
               shipper_id:
                 charge.shipper_id != null
                   ? String(charge.shipper_id)
