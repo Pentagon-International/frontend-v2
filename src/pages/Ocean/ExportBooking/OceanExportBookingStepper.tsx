@@ -31,6 +31,9 @@ import {
   IconUpload,
   IconDownload,
   IconX,
+  IconCalendarEvent,
+  IconFileDescription,
+  IconBellRinging,
 } from "@tabler/icons-react";
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
@@ -200,7 +203,12 @@ interface FormValues {
     userFileName?: string;
     document_url?: string;
   }>;
-  trigger_updates: Array<{ type: string; code: string; description: string }>;
+  trigger_updates: Array<{
+    id?: number;
+    type: string;
+    code: string;
+    description: string;
+  }>;
   // Modal rows for Events / Documents / Trigger Updates (dynamic rows in modals)
   event_modal_rows: Array<{ eventType: string | null; eventDate: Date | null }>;
   document_modal_rows: Array<{
@@ -211,6 +219,7 @@ interface FormValues {
     document_url?: string;
   }>;
   trigger_modal_rows: Array<{
+    id?: number;
     type: string | null;
     code: string | null;
     description: string;
@@ -979,11 +988,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       trigger_updates: Array.isArray(data.trigger_updates)
         ? (
             data.trigger_updates as Array<{
+              id?: number;
               type?: string;
               code?: string;
               description?: string;
             }>
           ).map((t) => ({
+            id: t.id != null ? Number(t.id) : undefined,
             type: String(t.type ?? ""),
             code: String(t.code ?? ""),
             description: String(t.description ?? ""),
@@ -1007,16 +1018,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       trigger_modal_rows: Array.isArray(data.trigger_updates)
         ? (
             data.trigger_updates as Array<{
+              id?: number;
               type?: string;
               code?: string;
               description?: string;
             }>
           ).map((t) => ({
+            id: t.id != null ? Number(t.id) : undefined,
             type: t.type ? String(t.type) : null,
             code: t.code ? String(t.code) : null,
             description: String(t.description ?? ""),
           }))
-        : [{ type: null, code: null, description: "" }],
+        : [{ id: undefined, type: null, code: null, description: "" }],
     };
   };
 
@@ -1368,6 +1381,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   const addTriggerRow = () => {
     form.insertListItem("trigger_modal_rows", {
+      id: undefined,
       type: null,
       code: null,
       description: "",
@@ -1386,7 +1400,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     const rows = form.values.trigger_modal_rows;
     if (rows.length === 1) {
       form.setFieldValue("trigger_modal_rows", [
-        { type: null, code: null, description: "" },
+        { id: undefined, type: null, code: null, description: "" },
       ]);
     } else {
       form.removeListItem("trigger_modal_rows", index);
@@ -1395,14 +1409,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   const handleSubmitTriggerModal = () => {
     const rows = form.values.trigger_modal_rows;
-    const toAdd: { type: string; code: string; description: string }[] = [];
+    const toAdd: { id?: number; type: string; code: string; description: string }[] = [];
     for (const row of rows) {
       if (row.type && row.code) {
-        toAdd.push({
+        const item: { id?: number; type: string; code: string; description: string } = {
           type: row.type,
           code: row.code,
           description: row.description.trim(),
-        });
+        };
+        if (row.id != null) {
+          item.id = typeof row.id === "number" ? row.id : Number(row.id);
+        }
+        toAdd.push(item);
       }
     }
     if (toAdd.length === 0) {
@@ -2384,7 +2402,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   return (
     <>
-      {/* Events modal - dynamic rows, add/remove in same row as fields */}
+      {/* Events modal - single heading row, multiple data rows (like Rate Details) */}
       <Modal
         opened={eventsModalOpen}
         onClose={() => setEventsModalOpen(false)}
@@ -2394,12 +2412,24 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         styles={{ content: { maxWidth: 640 } }}
       >
         <Stack gap="md">
+          {form.values.event_modal_rows.length > 0 && (
+            <Grid gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+              <Grid.Col span={5}>
+                <RequiredLabel label="Event Type" required={false} />
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <RequiredLabel label="Event Date" required={false} />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <RequiredLabel label="Actions" required={false} />
+              </Grid.Col>
+            </Grid>
+          )}
           {form.values.event_modal_rows.map((row, index) => (
             <Grid key={index} align="flex-end" gutter="sm">
               <Grid.Col span={5}>
                 <Select
-                  label="Event Type"
-                  placeholder="Select"
+                  placeholder="Select event type"
                   data={eventTypeOptions}
                   value={row.eventType}
                   onChange={(value) =>
@@ -2410,7 +2440,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Grid.Col>
               <Grid.Col span={5}>
                 <SingleDateInput
-                  label="Event Date"
                   placeholder="Pick date"
                   value={row.eventDate}
                   onChange={(value) =>
@@ -2457,7 +2486,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         </Stack>
       </Modal>
 
-      {/* Documents modal - dynamic rows, add/remove in same row as fields */}
+      {/* Documents modal - single heading row, multiple data rows (like Rate Details) */}
       <Modal
         opened={documentsModalOpen}
         onClose={() => setDocumentsModalOpen(false)}
@@ -2466,12 +2495,24 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         size="xl"
         styles={{ content: { maxWidth: 640 } }}
       >
-        <Stack gap="xs">
+        <Stack gap="md">
+          {form.values.document_modal_rows.length > 0 && (
+            <Grid columns={12} gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+              <Grid.Col span={5}>
+                <RequiredLabel label="Document Name" required={false} />
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <RequiredLabel label="File" required={false} />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <RequiredLabel label="Actions" required={false} />
+              </Grid.Col>
+            </Grid>
+          )}
           {form.values.document_modal_rows.map((row, index) => (
             <Grid key={index} columns={12} gutter="sm" align="flex-end">
-              <Grid.Col span={5.5}>
+              <Grid.Col span={5}>
                 <FormTextInput
-                  label="Document Name"
                   placeholder="Enter document name"
                   value={row.documentName}
                   onChange={(e) =>
@@ -2479,11 +2520,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   }
                 />
               </Grid.Col>
-              <Grid.Col span={5.5}>
+              <Grid.Col span={5}>
                 <Box>
-                  <Text size="sm" fw={500} mb={4}>
-                    File
-                  </Text>
                   <Dropzone
                     onDrop={(files: File[]) => {
                       if (files.length === 0) return;
@@ -2616,7 +2654,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   </Dropzone>
                 </Box>
               </Grid.Col>
-              <Grid.Col span={1} style={{ marginBottom: 4 }}>
+              <Grid.Col
+                span={2}
+                style={{ display: "flex", gap: 4, marginBottom: 4 }}
+              >
                 {form.values.document_modal_rows.length > 1 && (
                   <ActionIcon
                     variant="subtle"
@@ -2642,17 +2683,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Grid.Col>
             </Grid>
           ))}
-          {form.values.document_modal_rows.length === 0 && (
-            <Button
-              variant="light"
-              color="#105476"
-              leftSection={<IconPlus size={16} />}
-              onClick={addDocumentRow}
-              fullWidth
-            >
-              Add Document
-            </Button>
-          )}
           <Group justify="flex-end" mt="md">
             <Button
               variant="subtle"
@@ -2670,7 +2700,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         </Stack>
       </Modal>
 
-      {/* Trigger Update modal */}
+      {/* Trigger Update modal - single heading row, multiple data rows (like Rate Details) */}
       <Modal
         opened={triggerModalOpen}
         onClose={() => setTriggerModalOpen(false)}
@@ -2680,11 +2710,26 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         styles={{ content: { maxWidth: 640 } }}
       >
         <Stack gap="md">
+          {form.values.trigger_modal_rows.length > 0 && (
+            <Grid columns={12} gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+              <Grid.Col span={3}>
+                <RequiredLabel label="Type" required={false} />
+              </Grid.Col>
+              <Grid.Col span={3}>
+                <RequiredLabel label="Code" required={false} />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <RequiredLabel label="Description" required={false} />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <RequiredLabel label="Actions" required={false} />
+              </Grid.Col>
+            </Grid>
+          )}
           {form.values.trigger_modal_rows.map((row, index) => (
             <Grid key={index} columns={12} gutter="sm" align="flex-end">
-              <Grid.Col span={3.5}>
+              <Grid.Col span={3}>
                 <Select
-                  label="Type"
                   placeholder="Select type"
                   data={triggerTypeOptions}
                   value={row.type}
@@ -2694,9 +2739,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   clearable
                 />
               </Grid.Col>
-              <Grid.Col span={3.5}>
+              <Grid.Col span={3}>
                 <Select
-                  label="Code"
                   placeholder="Select code"
                   // data={triggerCodeOptions}
                   data={["abc","def"]}
@@ -2709,7 +2753,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
-                  label="Description"
                   placeholder="Enter description"
                   value={row.description}
                   onChange={(e) =>
@@ -2717,31 +2760,32 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   }
                 />
               </Grid.Col>
-              <Grid.Col span={1} style={{ marginBottom: 4 }}>
-                <Group gap={4}>
-                  {form.values.trigger_modal_rows.length > 1 && (
-                    <ActionIcon
-                      variant="subtle"
-                      color="red"
-                      size="lg"
-                      onClick={() => removeTriggerRow(index)}
-                      title="Remove row"
-                    >
-                      <IconTrash size={18} />
-                    </ActionIcon>
-                  )}
-                  {index === form.values.trigger_modal_rows.length - 1 && (
-                    <ActionIcon
-                      variant="light"
-                      color="blue"
-                      size="lg"
-                      onClick={addTriggerRow}
-                      title="Add row"
-                    >
-                      <IconPlus size={18} />
-                    </ActionIcon>
-                  )}
-                </Group>
+              <Grid.Col
+                span={2}
+                style={{ display: "flex", gap: 4, marginBottom: 4 }}
+              >
+                {form.values.trigger_modal_rows.length > 1 && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="lg"
+                    onClick={() => removeTriggerRow(index)}
+                    title="Remove row"
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                )}
+                {index === form.values.trigger_modal_rows.length - 1 && (
+                  <ActionIcon
+                    variant="light"
+                    color="blue"
+                    size="lg"
+                    onClick={addTriggerRow}
+                    title="Add row"
+                  >
+                    <IconPlus size={18} />
+                  </ActionIcon>
+                )}
               </Grid.Col>
             </Grid>
           ))}
@@ -2808,6 +2852,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 }}
               >
                 <Menu.Item
+                  leftSection={<IconCalendarEvent size={16} />}
                   styles={{
                     item: {
                       fontFamily: "Inter",
@@ -2845,6 +2890,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   Events
                 </Menu.Item>
                 <Menu.Item
+                  leftSection={<IconFileDescription size={16} />}
                   styles={{
                     item: {
                       fontFamily: "Inter",
@@ -2865,25 +2911,22 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       userFileName: d.userFileName ?? "",
                       document_url: d.document_url,
                     }));
-                    if (displayList.length === 0) {
-                      form.setFieldValue("document_modal_rows", []);
-                    } else {
-                      form.setFieldValue("document_modal_rows", [
-                        ...modalRows,
-                        {
-                          id: undefined,
-                          documentName: "",
-                          file: null,
-                          userFileName: "",
-                        },
-                      ]);
-                    }
+                    form.setFieldValue("document_modal_rows", [
+                      ...modalRows,
+                      {
+                        id: undefined,
+                        documentName: "",
+                        file: null,
+                        userFileName: "",
+                      },
+                    ]);
                     setDocumentsModalOpen(true);
                   }}
                 >
                   Documents
                 </Menu.Item>
                 <Menu.Item
+                  leftSection={<IconBellRinging size={16} />}
                   styles={{
                     item: {
                       fontFamily: "Inter",
@@ -2901,6 +2944,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       form.setFieldValue(
                         "trigger_modal_rows",
                         existing.map((t) => ({
+                          id: t.id != null ? Number(t.id) : undefined,
                           type: t.type || null,
                           code: t.code || null,
                           description: t.description || "",
@@ -2908,7 +2952,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       );
                     } else {
                       form.setFieldValue("trigger_modal_rows", [
-                        { type: null, code: null, description: "" },
+                        { id: undefined, type: null, code: null, description: "" },
                       ]);
                     }
                     setTriggerModalOpen(true);
