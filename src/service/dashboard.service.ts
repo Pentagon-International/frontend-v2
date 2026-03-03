@@ -2147,6 +2147,122 @@ export const getLostCustomerData = async (
   }
 };
 
+// Customer Service Report - Pending Bookings (Gained quotations without booking)
+export interface PendingBookingItem {
+  enquiry_id: string;
+  quotation_id: string;
+  quotation_date: string;
+  customer_service_details: string;
+  sales_details: {
+    sales_person: string;
+    sales_coordinator: string | null;
+  };
+  gained_date: string;
+  service_details: Array<{
+    service: string;
+    trade: string;
+    origin: string;
+    destination: string;
+  }>;
+  customer_details: {
+    customer_id: number;
+    customer_code: string;
+    customer_name: string;
+  };
+}
+
+export interface PendingBookingsResponse {
+  status: boolean;
+  message: string;
+  index: number;
+  limit: number;
+  count: number;
+  next: string | null;
+  previous: string | null;
+  data: PendingBookingItem[];
+}
+
+// Customer Service Report - Pending Jobs (Gained bookings pending jobs)
+export interface PendingJobItem {
+  booking_id: string;
+  customer_details: {
+    customer_id: number;
+    customer_code: string;
+    customer_name: string;
+  };
+  service: string;
+  trade: string;
+  booking_date: string;
+  customer_service_person: string;
+}
+
+export interface PendingJobsResponse {
+  status: boolean;
+  message: string;
+  index: number;
+  limit: number;
+  count: number;
+  next: string | null;
+  previous: string | null;
+  data: PendingJobItem[];
+}
+
+export interface CustomerServiceReportFilters {
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  index?: number;
+  limit?: number;
+}
+
+export const getPendingBookingsData = async (
+  filters: CustomerServiceReportFilters = {}
+): Promise<PendingBookingsResponse> => {
+  try {
+    const payload: { date_from?: string; date_to?: string; search?: string } =
+      {};
+    if (filters.date_from) payload.date_from = filters.date_from;
+    if (filters.date_to) payload.date_to = filters.date_to;
+    if (filters.search?.trim()) payload.search = filters.search.trim();
+    const params = new URLSearchParams();
+    if (filters.index != null) params.append("index", String(filters.index));
+    if (filters.limit != null) params.append("limit", String(filters.limit));
+    const query = params.toString();
+    const url = query
+      ? `${URL.dashboard.gainedQuotationsWithoutBooking}?${query}`
+      : URL.dashboard.gainedQuotationsWithoutBooking;
+    const response = await postAPICall(url, payload, API_HEADER);
+    return response as PendingBookingsResponse;
+  } catch (error) {
+    console.error("Error fetching pending bookings data:", error);
+    throw error;
+  }
+};
+
+export const getPendingJobsData = async (
+  filters: CustomerServiceReportFilters = {}
+): Promise<PendingJobsResponse> => {
+  try {
+    const payload: { date_from?: string; date_to?: string; search?: string } =
+      {};
+    if (filters.date_from) payload.date_from = filters.date_from;
+    if (filters.date_to) payload.date_to = filters.date_to;
+    if (filters.search?.trim()) payload.search = filters.search.trim();
+    const params = new URLSearchParams();
+    if (filters.index != null) params.append("index", String(filters.index));
+    if (filters.limit != null) params.append("limit", String(filters.limit));
+    const query = params.toString();
+    const url = query
+      ? `${URL.dashboard.gainedBookingsPendingJobs}?${query}`
+      : URL.dashboard.gainedBookingsPendingJobs;
+    const response = await postAPICall(url, payload, API_HEADER);
+    return response as PendingJobsResponse;
+  } catch (error) {
+    console.error("Error fetching pending jobs data:", error);
+    throw error;
+  }
+};
+
 /**
  * Example API Usage:
  *

@@ -74,6 +74,10 @@ export const URL = {
   importShipmentFilter: "import-shipment/filter/",
   customerServiceShipment: "customer-service-shipment/",
   customerServiceShipmentFilter: "customer-service-shipment/filter/",
+  uploadDocument: "customer-service-shipment/upload-document/",
+  eventMaster: "event-master/",
+  eventMasterFilter: "filters_event_master/",
+  triggerTypeMaster: "trigger-type-master/",
   booking: "booking/",
   bookingFilter: "booking/filter/",
   salespersons: "accounts/salespersons/",
@@ -147,5 +151,8 @@ export const URL = {
     pipelineReportProduct: "pipeline/dashboard/product/",
     expected: "expected/",
     booking: "customer-service-shipment/formatted-list/",
+    gainedQuotationsWithoutBooking:
+      "pipeline/gained-quotations-without-booking/",
+    gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",
   },
 };
