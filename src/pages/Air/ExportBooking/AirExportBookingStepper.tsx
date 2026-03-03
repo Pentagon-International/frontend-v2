@@ -15,13 +15,25 @@ import {
   Radio,
   Divider,
   Loader,
+  Menu,
+  Modal,
+  Select,
+  ActionIcon,
 } from "@mantine/core";
+import { Dropzone } from "@mantine/dropzone";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
   IconCheck,
   IconPlus,
   IconTrash,
+  IconDotsVertical,
+  IconUpload,
+  IconDownload,
+  IconX,
+  IconCalendarEvent,
+  IconFileDescription,
+  IconBellRinging,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { postAPICall } from "../../../service/postApiCall";
@@ -90,6 +102,11 @@ interface CargoDetail {
   no_of_containers?: number;
 }
 
+interface BookingEvent {
+  type: string;
+  date: string;
+}
+
 interface FormValues {
   // Export Shipment fields
   customer_code: string;
@@ -155,6 +172,37 @@ interface FormValues {
   delivery_address_id: string;
   planned_delivery_date: Date;
   actual_delivery_date: Date | null;
+  // Events, Documents, Trigger Updates (action menu)
+  events: Array<{ type: string; date: string }>;
+  document_ids: number[];
+  /** Display list for documents (name + file name + url) until submit */
+  document_display_list: Array<{
+    id: number;
+    documentName: string;
+    userFileName?: string;
+    document_url?: string;
+  }>;
+  trigger_updates: Array<{
+    id?: number;
+    type: string;
+    code: string;
+    description: string;
+  }>;
+  // Modal rows for Events / Documents / Trigger Updates (dynamic rows in modals)
+  event_modal_rows: Array<{ eventType: string | null; eventDate: Date | null }>;
+  document_modal_rows: Array<{
+    id?: number;
+    documentName: string;
+    file: File | null;
+    userFileName?: string;
+    document_url?: string;
+  }>;
+  trigger_modal_rows: Array<{
+    id?: number;
+    type: string | null;
+    code: string | null;
+    description: string;
+  }>;
 }
 
 // Yup validation schema
@@ -287,6 +335,18 @@ const validationSchema = yup.object({
   delivery_from_code: yup.string(),
   delivery_address_id: yup.string(),
   planned_delivery_date: yup.date().min(yup.ref("planned_pickup_date"), "Delivery must be after pickup"),
+  // Events, Documents, Trigger Updates - optional
+  events: yup.array().of(
+    yup.object({ type: yup.string(), date: yup.string() }),
+  ),
+  document_ids: yup.array().of(yup.number()),
+  trigger_updates: yup.array().of(
+    yup.object({
+      type: yup.string(),
+      code: yup.string(),
+      description: yup.string(),
+    }),
+  ),
 });
 
 // Data fetching functions
@@ -327,6 +387,28 @@ const fetchUnitMaster = async (serviceType: string = "AIR") => {
     console.error("Error fetching unit master:", error);
     return [];
   }
+};
+
+const fetchEventMaster = async () => {
+  try {
+    const payload = { filters: {} };
+    const response = (await postAPICall(
+      URL.eventMasterFilter,
+      payload,
+      API_HEADER
+    )) as { data?: unknown[] };
+    return response?.data ?? [];
+  } catch (error) {
+    console.error("Error fetching event master:", error);
+    return [];
+  }
+};
+
+const fetchTriggerTypeMaster = async () => {
+  const res = (await getAPICall(URL.triggerTypeMaster, API_HEADER)) as {
+    data?: unknown;
+  };
+  return Array.isArray(res?.data) ? res.data : res?.data ? [res.data] : [];
 };
 
 // Type definitions for salespersons
@@ -487,6 +569,11 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   ]);
   const [quotationId, setQuotationId] = useState("");
 
+  const [eventsModalOpen, setEventsModalOpen] = useState(false);
+  const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
+  const [triggerModalOpen, setTriggerModalOpen] = useState(false);
+  const [documentUploading, setDocumentUploading] = useState(false);
+
   // State for display values
   const [shipperDisplayName, setShipperDisplayName] = useState<string | null>(
     null
@@ -601,6 +688,19 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   // Get user data from auth store
   const user = useAuthStore((state) => state.user);
 
+  // Events master and Trigger Type master
+  const { data: eventMasterData = [] } = useQuery({
+    queryKey: ["eventMaster"],
+    queryFn: fetchEventMaster,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: triggerTypeMasterRaw = [] } = useQuery({
+    queryKey: ["triggerTypeMaster"],
+    queryFn: fetchTriggerTypeMaster,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Type for terms of shipment data
   type TermsOfShipmentData = {
     tos_code: string;
@@ -615,6 +715,27 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       label: `${item.tos_name} (${item.tos_code})`,
     }));
   }, [termsOfShipment]);
+
+  const eventTypeOptions = useMemo(() => {
+    const list = eventMasterData as Array<{ name?: string }>;
+    if (!list?.length) return [];
+    return list.map((item) => {
+      const name = String(item.name ?? "");
+      return {
+        value: name,
+        label: name,
+      };
+    });
+  }, [eventMasterData]);
+
+  // Trigger type has no master data – static options
+  const triggerTypeOptions = useMemo(
+    () => [
+      { value: "Customer", label: "Customer" },
+      { value: "Agent", label: "Agent" },
+    ],
+    [],
+  );
 
   // Memoized container type options
   const containerTypeOptions = useMemo(() => {
@@ -874,6 +995,87 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       actual_delivery_date: data.actual_delivery_date
         ? new Date(String(data.actual_delivery_date))
         : null,
+
+      // Events, Documents, Trigger Updates
+      events: Array.isArray(data.events)
+        ? (data.events as Array<{ type?: string; date?: string }>).map(
+            (e) => ({
+              type: String(e.type ?? ""),
+              date: String(e.date ?? ""),
+            })
+          )
+        : [],
+      document_ids: Array.isArray(data.document_ids)
+        ? (data.document_ids as number[]).map((id) => Number(id))
+        : Array.isArray(
+            (data as { documents?: Array<Record<string, unknown>> }).documents
+          )
+        ? (
+            (data as { documents?: Array<Record<string, unknown>> })
+              .documents as Array<Record<string, unknown>>
+          )
+            .map((doc) => (doc.id != null ? Number(doc.id) : null))
+            .filter((id): id is number => id !== null)
+        : [],
+      document_display_list: Array.isArray(
+        (data as { documents?: Array<Record<string, unknown>> }).documents
+      )
+        ? (
+            (data as { documents?: Array<Record<string, unknown>> })
+              .documents as Array<Record<string, unknown>>
+          ).map((doc) => ({
+            id: Number(doc.id),
+            documentName: String(doc.document_name ?? ""),
+            userFileName: String(doc.user_file_name ?? ""),
+            document_url:
+              doc.document_url != null ? String(doc.document_url) : undefined,
+          }))
+        : [],
+      trigger_updates: Array.isArray(data.trigger_updates)
+        ? (
+            data.trigger_updates as Array<{
+              id?: number;
+              type?: string;
+              code?: string;
+              description?: string;
+            }>
+          ).map((t) => ({
+            id: t.id != null ? Number(t.id) : undefined,
+            type: String(t.type ?? ""),
+            code: String(t.code ?? ""),
+            description: String(t.description ?? ""),
+          }))
+        : [],
+      document_modal_rows: Array.isArray(
+        (data as { documents?: Array<Record<string, unknown>> }).documents
+      )
+        ? (
+            (data as { documents?: Array<Record<string, unknown>> })
+              .documents as Array<Record<string, unknown>>
+          ).map((doc) => ({
+            id: doc.id != null ? Number(doc.id) : undefined,
+            documentName: String(doc.document_name ?? ""),
+            file: null,
+            userFileName: String(doc.user_file_name ?? ""),
+            document_url:
+              doc.document_url != null ? String(doc.document_url) : undefined,
+          }))
+        : [{ id: undefined, documentName: "", file: null, userFileName: "" }],
+      trigger_modal_rows: Array.isArray(data.trigger_updates)
+        ? (
+            data.trigger_updates as Array<{
+              id?: number;
+              type?: string;
+              code?: string;
+              description?: string;
+            }>
+          ).map((t) => ({
+            id: t.id != null ? Number(t.id) : undefined,
+            type: t.type ? String(t.type) : null,
+            code: t.code ? String(t.code) : null,
+            description: String(t.description ?? ""),
+          }))
+        : [{ id: undefined, type: null, code: null, description: "" }],
     };
   };
 
@@ -974,6 +1176,19 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       planned_delivery_date: new Date(),
       actual_delivery_date: null,
 
+      // Events, Documents, Trigger Updates
+      events: [],
+      document_ids: [],
+      document_display_list: [],
+      trigger_updates: [],
+      event_modal_rows: [{ eventType: null, eventDate: null }],
+      document_modal_rows: [
+        { id: undefined, documentName: "", file: null, userFileName: "" },
+      ],
+      trigger_modal_rows: [
+        { id: undefined, type: null, code: null, description: "" },
+      ],
+
       // Merge with initial data when provided (edit mode or create-from-quotation)
       ...(initialData
         ? mapInitialDataToFormValues(initialData)
@@ -989,6 +1204,276 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       ? mapInitialDataToFormValues(initialData)
       : "Not in edit mode"
   );
+
+  // Events, Documents, Trigger Updates – form-based handlers
+  const addEventRow = () => {
+    form.insertListItem("event_modal_rows", {
+      eventType: null,
+      eventDate: null,
+    });
+  };
+
+  const updateEventRow = (
+    index: number,
+    field: "eventType" | "eventDate",
+    value: string | Date | null
+  ) => {
+    form.setFieldValue(`event_modal_rows.${index}.${field}`, value);
+  };
+
+  const removeEventRow = (index: number) => {
+    if (form.values.event_modal_rows.length > 1) {
+      form.removeListItem("event_modal_rows", index);
+    }
+  };
+
+  const handleSubmitEventsModal = () => {
+    const rows = form.values.event_modal_rows;
+    const toAdd: BookingEvent[] = [];
+    for (const row of rows) {
+      if (row.eventType && row.eventDate) {
+        toAdd.push({
+          type: row.eventType,
+          date:
+            row.eventDate instanceof Date
+              ? row.eventDate.toISOString().split("T")[0]
+              : String(row.eventDate),
+        });
+      }
+    }
+    if (toAdd.length === 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Please add at least one event with type and date",
+      });
+      return;
+    }
+    // Replace existing events with the current modal rows (edit full list)
+    form.setFieldValue("events", toAdd);
+    form.setFieldValue("event_modal_rows", [
+      { eventType: null, eventDate: null },
+    ]);
+    setEventsModalOpen(false);
+  };
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+  const downloadDocumentFile = (url: string, fileName: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const addDocumentRow = () => {
+    form.insertListItem("document_modal_rows", {
+      id: undefined,
+      documentName: "",
+      file: null,
+      userFileName: "",
+    });
+  };
+
+  const updateDocumentRow = (
+    index: number,
+    field: "documentName" | "file" | "document_url",
+    value: string | File | null | undefined
+  ) => {
+    form.setFieldValue(`document_modal_rows.${index}.${field}`, value);
+  };
+
+  const removeDocumentRow = (index: number) => {
+    if (form.values.document_modal_rows.length > 1) {
+      form.removeListItem("document_modal_rows", index);
+    }
+  };
+
+  const handleSubmitDocumentsModal = async () => {
+    const rows = form.values.document_modal_rows;
+    const items = rows
+      .map((row, index) => ({ row, index }))
+      .filter(
+        (item) =>
+          item.row.documentName.trim() &&
+          (item.row.id != null || item.row.file != null)
+      );
+    const invalid = rows.some(
+      (r) =>
+        (r.documentName.trim() && !r.file && r.id == null) ||
+        (!r.documentName.trim() && (r.file || r.id != null))
+    );
+    if (invalid) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Each row must have document name and either an existing document or a new file",
+      });
+      return;
+    }
+    if (items.length === 0) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Please add at least one document (name + file) or leave all rows empty",
+      });
+      return;
+    }
+    setDocumentUploading(true);
+    try {
+      const formData = new FormData();
+      items.forEach(({ row }, i) => {
+        formData.append(`document_names[${i}]`, row.documentName.trim());
+        if (row.file != null) {
+          formData.append(`documents[${i}]`, row.file);
+        }
+        if (row.id != null) {
+          // Backend expects `document_id[index]` for existing docs
+          formData.append(`document_id[${i}]`, String(row.id));
+        }
+      });
+
+      const headers = {
+        "Content-Type": "multipart/form-data",
+        ...API_HEADER.headers,
+      };
+
+      const response = (await postAPICall(URL.uploadDocument, formData, {
+        headers,
+      })) as { success?: boolean; data?: unknown; message?: string };
+
+      if (response?.success) {
+        type DocumentItem = {
+          id?: number;
+          document_name?: string;
+          document_url?: string;
+          user_file_name?: string;
+        };
+
+        const raw = response.data as
+          | { documents?: DocumentItem[] }
+          | DocumentItem[]
+          | DocumentItem
+          | undefined;
+
+        let normalized: DocumentItem[] = [];
+        if (raw && Array.isArray((raw as { documents?: DocumentItem[] }).documents)) {
+          normalized = (raw as { documents?: DocumentItem[] }).documents ?? [];
+        } else if (Array.isArray(raw)) {
+          normalized = raw as DocumentItem[];
+        } else if (raw) {
+          normalized = [raw as DocumentItem];
+        }
+
+        const newIds = normalized
+          .filter((d) => d.id != null)
+          .map((d) => Number(d.id!));
+        const updatedDisplayList = normalized.map((d) => ({
+          id: Number(d.id ?? 0),
+          documentName: String(d.document_name ?? ""),
+          userFileName: String(d.user_file_name ?? ""),
+          document_url:
+            d.document_url != null ? String(d.document_url) : undefined,
+        }));
+
+        // After an upload call, treat the response as the single source of truth
+        // for the current document set to avoid duplicating existing documents.
+        form.setFieldValue("document_ids", newIds);
+        form.setFieldValue("document_display_list", updatedDisplayList);
+        const modalRowsFromDisplay = updatedDisplayList.map((d) => ({
+          id: d.id,
+          documentName: d.documentName,
+          file: null as File | null,
+          userFileName: d.userFileName ?? "",
+          document_url: d.document_url,
+        }));
+        form.setFieldValue("document_modal_rows", [
+          ...modalRowsFromDisplay,
+          {
+            id: undefined,
+            documentName: "",
+            file: null,
+            userFileName: "",
+          },
+        ]);
+        ToastNotification({
+          type: "success",
+          message: "Document(s) saved successfully",
+        });
+        setDocumentsModalOpen(false);
+      } else {
+        ToastNotification({
+          type: "error",
+          message: response?.message || "Failed to upload document(s)",
+        });
+      }
+    } catch (err) {
+      console.error("Document upload error:", err);
+      ToastNotification({
+        type: "error",
+        message: "Failed to upload document(s)",
+      });
+    } finally {
+      setDocumentUploading(false);
+    }
+  };
+
+  const addTriggerRow = () => {
+    form.insertListItem("trigger_modal_rows", {
+      id: undefined,
+      type: null,
+      code: null,
+      description: "",
+    });
+  };
+
+  const updateTriggerRow = (
+    index: number,
+    field: "type" | "code" | "description",
+    value: string | null
+  ) => {
+    form.setFieldValue(`trigger_modal_rows.${index}.${field}`, value ?? "");
+  };
+
+  const removeTriggerRow = (index: number) => {
+    const rows = form.values.trigger_modal_rows;
+    if (rows.length === 1) {
+      form.setFieldValue("trigger_modal_rows", [
+        { id: undefined, type: null, code: null, description: "" },
+      ]);
+    } else {
+      form.removeListItem("trigger_modal_rows", index);
+    }
+  };
+
+  const handleSubmitTriggerModal = () => {
+    const rows = form.values.trigger_modal_rows;
+    const toAdd: { id?: number; type: string; code: string; description: string }[] = [];
+    for (const row of rows) {
+      if (row.type && row.code) {
+        const item: { id?: number; type: string; code: string; description: string } = {
+          type: row.type,
+          code: row.code,
+          description: row.description.trim(),
+        };
+        if (row.id != null) {
+          item.id = typeof row.id === "number" ? row.id : Number(row.id);
+        }
+        toAdd.push(item);
+      }
+    }
+    if (toAdd.length === 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Please add at least one trigger with type and code",
+      });
+      return;
+    }
+    form.setFieldValue("trigger_updates", toAdd);
+    setTriggerModalOpen(false);
+  };
 
   // Salespersons data query - must be after form initialization
   const { data: rawSalespersonsData = [] } = useQuery({
@@ -1747,6 +2232,11 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             ? Number(form.values.cha_address_id)
             : null,
 
+      // Events, Documents, Trigger Updates
+      document_ids: form.values.document_ids,
+      events: form.values.events,
+      trigger_updates: form.values.trigger_updates,
+
         is_hazardous: form.values.is_hazardous,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
@@ -1923,6 +2413,418 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   return (
     <>
+      {/* Events modal - single heading row, multiple data rows */}
+      <Modal
+        opened={eventsModalOpen}
+        onClose={() => setEventsModalOpen(false)}
+        title="Events"
+        centered
+        size="xl"
+        styles={{ content: { maxWidth: 640 } }}
+      >
+        <Stack gap="md">
+          {form.values.event_modal_rows.length > 0 && (
+            <Grid gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+              <Grid.Col span={5}>
+                <RequiredLabel label="Event Type" required={false} />
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <RequiredLabel label="Event Date" required={false} />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <RequiredLabel label="Actions" required={false} />
+              </Grid.Col>
+            </Grid>
+          )}
+          {form.values.event_modal_rows.map((row, index) => (
+            <Grid key={index} align="flex-end" gutter="sm">
+              <Grid.Col span={5}>
+                <Select
+                  placeholder="Select event type"
+                  data={eventTypeOptions}
+                  value={row.eventType}
+                  onChange={(value) =>
+                    updateEventRow(index, "eventType", value ?? null)
+                  }
+                  clearable
+                />
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <SingleDateInput
+                  placeholder="Pick date"
+                  value={row.eventDate}
+                  onChange={(value) =>
+                    updateEventRow(index, "eventDate", value ?? null)
+                  }
+                  size="sm"
+                />
+              </Grid.Col>
+              <Grid.Col
+                span={2}
+                style={{ display: "flex", gap: 4, marginBottom: 4 }}
+              >
+                {form.values.event_modal_rows.length > 1 && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="lg"
+                    onClick={() => removeEventRow(index)}
+                    title="Remove row"
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                )}
+                {index === form.values.event_modal_rows.length - 1 && (
+                  <ActionIcon
+                    variant="light"
+                    color="blue"
+                    size="lg"
+                    onClick={addEventRow}
+                    title="Add row"
+                  >
+                    <IconPlus size={18} />
+                  </ActionIcon>
+                )}
+              </Grid.Col>
+            </Grid>
+          ))}
+          <Group justify="flex-end" mt="md">
+            <Button
+              variant="subtle"
+              onClick={() => setEventsModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitEventsModal}>Add Events</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Documents modal - single heading row, multiple data rows */}
+      <Modal
+        opened={documentsModalOpen}
+        onClose={() => setDocumentsModalOpen(false)}
+        title="Documents"
+        centered
+        size="xl"
+        styles={{ content: { maxWidth: 640 } }}
+      >
+        <Stack gap="md">
+          {form.values.document_modal_rows.length > 0 && (
+            <Grid columns={12} gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+              <Grid.Col span={5}>
+                <RequiredLabel label="Document Name" required={false} />
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <RequiredLabel label="File" required={false} />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <RequiredLabel label="Actions" required={false} />
+              </Grid.Col>
+            </Grid>
+          )}
+          {form.values.document_modal_rows.map((row, index) => (
+            <Grid key={index} columns={12} gutter="sm" align="flex-end">
+              <Grid.Col span={5}>
+                <FormTextInput
+                  placeholder="Enter document name"
+                  value={row.documentName}
+                  onChange={(e) =>
+                    updateDocumentRow(index, "documentName", e.target.value)
+                  }
+                />
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <Box>
+                  <Dropzone
+                    onDrop={(files: File[]) => {
+                      if (files.length === 0) return;
+                      const file = files[0];
+                      if (file.size > MAX_FILE_SIZE) {
+                        ToastNotification({
+                          type: "error",
+                          message: `File "${file.name}" exceeds 5MB limit`,
+                        });
+                        return;
+                      }
+                      updateDocumentRow(index, "file", file);
+                      updateDocumentRow(index, "document_url", undefined);
+                    }}
+                    onReject={() => {
+                      ToastNotification({
+                        type: "error",
+                        message: "File size exceeds 5MB limit",
+                      });
+                    }}
+                    maxSize={MAX_FILE_SIZE}
+                    accept={undefined}
+                    multiple={false}
+                    disabled={false}
+                    styles={{
+                      root: {
+                        border: "1px solid var(--mantine-color-gray-4)",
+                        borderRadius: "var(--mantine-radius-sm)",
+                        backgroundColor: "var(--mantine-color-white)",
+                        minHeight: "36px",
+                        padding: "0",
+                      },
+                      inner: {
+                        padding: "0",
+                        minHeight: "36px",
+                      },
+                    }}
+                  >
+                    <Group
+                      justify="space-between"
+                      gap="xs"
+                      px="sm"
+                      style={{
+                        minHeight: "36px",
+                        pointerEvents: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                        {row.file ? (
+                          <>
+                            <IconUpload
+                              size={16}
+                              color="var(--mantine-color-dimmed)"
+                            />
+                            <Text
+                              size="sm"
+                              truncate
+                              style={{
+                                flex: 1,
+                                color: "var(--mantine-color-dark)",
+                              }}
+                            >
+                              {row.file.name}
+                            </Text>
+                          </>
+                        ) : row.document_url ? (
+                          <>
+                            <IconDownload
+                              size={16}
+                              color="var(--mantine-color-blue-6)"
+                            />
+                            <Text
+                              size="sm"
+                              truncate
+                              style={{
+                                flex: 1,
+                                color: "var(--mantine-color-blue-6)",
+                                cursor: "pointer",
+                                textDecoration: "underline",
+                                pointerEvents: "auto" as const,
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (row.document_url && row.userFileName) {
+                                  downloadDocumentFile(
+                                    row.document_url,
+                                    row.userFileName,
+                                  );
+                                }
+                              }}
+                            >
+                              {row.userFileName || "Download file"}
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <IconUpload
+                              size={16}
+                              color="var(--mantine-color-dimmed)"
+                            />
+                            <Text
+                              size="sm"
+                              c="dimmed"
+                              truncate
+                              style={{ flex: 1 }}
+                            >
+                              Drag and drop or click to select file
+                            </Text>
+                          </>
+                        )}
+                      </Group>
+                      {(row.file || row.document_url) && (
+                        <Button
+                          variant="subtle"
+                          color="red"
+                          size="xs"
+                          p={4}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateDocumentRow(index, "file", null);
+                            updateDocumentRow(index, "document_url", undefined);
+                          }}
+                          style={{ pointerEvents: "auto" }}
+                        >
+                          <IconX size={14} />
+                        </Button>
+                      )}
+                    </Group>
+                  </Dropzone>
+                </Box>
+              </Grid.Col>
+              <Grid.Col
+                span={2}
+                style={{ display: "flex", gap: 4, marginBottom: 4 }}
+              >
+                {form.values.document_modal_rows.length > 1 && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="lg"
+                    onClick={() => removeDocumentRow(index)}
+                    title="Remove row"
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                )}
+                {index === form.values.document_modal_rows.length - 1 && (
+                  <ActionIcon
+                    variant="light"
+                    color="blue"
+                    size="lg"
+                    onClick={addDocumentRow}
+                    title="Add row"
+                  >
+                    <IconPlus size={18} />
+                  </ActionIcon>
+                )}
+              </Grid.Col>
+            </Grid>
+          ))}
+          <Group justify="flex-end" mt="md">
+            <Button
+              variant="subtle"
+              onClick={() => setDocumentsModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitDocumentsModal}
+              loading={documentUploading}
+            >
+              Attach
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Trigger Update modal */}
+      <Modal
+        opened={triggerModalOpen}
+        onClose={() => setTriggerModalOpen(false)}
+        title="Trigger Update"
+        centered
+        size="xl"
+        styles={{ content: { maxWidth: 640 } }}
+      >
+        <Stack gap="md">
+          {form.values.trigger_modal_rows.length > 0 && (
+            <Grid columns={12} gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+              <Grid.Col span={3}>
+                <RequiredLabel label="Type" required={false} />
+              </Grid.Col>
+              <Grid.Col span={3}>
+                <RequiredLabel label="Code" required={false} />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <RequiredLabel label="Description" required={false} />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <RequiredLabel label="Actions" required={false} />
+              </Grid.Col>
+            </Grid>
+          )}
+          {form.values.trigger_modal_rows.map((row, index) => (
+            <Grid key={index} columns={12} gutter="sm" align="flex-end">
+              <Grid.Col span={3}>
+                <Select
+                  placeholder="Select type"
+                  data={triggerTypeOptions}
+                  value={row.type}
+                  onChange={(value) =>
+                    updateTriggerRow(index, "type", value ?? null)
+                  }
+                  clearable
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
+                <Select
+                  placeholder="Select code"
+                  data={["abc", "def"]}
+                  value={row.code}
+                  onChange={(value) =>
+                    updateTriggerRow(index, "code", value ?? null)
+                  }
+                  clearable
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <FormTextInput
+                  placeholder="Enter description"
+                  value={row.description}
+                  onChange={(e) =>
+                    updateTriggerRow(index, "description", e.target.value)
+                  }
+                />
+              </Grid.Col>
+              <Grid.Col
+                span={2}
+                style={{ display: "flex", gap: 4, marginBottom: 4 }}
+              >
+                {form.values.trigger_modal_rows.length > 1 && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="lg"
+                    onClick={() => removeTriggerRow(index)}
+                    title="Remove row"
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                )}
+                {index === form.values.trigger_modal_rows.length - 1 && (
+                  <ActionIcon
+                    variant="light"
+                    color="blue"
+                    size="lg"
+                    onClick={addTriggerRow}
+                    title="Add row"
+                  >
+                    <IconPlus size={18} />
+                  </ActionIcon>
+                )}
+              </Grid.Col>
+            </Grid>
+          ))}
+          {form.values.trigger_modal_rows.length === 0 && (
+            <Button
+              variant="light"
+              color="#105476"
+              leftSection={<IconPlus size={16} />}
+              onClick={addTriggerRow}
+              fullWidth
+            >
+              Add Trigger
+            </Button>
+          )}
+          <Group justify="flex-end" mt="md">
+            <Button
+              variant="subtle"
+              onClick={() => setTriggerModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitTriggerModal}>Save</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       <Box
         style={{
           flex: 1,
@@ -1936,9 +2838,156 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {active === 0 && (
             <Box>
               {/* Export Shipment Section */}
-              <Text size="md" fw={600} mb="lg" c="#105476">
-                Export Booking
-              </Text>
+              <Group justify="space-between" mb="lg">
+                <Text size="md" fw={600} c="#105476">
+                  Export Booking
+                </Text>
+                <Menu shadow="md" width={220} position="bottom-end">
+                  <Menu.Target>
+                    <ActionIcon
+                      variant="subtle"
+                      color="#105476"
+                      size="lg"
+                      styles={{
+                        root: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          border: "1px solid #E9ECEF",
+                          borderRadius: "8px",
+                          "&:hover": { backgroundColor: "#F8F9FA" },
+                        },
+                      }}
+                    >
+                      <IconDotsVertical size={18} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown
+                    styles={{
+                      dropdown: {
+                        border: "1px solid #E9ECEF",
+                        borderRadius: "8px",
+                        padding: "8px",
+                        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                      },
+                    }}
+                  >
+                    <Menu.Item
+                      leftSection={<IconCalendarEvent size={16} />}
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": { backgroundColor: "#F8F9FA" },
+                        },
+                      }}
+                      onClick={() => {
+                        const existing = form.values.events;
+                        if (existing.length > 0) {
+                          form.setFieldValue(
+                            "event_modal_rows",
+                            [
+                              ...existing.map((e) => ({
+                                eventType: e.type,
+                                eventDate: e.date
+                                  ? new Date(e.date)
+                                  : null,
+                              })),
+                              { eventType: null, eventDate: null },
+                            ],
+                          );
+                        } else {
+                          form.setFieldValue("event_modal_rows", [
+                            { eventType: null, eventDate: null },
+                          ]);
+                        }
+                        setEventsModalOpen(true);
+                      }}
+                    >
+                      Events
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<IconFileDescription size={16} />}
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": { backgroundColor: "#F8F9FA" },
+                        },
+                      }}
+                      onClick={() => {
+                    const displayList = form.values.document_display_list;
+                    const modalRows = displayList.map((d) => ({
+                      id: d.id,
+                      documentName: d.documentName,
+                      file: null as File | null,
+                      userFileName: d.userFileName ?? "",
+                      document_url: d.document_url,
+                    }));
+                    form.setFieldValue("document_modal_rows", [
+                      ...modalRows,
+                      {
+                        id: undefined,
+                        documentName: "",
+                        file: null,
+                        userFileName: "",
+                      },
+                    ]);
+                        setDocumentsModalOpen(true);
+                      }}
+                    >
+                      Documents
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<IconBellRinging size={16} />}
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": { backgroundColor: "#F8F9FA" },
+                        },
+                      }}
+                      onClick={() => {
+                        const existing = form.values.trigger_updates;
+                        if (existing.length > 0) {
+                          form.setFieldValue(
+                            "trigger_modal_rows",
+                            existing.map((t) => ({
+                              id: t.id != null ? Number(t.id) : undefined,
+                              type: t.type || null,
+                              code: t.code || null,
+                              description: t.description || "",
+                            })),
+                          );
+                        } else {
+                          form.setFieldValue("trigger_modal_rows", [
+                            {
+                              id: undefined,
+                              type: null,
+                              code: null,
+                              description: "",
+                            },
+                          ]);
+                        }
+                        setTriggerModalOpen(true);
+                      }}
+                    >
+                      Trigger Update
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+              </Group>
               <Grid mb="lg">
                 <Grid.Col span={4}>
                   <SearchableSelect
