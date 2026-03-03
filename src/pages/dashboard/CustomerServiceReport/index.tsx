@@ -17,18 +17,34 @@ import {
   useMantineReactTable,
 } from "mantine-react-table";
 import dayjs from "dayjs";
+import { useNavigate } from "react-router-dom";
 import {
   getPendingBookingsData,
   getPendingJobsData,
+  getJobListByEventData,
   PendingBookingItem,
   PendingJobItem,
+  JobsWithoutBLReleasedItem,
 } from "../../../service/dashboard.service";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 
 const CARD_PREVIEW_ROWS = 5;
 const TABLE_PAGE_SIZE = 10;
 
-type TableViewType = null | "pending-bookings" | "pending-jobs";
+const GAINED_QUOTATIONS_PAYLOAD = { trade: "Export" };
+const BOOKINGS_PENDING_JOBS_PAYLOAD = { service_type: "Export" };
+const JOBS_WITHOUT_BL_PAYLOAD = {
+  event_name: "BL Released",
+  service_type: "Export",
+  operator: "not_equal",
+};
+const POD_NOT_UPDATED_PAYLOAD = {
+  event_name: "POD Released",
+  service_type: "Export",
+  operator: "not_equal",
+};
+
+type TableViewType = null | "pending-bookings" | "pending-jobs" | "jobs-without-bl" | "pod-not-updated";
 
 interface CustomerServiceReportProps {
   globalSearch?: string;
@@ -41,6 +57,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
   fromDate,
   toDate,
 }) => {
+  const navigate = useNavigate();
   const [tableView, setTableView] = useState<TableViewType>(null);
   const [pendingBookings, setPendingBookings] = useState<PendingBookingItem[]>(
     [],
@@ -50,9 +67,15 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [cardBookingsCount, setCardBookingsCount] = useState(0);
   const [cardJobsCount, setCardJobsCount] = useState(0);
+  const [jobsWithoutBL, setJobsWithoutBL] = useState<JobsWithoutBLReleasedItem[]>([]);
+  const [loadingJobsWithoutBL, setLoadingJobsWithoutBL] = useState(true);
+  const [cardJobsWithoutBLCount, setCardJobsWithoutBLCount] = useState(0);
+  const [podNotUpdated, setPodNotUpdated] = useState<JobsWithoutBLReleasedItem[]>([]);
+  const [loadingPodNotUpdated, setLoadingPodNotUpdated] = useState(true);
+  const [cardPodNotUpdatedCount, setCardPodNotUpdatedCount] = useState(0);
   // Full table view state (when View All is clicked)
   const [tableData, setTableData] = useState<
-    PendingBookingItem[] | PendingJobItem[]
+    PendingBookingItem[] | PendingJobItem[] | JobsWithoutBLReleasedItem[]
   >([]);
   const [tableTotalCount, setTableTotalCount] = useState(0);
   const [tableLoading, setTableLoading] = useState(false);
@@ -73,7 +96,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
     const load = async () => {
       setLoadingBookings(true);
       try {
-        const res = await getPendingBookingsData(filters);
+        const res = await getPendingBookingsData(filters, GAINED_QUOTATIONS_PAYLOAD);
         if (!cancelled && Array.isArray(res?.data)) {
           setPendingBookings(res.data);
           setCardBookingsCount(typeof res?.count === "number" ? res.count : 0);
@@ -98,7 +121,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
     const load = async () => {
       setLoadingJobs(true);
       try {
-        const res = await getPendingJobsData(filters);
+        const res = await getPendingJobsData(filters, BOOKINGS_PENDING_JOBS_PAYLOAD);
         if (!cancelled && Array.isArray(res?.data)) {
           setPendingJobs(res.data);
           setCardJobsCount(typeof res?.count === "number" ? res.count : 0);
@@ -118,12 +141,68 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
     };
   }, [filters.date_from, filters.date_to, filters.search]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoadingJobsWithoutBL(true);
+      try {
+        const res = await getJobListByEventData(filters, JOBS_WITHOUT_BL_PAYLOAD);
+        if (!cancelled && Array.isArray(res?.data)) {
+          setJobsWithoutBL(res.data);
+          setCardJobsWithoutBLCount(typeof res?.count === "number" ? res.count : 0);
+        }
+      } catch {
+        if (!cancelled) {
+          setJobsWithoutBL([]);
+          setCardJobsWithoutBLCount(0);
+        }
+      } finally {
+        if (!cancelled) setLoadingJobsWithoutBL(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.date_from, filters.date_to, filters.search]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoadingPodNotUpdated(true);
+      try {
+        const res = await getJobListByEventData(filters, POD_NOT_UPDATED_PAYLOAD);
+        if (!cancelled && Array.isArray(res?.data)) {
+          setPodNotUpdated(res.data);
+          setCardPodNotUpdatedCount(typeof res?.count === "number" ? res.count : 0);
+        }
+      } catch {
+        if (!cancelled) {
+          setPodNotUpdated([]);
+          setCardPodNotUpdatedCount(0);
+        }
+      } finally {
+        if (!cancelled) setLoadingPodNotUpdated(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [filters.date_from, filters.date_to, filters.search]);
+
   const handleViewAllBookings = () => {
     setTableView("pending-bookings");
     setTablePageIndex(0);
   };
   const handleViewAllJobs = () => {
     setTableView("pending-jobs");
+    setTablePageIndex(0);
+  };
+  const handleViewAllJobsWithoutBL = () => {
+    setTableView("jobs-without-bl");
+    setTablePageIndex(0);
+  };
+  const handleViewAllPodNotUpdated = () => {
+    setTableView("pod-not-updated");
     setTablePageIndex(0);
   };
   const handleBackFromTable = () => setTableView(null);
@@ -153,8 +232,12 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
       try {
         const res =
           tableView === "pending-bookings"
-            ? await getPendingBookingsData(tableFilters)
-            : await getPendingJobsData(tableFilters);
+            ? await getPendingBookingsData(tableFilters, GAINED_QUOTATIONS_PAYLOAD)
+            : tableView === "pending-jobs"
+              ? await getPendingJobsData(tableFilters, BOOKINGS_PENDING_JOBS_PAYLOAD)
+              : tableView === "jobs-without-bl"
+                ? await getJobListByEventData(tableFilters, JOBS_WITHOUT_BL_PAYLOAD)
+                : await getJobListByEventData(tableFilters, POD_NOT_UPDATED_PAYLOAD);
         if (!cancelled) {
           const list = Array.isArray(res?.data) ? res.data : [];
           const total = typeof res?.count === "number" ? res.count : 0;
@@ -199,9 +282,28 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
         header: "Quotation No",
         minSize: 80,
         maxSize:100,
-        Cell: ({ row }) => (
-          <Text size="sm">{row.original.quotation_id ?? "-"}</Text>
-        ),
+        Cell: ({ row }) => {
+          const id = row.original.quotation_primary_key;
+          if (!id) return <Text size="sm">-</Text>;
+          return (
+            <Badge
+              size="xs"
+              bg="#105476"
+              c="white"
+              style={{ cursor: "pointer", textDecoration: "none" }}
+              onClick={() =>
+                navigate(`/quotation-create/${id}`, {
+                  state: {
+                    returnTo: "dashboard-customer-service",
+                    viewMode: true,
+                  },
+                })
+              }
+            >
+              {id}
+            </Badge>
+          );
+        },
       },
       {
         id: "customer_name",
@@ -269,8 +371,22 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
         ),
       },
     ],
-    [],
+    [navigate],
   );
+
+  const getBookingEditPath = (service: string) => {
+    const s = (service ?? "").toUpperCase();
+    if (s === "AIR") return "/air/export-booking/edit";
+    if (s === "FCL" || s === "LCL") return "/SeaExport/export-booking/edit";
+    return null;
+  };
+
+  const getJobEditPath = (service: string) => {
+    const s = (service ?? "").toUpperCase();
+    if (s === "AIR") return "/air/export-job/edit";
+    if (s === "FCL" || s === "LCL") return "/SeaExport/export-job/edit";
+    return null;
+  };
 
   const pendingJobsColumns = useMemo<MRT_ColumnDef<PendingJobItem>[]>(
     () => [
@@ -279,9 +395,30 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
         header: "Booking No",
         minSize: 80,
         maxSize:120,
-        Cell: ({ row }) => (
-          <Text size="sm">{row.original.booking_id ?? "-"}</Text>
-        ),
+        Cell: ({ row }) => {
+          const bookingId = row.original.booking_id;
+          const path = getBookingEditPath(row.original.service);
+          if (!bookingId || !path) return <Text size="sm">{bookingId ?? "-"}</Text>;
+          return (
+            <Badge
+              size="xs"
+              bg="#105476"
+              c="white"
+              style={{ cursor: "pointer", textDecoration: "none" }}
+              onClick={() =>
+                navigate(path, {
+                  state: {
+                    bookingId:row.original.booking_primary_key,
+                    returnTo: "dashboard-customer-service",
+                    viewMode: true,
+                  },
+                })
+              }
+            >
+              {bookingId}
+            </Badge>
+          );
+        },
       },
       {
         id: "customer_name",
@@ -320,11 +457,104 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
         ),
       },
     ],
-    [],
+    [navigate],
+  );
+
+  const jobsWithoutBLColumns = useMemo<
+    MRT_ColumnDef<JobsWithoutBLReleasedItem>[]
+  >(
+    () => [
+      {
+        accessorKey: "booking_id",
+        header: "Booking Id",
+        minSize: 80,
+        maxSize: 120,
+        Cell: ({ row }) => (
+          <Text size="sm">{row.original.booking_id ?? "-"}</Text>
+        ),
+      },
+      {
+        accessorKey: "job_id",
+        header: "Job Id",
+        minSize: 90,
+        maxSize: 110,
+        Cell: ({ row }) => {
+          const jobId = row.original.job_id;
+          const path = getJobEditPath(row.original.service);
+          if (!jobId || !path) return <Text size="sm">{jobId ?? "-"}</Text>;
+          return (
+            <Badge
+              size="xs"
+              style={{ cursor: "pointer", textDecoration: "none", backgroundColor: "#105476", color:"white" }}
+              onClick={() =>
+                navigate(path, {
+                  state: {
+                    jobId: row.original.job_primary_key,
+                    returnTo: "dashboard-customer-service",
+                    viewMode: true,
+                  },
+                })
+              }
+            >
+              {jobId}
+            </Badge>
+          );
+        },
+      },
+      {
+        accessorKey: "houseno",
+        header: "House No",
+        minSize: 80,
+        maxSize: 100,
+        Cell: ({ row }) => (
+          <Text size="sm">{row.original.houseno ?? "-"}</Text>
+        ),
+      },
+      {
+        id: "customer_name",
+        header: "Customer Name",
+        minSize: 120,
+        maxSize: 150,
+        Cell: ({ row }) => (
+          <Text truncate size="sm">
+            {row.original.customer_details?.customer_name ?? "-"}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "etd",
+        header: "ETD",
+        minSize: 90,
+        maxSize: 110,
+        Cell: ({ row }) => (
+          <Text size="sm">
+            {row.original.etd
+              ? dayjs(row.original.etd).format("YYYY-MM-DD")
+              : "-"}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "eta",
+        header: "ETA",
+        minSize: 90,
+        maxSize: 110,
+        Cell: ({ row }) => (
+          <Text size="sm">
+            {row.original.eta
+              ? dayjs(row.original.eta).format("YYYY-MM-DD")
+              : "-"}
+          </Text>
+        ),
+      },
+    ],
+    [navigate],
   );
 
   const bookingsPreview = pendingBookings.slice(0, CARD_PREVIEW_ROWS);
   const jobsPreview = pendingJobs.slice(0, CARD_PREVIEW_ROWS);
+  const jobsWithoutBLPreview = jobsWithoutBL.slice(0, CARD_PREVIEW_ROWS);
+  const podNotUpdatedPreview = podNotUpdated.slice(0, CARD_PREVIEW_ROWS);
 
   const cardTableCommon = {
     enableColumnFilters: false,
@@ -414,10 +644,26 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
     data: jobsPreview,
   });
 
+  const tableJobsWithoutBL = useMantineReactTable({
+    ...cardTableCommon,
+    columns: jobsWithoutBLColumns,
+    data: jobsWithoutBLPreview,
+  });
+
+  const tablePodNotUpdated = useMantineReactTable({
+    ...cardTableCommon,
+    columns: jobsWithoutBLColumns,
+    data: podNotUpdatedPreview,
+  });
+
   const fullTableColumns =
     tableView === "pending-bookings"
       ? pendingBookingsColumns
-      : pendingJobsColumns;
+      : tableView === "pending-jobs"
+        ? pendingJobsColumns
+        : tableView === "jobs-without-bl" || tableView === "pod-not-updated"
+          ? jobsWithoutBLColumns
+          : jobsWithoutBLColumns;
 
   const fullTable = useMantineReactTable({
     columns: fullTableColumns,
@@ -474,7 +720,13 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
 
   if (tableView) {
     const title =
-      tableView === "pending-bookings" ? "Gained Quotations - Pending for Bookings" : "Bookings Created - Pending for Jobs";
+      tableView === "pending-bookings"
+        ? "Gained Quotations - Pending for Bookings"
+        : tableView === "pending-jobs"
+          ? "Bookings Created - Pending for Jobs"
+          : tableView === "jobs-without-bl"
+            ? "Jobs without BL released"
+            : "POD Not updated";
     return (
       <Box
         style={{
@@ -534,7 +786,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
   }
 
   return (
-    <Box>
+    <Box pb={20}>
       <Grid>
         <Grid.Col span={6}>
           <Card
@@ -636,6 +888,110 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             ) : (
               <Box style={{ overflow: "hidden", maxHeight: 200 }}>
                 <MantineReactTable table={tableJobs} />
+              </Box>
+            )}
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={6}>
+          <Card
+            shadow="sm"
+            p="md"
+            radius="md"
+            style={{
+              border: "1px solid #e9ecef",
+              background:
+                "linear-gradient(to right, rgb(251, 253, 255) 0%, #FAF8F5 100%)",
+              height: 265,
+            }}
+          >
+            <Group justify="space-between" align="center" mb="md">
+              <Group gap="sm" align="center">
+                <Text size="md" fw={500} c="Black">
+                  Jobs without BL released
+                </Text>
+                <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
+                  {cardJobsWithoutBLCount}
+                </Badge>
+              </Group>
+              <Text
+                size="xs"
+                c="#ffffff"
+                fw={500}
+                style={{
+                  backgroundColor: "#105476",
+                  textDecoration: "none",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: 24,
+                }}
+                onClick={handleViewAllJobsWithoutBL}
+              >
+                View All
+              </Text>
+            </Group>
+            {loadingJobsWithoutBL ? (
+              <Center py="xl">
+                <Loader size="md" color="#105476" />
+              </Center>
+            ) : jobsWithoutBLPreview.length === 0 ? (
+              <Center py="xl">
+                <Text c="dimmed">No data available</Text>
+              </Center>
+            ) : (
+              <Box style={{ overflow: "hidden", maxHeight: 200 }}>
+                <MantineReactTable table={tableJobsWithoutBL} />
+              </Box>
+            )}
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={6}>
+          <Card
+            shadow="sm"
+            p="md"
+            radius="md"
+            style={{
+              border: "1px solid #e9ecef",
+              background:
+                "linear-gradient(to right, rgb(251, 253, 255) 0%, #FAF8F5 100%)",
+              height: 265,
+            }}
+          >
+            <Group justify="space-between" align="center" mb="md">
+              <Group gap="sm" align="center">
+                <Text size="md" fw={500} c="Black">
+                  POD Not updated
+                </Text>
+                <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
+                  {cardPodNotUpdatedCount}
+                </Badge>
+              </Group>
+              <Text
+                size="xs"
+                c="#ffffff"
+                fw={500}
+                style={{
+                  backgroundColor: "#105476",
+                  textDecoration: "none",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: 24,
+                }}
+                onClick={handleViewAllPodNotUpdated}
+              >
+                View All
+              </Text>
+            </Group>
+            {loadingPodNotUpdated ? (
+              <Center py="xl">
+                <Loader size="md" color="#105476" />
+              </Center>
+            ) : podNotUpdatedPreview.length === 0 ? (
+              <Center py="xl">
+                <Text c="dimmed">No data available</Text>
+              </Center>
+            ) : (
+              <Box style={{ overflow: "hidden", maxHeight: 200 }}>
+                <MantineReactTable table={tablePodNotUpdated} />
               </Box>
             )}
           </Card>
