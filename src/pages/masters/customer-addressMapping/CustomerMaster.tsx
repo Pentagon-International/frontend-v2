@@ -51,6 +51,7 @@ import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 
 type AddressData = {
+  id?: number;
   customer_location: string;
   address_type: string;
   address: string;
@@ -61,6 +62,14 @@ type AddressData = {
   phone_no: string;
   mobile_no: string;
   email: string;
+  pan_no?: string;
+  gst_id?: string;
+  tan_no?: string;
+  arn_no?: string;
+  uin_no?: string;
+  gst_registration_status?: string;
+  composite_regular?: string;
+  sez?: boolean;
   latitude?: number;
   longitude?: number;
 };
