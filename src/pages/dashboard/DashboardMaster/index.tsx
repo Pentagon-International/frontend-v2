@@ -75,6 +75,7 @@ import BudgetSection from "./BudgetSection";
 import PipelineReport from "../PipelineReport/index";
 import Booking from "../Booking/index";
 import CustomerServiceReport from "../CustomerServiceReport";
+import CustomerServiceImportReport from "../CustomerServiceImportReport";
 
 interface AggregatedData {
   totalOutstanding: number;
@@ -7561,7 +7562,29 @@ const Dashboard = () => {
                 padding: "4px 12px",
               }}
             >
-              Customer Service
+              CS Export
+            </Button>
+            <Button
+              variant={activeTab === "customer-service-import" ? "filled" : "subtle"}
+              onClick={() => setActiveTab("customer-service-import")}
+              size="xs"
+              style={{
+                backgroundColor:
+                  activeTab === "customer-service-import" ? "#ffffff" : "transparent",
+                color: activeTab === "customer-service-import" ? "#000000" : "#666",
+                fontWeight: activeTab === "customer-service-import" ? 600 : 400,
+                border: "none",
+                borderRadius: "4px",
+                boxShadow:
+                  activeTab === "customer-service-import"
+                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    : "none",
+                transition: "all 0.2s ease",
+                fontSize: "12px",
+                padding: "4px 12px",
+              }}
+            >
+              CS Import
             </Button>
           </Group>
         )}
@@ -7698,6 +7721,7 @@ const Dashboard = () => {
           <Tabs.Tab value="pipeline-Report">Pipeline Report</Tabs.Tab>
           <Tabs.Tab value="booking">Booking</Tabs.Tab>
           <Tabs.Tab value="customer-service">Customer Service</Tabs.Tab>
+          <Tabs.Tab value="customer-service-import">Customer Service Import</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="overall" pt="sm">
@@ -7894,6 +7918,14 @@ const Dashboard = () => {
         </Tabs.Panel>
         <Tabs.Panel value="customer-service" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
           <CustomerServiceReport
+            key={tabsRefreshKey}
+            globalSearch={globalSearch}
+            fromDate={customerInteractionFromDate}
+            toDate={customerInteractionToDate}
+          />
+        </Tabs.Panel>
+        <Tabs.Panel value="customer-service-import" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
+          <CustomerServiceImportReport
             key={tabsRefreshKey}
             globalSearch={globalSearch}
             fromDate={customerInteractionFromDate}

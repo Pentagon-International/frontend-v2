@@ -31,32 +31,32 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 const CARD_PREVIEW_ROWS = 5;
 const TABLE_PAGE_SIZE = 10;
 
-const GAINED_QUOTATIONS_PAYLOAD = { trade: "Export" };
-const BOOKINGS_PENDING_JOBS_PAYLOAD = { service_type: "Export" };
+const GAINED_QUOTATIONS_PAYLOAD = { trade: "Import" };
+const BOOKINGS_PENDING_JOBS_PAYLOAD = { service_type: "Import" };
 const JOBS_WITHOUT_BL_PAYLOAD = {
-  event_name: "BL Released",
-  service_type: "Export",
+  event_name: "CAN Released",
+  service_type: "Import",
   operator: "not_equal",
 };
 const POD_NOT_UPDATED_PAYLOAD = {
-  event_name: "POD Released",
-  service_type: "Export",
+  event_name: "DO Released",
+  service_type: "Import",
   operator: "not_equal",
 };
 const INVOICE_NOT_RAISED_PAYLOAD = {
   for_invoice: true,
-  service_type: "Export"
+  service_type: "Import"
 };
 
 type TableViewType = null | "pending-bookings" | "pending-jobs" | "jobs-without-bl" | "pod-not-updated" | "invoice-not-raised";
 
-interface CustomerServiceReportProps {
+interface CustomerServiceImportReportProps {
   globalSearch?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
 }
 
-const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
+const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = ({
   globalSearch,
   fromDate,
   toDate,
@@ -330,7 +330,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
               onClick={() =>
                 navigate(`/quotation-create/${id}`, {
                   state: {
-                    returnTo: "dashboard-customer-service",
+                    returnTo: "dashboard-customer-service-import",
                     viewMode: true,
                   },
                 })
@@ -412,15 +412,15 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
 
   const getBookingEditPath = (service: string) => {
     const s = (service ?? "").toUpperCase();
-    if (s === "AIR") return "/air/export-booking/edit";
-    if (s === "FCL" || s === "LCL") return "/SeaExport/export-booking/edit";
+    if (s === "AIR") return "/air/import-booking/edit";
+    if (s === "FCL" || s === "LCL") return "/SeaExport/import-booking/edit";
     return null;
   };
 
   const getJobEditPath = (service: string) => {
     const s = (service ?? "").toUpperCase();
-    if (s === "AIR") return "/air/export-job/edit";
-    if (s === "FCL" || s === "LCL") return "/SeaExport/export-job/edit";
+    if (s === "AIR") return "/air/import-job/edit";
+    if (s === "FCL" || s === "LCL") return "/SeaExport/import-job/edit";
     return null;
   };
 
@@ -445,7 +445,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 navigate(path, {
                   state: {
                     bookingId:row.original.booking_primary_key,
-                    returnTo: "dashboard-customer-service",
+                    returnTo: "dashboard-customer-service-import",
                     viewMode: true,
                   },
                 })
@@ -526,7 +526,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 navigate(path, {
                   state: {
                     jobId: row.original.job_primary_key,
-                    returnTo: "dashboard-customer-service",
+                    returnTo: "dashboard-customer-service-import",
                     viewMode: true,
                   },
                 })
@@ -775,9 +775,9 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
         : tableView === "pending-jobs"
           ? "Bookings Created - Pending for Jobs"
           : tableView === "jobs-without-bl"
-            ? "Jobs - BL Not Released"
+            ? "Jobs - CAN Not Released"
             : tableView === "pod-not-updated"
-              ? "Jobs - POD Not Updated"
+              ? "Jobs - DO Not Released"
               : "Jobs - Invoice Not Raised";
     return (
       <Box
@@ -959,7 +959,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             <Group justify="space-between" align="center" mb="md">
               <Group gap="sm" align="center">
                 <Text size="md" fw={500} c="Black">
-                  Jobs - BL Not Released
+                  Jobs - CAN Not Released
                 </Text>
                 <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
                   {cardJobsWithoutBLCount}
@@ -1011,7 +1011,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             <Group justify="space-between" align="center" mb="md">
               <Group gap="sm" align="center">
                 <Text size="md" fw={500} c="Black">
-                  Jobs - POD Not Updated
+                  Jobs - DO Not Released
                 </Text>
                 <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
                   {cardPodNotUpdatedCount}
@@ -1105,4 +1105,4 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
   );
 };
 
-export default CustomerServiceReport;
+export default CustomerServiceImportReport;

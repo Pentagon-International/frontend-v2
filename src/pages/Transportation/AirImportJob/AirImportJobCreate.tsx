@@ -51,6 +51,7 @@ import utc from "dayjs/plugin/utc";
 dayjs.extend(utc);
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
+import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
@@ -251,6 +252,7 @@ function AirImportJobCreate() {
   const location = useLocation();
   const jobData = location.state?.job;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingJobById, setIsFetchingJobById] = useState(false);
   const [hawbDetails, setHawbDetails] = useState<HAWBDetail[]>(
     location.state?.hawbDetails && Array.isArray(location.state.hawbDetails)
       ? location.state.hawbDetails
@@ -307,6 +309,50 @@ function AirImportJobCreate() {
   }, [location.pathname, location.state]);
 
   const isReadOnly = mode === "view";
+
+  // When navigated from Customer Service Import with jobId only - fetch job and show
+  useEffect(() => {
+    const jobId = location.state?.jobId as number | undefined;
+    if (jobId == null || location.state?.job) return;
+    let cancelled = false;
+    const fetchAndReplace = async () => {
+      setIsFetchingJobById(true);
+      try {
+        const jobListRes = await getAPICall(
+          `${URL.jobCreate}${jobId}/`,
+          API_HEADER
+        );
+        const body = (jobListRes as { data?: unknown })?.data ?? jobListRes;
+        const list = Array.isArray((body as { data?: unknown[] })?.data)
+          ? (body as { data: unknown[] }).data
+          : Array.isArray(body)
+            ? (body as unknown[])
+            : [];
+        const job = list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+        if (!cancelled && job) {
+          navigate("/air/import-job/edit", {
+            state: {
+              job,
+              returnTo: location.state?.returnTo,
+              viewMode: location.state?.viewMode,
+            },
+            replace: true,
+          });
+        } else if (!cancelled) {
+          ToastNotification({ type: "error", message: "Failed to load job data." });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Error fetching job:", error);
+          ToastNotification({ type: "error", message: "Failed to load job. Please try again." });
+        }
+      } finally {
+        if (!cancelled) setIsFetchingJobById(false);
+      }
+    };
+    fetchAndReplace();
+    return () => { cancelled = true; };
+  }, [location.state?.jobId, location.state?.job, navigate]);
 
   // MAWB Details Form - Initialize with jobData if available, or from location.state for create mode
   const mawbDetailsForm = useForm<MAWBDetailsForm>({
@@ -1824,6 +1870,14 @@ function AirImportJobCreate() {
       .finally(() => setInvoiceListLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+
+  if (isFetchingJobById) {
+    return (
+      <Center style={{ minHeight: "60vh" }}>
+        <Loader color="#105476" size="lg" />
+      </Center>
+    );
+  }
 
   return (
     <Box p="md" mx="auto">

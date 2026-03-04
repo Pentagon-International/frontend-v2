@@ -154,5 +154,6 @@ export const URL = {
     gainedQuotationsWithoutBooking:
       "pipeline/gained-quotations-without-booking/",
     gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",
+    jobsWithoutBLReleased: "pipeline/jobs-without-bl-released/",
   },
 };

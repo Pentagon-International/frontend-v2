@@ -2152,6 +2152,7 @@ export interface PendingBookingItem {
   enquiry_id: string;
   quotation_id: string;
   quotation_date: string;
+  quotation_primary_key: string;
   customer_service_details: string;
   sales_details: {
     sales_person: string;
@@ -2185,6 +2186,7 @@ export interface PendingBookingsResponse {
 // Customer Service Report - Pending Jobs (Gained bookings pending jobs)
 export interface PendingJobItem {
   booking_id: string;
+  booking_primary_key: string;
   customer_details: {
     customer_id: number;
     customer_code: string;
@@ -2207,6 +2209,32 @@ export interface PendingJobsResponse {
   data: PendingJobItem[];
 }
 
+export interface JobsWithoutBLReleasedItem {
+  job_primary_key: number;
+  job_id: string;
+  booking_id: string;
+  houseno: string;
+  service?: string;
+  customer_details: {
+    customer_id: number;
+    customer_code: string;
+    customer_name: string;
+  };
+  etd: string;
+  eta: string;
+}
+
+export interface JobsWithoutBLReleasedResponse {
+  status: boolean;
+  message: string;
+  index: number;
+  limit: number | null;
+  count: number;
+  next: string | null;
+  previous: string | null;
+  data: JobsWithoutBLReleasedItem[];
+}
+
 export interface CustomerServiceReportFilters {
   date_from?: string;
   date_to?: string;
@@ -2215,12 +2243,19 @@ export interface CustomerServiceReportFilters {
   limit?: number;
 }
 
+/** Payload (other than date/search) for gained-quotations API - caller sends from page */
+export interface GainedQuotationsPayload {
+  trade?: string;
+}
+
 export const getPendingBookingsData = async (
-  filters: CustomerServiceReportFilters = {}
+  filters: CustomerServiceReportFilters = {},
+  payloadFromPage?: GainedQuotationsPayload
 ): Promise<PendingBookingsResponse> => {
   try {
-    const payload: { date_from?: string; date_to?: string; search?: string } =
-      {};
+    const payload: { date_from?: string; date_to?: string; search?: string; trade?: string } = {
+      ...(payloadFromPage && payloadFromPage.trade != null && { trade: payloadFromPage.trade }),
+    };
     if (filters.date_from) payload.date_from = filters.date_from;
     if (filters.date_to) payload.date_to = filters.date_to;
     if (filters.search?.trim()) payload.search = filters.search.trim();
@@ -2239,12 +2274,19 @@ export const getPendingBookingsData = async (
   }
 };
 
+/** Payload (other than date/search) for bookings-pending-jobs API - caller sends from page */
+export interface BookingsPendingJobsPayload {
+  service_type?: string;
+}
+
 export const getPendingJobsData = async (
-  filters: CustomerServiceReportFilters = {}
+  filters: CustomerServiceReportFilters = {},
+  payloadFromPage?: BookingsPendingJobsPayload
 ): Promise<PendingJobsResponse> => {
   try {
-    const payload: { date_from?: string; date_to?: string; search?: string } =
-      {};
+    const payload: { date_from?: string; date_to?: string; search?: string; service_type?: string } = {
+      ...(payloadFromPage && payloadFromPage.service_type != null && { service_type: payloadFromPage.service_type }),
+    };
     if (filters.date_from) payload.date_from = filters.date_from;
     if (filters.date_to) payload.date_to = filters.date_to;
     if (filters.search?.trim()) payload.search = filters.search.trim();
@@ -2259,6 +2301,52 @@ export const getPendingJobsData = async (
     return response as PendingJobsResponse;
   } catch (error) {
     console.error("Error fetching pending jobs data:", error);
+    throw error;
+  }
+};
+
+/** Event payload for job-list-by-event API (caller sends from page) */
+export interface JobListEventPayload {
+  event_name: string;
+  service_type: string;
+  operator: string;
+  for_invoice:boolean;
+}
+
+/** Job-list-by-event API: payload (event_name, service_type, operator) is passed from caller; date/search from filters */
+export const getJobListByEventData = async (
+  filters: CustomerServiceReportFilters,
+  eventPayload: JobListEventPayload
+): Promise<JobsWithoutBLReleasedResponse> => {
+  try {
+    const payload: {
+      date_from?: string;
+      date_to?: string;
+      search?: string;
+      event_name: string;
+      service_type: string;
+      operator: string;
+      for_invoice: boolean;
+    } = {
+      event_name: eventPayload.event_name,
+      service_type: eventPayload.service_type,
+      operator: eventPayload.operator,
+      for_invoice: eventPayload.for_invoice
+    };
+    if (filters.date_from) payload.date_from = filters.date_from;
+    if (filters.date_to) payload.date_to = filters.date_to;
+    if (filters.search?.trim()) payload.search = filters.search.trim();
+    const params = new URLSearchParams();
+    if (filters.index != null) params.append("index", String(filters.index));
+    if (filters.limit != null) params.append("limit", String(filters.limit));
+    const query = params.toString();
+    const url = query
+      ? `${URL.dashboard.jobsWithoutBLReleased}?${query}`
+      : URL.dashboard.jobsWithoutBLReleased;
+    const response = await postAPICall(url, payload, API_HEADER);
+    return response as JobsWithoutBLReleasedResponse;
+  } catch (error) {
+    console.error("Error fetching job list by event:", error);
     throw error;
   }
 };

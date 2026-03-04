@@ -294,6 +294,7 @@ function ImportJobCreate() {
   const jobData = location.state?.job;
   const user = useAuthStore((state) => state.user);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingJobById, setIsFetchingJobById] = useState(false);
   const [housingDetails, setHousingDetails] = useState<HousingDetail[]>(
     location.state?.housingDetails &&
       Array.isArray(location.state.housingDetails)
@@ -336,6 +337,50 @@ function ImportJobCreate() {
   }, [location.pathname, location.state]);
 
   const isReadOnly = mode === "view";
+
+  // When navigated from Customer Service Import with jobId only - fetch job and show
+  useEffect(() => {
+    const jobId = location.state?.jobId as number | undefined;
+    if (jobId == null || location.state?.job) return;
+    let cancelled = false;
+    const fetchAndReplace = async () => {
+      setIsFetchingJobById(true);
+      try {
+        const jobListRes = await getAPICall(
+          `${URL.jobCreate}${jobId}/`,
+          API_HEADER
+        );
+        const body = (jobListRes as { data?: unknown })?.data ?? jobListRes;
+        const list = Array.isArray((body as { data?: unknown[] })?.data)
+          ? (body as { data: unknown[] }).data
+          : Array.isArray(body)
+            ? (body as unknown[])
+            : [];
+        const job = list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+        if (!cancelled && job) {
+          navigate("/SeaExport/import-job/edit", {
+            state: {
+              job,
+              returnTo: location.state?.returnTo,
+              viewMode: location.state?.viewMode,
+            },
+            replace: true,
+          });
+        } else if (!cancelled) {
+          ToastNotification({ type: "error", message: "Failed to load job data." });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Error fetching job:", error);
+          ToastNotification({ type: "error", message: "Failed to load job. Please try again." });
+        }
+      } finally {
+        if (!cancelled) setIsFetchingJobById(false);
+      }
+    };
+    fetchAndReplace();
+    return () => { cancelled = true; };
+  }, [location.state?.jobId, location.state?.job, navigate]);
 
   // MBL Details Form
   const mblDetailsForm = useForm<MBLDetailsForm>({
@@ -2030,6 +2075,14 @@ function ImportJobCreate() {
       setIsSubmitting(false);
     }
   };
+
+  if (isFetchingJobById) {
+    return (
+      <Center style={{ minHeight: "60vh" }}>
+        <Loader color="#105476" size="lg" />
+      </Center>
+    );
+  }
 
   return (
     <Box p="md" mx="auto">
