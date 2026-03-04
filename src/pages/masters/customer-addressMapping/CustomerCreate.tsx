@@ -11,6 +11,7 @@ import {
   Select,
   Stack,
   Stepper,
+  Switch,
   Text,
   TextInput,
   Textarea,
@@ -105,6 +106,14 @@ type AddressData = {
   phone_no: string;
   mobile_no: string;
   email: string;
+  pan_no?: string;
+  gst_id?: string;
+  tan_no?: string;
+  arn_no?: string;
+  uin_no?: string;
+  gst_registration_status?: string;
+  composite_regular?: string;
+  sez?: boolean;
   latitude?: number;
   longitude?: number;
 };
@@ -162,7 +171,7 @@ const addressValidationSchema = yup.object({
           .required("Address type is required")
           .oneOf(
             ["Primary", "Secondary", "Billing", "Shipping"],
-            "Please select a valid address type"
+            "Please select a valid address type",
           ),
         address: yup
           .string()
@@ -178,7 +187,7 @@ const addressValidationSchema = yup.object({
           .string()
           .matches(
             /^$|^[\d\s\-+()]+$/,
-            "Phone number can only contain digits, spaces, hyphens, plus signs, and parentheses"
+            "Phone number can only contain digits, spaces, hyphens, plus signs, and parentheses",
           )
           .max(20, "Phone number must not exceed 20 characters"), // Optional - lanline number
         mobile_no: yup
@@ -186,7 +195,7 @@ const addressValidationSchema = yup.object({
           .required("Mobile number is required")
           .matches(
             /^[\d\s\-+()]+$/,
-            "Mobile number can only contain digits, spaces, hyphens, plus signs, and parentheses"
+            "Mobile number can only contain digits, spaces, hyphens, plus signs, and parentheses",
           )
           .min(10, "Mobile number must be at least 10 digits")
           .max(15, "Mobile number must not exceed 15 digits"),
@@ -195,6 +204,14 @@ const addressValidationSchema = yup.object({
           .email("Please enter a valid email address")
           .required("Email is required")
           .max(100, "Email must not exceed 100 characters"),
+        pan_no: yup.string().optional().max(20, "PAN must not exceed 20 characters"),
+        gst_id: yup.string().optional().max(20, "GST No must not exceed 20 characters"),
+        tan_no: yup.string().optional().max(20, "TAN must not exceed 20 characters"),
+        arn_no: yup.string().optional().max(30, "ARN must not exceed 30 characters"),
+        uin_no: yup.string().optional().max(30, "UIN must not exceed 30 characters"),
+        gst_registration_status: yup.string().optional(),
+        composite_regular: yup.string().optional().oneOf(["composite", "Regular", ""], "Select Composite or Regular"),
+        sez: yup.boolean().optional(),
         latitude: yup
           .number()
           .optional()
@@ -205,7 +222,7 @@ const addressValidationSchema = yup.object({
           .optional()
           .min(-180, "Longitude must be between -180 and 180")
           .max(180, "Longitude must be between -180 and 180"),
-      })
+      }),
     )
     .min(1, "At least one address is required"),
 });
@@ -247,7 +264,7 @@ const AddressCard = memo(
     countryOptions: { value: string; label: string }[];
     selectedCountries: Record<number, string>;
     getStateOptions: (
-      countryCode: string
+      countryCode: string,
     ) => { value: string; label: string }[];
     getStateValue: (index: number) => string;
     cityOptions: { value: string; label: string }[];
@@ -280,7 +297,7 @@ const AddressCard = memo(
                 const formattedValue = toTitleCase(e.target.value);
                 addressForm.setFieldValue(
                   `addresses_data.${index}.customer_location`,
-                  formattedValue
+                  formattedValue,
                 );
               }}
               error={
@@ -302,7 +319,7 @@ const AddressCard = memo(
               ]}
               disabled={isViewMode}
               {...addressForm.getInputProps(
-                `addresses_data.${index}.address_type`
+                `addresses_data.${index}.address_type`,
               )}
               error={addressForm.errors[`addresses_data.${index}.address_type`]}
             />
@@ -320,7 +337,7 @@ const AddressCard = memo(
                 const formattedValue = toTitleCase(e.currentTarget.value);
                 addressForm.setFieldValue(
                   `addresses_data.${index}.address`,
-                  formattedValue
+                  formattedValue,
                 );
               }}
               error={addressForm.errors[`addresses_data.${index}.address`]}
@@ -402,7 +419,7 @@ const AddressCard = memo(
                 value={
                   addressForm.values.addresses_data[index]?.city
                     ? getCityValue(
-                        addressForm.values.addresses_data[index].city
+                        addressForm.values.addresses_data[index].city,
                       )
                     : ""
                 }
@@ -447,7 +464,7 @@ const AddressCard = memo(
               placeholder="Enter mobile number"
               disabled={isViewMode}
               {...addressForm.getInputProps(
-                `addresses_data.${index}.mobile_no`
+                `addresses_data.${index}.mobile_no`,
               )}
             />
           </Grid.Col>
@@ -461,6 +478,86 @@ const AddressCard = memo(
               {...addressForm.getInputProps(`addresses_data.${index}.email`)}
             />
           </Grid.Col>
+
+          <Grid.Col span={4}>
+            <TextInput
+              label="PAN No"
+              placeholder="Enter PAN number"
+              disabled={isViewMode}
+              {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <TextInput
+              label="GST No"
+              placeholder="Enter GST number"
+              disabled={isViewMode}
+              {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <TextInput
+              label="TAN No"
+              placeholder="Enter TAN number"
+              disabled={isViewMode}
+              {...addressForm.getInputProps(`addresses_data.${index}.tan_no`)}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <TextInput
+              label="ARN No"
+              placeholder="Enter ARN number"
+              disabled={isViewMode}
+              {...addressForm.getInputProps(`addresses_data.${index}.arn_no`)}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <TextInput
+              label="UIN No"
+              placeholder="Enter UIN number"
+              disabled={isViewMode}
+              {...addressForm.getInputProps(`addresses_data.${index}.uin_no`)}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <Select
+              label="GST Registration Status"
+              placeholder="Select status"
+              data={[
+                { value: "Registered", label: "Registered" },
+                { value: "Unregistered", label: "Unregistered" },
+              ]}
+              disabled={isViewMode}
+              {...addressForm.getInputProps(`addresses_data.${index}.gst_registration_status`)}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <Select
+              label="Composite / Regular"
+              placeholder="Select"
+              data={[
+                { value: "composite", label: "Composite" },
+                { value: "Regular", label: "Regular" },
+              ]}
+              disabled={isViewMode}
+              {...addressForm.getInputProps(`addresses_data.${index}.composite_regular`)}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <Switch
+              label="SEZ"
+              description={addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"}
+              disabled={isViewMode}
+              checked={Boolean(addressForm.values.addresses_data[index]?.sez)}
+              onChange={(e) =>
+                addressForm.setFieldValue(
+                  `addresses_data.${index}.sez`,
+                  e.currentTarget.checked,
+                )
+              }
+            />
+          </Grid.Col>
+
           <Grid.Col span={12}>
             <Group justify="right" mb="md">
               {canRemove && (
@@ -478,7 +575,7 @@ const AddressCard = memo(
         </Grid>
       </Card>
     );
-  }
+  },
 );
 
 AddressCard.displayName = "AddressCard";
@@ -493,7 +590,7 @@ const fetchSalespersons = async (customerId: string = "") => {
     "URL:",
     URL.salespersons,
     "Timestamp:",
-    new Date().toISOString()
+    new Date().toISOString(),
   );
   const response = await postAPICall(URL.salespersons, payload, API_HEADER);
   console.log("📊 Salespersons response:", response);
@@ -508,7 +605,7 @@ function CustomerCreate() {
     Record<number, string>
   >({});
   const [selectedStates, setSelectedStates] = useState<Record<number, string>>(
-    {}
+    {},
   );
   const [customCities, setCustomCities] = useState<Record<number, boolean>>({});
   const [citySearchValues, setCitySearchValues] = useState<
@@ -534,7 +631,7 @@ function CustomerCreate() {
     queryKey: ["salespersons", ""],
     queryFn: () => {
       console.log(
-        "🚀 React Query calling fetchSalespersons with empty customer_code"
+        "🚀 React Query calling fetchSalespersons with empty customer_code",
       );
       return fetchSalespersons("");
     },
@@ -571,7 +668,7 @@ function CustomerCreate() {
       try {
         const response = (await getAPICall(
           `${URL.country}`,
-          API_HEADER
+          API_HEADER,
         )) as CountryApiResponse;
 
         // Handle the API response structure
@@ -600,7 +697,7 @@ function CustomerCreate() {
       try {
         const response = (await getAPICall(
           `${URL.state}`,
-          API_HEADER
+          API_HEADER,
         )) as StateApiResponse;
 
         // Handle the API response structure
@@ -629,7 +726,7 @@ function CustomerCreate() {
       try {
         const response = (await getAPICall(
           `${URL.city}`,
-          API_HEADER
+          API_HEADER,
         )) as CityApiResponse;
 
         // Handle the API response structure
@@ -658,7 +755,7 @@ function CustomerCreate() {
       try {
         const response = (await getAPICall(
           `${URL.customerType}`,
-          API_HEADER
+          API_HEADER,
         )) as CustomerTypeApiResponse;
 
         // Handle the API response structure
@@ -669,7 +766,7 @@ function CustomerCreate() {
         // Fallback for different response structure
         if (Array.isArray(response)) {
           return (response as CustomerTypeData[]).filter(
-            (type) => type.status === "ACTIVE"
+            (type) => type.status === "ACTIVE",
           );
         }
 
@@ -730,6 +827,14 @@ function CustomerCreate() {
           phone_no: "",
           mobile_no: "",
           email: "",
+          pan_no: "",
+          gst_id: "",
+          tan_no: "",
+          arn_no: "",
+          uin_no: "",
+          gst_registration_status: "",
+          composite_regular: "",
+          sez: false,
           latitude: 0,
           longitude: 0,
         },
@@ -757,6 +862,14 @@ function CustomerCreate() {
           phone_no: "",
           mobile_no: "",
           email: "",
+          pan_no: "",
+          gst_id: "",
+          tan_no: "",
+          arn_no: "",
+          uin_no: "",
+          gst_registration_status: "",
+          composite_regular: "",
+          sez: false,
           latitude: 0,
           longitude: 0,
         },
@@ -786,7 +899,7 @@ function CustomerCreate() {
         addressDataToRestore = addressDataToRestore.map((addr: AddressData) => {
           if (addr.city) {
             const city = cities.find(
-              (c) => c.city_name === addr.city || c.city_code === addr.city
+              (c) => c.city_name === addr.city || c.city_code === addr.city,
             );
             if (city) {
               // Normalize to city_name for consistency
@@ -848,7 +961,7 @@ function CustomerCreate() {
             const country = countries.find(
               (c) =>
                 c.country_name === addr.country ||
-                c.country_code === addr.country
+                c.country_code === addr.country,
             );
             if (country) {
               newSelectedCountries[idx] = country.country_code;
@@ -877,7 +990,7 @@ function CustomerCreate() {
             // Normalize city value - try to find city and use city_name if found
             let cityValue = addr.city;
             const city = cities.find(
-              (c) => c.city_name === addr.city || c.city_code === addr.city
+              (c) => c.city_name === addr.city || c.city_code === addr.city,
             );
 
             if (city) {
@@ -889,11 +1002,11 @@ function CustomerCreate() {
               // Update form value to city_name to ensure dropdown displays correctly
               addressForm.setFieldValue(
                 `addresses_data.${idx}.city`,
-                cityValue
+                cityValue,
               );
               customerForm.setFieldValue(
                 `addresses_data.${idx}.city`,
-                cityValue
+                cityValue,
               );
             } else {
               // City doesn't exist - it's a custom city
@@ -948,7 +1061,7 @@ function CustomerCreate() {
                 landline?: string;
                 phone?: string;
                 mobile?: string;
-              }
+              },
             ) => {
               // Preserve original city value from API
               const originalCityValue = addr.city || "";
@@ -957,7 +1070,7 @@ function CustomerCreate() {
               // Try to convert city_code to city_name if it exists in dropdown
               if (cityName) {
                 const city = cities.find(
-                  (c) => c.city_code === cityName || c.city_name === cityName
+                  (c) => c.city_code === cityName || c.city_name === cityName,
                 );
                 if (city) {
                   // City exists in dropdown - use city_name for consistency
@@ -966,6 +1079,7 @@ function CustomerCreate() {
                 // If city not found, keep original value (could be city_code or custom city name)
               }
               return {
+                ...(addr.id != null && { id: addr.id }),
                 customer_location:
                   addr.customer_location || addr.location || "",
                 address_type: addr.address_type || "Primary",
@@ -977,10 +1091,18 @@ function CustomerCreate() {
                 phone_no: addr.phone_no || addr.landline || addr.phone || "",
                 mobile_no: addr.mobile_no || addr.mobile || "",
                 email: addr.email || "",
+                pan_no: (addr as any).pan_no ?? "",
+                gst_id: (addr as any).gst_id ?? "",
+                tan_no: (addr as any).tan_no ?? "",
+                arn_no: (addr as any).arn_no ?? "",
+                uin_no: (addr as any).uin_no ?? "",
+                gst_registration_status: (addr as any).gst_registration_status ?? "",
+                composite_regular: (addr as any).composite_regular ?? "",
+                sez: Boolean((addr as any).sez),
                 latitude: addr.latitude || 0,
                 longitude: addr.longitude || 0,
               };
-            }
+            },
           ) || [
             {
               customer_location: "",
@@ -993,6 +1115,14 @@ function CustomerCreate() {
               phone_no: "",
               mobile_no: "",
               email: "",
+              pan_no: "",
+              gst_id: "",
+              tan_no: "",
+              arn_no: "",
+              uin_no: "",
+              gst_registration_status: "",
+              composite_regular: "",
+              sez: false,
               latitude: 0,
               longitude: 0,
             },
@@ -1040,7 +1170,7 @@ function CustomerCreate() {
           addressData.forEach((addr, idx) => {
             if (addr.country) {
               const country = countries.find(
-                (c) => c.country_name === addr.country
+                (c) => c.country_name === addr.country,
               );
               if (country) {
                 newSelectedCountries[idx] = country.country_code;
@@ -1053,7 +1183,7 @@ function CustomerCreate() {
             if (addr.city) {
               // Check if the city value (could be name or code) exists in dropdown
               const city = cities.find(
-                (c) => c.city_name === addr.city || c.city_code === addr.city
+                (c) => c.city_name === addr.city || c.city_code === addr.city,
               );
               const cityExists = !!city;
               newCustomCities[idx] = !cityExists;
@@ -1083,7 +1213,7 @@ function CustomerCreate() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [countries, customerTypes, cities] // Added countries and cities dependency (forms excluded to prevent infinite loops)
+    [countries, customerTypes, cities], // Added countries and cities dependency (forms excluded to prevent infinite loops)
   );
 
   // Fetch customer data when in edit or view mode (only if not coming back from relationship mapping)
@@ -1128,7 +1258,7 @@ function CustomerCreate() {
             landline?: string;
             phone?: string;
             mobile?: string;
-          }
+          },
         ) => {
           // Preserve original city value from API
           const originalCityValue = addr.city || "";
@@ -1137,7 +1267,7 @@ function CustomerCreate() {
           // Try to convert city_code to city_name if it exists in dropdown
           if (cityName) {
             const city = cities.find(
-              (c) => c.city_code === cityName || c.city_name === cityName
+              (c) => c.city_code === cityName || c.city_name === cityName,
             );
             if (city) {
               // City exists in dropdown - use city_name for consistency
@@ -1157,10 +1287,18 @@ function CustomerCreate() {
             phone_no: addr.phone_no || addr.landline || addr.phone || "",
             mobile_no: addr.mobile_no || addr.mobile || "",
             email: addr.email || "",
+            pan_no: (addr as any).pan_no ?? "",
+            gst_id: (addr as any).gst_id ?? "",
+            tan_no: (addr as any).tan_no ?? "",
+            arn_no: (addr as any).arn_no ?? "",
+            uin_no: (addr as any).uin_no ?? "",
+            gst_registration_status: (addr as any).gst_registration_status ?? "",
+            composite_regular: (addr as any).composite_regular ?? "",
+            sez: Boolean((addr as any).sez),
             latitude: addr.latitude || 0,
             longitude: addr.longitude || 0,
           };
-        }
+        },
       ) || [
         {
           customer_location: "",
@@ -1173,6 +1311,14 @@ function CustomerCreate() {
           phone_no: "",
           mobile_no: "",
           email: "",
+          pan_no: "",
+          gst_id: "",
+          tan_no: "",
+          arn_no: "",
+          uin_no: "",
+          gst_registration_status: "",
+          composite_regular: "",
+          sez: false,
           latitude: 0,
           longitude: 0,
         },
@@ -1212,7 +1358,7 @@ function CustomerCreate() {
       addressData.forEach((addr: AddressData, idx: number) => {
         if (addr.country) {
           const country = countries.find(
-            (c) => c.country_name === addr.country
+            (c) => c.country_name === addr.country,
           );
           if (country) {
             newSelectedCountries[idx] = country.country_code;
@@ -1225,7 +1371,7 @@ function CustomerCreate() {
         if (addr.city) {
           // Check if the city value (could be name or code) exists in dropdown
           const city = cities.find(
-            (c) => c.city_name === addr.city || c.city_code === addr.city
+            (c) => c.city_name === addr.city || c.city_code === addr.city,
           );
           const cityExists = !!city;
           newCustomCities[idx] = !cityExists;
@@ -1302,6 +1448,14 @@ function CustomerCreate() {
       phone_no: "",
       mobile_no: "",
       email: "",
+      pan_no: "",
+      gst_id: "",
+      tan_no: "",
+      arn_no: "",
+      uin_no: "",
+      gst_registration_status: "",
+      composite_regular: "",
+      sez: false,
       latitude: 0,
       longitude: 0,
     };
@@ -1346,14 +1500,14 @@ function CustomerCreate() {
       return states
         .filter(
           (state) =>
-            state.status === "active" && state.country_code === countryCode
+            state.status === "active" && state.country_code === countryCode,
         )
         .map((state) => ({
           value: state.id.toString(),
           label: state.state_name,
         }));
     },
-    [states]
+    [states],
   );
 
   // Get state value for a specific address
@@ -1363,7 +1517,7 @@ function CustomerCreate() {
       const state = states.find((s) => s.state_name === selectedStates[index]);
       return state ? state.id.toString() : "";
     },
-    [selectedStates, states]
+    [selectedStates, states],
   );
 
   // Get city value for a specific address
@@ -1378,7 +1532,7 @@ function CustomerCreate() {
       }
       return city ? city.id.toString() : "";
     },
-    [cities]
+    [cities],
   );
 
   // Check if city exists in dropdown options
@@ -1386,11 +1540,11 @@ function CustomerCreate() {
     (cityValue: string) => {
       if (!cityValue) return false;
       const city = cities.find(
-        (c) => c.city_name === cityValue || c.city_code === cityValue
+        (c) => c.city_name === cityValue || c.city_code === cityValue,
       );
       return !!city;
     },
-    [cities]
+    [cities],
   );
 
   // Get city name from stored value (code or name)
@@ -1405,7 +1559,7 @@ function CustomerCreate() {
       }
       return city ? city.city_name : cityValue; // Return city name if found, otherwise return the value as-is (custom city)
     },
-    [cities]
+    [cities],
   );
 
   // Handle country selection - wrapped in useCallback for better performance
@@ -1442,19 +1596,19 @@ function CustomerCreate() {
       // Update both forms to keep them in sync - store country code for payload
       customerForm.setFieldValue(
         `addresses_data.${index}.country`,
-        country.country_code
+        country.country_code,
       );
       customerForm.setFieldValue(`addresses_data.${index}.state`, "");
       customerForm.setFieldValue(`addresses_data.${index}.city`, "");
 
       addressForm.setFieldValue(
         `addresses_data.${index}.country`,
-        country.country_code
+        country.country_code,
       );
       addressForm.setFieldValue(`addresses_data.${index}.state`, "");
       addressForm.setFieldValue(`addresses_data.${index}.city`, "");
     },
-    [countries, customerForm, addressForm]
+    [countries, customerForm, addressForm],
   );
 
   // Handle state selection - wrapped in useCallback for better performance
@@ -1469,15 +1623,15 @@ function CustomerCreate() {
       // Update both forms to keep them in sync - store state name for payload
       customerForm.setFieldValue(
         `addresses_data.${index}.state`,
-        state.state_code
+        state.state_code,
       );
 
       addressForm.setFieldValue(
         `addresses_data.${index}.state`,
-        state.state_code
+        state.state_code,
       );
     },
-    [states, customerForm, addressForm]
+    [states, customerForm, addressForm],
   );
 
   // Handle city selection - wrapped in useCallback for better performance
@@ -1493,14 +1647,14 @@ function CustomerCreate() {
       // Update both forms to keep them in sync - store city name for payload
       customerForm.setFieldValue(
         `addresses_data.${index}.city`,
-        city.city_name
+        city.city_name,
       );
       addressForm.setFieldValue(`addresses_data.${index}.city`, city.city_name);
 
       // Clear search value
       setCitySearchValues((prev) => ({ ...prev, [index]: "" }));
     },
-    [cities, customerForm, addressForm]
+    [cities, customerForm, addressForm],
   );
 
   // Handle custom city input
@@ -1516,7 +1670,7 @@ function CustomerCreate() {
       // Update search value
       setCitySearchValues((prev) => ({ ...prev, [index]: cityName }));
     },
-    [customerForm, addressForm]
+    [customerForm, addressForm],
   );
 
   // Handle city search - check if we should switch to text input
@@ -1529,13 +1683,13 @@ function CustomerCreate() {
         const exactMatch = cities.find(
           (c) =>
             c.city_name.toLowerCase() === searchValue.toLowerCase() ||
-            c.city_code.toLowerCase() === searchValue.toLowerCase()
+            c.city_code.toLowerCase() === searchValue.toLowerCase(),
         );
         // Check if any city starts with or contains the search value
         const partialMatch = cities.find(
           (c) =>
             c.city_name.toLowerCase().startsWith(searchValue.toLowerCase()) ||
-            c.city_code.toLowerCase().startsWith(searchValue.toLowerCase())
+            c.city_code.toLowerCase().startsWith(searchValue.toLowerCase()),
         );
 
         // If no exact or partial match found, switch to custom input
@@ -1545,11 +1699,11 @@ function CustomerCreate() {
           const formattedValue = toTitleCase(searchValue);
           customerForm.setFieldValue(
             `addresses_data.${index}.city`,
-            formattedValue
+            formattedValue,
           );
           addressForm.setFieldValue(
             `addresses_data.${index}.city`,
-            formattedValue
+            formattedValue,
           );
         } else if (exactMatch || partialMatch) {
           // If there's a match, ensure we're in dropdown mode
@@ -1560,7 +1714,7 @@ function CustomerCreate() {
         setCitySearchValues((prev) => ({ ...prev, [index]: "" }));
       }
     },
-    [cities, customerForm, addressForm]
+    [cities, customerForm, addressForm],
   );
 
   // Handle clearing custom city and switching back to dropdown
@@ -1572,7 +1726,7 @@ function CustomerCreate() {
       customerForm.setFieldValue(`addresses_data.${index}.city`, "");
       addressForm.setFieldValue(`addresses_data.${index}.city`, "");
     },
-    [customerForm, addressForm]
+    [customerForm, addressForm],
   );
 
   const createCustomer = async (values: CustomerFormData): Promise<void> => {
@@ -1588,6 +1742,14 @@ function CustomerCreate() {
           ...addr,
           address_type:
             addr.address_type === "Primary" ? "Primary" : addr.address_type,
+          pan_no: addr.pan_no ?? "",
+          gst_id: addr.gst_id ?? "",
+          tan_no: addr.tan_no ?? "",
+          arn_no: addr.arn_no ?? "",
+          uin_no: addr.uin_no ?? "",
+          gst_registration_status: addr.gst_registration_status ?? "",
+          composite_regular: addr.composite_regular ?? "",
+          sez: Boolean(addr.sez),
         })),
       };
 
@@ -1621,7 +1783,7 @@ function CustomerCreate() {
 
       console.log(
         "🔍 CustomerCreate - Final error message to display:",
-        errorMessage
+        errorMessage,
       );
 
       ToastNotification({
@@ -1650,6 +1812,14 @@ function CustomerCreate() {
             ...addr,
             address_type:
               addr.address_type === "Primary" ? "Primary" : addr.address_type,
+            pan_no: addr.pan_no ?? "",
+            gst_id: addr.gst_id ?? "",
+            tan_no: addr.tan_no ?? "",
+            arn_no: addr.arn_no ?? "",
+            uin_no: addr.uin_no ?? "",
+            gst_registration_status: addr.gst_registration_status ?? "",
+            composite_regular: addr.composite_regular ?? "",
+            sez: Boolean(addr.sez),
           };
 
           // Include id if it exists (for existing addresses in edit mode)
@@ -1692,7 +1862,7 @@ function CustomerCreate() {
 
       console.log(
         "🔍 CustomerCreate - Final error message to display:",
-        errorMessage
+        errorMessage,
       );
 
       ToastNotification({
@@ -1815,7 +1985,7 @@ function CustomerCreate() {
                       const formattedValue = toTitleCase(e.target.value);
                       customerForm.setFieldValue(
                         "customer_name",
-                        formattedValue
+                        formattedValue,
                       );
                     }}
                     error={customerForm.errors.customer_name}
@@ -1985,7 +2155,7 @@ function CustomerCreate() {
                                 customerFormData: customerForm.values,
                                 addressFormData: addressForm.values,
                               },
-                            }
+                            },
                           );
                         } else {
                           // Force re-render to show validation errors inline
@@ -2026,7 +2196,7 @@ function CustomerCreate() {
                                 customerFormData: customerForm.values,
                                 addressFormData: addressForm.values,
                               },
-                            }
+                            },
                           );
                         } else {
                           // Force re-render to show validation errors inline
