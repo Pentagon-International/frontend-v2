@@ -41,7 +41,7 @@ import {
   ToastNotification,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
-import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
+import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -1516,7 +1516,7 @@ function HouseCreate() {
     };
   };
 
-  // Generate PDF preview from current form data
+  // Generate Bill of Lading PDF preview from current form data
   const generatePDFPreview = () => {
     try {
       setPreviewOpen(true);
@@ -1586,14 +1586,15 @@ function HouseCreate() {
             amount: charge.amount,
           })),
       };
+      // Build job data in the same shape as ExportJobCreate BL generator
       const jobData = {
-        service: location.state?.mblDetails?.service || "FCL",
-        service_type: "Export",
-        ...location.state?.mblDetails,
-        ...location.state?.carrierDetails,
-        notes: location.state?.job?.notes || [],
+        ...(location.state?.job || {}),
+        mblDetails: location.state?.mblDetails || {},
+        carrierDetails: location.state?.carrierDetails || {},
+        containerDetails: location.state?.containerDetails || [],
       };
-      const blobUrl = generateCargoArrivalNoticePDF(
+
+      const blobUrl = generateBillOfLadingPDF(
         jobData,
         housingData,
         defaultBranch,
@@ -1622,7 +1623,7 @@ function HouseCreate() {
     if (pdfBlob) {
       const link = document.createElement("a");
       link.href = pdfBlob;
-      link.download = `Cargo-Arrival-Notice-${form.values.hbl_number || "HBL"}.pdf`;
+      link.download = `Bill-of-Lading-${form.values.hbl_number || "HBL"}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1762,7 +1763,7 @@ function HouseCreate() {
                 },
               }}
             >
-              {/* Cargo Arrival Notice */}
+              {/* Bill of Lading */}
               <Menu.Item
                 leftSection={
                   <Box
@@ -1799,52 +1800,7 @@ function HouseCreate() {
                 }}
                 onClick={generatePDFPreview}
               >
-                Cargo Arrival Notice
-              </Menu.Item>
-
-              {/* Delivery Order */}
-              <Menu.Item
-                leftSection={
-                  <Box
-                    style={{
-                      backgroundColor: "#E7F5FF",
-                      borderRadius: "6px",
-                      padding: "6px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <IconEye size={16} color="#105476" />
-                  </Box>
-                }
-                styles={{
-                  item: {
-                    fontFamily: "Inter",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    borderRadius: "6px",
-                    padding: "10px 12px",
-                    marginBottom: "4px",
-                    "&:hover": {
-                      backgroundColor: "#F8F9FA",
-                    },
-                  },
-                  itemLabel: {
-                    fontFamily: "Inter",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                  },
-                }}
-                onClick={() => {
-                  ToastNotification({
-                    type: "info",
-                    message: "Delivery Order preview coming soon",
-                  });
-                }}
-              >
-                Delivery Order
+                Bill Of Lading
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>

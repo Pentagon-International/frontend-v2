@@ -4,7 +4,7 @@ import {
   CallModeEdit,
   CallModeMaster,
   CallModeView,
-  GstnMaster,
+  CustomerPanMaster,
   Dashboard,
   GroupCompany,
   GroupCompanyEdit,
@@ -390,7 +390,7 @@ const NavigationRoutes = () => {
           <Route path="callmode-master-new" element={<NewCallMode />} />
           <Route path="callmode-master-edit" element={<CallModeEdit />} />
           <Route path="callmode-master-view" element={<CallModeView />} />
-          <Route path="gstn" element={<GstnMaster />} />
+          <Route path="create-customer-pan" element={<CustomerPanMaster />} />
           <Route path="terms-of-shipment" element={<TermsOfShipment />} />
           <Route
             path="terms-of-shipment-new"

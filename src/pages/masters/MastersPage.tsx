@@ -118,7 +118,10 @@ export default function MastersPage() {
             icon: <IconBrandRedux size={28} color="#105476" />,
             label: "Call Mode",
           },
-          { icon: <IconFileStack size={28} color="#105476" />, label: "GSTN" },
+          {
+            icon: <IconFileStack size={28} color="#105476" />,
+            label: "Create Customer-PAN",
+          },
         ],
       },
       {

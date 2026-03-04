@@ -27,8 +27,8 @@ import NewCallMode from "../pages/masters/callmode-master/NewCallMode";
 import CallModeEdit from "../pages/masters/callmode-master/CallModeEdit";
 import CallModeView from "../pages/masters/callmode-master/CallModeView";
 
-// GSTN Master
-import GstnMaster from "../pages/masters/gstn-master/GstnMaster";
+// Create Customer-PAN Master
+import CustomerPanMaster from "../pages/masters/customer-pan-master/CustomerPanMaster";
 
 import MastersPage from "./masters/MastersPage";
 
@@ -180,7 +180,7 @@ export {
   NewCallMode,
   CallModeEdit,
   CallModeView,
-  GstnMaster,
+  CustomerPanMaster,
   TermsOfShipment,
   NewTermsOfShipment,
   EditTermsOfShipment,

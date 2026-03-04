@@ -32,7 +32,14 @@ import {
   IconEye,
   IconRefresh,
 } from "@tabler/icons-react";
-import { useEffect, useState, useMemo, useRef, useCallback, Fragment } from "react";
+import {
+  useEffect,
+  useState,
+  useMemo,
+  useRef,
+  useCallback,
+  Fragment,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -226,7 +233,7 @@ const carrierDetailsSchema = yup.object({
 
 // Helper function to get transport_mode based on transport_type
 const getTransportMode = (
-  transportType: string | null | undefined
+  transportType: string | null | undefined,
 ): string | undefined => {
   if (!transportType) return undefined;
   const type = transportType.trim();
@@ -249,7 +256,7 @@ function AirExportJobCreate() {
       : location.state?.housingDetails &&
           Array.isArray(location.state.housingDetails)
         ? location.state.housingDetails
-        : []
+        : [],
   );
 
   // Track if forms have been initialized from jobData (one-time initialization)
@@ -264,7 +271,7 @@ function AirExportJobCreate() {
   const routingStateInitializedRef = useRef(false);
   // Store origin agent data to persist across navigations
   const originAgentDataRef = useRef<Record<string, unknown> | null>(
-    location.state?.mawbDetails?.origin_agent_data || null
+    location.state?.mawbDetails?.origin_agent_data || null,
   );
   // Ref to track if navigation is in progress to prevent multiple navigations
   const navigationInProgressRef = useRef(false);
@@ -274,7 +281,9 @@ function AirExportJobCreate() {
   // Accounts tab state
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
   const [invoiceListLoading, setInvoiceListLoading] = useState(false);
-  const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<string | null>(null);
+  const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<
+    string | null
+  >(null);
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -303,7 +312,7 @@ function AirExportJobCreate() {
       try {
         const jobListRes = await getAPICall(
           `${URL.jobCreate}${jobId}/`,
-          API_HEADER
+          API_HEADER,
         );
         const body = (jobListRes as { data?: unknown })?.data ?? jobListRes;
         const list = Array.isArray((body as { data?: unknown[] })?.data)
@@ -311,7 +320,8 @@ function AirExportJobCreate() {
           : Array.isArray(body)
             ? (body as unknown[])
             : [];
-        const job = list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+        const job =
+          list.length > 0 ? (list[0] as Record<string, unknown>) : null;
         if (!cancelled && job) {
           navigate("/air/export-job/edit", {
             state: {
@@ -322,19 +332,27 @@ function AirExportJobCreate() {
             replace: true,
           });
         } else if (!cancelled) {
-          ToastNotification({ type: "error", message: "Failed to load job data." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load job data.",
+          });
         }
       } catch (error) {
         if (!cancelled) {
           console.error("Error fetching job:", error);
-          ToastNotification({ type: "error", message: "Failed to load job. Please try again." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load job. Please try again.",
+          });
         }
       } finally {
         if (!cancelled) setIsFetchingJobById(false);
       }
     };
     fetchAndReplace();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [location.state?.jobId, location.state?.job, navigate]);
 
   // MAWB Details Form - Initialize with jobData if available, or from location.state for create mode
@@ -520,7 +538,7 @@ function AirExportJobCreate() {
             destination_code: mawbDetailsForm.values.destination_code,
             destination_name: mawbDetailsForm.values.destination_name,
             allFormValues: mawbDetailsForm.values,
-          }
+          },
         );
 
         // Populate Carrier Details using setValues
@@ -552,7 +570,7 @@ function AirExportJobCreate() {
             carrier_code: carrierDetailsForm.values.carrier_code,
             carrier_name: carrierDetailsForm.values.carrier_name,
             allFormValues: carrierDetailsForm.values,
-          }
+          },
         );
 
         // Populate Housing Details from jobData if exists
@@ -581,7 +599,7 @@ function AirExportJobCreate() {
               hawb_number:
                 house.hawb_number || house.hawb_no || house.hbl_number
                   ? String(
-                      house.hawb_number || house.hawb_no || house.hbl_number
+                      house.hawb_number || house.hawb_no || house.hbl_number,
                     )
                   : "",
               routed: house.routed
@@ -661,7 +679,7 @@ function AirExportJobCreate() {
                           | number
                           | null,
                         haz: cargo.haz ? String(cargo.haz) : "",
-                      })
+                      }),
                     )
                   : [],
               charges: (() => {
@@ -677,20 +695,36 @@ function AirExportJobCreate() {
                       | { currency_code?: string; currency_id?: number }
                       | undefined;
                     const unitCode = String(
-                      charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
+                      charge.unit_code ??
+                        charge.unit_input ??
+                        unitDetails?.unit_code ??
+                        "",
                     ).trim();
                     const currency = String(
                       charge.currency ?? currencyDetails?.currency_code ?? "",
                     ).trim();
-                    const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+                    const chargeId =
+                      charge.charge_id != null
+                        ? Number(charge.charge_id)
+                        : charge.id != null
+                          ? Number(charge.id)
+                          : null;
                     const unitId =
-                      charge.unit_id != null ? String(charge.unit_id) :
-                      charge.unit != null ? String(charge.unit) :
-                      unitDetails?.unit_id != null ? String(unitDetails.unit_id) : "";
+                      charge.unit_id != null
+                        ? String(charge.unit_id)
+                        : charge.unit != null
+                          ? String(charge.unit)
+                          : unitDetails?.unit_id != null
+                            ? String(unitDetails.unit_id)
+                            : "";
                     const currencyId =
-                      charge.currency_id != null ? String(charge.currency_id) :
-                      charge.currency != null ? String(charge.currency) :
-                      currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : "";
+                      charge.currency_id != null
+                        ? String(charge.currency_id)
+                        : charge.currency != null
+                          ? String(charge.currency)
+                          : currencyDetails?.currency_id != null
+                            ? String(currencyDetails.currency_id)
+                            : "";
                     return {
                       id: charge.id != null ? Number(charge.id) : undefined,
                       charge_id: chargeId,
@@ -711,7 +745,7 @@ function AirExportJobCreate() {
                 }
                 return [];
               })(),
-            })
+            }),
           );
           setHawbDetails(mappedHawbDetails);
           hawbDetailsLoadedRef.current = true;
@@ -757,7 +791,7 @@ function AirExportJobCreate() {
                 truck_no: routing.truck_no ? String(routing.truck_no) : "",
                 rail_no: routing.rail_no ? String(routing.rail_no) : "",
               };
-            }
+            },
           );
           routingsForm.setValues({ routings: mappedRoutings });
           routingStateInitializedRef.current = true;
@@ -800,7 +834,7 @@ function AirExportJobCreate() {
                 truck_no: routing.truck_no ? String(routing.truck_no) : "",
                 rail_no: routing.rail_no ? String(routing.rail_no) : "",
               };
-            }
+            },
           );
           routingsForm.setValues({ routings: mappedRoutings });
           routingStateInitializedRef.current = true;
@@ -1663,7 +1697,8 @@ function AirExportJobCreate() {
           cargo_details: hawb.cargo_details || [],
           mawb_charges: hawb.charges
             ? hawb.charges.map((charge) => ({
-                ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),
+                ...(charge.id != null &&
+                  charge.id !== undefined && { id: Number(charge.id) }),
                 charge_id: charge.charge_id ?? null,
                 charge_name: charge.charge_name || "",
                 pp_cc: charge.pp_cc || "",
@@ -1671,7 +1706,9 @@ function AirExportJobCreate() {
                 // unit_input: charge.unit_code || "",
                 // currency: charge.currency || "",
                 no_of_unit: charge.no_of_unit || null,
-                currency_id: charge.currency_id ? String(charge.currency_id) : "",
+                currency_id: charge.currency_id
+                  ? String(charge.currency_id)
+                  : "",
                 roe: charge.roe || null,
                 amount_per_unit: charge.amount_per_unit || null,
                 amount: charge.amount || null,
@@ -1689,7 +1726,7 @@ function AirExportJobCreate() {
             ...payload,
             id: jobData.id,
           },
-          API_HEADER
+          API_HEADER,
         );
       } else {
         await postAPICall(`${URL.base}${URL.jobCreate}`, payload, API_HEADER);
@@ -1722,8 +1759,8 @@ function AirExportJobCreate() {
     setInvoiceListLoading(true);
     postAPICall(
       URL.invoiceCombined,
-      { filters: { "shipment_no": jobData.job_id , "is_agent": true } },
-      API_HEADER
+      { filters: { shipment_no: jobData.job_id, is_agent: true } },
+      API_HEADER,
     )
       .then((res: unknown) => {
         const data = (res as { data?: InvoiceListItem[] })?.data;
@@ -1767,7 +1804,7 @@ function AirExportJobCreate() {
             >
               {mode === "edit" ? "Update" : "Create"}
             </Button>
-            {hawbDetails.length > 0 && (
+            {jobData?.id != null && hawbDetails.length > 0 && (
               <Menu shadow="md" width={220} position="bottom-end">
                 <Menu.Target>
                   <ActionIcon
@@ -1800,93 +1837,94 @@ function AirExportJobCreate() {
                     },
                   }}
                 >
-                  {jobData?.id != null && (
-                    <Menu.Item
-                      leftSection={
-                        <Box
-                          style={{
-                            backgroundColor: "#E7F5FF",
-                            borderRadius: "6px",
-                            padding: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <IconFileInvoice size={16} color="#105476" />
-                        </Box>
-                      }
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
+                  <Menu.Item
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
                           borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": {
-                            backgroundColor: "#F8F9FA",
-                          },
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconFileInvoice size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
                         },
-                        itemLabel: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
+                      },
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
+                    onClick={() => {
+                      const allCollectCharges = hawbDetails.flatMap((hawb) =>
+                        (hawb.charges ?? [])
+                          .filter(
+                            (c) =>
+                              String(c.pp_cc ?? "")
+                                .trim()
+                                .toUpperCase() === "CC",
+                          )
+                          .map((c) => ({
+                            ...c,
+                            shipment_id:
+                              (hawb as { shipment_id?: string }).shipment_id ??
+                              (hawb as { shipment_no?: string }).shipment_no ??
+                              "",
+                            shipper_id:
+                              (hawb as { shipper_code?: string })
+                                .shipper_code ??
+                              (hawb as { shipper_id?: string }).shipper_id ??
+                              "",
+                          })),
+                      );
+
+                      const firstHouse = hawbDetails[0];
+
+                      const housingDetailsForInvoice = [
+                        {
+                          ...firstHouse,
+                          charges: allCollectCharges,
                         },
-                      }}
-                      onClick={() => {
-                        const allCollectCharges = hawbDetails.flatMap((hawb) =>
-                          (hawb.charges ?? [])
-                            .filter(
-                              (c) =>
-                                String(c.pp_cc ?? "").trim().toUpperCase() === "CC"
-                            )
-                            .map((c) => ({
-                              ...c,
-                              shipment_id:
-                                (hawb as { shipment_id?: string }).shipment_id ??
-                                (hawb as { shipment_no?: string }).shipment_no ??
-                                "",
-                              shipper_id:
-                                (hawb as { shipper_code?: string }).shipper_code ??
-                                (hawb as { shipper_id?: string }).shipper_id ??
-                                "",
-                            }))
-                        );
+                      ];
 
-                        const firstHouse = hawbDetails[0];
-
-                        const housingDetailsForInvoice = [
-                          {
-                            ...firstHouse,
-                            charges: allCollectCharges,
-                          },
-                        ];
-
-                        navigate("/air/export-job/invoice", {
-                          state: {
-                            hawbDetails: housingDetailsForInvoice,
-                            housingDetails: housingDetailsForInvoice,
-                            is_agent: true,
-                            fromJobLevel: true,
-                            ...(jobData && { job: jobData }),
-                            ...(location.state?.mawbDetails && {
-                              mawbDetails: location.state.mawbDetails,
-                            }),
-                            ...(location.state?.carrierDetails && {
-                              carrierDetails: location.state.carrierDetails,
-                            }),
-                            ...(location.state?.routings && {
-                              routings: location.state.routings,
-                            }),
-                          },
-                        });
-                      }}
-                    >
-                      Create Invoice
-                    </Menu.Item>
-                  )}
+                      navigate("/air/export-job/invoice", {
+                        state: {
+                          hawbDetails: housingDetailsForInvoice,
+                          housingDetails: housingDetailsForInvoice,
+                          is_agent: true,
+                          fromJobLevel: true,
+                          ...(jobData && { job: jobData }),
+                          ...(location.state?.mawbDetails && {
+                            mawbDetails: location.state.mawbDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Invoice
+                  </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
             )}
@@ -1997,7 +2035,7 @@ function AirExportJobCreate() {
                     // Store customer_name for display
                     mawbDetailsForm.setFieldValue(
                       "origin_agent_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     console.log("🔍 MAWB Destination Agent Selected:", {
@@ -2075,13 +2113,13 @@ function AirExportJobCreate() {
                   onChange={(value, selectedData) => {
                     mawbDetailsForm.setFieldValue(
                       "destination_code",
-                      value || ""
+                      value || "",
                     );
                     if (selectedData) {
                       const portName = selectedData.label.split(" (")[0] || "";
                       mawbDetailsForm.setFieldValue(
                         "destination_name",
-                        portName
+                        portName,
                       );
                     } else if (!value) {
                       mawbDetailsForm.setFieldValue("destination_name", "");
@@ -2179,11 +2217,11 @@ function AirExportJobCreate() {
                   onChange={(value, selectedData) => {
                     carrierDetailsForm.setFieldValue(
                       "carrier_code",
-                      value || ""
+                      value || "",
                     );
                     carrierDetailsForm.setFieldValue(
                       "carrier_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
                   }}
                   minSearchLength={2}
@@ -2267,38 +2305,38 @@ function AirExportJobCreate() {
                             routingsForm.values.routings[index]?.transport_type;
                           routingsForm.setFieldValue(
                             `routings.${index}.transport_type`,
-                            value || ""
+                            value || "",
                           );
                           // Clear carrier when transport type changes
                           if (oldTransportType !== value) {
                             routingsForm.setFieldValue(
                               `routings.${index}.carrier_code`,
-                              ""
+                              "",
                             );
                             routingsForm.setFieldValue(
                               `routings.${index}.carrier_name`,
-                              ""
+                              "",
                             );
                             // Clear transport-type-specific fields
                             routingsForm.setFieldValue(
                               `routings.${index}.vessel`,
-                              ""
+                              "",
                             );
                             routingsForm.setFieldValue(
                               `routings.${index}.flight`,
-                              ""
+                              "",
                             );
                             routingsForm.setFieldValue(
                               `routings.${index}.voyage_number`,
-                              ""
+                              "",
                             );
                             routingsForm.setFieldValue(
                               `routings.${index}.truck_no`,
-                              ""
+                              "",
                             );
                             routingsForm.setFieldValue(
                               `routings.${index}.rail_no`,
-                              ""
+                              "",
                             );
                           }
                         }}
@@ -2330,19 +2368,19 @@ function AirExportJobCreate() {
                         onChange={(value, selectedData) => {
                           routingsForm.setFieldValue(
                             `routings.${index}.from_code`,
-                            value || ""
+                            value || "",
                           );
                           if (selectedData) {
                             const portName =
                               selectedData.label.split(" (")[0] || "";
                             routingsForm.setFieldValue(
                               `routings.${index}.from_name`,
-                              portName
+                              portName,
                             );
                           } else if (!value) {
                             routingsForm.setFieldValue(
                               `routings.${index}.from_name`,
-                              ""
+                              "",
                             );
                           }
                         }}
@@ -2351,7 +2389,7 @@ function AirExportJobCreate() {
                           getTransportMode(routing.transport_type)
                             ? {
                                 transport_mode: getTransportMode(
-                                  routing.transport_type
+                                  routing.transport_type,
                                 )!,
                               }
                             : undefined
@@ -2379,19 +2417,19 @@ function AirExportJobCreate() {
                         onChange={(value, selectedData) => {
                           routingsForm.setFieldValue(
                             `routings.${index}.to_code`,
-                            value || ""
+                            value || "",
                           );
                           if (selectedData) {
                             const portName =
                               selectedData.label.split(" (")[0] || "";
                             routingsForm.setFieldValue(
                               `routings.${index}.to_name`,
-                              portName
+                              portName,
                             );
                           } else if (!value) {
                             routingsForm.setFieldValue(
                               `routings.${index}.to_name`,
-                              ""
+                              "",
                             );
                           }
                         }}
@@ -2400,7 +2438,7 @@ function AirExportJobCreate() {
                           getTransportMode(routing.transport_type)
                             ? {
                                 transport_mode: getTransportMode(
-                                  routing.transport_type
+                                  routing.transport_type,
                                 )!,
                               }
                             : undefined
@@ -2427,11 +2465,11 @@ function AirExportJobCreate() {
                             onChange={(value, selectedData) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
-                                value || ""
+                                value || "",
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_name`,
-                                selectedData?.label || ""
+                                selectedData?.label || "",
                               );
                             }}
                             minSearchLength={2}
@@ -2439,7 +2477,7 @@ function AirExportJobCreate() {
                               getTransportMode(routing.transport_type)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type
+                                      routing.transport_type,
                                     )!,
                                   }
                                 : undefined
@@ -2455,11 +2493,11 @@ function AirExportJobCreate() {
                             value={routing.vessel || ""}
                             onChange={(e) => {
                               const formattedValue = toTitleCase(
-                                e.target.value
+                                e.target.value,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.vessel`,
-                                formattedValue
+                                formattedValue,
                               );
                             }}
                             error={
@@ -2475,7 +2513,7 @@ function AirExportJobCreate() {
                             required
                             placeholder="Enter voyage number"
                             {...routingsForm.getInputProps(
-                              `routings.${index}.voyage_number`
+                              `routings.${index}.voyage_number`,
                             )}
                           />
                         </Grid.Col>
@@ -2500,11 +2538,11 @@ function AirExportJobCreate() {
                             onChange={(value, selectedData) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
-                                value || ""
+                                value || "",
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_name`,
-                                selectedData?.label || ""
+                                selectedData?.label || "",
                               );
                             }}
                             minSearchLength={2}
@@ -2512,7 +2550,7 @@ function AirExportJobCreate() {
                               getTransportMode(routing.transport_type)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type
+                                      routing.transport_type,
                                     )!,
                                   }
                                 : undefined
@@ -2525,7 +2563,7 @@ function AirExportJobCreate() {
                             required
                             placeholder="Enter flight number"
                             {...routingsForm.getInputProps(
-                              `routings.${index}.flight`
+                              `routings.${index}.flight`,
                             )}
                           />
                         </Grid.Col>
@@ -2550,11 +2588,11 @@ function AirExportJobCreate() {
                             onChange={(value, selectedData) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
-                                value || ""
+                                value || "",
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_name`,
-                                selectedData?.label || ""
+                                selectedData?.label || "",
                               );
                             }}
                             minSearchLength={2}
@@ -2562,7 +2600,7 @@ function AirExportJobCreate() {
                               getTransportMode(routing.transport_type)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type
+                                      routing.transport_type,
                                     )!,
                                   }
                                 : undefined
@@ -2575,7 +2613,7 @@ function AirExportJobCreate() {
                             required
                             placeholder="Enter truck number"
                             {...routingsForm.getInputProps(
-                              `routings.${index}.truck_no`
+                              `routings.${index}.truck_no`,
                             )}
                           />
                         </Grid.Col>
@@ -2592,16 +2630,16 @@ function AirExportJobCreate() {
                             value={routing.carrier_name || ""}
                             onChange={(e) => {
                               const formattedValue = toTitleCase(
-                                e.target.value
+                                e.target.value,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_name`,
-                                formattedValue
+                                formattedValue,
                               );
                               // For Rail, carrier_code can be same as carrier_name or empty
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
-                                formattedValue
+                                formattedValue,
                               );
                             }}
                             error={
@@ -2617,7 +2655,7 @@ function AirExportJobCreate() {
                             required
                             placeholder="Enter rail number"
                             {...routingsForm.getInputProps(
-                              `routings.${index}.rail_no`
+                              `routings.${index}.rail_no`,
                             )}
                           />
                         </Grid.Col>
@@ -2631,7 +2669,7 @@ function AirExportJobCreate() {
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.etd`
+                            `routings.${index}.etd`,
                           );
                           return {
                             value: inputProps.value as Date | null,
@@ -2639,7 +2677,7 @@ function AirExportJobCreate() {
                             onChange: (value: Date | null) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.etd`,
-                                value
+                                value,
                               );
                             },
                           };
@@ -2655,7 +2693,7 @@ function AirExportJobCreate() {
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.eta`
+                            `routings.${index}.eta`,
                           );
                           return {
                             value: inputProps.value as Date | null,
@@ -2663,7 +2701,7 @@ function AirExportJobCreate() {
                             onChange: (value: Date | null) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.eta`,
-                                value
+                                value,
                               );
                             },
                           };
@@ -2678,7 +2716,7 @@ function AirExportJobCreate() {
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.atd`
+                            `routings.${index}.atd`,
                           );
                           return {
                             value: inputProps.value as Date | null,
@@ -2686,7 +2724,7 @@ function AirExportJobCreate() {
                             onChange: (value: Date | null) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.atd`,
-                                value
+                                value,
                               );
                             },
                           };
@@ -2701,7 +2739,7 @@ function AirExportJobCreate() {
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.ata`
+                            `routings.${index}.ata`,
                           );
                           return {
                             value: inputProps.value as Date | null,
@@ -2709,7 +2747,7 @@ function AirExportJobCreate() {
                             onChange: (value: Date | null) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.ata`,
-                                value
+                                value,
                               );
                             },
                           };
@@ -2819,7 +2857,8 @@ function AirExportJobCreate() {
                           const isPosted =
                             statusUpper === "POSTED" || row.status === "posted";
                           const isUnposted =
-                            statusUpper === "UNPOSTED" || row.status === "unpost";
+                            statusUpper === "UNPOSTED" ||
+                            row.status === "unpost";
                           const isReversed =
                             statusUpper === "PARTIALLY REVERSED" ||
                             statusUpper === "FULLY REVERSED";
@@ -2837,7 +2876,7 @@ function AirExportJobCreate() {
                                 onClick={(e) => {
                                   if (
                                     (e.target as HTMLElement).closest(
-                                      "[data-menu-dropdown],[button]"
+                                      "[data-menu-dropdown],[button]",
                                     )
                                   )
                                     return;
@@ -2846,7 +2885,7 @@ function AirExportJobCreate() {
                                     return;
                                   }
                                   setExpandedInvoiceRowId((prev) =>
-                                    prev === rowKey ? null : rowKey
+                                    prev === rowKey ? null : rowKey,
                                   );
                                 }}
                               >
@@ -2959,7 +2998,10 @@ function AirExportJobCreate() {
                                               justifyContent: "center",
                                             }}
                                           >
-                                            <IconEye size={16} color="#105476" />
+                                            <IconEye
+                                              size={16}
+                                              color="#105476"
+                                            />
                                           </Box>
                                         }
                                         styles={{
@@ -2992,7 +3034,7 @@ function AirExportJobCreate() {
                                                   job: jobData,
                                                 }),
                                               },
-                                            }
+                                            },
                                           )
                                         }
                                       >
@@ -3047,7 +3089,7 @@ function AirExportJobCreate() {
                                                     job: jobData,
                                                   }),
                                                 },
-                                              }
+                                              },
                                             )
                                           }
                                         >
@@ -3102,7 +3144,7 @@ function AirExportJobCreate() {
                                                     job: jobData,
                                                   }),
                                                 },
-                                              }
+                                              },
                                             )
                                           }
                                         >
@@ -3354,15 +3396,14 @@ function AirExportJobCreate() {
                                                             },
                                                           }}
                                                           onClick={() => {
-                                                            const targetId = (
-                                                              rev.reverse_invoice_id ??
-                                                              (
-                                                                row as unknown as {
-                                                                  reverse_invoice_id?: number;
-                                                                }
-                                                              )
-                                                                .reverse_invoice_id
-                                                            ) as number;
+                                                            const targetId =
+                                                              (rev.reverse_invoice_id ??
+                                                                (
+                                                                  row as unknown as {
+                                                                    reverse_invoice_id?: number;
+                                                                  }
+                                                                )
+                                                                  .reverse_invoice_id) as number;
                                                             navigate(
                                                               `/air/export-job/invoice/view/${targetId}`,
                                                               {
@@ -3392,7 +3433,7 @@ function AirExportJobCreate() {
                                                                     job: jobData,
                                                                   }),
                                                                 },
-                                                              }
+                                                              },
                                                             );
                                                           }}
                                                         >
@@ -3402,7 +3443,7 @@ function AirExportJobCreate() {
                                                     </Menu>
                                                   </Table.Td>
                                                 </Table.Tr>
-                                              )
+                                              ),
                                             )
                                           ) : (
                                             <Table.Tr>
@@ -3492,8 +3533,8 @@ function AirExportJobCreate() {
           )}
         </Group>
       </Group>
-      {/* HAWB Details Display - Show at the top */}
-      {hawbDetails.length > 0 && active === 0 && (
+      {/* HAWB Details Display - Show at the top (all steps) */}
+      {hawbDetails.length > 0 && (
         <Box mb="xl">
           <Text size="lg" fw={600} c="#105476" mb="md" mt="md">
             House Air Waybill (HAWB) ({hawbDetails.length})

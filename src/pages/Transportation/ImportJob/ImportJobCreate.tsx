@@ -201,7 +201,7 @@ const containerDetailsFormSchema = yup.object({
           .filter((no) => no && no !== "");
         const uniqueContainerNos = new Set(containerNos);
         return uniqueContainerNos.size === containerNos.length;
-      }
+      },
     ),
 });
 
@@ -277,7 +277,7 @@ type HousingDetail = {
 
 // Helper function to get transport_mode based on transport_type
 const getTransportMode = (
-  transportType: string | null | undefined
+  transportType: string | null | undefined,
 ): string | undefined => {
   if (!transportType) return undefined;
   const type = transportType.trim();
@@ -299,7 +299,7 @@ function ImportJobCreate() {
     location.state?.housingDetails &&
       Array.isArray(location.state.housingDetails)
       ? location.state.housingDetails
-      : []
+      : [],
   );
 
   // PDF Preview state
@@ -348,7 +348,7 @@ function ImportJobCreate() {
       try {
         const jobListRes = await getAPICall(
           `${URL.jobCreate}${jobId}/`,
-          API_HEADER
+          API_HEADER,
         );
         const body = (jobListRes as { data?: unknown })?.data ?? jobListRes;
         const list = Array.isArray((body as { data?: unknown[] })?.data)
@@ -356,7 +356,8 @@ function ImportJobCreate() {
           : Array.isArray(body)
             ? (body as unknown[])
             : [];
-        const job = list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+        const job =
+          list.length > 0 ? (list[0] as Record<string, unknown>) : null;
         if (!cancelled && job) {
           navigate("/SeaExport/import-job/edit", {
             state: {
@@ -367,19 +368,27 @@ function ImportJobCreate() {
             replace: true,
           });
         } else if (!cancelled) {
-          ToastNotification({ type: "error", message: "Failed to load job data." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load job data.",
+          });
         }
       } catch (error) {
         if (!cancelled) {
           console.error("Error fetching job:", error);
-          ToastNotification({ type: "error", message: "Failed to load job. Please try again." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load job. Please try again.",
+          });
         }
       } finally {
         if (!cancelled) setIsFetchingJobById(false);
       }
     };
     fetchAndReplace();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [location.state?.jobId, location.state?.job, navigate]);
 
   // MBL Details Form
@@ -664,7 +673,7 @@ function ImportJobCreate() {
                                 cargo.haz === true ||
                                 String(cargo.haz).toLowerCase() === "yes"
                             : null,
-                      })
+                      }),
                     )
                   : [],
               charges:
@@ -677,17 +686,26 @@ function ImportJobCreate() {
                           ? charge.id
                           : Number(charge.id)
                         : undefined,
-                      charge_id: charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null,
+                      charge_id:
+                        charge.charge_id != null
+                          ? Number(charge.charge_id)
+                          : charge.id != null
+                            ? Number(charge.id)
+                            : null,
                       charge_name: charge.charge_name
                         ? String(charge.charge_name)
                         : "",
                       pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
-                      unit_id: charge.unit_id != null ? String(charge.unit_id) : "",
+                      unit_id:
+                        charge.unit_id != null ? String(charge.unit_id) : "",
                       unit_code: charge.unit_code
                         ? String(charge.unit_code)
                         : "",
                       no_of_unit: charge.no_of_unit as number | null,
-                      currency_id: charge.currency_id != null ? String(charge.currency_id) : "",
+                      currency_id:
+                        charge.currency_id != null
+                          ? String(charge.currency_id)
+                          : "",
                       currency: charge.currency ? String(charge.currency) : "",
                       roe: charge.roe as number | null,
                       amount_per_unit: charge.amount_per_unit as number | null,
@@ -711,7 +729,7 @@ function ImportJobCreate() {
                                         string,
                                         unknown
                                       >
-                                    ).unit_code
+                                    ).unit_code,
                                   )
                                 : "";
 
@@ -730,7 +748,7 @@ function ImportJobCreate() {
                                       string,
                                       unknown
                                     >
-                                  ).currency_code
+                                  ).currency_code,
                                 )
                               : "";
 
@@ -760,15 +778,26 @@ function ImportJobCreate() {
                                 : (charge.amount as number)
                               : null;
 
-                          const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
-                          const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+                          const unitDetails = charge.unit_details as
+                            | { unit_id?: number; unit_code?: string }
+                            | undefined;
+                          const currencyDetails = charge.currency_details as
+                            | { currency_id?: number; currency_code?: string }
+                            | undefined;
                           const unitIdFromApi =
-                            charge.unit_id != null ? String(charge.unit_id) :
-                            charge.unit != null ? String(charge.unit) :
-                            unitDetails?.unit_id != null ? String(unitDetails.unit_id) : "";
+                            charge.unit_id != null
+                              ? String(charge.unit_id)
+                              : charge.unit != null
+                                ? String(charge.unit)
+                                : unitDetails?.unit_id != null
+                                  ? String(unitDetails.unit_id)
+                                  : "";
                           const currencyIdFromApi =
-                            charge.currency_id != null ? String(charge.currency_id) :
-                            currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : "";
+                            charge.currency_id != null
+                              ? String(charge.currency_id)
+                              : currencyDetails?.currency_id != null
+                                ? String(currencyDetails.currency_id)
+                                : "";
 
                           return {
                             id: charge.id
@@ -776,7 +805,12 @@ function ImportJobCreate() {
                                 ? charge.id
                                 : Number(charge.id)
                               : undefined,
-                            charge_id: charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null,
+                            charge_id:
+                              charge.charge_id != null
+                                ? Number(charge.charge_id)
+                                : charge.id != null
+                                  ? Number(charge.id)
+                                  : null,
                             charge_name: charge.charge_name
                               ? String(charge.charge_name)
                               : "",
@@ -796,10 +830,10 @@ function ImportJobCreate() {
                             amount_per_unit: amountPerUnit,
                             amount: amount,
                           };
-                        }
+                        },
                       )
                     : [],
-            })
+            }),
           );
           setHousingDetails(mappedHousingDetails);
         }
@@ -814,7 +848,7 @@ function ImportJobCreate() {
             (routing: Record<string, unknown>) => {
               // Map fields based on transport type from API response
               const transportType = String(
-                routing.transport_type || ""
+                routing.transport_type || "",
               ).toLowerCase();
 
               // Extract values based on transport_type
@@ -929,7 +963,7 @@ function ImportJobCreate() {
                 voyage_number: voyage_number,
                 flight_voyage_number: flightVoyageNumber,
               };
-            }
+            },
           );
           routingsForm.setValues({ routings: mappedRoutings });
         }
@@ -984,7 +1018,7 @@ function ImportJobCreate() {
                     ? dayjs(unloadingDate as string | Date).toDate()
                     : null,
               };
-            }
+            },
           );
           containerDetailsForm.setValues({ containers: mappedContainers });
         }
@@ -1011,8 +1045,8 @@ function ImportJobCreate() {
     setInvoiceListLoading(true);
     postAPICall(
       URL.invoiceCombined,
-      { filters: { "shipment_no": jobData.job_id, "is_agent": true } },
-      API_HEADER
+      { filters: { shipment_no: jobData.job_id, is_agent: true } },
+      API_HEADER,
     )
       .then((res: unknown) => {
         const data = (res as { data?: InvoiceListItem[] })?.data;
@@ -1424,7 +1458,7 @@ function ImportJobCreate() {
   const canSaveContainerDetails = useMemo(() => {
     return containerDetailsForm.values.containers.some(
       (container) =>
-        container.container_type?.trim() && container.container_no?.trim()
+        container.container_type?.trim() && container.container_no?.trim(),
     );
   }, [containerDetailsForm.values.containers]);
 
@@ -1433,7 +1467,7 @@ function ImportJobCreate() {
   const canAddHBL = useMemo(() => {
     return containerDetailsForm.values.containers.some(
       (container) =>
-        container.container_type?.trim() && container.container_no?.trim()
+        container.container_type?.trim() && container.container_no?.trim(),
     );
   }, [containerDetailsForm.values.containers]);
 
@@ -1611,7 +1645,7 @@ function ImportJobCreate() {
       routingsForm.values.routings,
       housingDetails,
       jobData,
-    ]
+    ],
   );
 
   // Handle edit housing detail
@@ -1635,7 +1669,7 @@ function ImportJobCreate() {
     // Check at least one container detail is added with both type and number
     const hasValidContainers = containerDetailsForm.values.containers.some(
       (container) =>
-        container.container_type?.trim() && container.container_no?.trim()
+        container.container_type?.trim() && container.container_no?.trim(),
     );
 
     // Check at least one HBL detail is added
@@ -1656,7 +1690,7 @@ function ImportJobCreate() {
   // Handle form submission
   // Generate Cargo Arrival Notice PDF
   const generateCargoArrivalNoticePDFPreview = async (
-    housing: HousingDetail
+    housing: HousingDetail,
   ) => {
     try {
       setPreviewOpen(true);
@@ -1664,7 +1698,7 @@ function ImportJobCreate() {
 
       // Get default branch from user store or use default
       const defaultBranch = user?.branches?.find(
-        (branch) => branch.is_default
+        (branch) => branch.is_default,
       ) ||
         user?.branches?.[0] || { branch_name: "CHENNAI" };
       const country = user?.country || null;
@@ -1700,7 +1734,7 @@ function ImportJobCreate() {
         combinedData,
         housing,
         defaultBranch,
-        country
+        country,
       );
       setPdfBlob(blobUrl);
     } catch (error) {
@@ -1928,7 +1962,7 @@ function ImportJobCreate() {
 
           // Map fields based on transport type - use the correct field names from form
           const transportType = String(
-            routing.transport_type || ""
+            routing.transport_type || "",
           ).toLowerCase();
 
           if (transportType === "sea" || transportType === "vessel") {
@@ -2036,7 +2070,7 @@ function ImportJobCreate() {
                 ? dayjs(container.unloading_date).format("YYYY-MM-DD")
                 : null,
             };
-          }
+          },
         ),
       };
 
@@ -2049,7 +2083,7 @@ function ImportJobCreate() {
             ...payload,
             id: jobData.id,
           },
-          API_HEADER
+          API_HEADER,
         );
       } else {
         // Create mode: Use POST method
@@ -2283,8 +2317,9 @@ function ImportJobCreate() {
                             (house.charges ?? [])
                               .filter(
                                 (c) =>
-                                  String(c.pp_cc ?? "").trim().toUpperCase() ===
-                                  "CC"
+                                  String(c.pp_cc ?? "")
+                                    .trim()
+                                    .toUpperCase() === "CC",
                               )
                               .map((c) => ({
                                 ...c,
@@ -2300,7 +2335,7 @@ function ImportJobCreate() {
                                   (house as { shipper_id?: string })
                                     .shipper_id ??
                                   "",
-                              }))
+                              })),
                         );
                         const firstHouse = housingDetails[0];
                         const housingDetailsForInvoice = [
@@ -2459,7 +2494,7 @@ function ImportJobCreate() {
                     // Store customer_name for display
                     mblDetailsForm.setFieldValue(
                       "origin_agent_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Extract address from addresses_data if available
@@ -2483,12 +2518,12 @@ function ImportJobCreate() {
                       ) {
                         mblDetailsForm.setFieldValue(
                           "origin_agent_address",
-                          addressesData[0].address
+                          addressesData[0].address,
                         );
                       } else {
                         mblDetailsForm.setFieldValue(
                           "origin_agent_address",
-                          ""
+                          "",
                         );
                       }
                     } else {
@@ -2524,7 +2559,7 @@ function ImportJobCreate() {
                     if (selectedData) {
                       mblDetailsForm.setFieldValue(
                         "origin_name",
-                        selectedData.label.split(" (")[0] || ""
+                        selectedData.label.split(" (")[0] || "",
                       );
                     } else if (!value) {
                       mblDetailsForm.setFieldValue("origin_name", "");
@@ -2557,12 +2592,12 @@ function ImportJobCreate() {
                   onChange={(value, selectedData) => {
                     mblDetailsForm.setFieldValue(
                       "destination_code",
-                      value || ""
+                      value || "",
                     );
                     if (selectedData) {
                       mblDetailsForm.setFieldValue(
                         "destination_name",
-                        selectedData.label.split(" (")[0] || ""
+                        selectedData.label.split(" (")[0] || "",
                       );
                     } else if (!value) {
                       mblDetailsForm.setFieldValue("destination_name", "");
@@ -2680,11 +2715,11 @@ function ImportJobCreate() {
                   onChange={(value, selectedData) => {
                     carrierDetailsForm.setFieldValue(
                       "carrier_code",
-                      value || ""
+                      value || "",
                     );
                     carrierDetailsForm.setFieldValue(
                       "carrier_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
                   }}
                   minSearchLength={2}
@@ -2784,7 +2819,7 @@ function ImportJobCreate() {
                         onChange={(value) => {
                           routingsForm.setFieldValue(
                             `routings.${index}.transport_type`,
-                            value || ""
+                            value || "",
                           );
                         }}
                         error={
@@ -2816,19 +2851,19 @@ function ImportJobCreate() {
                         onChange={(value, selectedData) => {
                           routingsForm.setFieldValue(
                             `routings.${index}.from_code`,
-                            value || ""
+                            value || "",
                           );
                           if (selectedData) {
                             const portName =
                               selectedData.label.split(" (")[0] || "";
                             routingsForm.setFieldValue(
                               `routings.${index}.from_name`,
-                              portName
+                              portName,
                             );
                           } else if (!value) {
                             routingsForm.setFieldValue(
                               `routings.${index}.from_name`,
-                              ""
+                              "",
                             );
                           }
                         }}
@@ -2837,7 +2872,7 @@ function ImportJobCreate() {
                           getTransportMode(routing.transport_type)
                             ? {
                                 transport_mode: getTransportMode(
-                                  routing.transport_type
+                                  routing.transport_type,
                                 )!,
                               }
                             : undefined
@@ -2866,19 +2901,19 @@ function ImportJobCreate() {
                         onChange={(value, selectedData) => {
                           routingsForm.setFieldValue(
                             `routings.${index}.to_code`,
-                            value || ""
+                            value || "",
                           );
                           if (selectedData) {
                             const portName =
                               selectedData.label.split(" (")[0] || "";
                             routingsForm.setFieldValue(
                               `routings.${index}.to_name`,
-                              portName
+                              portName,
                             );
                           } else if (!value) {
                             routingsForm.setFieldValue(
                               `routings.${index}.to_name`,
-                              ""
+                              "",
                             );
                           }
                         }}
@@ -2887,7 +2922,7 @@ function ImportJobCreate() {
                           getTransportMode(routing.transport_type)
                             ? {
                                 transport_mode: getTransportMode(
-                                  routing.transport_type
+                                  routing.transport_type,
                                 )!,
                               }
                             : undefined
@@ -2906,11 +2941,11 @@ function ImportJobCreate() {
                             value={routing.vessel || ""}
                             onChange={(e) => {
                               const formattedValue = toTitleCase(
-                                e.target.value
+                                e.target.value,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.vessel`,
-                                formattedValue
+                                formattedValue,
                               );
                             }}
                             error={
@@ -2930,11 +2965,11 @@ function ImportJobCreate() {
                               const value = e.target.value;
                               routingsForm.setFieldValue(
                                 `routings.${index}.voyage_number`,
-                                value
+                                value,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight_voyage_number`,
-                                value
+                                value,
                               );
                             }}
                             error={
@@ -2966,11 +3001,11 @@ function ImportJobCreate() {
                             onChange={(value, selectedData) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
-                                value || ""
+                                value || "",
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_name`,
-                                selectedData?.label || ""
+                                selectedData?.label || "",
                               );
                             }}
                             minSearchLength={2}
@@ -2978,7 +3013,7 @@ function ImportJobCreate() {
                               getTransportMode(routing.transport_type)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type
+                                      routing.transport_type,
                                     )!,
                                   }
                                 : undefined
@@ -2995,11 +3030,11 @@ function ImportJobCreate() {
                               const value = e.target.value;
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight`,
-                                value
+                                value,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight_voyage_number`,
-                                value
+                                value,
                               );
                             }}
                             error={
@@ -3031,11 +3066,11 @@ function ImportJobCreate() {
                             onChange={(value, selectedData) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
-                                value || ""
+                                value || "",
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_name`,
-                                selectedData?.label || ""
+                                selectedData?.label || "",
                               );
                             }}
                             minSearchLength={2}
@@ -3043,7 +3078,7 @@ function ImportJobCreate() {
                               getTransportMode(routing.transport_type)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type
+                                      routing.transport_type,
                                     )!,
                                   }
                                 : undefined
@@ -3060,11 +3095,11 @@ function ImportJobCreate() {
                               const value = e.target.value;
                               routingsForm.setFieldValue(
                                 `routings.${index}.truck_no`,
-                                value
+                                value,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight_voyage_number`,
-                                value
+                                value,
                               );
                             }}
                             error={
@@ -3087,15 +3122,15 @@ function ImportJobCreate() {
                             value={routing.carrier_name || ""}
                             onChange={(e) => {
                               const formattedValue = toTitleCase(
-                                e.target.value
+                                e.target.value,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_name`,
-                                formattedValue
+                                formattedValue,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
-                                formattedValue
+                                formattedValue,
                               );
                             }}
                             error={
@@ -3115,11 +3150,11 @@ function ImportJobCreate() {
                               const value = e.target.value;
                               routingsForm.setFieldValue(
                                 `routings.${index}.rail_no`,
-                                value
+                                value,
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.flight_voyage_number`,
-                                value
+                                value,
                               );
                             }}
                             error={
@@ -3139,7 +3174,7 @@ function ImportJobCreate() {
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.etd`
+                            `routings.${index}.etd`,
                           );
                           return {
                             value: inputProps.value as Date | null,
@@ -3147,7 +3182,7 @@ function ImportJobCreate() {
                             onChange: (value: Date | null) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.etd`,
-                                value
+                                value,
                               );
                             },
                           };
@@ -3163,7 +3198,7 @@ function ImportJobCreate() {
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.eta`
+                            `routings.${index}.eta`,
                           );
                           return {
                             value: inputProps.value as Date | null,
@@ -3171,7 +3206,7 @@ function ImportJobCreate() {
                             onChange: (value: Date | null) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.eta`,
-                                value
+                                value,
                               );
                             },
                           };
@@ -3186,7 +3221,7 @@ function ImportJobCreate() {
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.atd`
+                            `routings.${index}.atd`,
                           );
                           return {
                             value: inputProps.value as Date | null,
@@ -3194,7 +3229,7 @@ function ImportJobCreate() {
                             onChange: (value: Date | null) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.atd`,
-                                value
+                                value,
                               );
                             },
                           };
@@ -3209,7 +3244,7 @@ function ImportJobCreate() {
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.ata`
+                            `routings.${index}.ata`,
                           );
                           return {
                             value: inputProps.value as Date | null,
@@ -3217,7 +3252,7 @@ function ImportJobCreate() {
                             onChange: (value: Date | null) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.ata`,
-                                value
+                                value,
                               );
                             },
                           };
@@ -3316,7 +3351,7 @@ function ImportJobCreate() {
 
             {/* Static Header Row */}
             {containerDetailsForm.values.containers.length > 0 && (
-              <Grid 
+              <Grid
                 mb="xs"
                 style={{
                   fontWeight: 600,
@@ -3343,9 +3378,9 @@ function ImportJobCreate() {
                   <RequiredLabel label="Unloading Date" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.6}>
-                  {containerDetailsForm.values.containers.length > 1 && 
+                  {containerDetailsForm.values.containers.length > 1 && (
                     <RequiredLabel label="Actions" required={false} />
-                  }
+                  )}
                 </Grid.Col>
               </Grid>
             )}
@@ -3362,7 +3397,7 @@ function ImportJobCreate() {
                       data={containerTypeData}
                       nothingFoundMessage="No container types found"
                       {...containerDetailsForm.getInputProps(
-                        `containers.${index}.container_type`
+                        `containers.${index}.container_type`,
                       )}
                       disabled={isReadOnly}
                       error={
@@ -3377,7 +3412,7 @@ function ImportJobCreate() {
                       placeholder="Container number"
                       maxLength={11}
                       {...containerDetailsForm.getInputProps(
-                        `containers.${index}.container_no`
+                        `containers.${index}.container_no`,
                       )}
                       disabled={isReadOnly}
                       error={
@@ -3395,12 +3430,12 @@ function ImportJobCreate() {
                             containerDetailsForm.values.containers.filter(
                               (c, i) =>
                                 i !== index &&
-                                c.container_no?.trim() === currentValue
+                                c.container_no?.trim() === currentValue,
                             );
                           if (duplicates.length > 0) {
                             containerDetailsForm.setFieldError(
                               `containers.${index}.container_no`,
-                              "Container number must be unique"
+                              "Container number must be unique",
                             );
                           } else {
                             const currentError =
@@ -3411,7 +3446,7 @@ function ImportJobCreate() {
                               currentError === "Container number must be unique"
                             ) {
                               containerDetailsForm.clearFieldError(
-                                `containers.${index}.container_no`
+                                `containers.${index}.container_no`,
                               );
                             }
                           }
@@ -3423,7 +3458,7 @@ function ImportJobCreate() {
                     <FormTextInput
                       placeholder="Actual seal number"
                       {...containerDetailsForm.getInputProps(
-                        `containers.${index}.actual_seal_no`
+                        `containers.${index}.actual_seal_no`,
                       )}
                       disabled={isReadOnly}
                     />
@@ -3432,7 +3467,7 @@ function ImportJobCreate() {
                     <FormTextInput
                       placeholder="Customs seal number"
                       {...containerDetailsForm.getInputProps(
-                        `containers.${index}.customs_seal_no`
+                        `containers.${index}.customs_seal_no`,
                       )}
                       disabled={isReadOnly}
                     />
@@ -3447,7 +3482,7 @@ function ImportJobCreate() {
                       onChange={(date) => {
                         containerDetailsForm.setFieldValue(
                           `containers.${index}.loading_date`,
-                          date
+                          date,
                         );
                       }}
                       error={
@@ -3468,7 +3503,7 @@ function ImportJobCreate() {
                       onChange={(date) => {
                         containerDetailsForm.setFieldValue(
                           `containers.${index}.unloading_date`,
-                          date
+                          date,
                         );
                       }}
                       error={
@@ -3947,194 +3982,205 @@ function ImportJobCreate() {
                                         </Table.Thead>
                                         <Table.Tbody>
                                           {hasReverseInvoices ? (
-                                            reverseInvoices.map((rev, revIdx) => (
-                                              <Table.Tr key={rev.id ?? revIdx}>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "20%",
-                                                  }}
+                                            reverseInvoices.map(
+                                              (rev, revIdx) => (
+                                                <Table.Tr
+                                                  key={rev.id ?? revIdx}
                                                 >
-                                                  {rev.day_book_name ?? "-"}
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "20%",
-                                                  }}
-                                                >
-                                                  {rev.document_no ?? "-"}
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "15%",
-                                                  }}
-                                                >
-                                                  {rev.document_date ?? "-"}
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "15%",
-                                                  }}
-                                                >
-                                                  {rev.total ?? "-"}
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "15%",
-                                                  }}
-                                                >
-                                                  <Badge
-                                                    size="sm"
-                                                    variant="light"
-                                                    color="#105476"
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "20%",
+                                                    }}
                                                   >
-                                                    {rev.status ?? "-"}
-                                                  </Badge>
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "15%",
-                                                  }}
-                                                  onClick={(e) =>
-                                                    e.stopPropagation()
-                                                  }
-                                                >
-                                                  <Menu
-                                                    shadow="md"
-                                                    width={200}
-                                                    position="bottom-end"
+                                                    {rev.day_book_name ?? "-"}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "20%",
+                                                    }}
                                                   >
-                                                    <Menu.Target>
-                                                      <ActionIcon
-                                                        variant="subtle"
-                                                        color="#105476"
-                                                        size="sm"
+                                                    {rev.document_no ?? "-"}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "15%",
+                                                    }}
+                                                  >
+                                                    {rev.document_date ?? "-"}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "15%",
+                                                    }}
+                                                  >
+                                                    {rev.total ?? "-"}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "15%",
+                                                    }}
+                                                  >
+                                                    <Badge
+                                                      size="sm"
+                                                      variant="light"
+                                                      color="#105476"
+                                                    >
+                                                      {rev.status ?? "-"}
+                                                    </Badge>
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "15%",
+                                                    }}
+                                                    onClick={(e) =>
+                                                      e.stopPropagation()
+                                                    }
+                                                  >
+                                                    <Menu
+                                                      shadow="md"
+                                                      width={200}
+                                                      position="bottom-end"
+                                                    >
+                                                      <Menu.Target>
+                                                        <ActionIcon
+                                                          variant="subtle"
+                                                          color="#105476"
+                                                          size="sm"
+                                                          styles={{
+                                                            root: {
+                                                              fontFamily:
+                                                                "Inter",
+                                                              fontSize: "13px",
+                                                              border:
+                                                                "1px solid #E9ECEF",
+                                                              borderRadius:
+                                                                "8px",
+                                                              "&:hover": {
+                                                                backgroundColor:
+                                                                  "#F8F9FA",
+                                                              },
+                                                            },
+                                                          }}
+                                                        >
+                                                          <IconDotsVertical
+                                                            size={16}
+                                                          />
+                                                        </ActionIcon>
+                                                      </Menu.Target>
+                                                      <Menu.Dropdown
                                                         styles={{
-                                                          root: {
-                                                            fontFamily: "Inter",
-                                                            fontSize: "13px",
+                                                          dropdown: {
                                                             border:
                                                               "1px solid #E9ECEF",
                                                             borderRadius: "8px",
-                                                            "&:hover": {
-                                                              backgroundColor:
-                                                                "#F8F9FA",
-                                                            },
+                                                            padding: "8px",
+                                                            boxShadow:
+                                                              "0 4px 12px rgba(0, 0, 0, 0.1)",
                                                           },
                                                         }}
                                                       >
-                                                        <IconDotsVertical
-                                                          size={16}
-                                                        />
-                                                      </ActionIcon>
-                                                    </Menu.Target>
-                                                    <Menu.Dropdown
-                                                      styles={{
-                                                        dropdown: {
-                                                          border:
-                                                            "1px solid #E9ECEF",
-                                                          borderRadius: "8px",
-                                                          padding: "8px",
-                                                          boxShadow:
-                                                            "0 4px 12px rgba(0, 0, 0, 0.1)",
-                                                        },
-                                                      }}
-                                                    >
-                                                      <Menu.Item
-                                                        leftSection={
-                                                          <Box
-                                                            style={{
-                                                              backgroundColor:
-                                                                "#E7F5FF",
+                                                        <Menu.Item
+                                                          leftSection={
+                                                            <Box
+                                                              style={{
+                                                                backgroundColor:
+                                                                  "#E7F5FF",
+                                                                borderRadius:
+                                                                  "6px",
+                                                                padding: "6px",
+                                                                display: "flex",
+                                                                alignItems:
+                                                                  "center",
+                                                                justifyContent:
+                                                                  "center",
+                                                              }}
+                                                            >
+                                                              <IconEye
+                                                                size={16}
+                                                                color="#105476"
+                                                              />
+                                                            </Box>
+                                                          }
+                                                          styles={{
+                                                            item: {
+                                                              fontFamily:
+                                                                "Inter",
+                                                              fontSize: "13px",
+                                                              fontWeight: 500,
                                                               borderRadius:
                                                                 "6px",
-                                                              padding: "6px",
-                                                              display: "flex",
-                                                              alignItems:
-                                                                "center",
-                                                              justifyContent:
-                                                                "center",
-                                                            }}
-                                                          >
-                                                            <IconEye
-                                                              size={16}
-                                                              color="#105476"
-                                                            />
-                                                          </Box>
-                                                        }
-                                                        styles={{
-                                                          item: {
-                                                            fontFamily: "Inter",
-                                                            fontSize: "13px",
-                                                            fontWeight: 500,
-                                                            borderRadius: "6px",
-                                                            padding:
-                                                              "10px 12px",
-                                                            marginBottom: "4px",
-                                                            "&:hover": {
-                                                              backgroundColor:
-                                                                "#F8F9FA",
-                                                            },
-                                                          },
-                                                          itemLabel: {
-                                                            fontFamily: "Inter",
-                                                            fontSize: "13px",
-                                                            fontWeight: 500,
-                                                            color: "#424242",
-                                                          },
-                                                        }}
-                                                        onClick={() => {
-                                                          const targetId =
-                                                            (rev.reverse_invoice_id ??
-                                                              row.reverse_invoice_id) as number;
-                                                          navigate(
-                                                            `/SeaExport/import-job/invoice/view/${targetId}`,
-                                                            {
-                                                              state: {
-                                                                invoiceData: {
-                                                                  ...row,
-                                                                  ...rev,
-                                                                  id: targetId,
-                                                                  document_no:
-                                                                    rev.document_no ??
-                                                                    row.document_no,
-                                                                  document_date:
-                                                                    rev.document_date ??
-                                                                    row.document_date,
-                                                                  total:
-                                                                    rev.total ??
-                                                                    row.total,
-                                                                  status:
-                                                                    rev.status ??
-                                                                    row.status,
-                                                                  day_book_name:
-                                                                    rev.day_book_name ??
-                                                                    row.day_book_name,
-                                                                },
-                                                                fromJobLevel: true,
-                                                                ...(location
-                                                                  .state
-                                                                  ?.job && {
-                                                                  job: location
-                                                                    .state.job,
-                                                                }),
+                                                              padding:
+                                                                "10px 12px",
+                                                              marginBottom:
+                                                                "4px",
+                                                              "&:hover": {
+                                                                backgroundColor:
+                                                                  "#F8F9FA",
                                                               },
                                                             },
-                                                          );
-                                                        }}
-                                                      >
-                                                        View
-                                                      </Menu.Item>
-                                                    </Menu.Dropdown>
-                                                  </Menu>
-                                                </Table.Td>
-                                              </Table.Tr>
-                                            ))
+                                                            itemLabel: {
+                                                              fontFamily:
+                                                                "Inter",
+                                                              fontSize: "13px",
+                                                              fontWeight: 500,
+                                                              color: "#424242",
+                                                            },
+                                                          }}
+                                                          onClick={() => {
+                                                            const targetId =
+                                                              (rev.reverse_invoice_id ??
+                                                                row.reverse_invoice_id) as number;
+                                                            navigate(
+                                                              `/SeaExport/import-job/invoice/view/${targetId}`,
+                                                              {
+                                                                state: {
+                                                                  invoiceData: {
+                                                                    ...row,
+                                                                    ...rev,
+                                                                    id: targetId,
+                                                                    document_no:
+                                                                      rev.document_no ??
+                                                                      row.document_no,
+                                                                    document_date:
+                                                                      rev.document_date ??
+                                                                      row.document_date,
+                                                                    total:
+                                                                      rev.total ??
+                                                                      row.total,
+                                                                    status:
+                                                                      rev.status ??
+                                                                      row.status,
+                                                                    day_book_name:
+                                                                      rev.day_book_name ??
+                                                                      row.day_book_name,
+                                                                  },
+                                                                  fromJobLevel: true,
+                                                                  ...(location
+                                                                    .state
+                                                                    ?.job && {
+                                                                    job: location
+                                                                      .state
+                                                                      .job,
+                                                                  }),
+                                                                },
+                                                              },
+                                                            );
+                                                          }}
+                                                        >
+                                                          View
+                                                        </Menu.Item>
+                                                      </Menu.Dropdown>
+                                                    </Menu>
+                                                  </Table.Td>
+                                                </Table.Tr>
+                                              ),
+                                            )
                                           ) : (
                                             <Table.Tr>
                                               <Table.Td
@@ -4241,8 +4287,8 @@ function ImportJobCreate() {
           )}
         </Group>
       </Group>
-      {/* Housing Details Display - Show at the top */}
-      {housingDetails.length > 0 && active === 2 && (
+      {/* Housing Details Display - Show at the top (all steps) */}
+      {housingDetails.length > 0 && (
         <Box mb="xl">
           <Text size="lg" fw={600} c="#105476" mb="md" mt="md">
             House Bill of Lading ({housingDetails.length})
