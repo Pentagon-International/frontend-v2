@@ -77,7 +77,7 @@ export const URL = {
   uploadDocument: "customer-service-shipment/upload-document/",
   eventMaster: "event-master/",
   eventMasterFilter: "filters_event_master/",
-  triggerTypeMaster: "trigger-type-master/",
+  triggerMaster: "trigger-master/filter/",
   booking: "booking/",
   bookingFilter: "booking/filter/",
   salespersons: "accounts/salespersons/",

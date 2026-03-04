@@ -161,6 +161,7 @@ function OceanImportBookingMaster() {
     let color: string = "#105476";
     if (label === "BOOKED") color = "green";
     else if (label === "GENERATED") color = "#105476";
+    else if (label === "RECEIVED") color = "blue";
     else color = "gray";
     return { label, color } as const;
   };

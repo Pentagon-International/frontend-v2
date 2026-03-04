@@ -394,11 +394,12 @@ const fetchEventMaster = async () => {
   }
 };
 
-const fetchTriggerTypeMaster = async () => {
-  const res = (await getAPICall(URL.triggerTypeMaster, API_HEADER)) as {
-    data?: unknown;
+const fetchTriggerMaster = async () => {
+  const res = (await postAPICall(URL.triggerMaster, {}, API_HEADER)) as {
+    data?: Array<{ code?: string }>;
   };
-  return Array.isArray(res?.data) ? res.data : res?.data ? [res.data] : [];
+  const list = Array.isArray(res?.data) ? res.data : [];
+  return list;
 };
 
 // Type definitions for salespersons
@@ -649,9 +650,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: triggerTypeMasterRaw = [] } = useQuery({
-    queryKey: ["triggerTypeMaster"],
-    queryFn: fetchTriggerTypeMaster,
+  const { data: triggerMasterData = [] } = useQuery({
+    queryKey: ["triggerMaster"],
+    queryFn: fetchTriggerMaster,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -722,6 +723,17 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     ],
     [],
   );
+
+  const triggerCodeOptions = useMemo(() => {
+    const list = triggerMasterData as Array<{ code?: string }>;
+    if (!list?.length) return [];
+    const codes = new Set<string>();
+    list.forEach((item) => {
+      const c = item.code;
+      if (c != null && String(c).trim()) codes.add(String(c));
+    });
+    return Array.from(codes).map((c) => ({ value: c, label: c }));
+  }, [triggerMasterData]);
 
   // Memoized container type options
   const containerTypeOptions = useMemo(() => {
@@ -2810,7 +2822,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               <Grid.Col span={3}>
                 <Select
                   placeholder="Select code"
-                  data={["abc", "def"]}
+                  data={triggerCodeOptions}
                   value={row.code}
                   onChange={(value) =>
                     updateTriggerRow(index, "code", value ?? null)
