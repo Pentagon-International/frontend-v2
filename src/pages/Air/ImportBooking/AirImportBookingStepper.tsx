@@ -4039,15 +4039,15 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               </Grid>
               <Divider my="md" />
 
-              {/* Destination Agent Details */}
+              {/* Origin Agent Details */}
               <Text size="sm" fw={500} mb="sm" c="#105476">
-                Destination Agent Details
+                Origin Agent Details
               </Text>
               <Grid mb="md">
                 <Grid.Col span={5}>
                   <SearchableSelect
-                    label="Destination Agent Name"
-                    placeholder="Type destination agent name"
+                    label="Origin Agent Name"
+                    placeholder="Type origin agent name"
                     apiEndpoint={URL.agent}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
@@ -4105,7 +4105,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={7}>
                   <Dropdown
-                    label="Destination Agent Address"
+                    label="Origin Agent Address"
                     placeholder="Select agent address"
                     // withAsterisk
                     searchable
@@ -4127,7 +4127,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={5}>
                   <FormTextInput
-                    label="Destination Agent Email Id"
+                    label="Origin Agent Email Id"
                     placeholder="Enter email address"
                     {...form.getInputProps("destination_agent_email")}
                   />

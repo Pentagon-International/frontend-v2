@@ -183,8 +183,8 @@ function AirJobGenerationCreate() {
       origin_name: "",
       destination_code: "",
       destination_name: "",
-      eta: dayjs().utc().toISOString(),
-      etd: dayjs().utc().toISOString(),
+      eta: "",
+      etd: "",
       ata: "",
       atd: "",
       cutoff_date: dayjs().format("YYYY-MM-DD"),
@@ -207,8 +207,8 @@ function AirJobGenerationCreate() {
           from_port_name: "",
           to_port_code: "",
           to_port_name: "",
-          eta: dayjs().format("YYYY-MM-DD"),
-          etd: dayjs().format("YYYY-MM-DD"),
+          eta: "",
+          etd: "",
           ata: "",
           atd: "",
           carrier_code: "",
@@ -250,8 +250,8 @@ function AirJobGenerationCreate() {
         origin_name: (jobData.origin_name as string) || "",
         destination_code: (jobData.destination_code as string) || "",
         destination_name: (jobData.destination_name as string) || "",
-        eta: etaStr || dayjs().utc().toISOString(),
-        etd: etdStr || dayjs().utc().toISOString(),
+        eta: etaStr,
+        etd: etdStr,
         ata: ataStr || "",
         atd: atdStr || "",
         cutoff_date: (jobData.cut_off_date as string) || dayjs().format("YYYY-MM-DD"),
@@ -289,8 +289,8 @@ function AirJobGenerationCreate() {
             from_port_name: r.from_port_name || "",
             to_port_code: r.to_port_code || "",
             to_port_name: r.to_port_name || "",
-            eta: r.eta ? dayjs(r.eta).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
-            etd: r.etd ? dayjs(r.etd).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
+            eta: r.eta ? dayjs(r.eta).format("YYYY-MM-DD") : "",
+            etd: r.etd ? dayjs(r.etd).format("YYYY-MM-DD") : "",
             ata: r.ata ? dayjs(r.ata).format("YYYY-MM-DD") : "",
             atd: r.atd ? dayjs(r.atd).format("YYYY-MM-DD") : "",
             carrier_code: r.carrier_code || "",
@@ -370,7 +370,7 @@ function AirJobGenerationCreate() {
       const payload = {
         filters: {
           service_type: "EXPORT",
-          status: "BOOKED",
+          status: ["BOOKED", "RECEIVED"],
           service: formValues.service,
           origin_code: formValues.origin_code,
           destination_code: formValues.destination_code,
@@ -427,16 +427,16 @@ function AirJobGenerationCreate() {
     flight_no: jobDetailsForm.values.flight_no || undefined,
     routing_details: routingForm.values.routings.map((r) => ({
       ...(r.id != null ? { id: r.id } : {}),
-      transport_type: r.transport_type || undefined,
+      transport_type: r.transport_type,
       from_port_code: r.from_port_code,
       to_port_code: r.to_port_code,
-      eta: r.eta || undefined,
-      etd: r.etd || undefined,
-      ata: r.ata || undefined,
-      atd: r.atd || undefined,
       carrier_code: r.carrier_code,
-      transport_no: r.transport_no || undefined,
-      vessel: r.transport_type === "SEA" ? (r.vessel || undefined) : undefined,
+      transport_no: r.transport_no,
+      etd: r.etd,
+      eta: r.eta,
+      atd: r.atd,
+      ata: r.ata,
+      vessel: r.transport_type === "SEA" ? r.vessel : "",
     })),
     booking_details: Array.from(selectedBookings).map((booking_id) => ({
       ...(existingBookingDetails[booking_id] != null
@@ -450,8 +450,7 @@ function AirJobGenerationCreate() {
     if (viewMode) return;
 
     const jobValidation = jobDetailsForm.validate();
-    const routingValidation = routingForm.validate();
-    if (jobValidation.hasErrors || routingValidation.hasErrors) {
+    if (jobValidation.hasErrors) {
       ToastNotification({
         type: "error",
         message: "Please complete all required fields",
@@ -568,8 +567,7 @@ function AirJobGenerationCreate() {
     if (!editMode || viewMode || !jobId) return;
 
     const jobValidation = jobDetailsForm.validate();
-    const routingValidation = routingForm.validate();
-    if (jobValidation.hasErrors || routingValidation.hasErrors) {
+    if (jobValidation.hasErrors) {
       ToastNotification({
         type: "error",
         message: "Please complete all required fields",
@@ -1277,8 +1275,8 @@ function AirJobGenerationCreate() {
                                     from_port_name: "",
                                     to_port_code: "",
                                     to_port_name: "",
-                                    eta: dayjs().format("YYYY-MM-DD"),
-                                    etd: dayjs().format("YYYY-MM-DD"),
+                                    eta: "",
+                                    etd: "",
                                     ata: "",
                                     atd: "",
                                     carrier_code: "",

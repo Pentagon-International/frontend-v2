@@ -240,8 +240,8 @@ function OceanJobGenerationCreate() {
       origin_name: "",
       destination_code: "",
       destination_name: "",
-      eta: dayjs().format("YYYY-MM-DD"),
-      etd: dayjs().format("YYYY-MM-DD"),
+      eta: "",
+      etd: "",
       ata: "",
       atd: "",
       cutoff_date: dayjs().format("YYYY-MM-DD"),
@@ -310,8 +310,8 @@ function OceanJobGenerationCreate() {
       setCreatedJobData(jobData as any);
 
       // Populate job details - map from API response (code as value, name as display)
-      const etaStr = jobData.eta ? dayjs(jobData.eta).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
-      const etdStr = jobData.etd ? dayjs(jobData.etd).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
+      const etaStr = jobData.eta ? dayjs(jobData.eta).format("YYYY-MM-DD") : "";
+      const etdStr = jobData.etd ? dayjs(jobData.etd).format("YYYY-MM-DD") : "";
       const ataStr = jobData.ata ? dayjs(jobData.ata).format("YYYY-MM-DD") : "";
       const atdStr = jobData.atd ? dayjs(jobData.atd).format("YYYY-MM-DD") : "";
       jobDetailsForm.setValues({
@@ -528,7 +528,7 @@ function OceanJobGenerationCreate() {
       const payload = {
         filters: {
           service_type: "EXPORT",
-          status: "BOOKED",
+          status: ["BOOKED", "RECEIVED"],
           service: formValues.service, // This will be LCL or FCL based on route
           origin_code: formValues.origin_code,
           destination_code: formValues.destination_code,
