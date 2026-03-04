@@ -2851,95 +2851,89 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         }}
       >
         <Box style={{ padding: "24px 24px 32px" }}>
-          {/* Step 1: Export Booking */}
-          {active === 0 && (
-            <Box>
-              {/* Export Shipment Section */}
-              <Group justify="space-between" mb="lg">
-                <Text size="md" fw={600} c="#105476">
-                  Export Booking
-                </Text>
-                <Menu shadow="md" width={220} position="bottom-end">
-                  <Menu.Target>
-                    <ActionIcon
-                      variant="subtle"
-                      color="#105476"
-                      size="lg"
-                      styles={{
-                        root: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          border: "1px solid #E9ECEF",
-                          borderRadius: "8px",
-                          "&:hover": { backgroundColor: "#F8F9FA" },
-                        },
-                      }}
-                    >
-                      <IconDotsVertical size={18} />
-                    </ActionIcon>
-                  </Menu.Target>
-                  <Menu.Dropdown
-                    styles={{
-                      dropdown: {
-                        border: "1px solid #E9ECEF",
-                        borderRadius: "8px",
-                        padding: "8px",
-                        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                      },
-                    }}
-                  >
-                    <Menu.Item
-                      leftSection={<IconCalendarEvent size={16} />}
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": { backgroundColor: "#F8F9FA" },
-                        },
-                      }}
-                      onClick={() => {
-                        const existing = form.values.events;
-                        if (existing.length > 0) {
-                          form.setFieldValue(
-                            "event_modal_rows",
-                            [
-                              ...existing.map((e) => ({
-                                eventType: e.type,
-                                eventDate: e.date
-                                  ? new Date(e.date)
-                                  : null,
-                              })),
-                              { eventType: null, eventDate: null },
-                            ],
-                          );
-                        } else {
-                          form.setFieldValue("event_modal_rows", [
-                            { eventType: null, eventDate: null },
-                          ]);
-                        }
-                        setEventsModalOpen(true);
-                      }}
-                    >
-                      Events
-                    </Menu.Item>
-                    <Menu.Item
-                      leftSection={<IconFileDescription size={16} />}
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": { backgroundColor: "#F8F9FA" },
-                        },
-                      }}
-                      onClick={() => {
+          {/* Action menu - available on all steps */}
+          <Group justify="flex-end" mb="md">
+            <Menu shadow="md" width={220} position="bottom-end">
+              <Menu.Target>
+                <ActionIcon
+                  variant="subtle"
+                  color="#105476"
+                  size="lg"
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      border: "1px solid #E9ECEF",
+                      borderRadius: "8px",
+                      "&:hover": { backgroundColor: "#F8F9FA" },
+                    },
+                  }}
+                >
+                  <IconDotsVertical size={18} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown
+                styles={{
+                  dropdown: {
+                    border: "1px solid #E9ECEF",
+                    borderRadius: "8px",
+                    padding: "8px",
+                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                  },
+                }}
+              >
+                <Menu.Item
+                  leftSection={<IconCalendarEvent size={16} />}
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": { backgroundColor: "#F8F9FA" },
+                    },
+                  }}
+                  onClick={() => {
+                    const existing = form.values.events;
+                    if (existing.length > 0) {
+                      form.setFieldValue(
+                        "event_modal_rows",
+                        [
+                          ...existing.map((e) => ({
+                            eventType: e.type,
+                            eventDate: e.date
+                              ? new Date(e.date)
+                              : null,
+                          })),
+                          { eventType: null, eventDate: null },
+                        ],
+                      );
+                    } else {
+                      form.setFieldValue("event_modal_rows", [
+                        { eventType: null, eventDate: null },
+                      ]);
+                    }
+                    setEventsModalOpen(true);
+                  }}
+                >
+                  Events
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconFileDescription size={16} />}
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": { backgroundColor: "#F8F9FA" },
+                    },
+                  }}
+                  onClick={() => {
                     const displayList = form.values.document_display_list;
                     const modalRows = displayList.map((d) => ({
                       id: d.id,
@@ -2957,53 +2951,62 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         userFileName: "",
                       },
                     ]);
-                        setDocumentsModalOpen(true);
-                      }}
-                    >
-                      Documents
-                    </Menu.Item>
-                    <Menu.Item
-                      leftSection={<IconBellRinging size={16} />}
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": { backgroundColor: "#F8F9FA" },
+                    setDocumentsModalOpen(true);
+                  }}
+                >
+                  Documents
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconBellRinging size={16} />}
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": { backgroundColor: "#F8F9FA" },
+                    },
+                  }}
+                  onClick={() => {
+                    const existing = form.values.trigger_updates;
+                    if (existing.length > 0) {
+                      form.setFieldValue(
+                        "trigger_modal_rows",
+                        existing.map((t) => ({
+                          id: t.id != null ? Number(t.id) : undefined,
+                          type: t.type || null,
+                          code: t.code || null,
+                          description: t.description || "",
+                        })),
+                      );
+                    } else {
+                      form.setFieldValue("trigger_modal_rows", [
+                        {
+                          id: undefined,
+                          type: null,
+                          code: null,
+                          description: "",
                         },
-                      }}
-                      onClick={() => {
-                        const existing = form.values.trigger_updates;
-                        if (existing.length > 0) {
-                          form.setFieldValue(
-                            "trigger_modal_rows",
-                            existing.map((t) => ({
-                              id: t.id != null ? Number(t.id) : undefined,
-                              type: t.type || null,
-                              code: t.code || null,
-                              description: t.description || "",
-                            })),
-                          );
-                        } else {
-                          form.setFieldValue("trigger_modal_rows", [
-                            {
-                              id: undefined,
-                              type: null,
-                              code: null,
-                              description: "",
-                            },
-                          ]);
-                        }
-                        setTriggerModalOpen(true);
-                      }}
-                    >
-                      Trigger Update
-                    </Menu.Item>
-                  </Menu.Dropdown>
-                </Menu>
+                      ]);
+                    }
+                    setTriggerModalOpen(true);
+                  }}
+                >
+                  Trigger Update
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
+          {/* Step 1: Export Booking */}
+          {active === 0 && (
+            <Box>
+              {/* Export Shipment Section */}
+              <Group justify="space-between" mb="lg">
+                <Text size="md" fw={600} c="#105476">
+                  Export Booking
+                </Text>
               </Group>
               <Grid mb="lg">
                 <Grid.Col span={4}>
