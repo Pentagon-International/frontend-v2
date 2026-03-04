@@ -2310,6 +2310,7 @@ export interface JobListEventPayload {
   event_name: string;
   service_type: string;
   operator: string;
+  for_invoice:boolean;
 }
 
 /** Job-list-by-event API: payload (event_name, service_type, operator) is passed from caller; date/search from filters */
@@ -2325,10 +2326,12 @@ export const getJobListByEventData = async (
       event_name: string;
       service_type: string;
       operator: string;
+      for_invoice: boolean;
     } = {
       event_name: eventPayload.event_name,
       service_type: eventPayload.service_type,
       operator: eventPayload.operator,
+      for_invoice: eventPayload.for_invoice
     };
     if (filters.date_from) payload.date_from = filters.date_from;
     if (filters.date_to) payload.date_to = filters.date_to;

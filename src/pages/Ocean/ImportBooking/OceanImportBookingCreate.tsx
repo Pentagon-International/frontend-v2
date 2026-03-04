@@ -330,6 +330,42 @@ function OceanImportBookingCreate() {
     [navigate]
   );
 
+  // When navigated from Customer Service Import dashboard with bookingId only - fetch and show booking
+  useEffect(() => {
+    const bookingId = location.state?.bookingId as string | number | undefined;
+    if (!bookingId || location.state?.job) return;
+    let cancelled = false;
+    const fetchAndReplace = async () => {
+      setIsFetchingBooking(true);
+      try {
+        const response = (await getAPICall(
+          `${URL.customerServiceShipment}${bookingId}/`,
+          API_HEADER
+        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
+        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
+          ? response.data[0]
+          : (response?.data as Record<string, unknown>);
+        if (!cancelled && response?.success && bookingItem) {
+          navigate("/SeaExport/import-booking/edit", {
+            state: { job: bookingItem, returnTo: location.state?.returnTo, viewMode: location.state?.viewMode },
+            replace: true,
+          });
+        } else if (!cancelled) {
+          ToastNotification({ type: "error", message: "Failed to load booking data." });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Error fetching booking:", error);
+          ToastNotification({ type: "error", message: "Failed to load booking. Please try again." });
+        }
+      } finally {
+        if (!cancelled) setIsFetchingBooking(false);
+      }
+    };
+    fetchAndReplace();
+    return () => { cancelled = true; };
+  }, [location.state?.bookingId, location.state?.job, navigate]);
+
   const showLoader =
     isSubmitting ||
     isFetchingBooking ||
