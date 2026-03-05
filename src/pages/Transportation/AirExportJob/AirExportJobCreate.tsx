@@ -16,6 +16,7 @@ import {
   ScrollArea,
   Center,
   Loader,
+  Modal,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -31,6 +32,8 @@ import {
   IconChevronUp,
   IconEye,
   IconRefresh,
+  IconDownload,
+  IconX,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -57,6 +60,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
+import useAuthStore from "../../../store/authStore";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
@@ -284,6 +288,10 @@ function AirExportJobCreate() {
   const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<
     string | null
   >(null);
+
+  // Cargo manifest PDF preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<string | null>(null);
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -1442,6 +1450,55 @@ function AirExportJobCreate() {
     navigateToHawbCreate(index, hawbToEdit);
   };
 
+  // Cargo manifest PDF preview handlers
+  const handleCargoManifestPreview = async () => {
+    if (!jobData?.id) return;
+    setPreviewOpen(true);
+    setPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}job-create/cargo-manifest/${jobData.id}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setPdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching cargo manifest PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load cargo manifest PDF",
+      });
+      setPreviewOpen(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(null);
+  };
+
+  const handleDownloadPDF = () => {
+    if (pdfBlob) {
+      const link = document.createElement("a");
+      link.href = pdfBlob;
+      link.download = `CargoManifest-${jobData?.id || "draft"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Check if all requirements are met for Create button
   const canCreateJob = useMemo(() => {
     // Check MAWB mandatory fields
@@ -1850,6 +1907,44 @@ function AirExportJobCreate() {
                     },
                   }}
                 >
+                                    <Menu.Item
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconFileInvoice size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
+                    onClick={handleCargoManifestPreview}
+                  >
+                    Cargo Manifest
+                  </Menu.Item>
                   <Menu.Item
                     leftSection={
                       <Box
@@ -1938,6 +2033,7 @@ function AirExportJobCreate() {
                   >
                     Create Invoice
                   </Menu.Item>
+
                 </Menu.Dropdown>
               </Menu>
             )}
@@ -3546,6 +3642,73 @@ function AirExportJobCreate() {
           )}
         </Group>
       </Group>
+      {/* Cargo Manifest PDF Preview Modal */}
+      <Modal
+        opened={previewOpen}
+        onClose={handleClosePreview}
+        title="Cargo Manifest"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {pdfBlob ? (
+            <>
+              <iframe
+                src={pdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Cargo Manifest Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
+
       {/* HAWB Details Display - Show at the top (all steps) */}
       {hawbDetails.length > 0 && (
         <Box mb="xl">

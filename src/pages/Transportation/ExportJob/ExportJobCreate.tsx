@@ -305,6 +305,13 @@ function ExportJobCreate() {
   const [currentHousingForPreview, setCurrentHousingForPreview] =
     useState<HousingDetail | null>(null);
 
+  // Cargo Manifest PDF preview state
+  const [cargoManifestPreviewOpen, setCargoManifestPreviewOpen] =
+    useState(false);
+  const [cargoManifestPdfBlob, setCargoManifestPdfBlob] = useState<
+    string | null
+  >(null);
+
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
   const [invoiceListLoading, setInvoiceListLoading] = useState(false);
@@ -1647,6 +1654,55 @@ function ExportJobCreate() {
     }
   };
 
+  // Cargo Manifest PDF preview handlers
+  const handleCargoManifestPreview = async () => {
+    if (!jobData?.id) return;
+    setCargoManifestPreviewOpen(true);
+    setCargoManifestPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}job-create/cargo-manifest/${jobData.id}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setCargoManifestPdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching cargo manifest PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load cargo manifest PDF",
+      });
+      setCargoManifestPreviewOpen(false);
+    }
+  };
+
+  const handleCargoManifestClosePreview = () => {
+    setCargoManifestPreviewOpen(false);
+    if (cargoManifestPdfBlob) {
+      window.URL.revokeObjectURL(cargoManifestPdfBlob);
+    }
+    setCargoManifestPdfBlob(null);
+  };
+
+  const handleCargoManifestDownloadPDF = () => {
+    if (cargoManifestPdfBlob) {
+      const link = document.createElement("a");
+      link.href = cargoManifestPdfBlob;
+      link.download = `CargoManifest-${jobData?.id || "draft"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Helper function to navigate to HouseCreate with container numbers
   const navigateToHouseCreate = useCallback(
     (editIndex?: number, editData?: HousingDetail) => {
@@ -2203,6 +2259,46 @@ function ExportJobCreate() {
                     </Fragment>
                   ))}
 
+                  {jobData?.id != null && (
+                    <Menu.Item
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconFileInvoice size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
+                      onClick={handleCargoManifestPreview}
+                    >
+                      Cargo Manifest
+                    </Menu.Item>
+                  )}
                   {jobData?.id != null && (
                     <Menu.Item
                       leftSection={
@@ -4157,7 +4253,7 @@ function ExportJobCreate() {
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate("/SeaExport/import-job")}
+            onClick={() => navigate("/SeaExport/export-job")}
           >
             Back to List
           </Button>
@@ -4527,6 +4623,73 @@ function ExportJobCreate() {
           </Stack>
         </Box>
       )}
+
+      {/* Cargo Manifest PDF Preview Modal */}
+      <Modal
+        opened={cargoManifestPreviewOpen}
+        onClose={handleCargoManifestClosePreview}
+        title="Cargo Manifest"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {cargoManifestPdfBlob ? (
+            <>
+              <iframe
+                src={cargoManifestPdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Cargo Manifest Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleCargoManifestClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleCargoManifestDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
 
       {/* Bill Of Lading PDF Preview Modal */}
       <Modal
