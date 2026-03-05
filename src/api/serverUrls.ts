@@ -135,6 +135,9 @@ export const URL = {
   reverseSupplierInvoice: "reverse-supplier-invoice/",
   invoiceCombined: "invoice/combined/",
 
+  // PAN / GST utilities
+  panGstByPan: "pan-gst-master/get-by-pan/",
+
   // Dashboard APIs
   dashboard: {
     outstandingSummary: "local-outstanding/salesman-summary/",

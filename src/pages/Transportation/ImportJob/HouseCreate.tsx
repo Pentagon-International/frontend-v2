@@ -82,6 +82,8 @@ type HouseDetailsForm = {
   notify_customer1_email: string;
   commodity_description: string;
   marks_no: string;
+   item_no: string;
+   sub_item_no: string;
 };
 
 // Type definitions for cargo details
@@ -537,6 +539,9 @@ function HouseCreate() {
       notify_customer1_email: editData?.notify_customer1_email || "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
+      item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
+      sub_item_no:
+        (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
     },
     validate: () => {
       // Validation handled in validateStep functions
@@ -1644,6 +1649,8 @@ function HouseCreate() {
       notify_customer1_email: v.notify_customer1_email,
       commodity_description: v.commodity_description,
       marks_no: v.marks_no,
+      item_no: v.item_no,
+      sub_item_no: v.sub_item_no,
       cargo_details: cargoDetails,
       charges: chargesForm.values.charges,
     };
@@ -2337,6 +2344,24 @@ function HouseCreate() {
                     form.setFieldValue("customer_service", formattedValue);
                   }}
                   error={form.errors.customer_service}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Item Number"
+                  placeholder="Enter Item Number"
+                  {...form.getInputProps("item_no")}
+                  error={form.errors.item_no}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Sub Item Number"
+                  placeholder="Enter Sub Item Number"
+                  {...form.getInputProps("sub_item_no")}
+                  error={form.errors.sub_item_no}
                 />
               </Grid.Col>
             </Grid>

@@ -73,6 +73,8 @@ type MBLDetailsForm = {
   eta: Date | null;
   atd: Date | null;
   ata: Date | null;
+  igm_no: string;
+  igm_date: Date | null;
 };
 
 type CarrierDetailsForm = {
@@ -162,6 +164,8 @@ const mblDetailsSchema = yup.object({
   eta: yup.date().required("ETA is required"),
   atd: yup.date().nullable(),
   ata: yup.date().nullable(),
+  igm_no: yup.string().optional(),
+  igm_date: yup.date().nullable(),
 });
 
 const carrierDetailsSchema = yup.object({
@@ -248,6 +252,8 @@ type HousingDetail = {
   notify_customer1_email: string;
   commodity_description: string;
   marks_no: string;
+  item_no?: string;
+  sub_item_no?: string;
   cargo_details?: Array<{
     id?: number | string;
     container_no?: number | string;
@@ -406,6 +412,8 @@ function ImportJobCreate() {
       eta: null,
       atd: null,
       ata: null,
+      igm_no: "",
+      igm_date: null,
     },
     validate: yupResolver(mblDetailsSchema),
   });
@@ -542,6 +550,11 @@ function ImportJobCreate() {
           ata:
             mblData.ata && dayjs(mblData.ata).isValid()
               ? dayjs(mblData.ata).toDate()
+              : null,
+          igm_no: mblData.igm_no || "",
+          igm_date:
+            mblData.igm_date && dayjs(mblData.igm_date).isValid()
+              ? dayjs(mblData.igm_date).toDate()
               : null,
         });
 
@@ -1106,6 +1119,8 @@ function ImportJobCreate() {
           eta: mblDetails.eta || null,
           atd: mblDetails.atd || null,
           ata: mblDetails.ata || null,
+          igm_no: mblDetails.igm_no || "",
+          igm_date: mblDetails.igm_date || null,
         });
       }
 
@@ -1913,6 +1928,14 @@ function ImportJobCreate() {
             ? dayjs(mblDetailsForm.values.ata).format("YYYY-MM-DD")
             : null
           : null,
+        igm_no: mblDetailsForm.values.igm_no
+          ? mblDetailsForm.values.igm_no.trim()
+          : null,
+        igm_date: mblDetailsForm.values.igm_date
+          ? dayjs(mblDetailsForm.values.igm_date).isValid()
+            ? dayjs(mblDetailsForm.values.igm_date).format("YYYY-MM-DD")
+            : null
+          : null,
         carrier_code: carrierDetailsForm.values.carrier_code,
         vessel_name: carrierDetailsForm.values.vessel_name || null,
         voyage_number: carrierDetailsForm.values.voyage_number || null,
@@ -2017,6 +2040,8 @@ function ImportJobCreate() {
           notify_customer1_email: house.notify_customer1_email || "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
+          item_no: house.item_no || "",
+          sub_item_no: house.sub_item_no || "",
           cargo_details: (house.cargo_details || []).map((cargo) => ({
             ...(cargo.id && { id: cargo.id }),
             // Include both container_no and container_id in edit mode if they exist
@@ -2681,6 +2706,35 @@ function ImportJobCreate() {
                       error: inputProps.error as string | undefined,
                       onChange: (value: Date | null) => {
                         mblDetailsForm.setFieldValue("ata", value);
+                      },
+                    };
+                  })()}
+                  size="sm"
+                />
+              </Grid.Col>
+            </Grid>
+
+            {/* IGM details row */}
+            <Grid mb="xl">
+              <Grid.Col span={3}>
+                <FormTextInput
+                  label="IGM Number"
+                  placeholder="Enter IGM Number"
+                  {...mblDetailsForm.getInputProps("igm_no")}
+                  error={mblDetailsForm.errors.igm_no}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="IGM Date"
+                  placeholder="YYYY-MM-DD"
+                  {...(() => {
+                    const inputProps = mblDetailsForm.getInputProps("igm_date");
+                    return {
+                      value: inputProps.value as Date | null,
+                      error: inputProps.error as string | undefined,
+                      onChange: (value: Date | null) => {
+                        mblDetailsForm.setFieldValue("igm_date", value);
                       },
                     };
                   })()}

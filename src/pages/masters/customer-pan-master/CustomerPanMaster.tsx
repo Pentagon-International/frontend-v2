@@ -1,8 +1,21 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Card, Checkbox, Group, Stack, Text, TextInput } from "@mantine/core";
+import {
+  Box,
+  Button,
+  Card,
+  Checkbox,
+  Group,
+  Stack,
+  Text,
+  TextInput,
+  Divider,
+} from "@mantine/core";
 import { IconSearch } from "@tabler/icons-react";
 import { ToastNotification } from "../../../components";
+import { postAPICall } from "../../../service/postApiCall";
+import { URL } from "../../../api/serverUrls";
+import { API_HEADER } from "../../../store/storeKeys";
 
 type PanAddress = {
   id: number;
@@ -14,6 +27,9 @@ type PanAddress = {
   phone_no?: string;
   mobile_no?: string;
   email?: string;
+  pan_no?: string;
+  gst_id?: string;
+  gst_registration_status?: string;
 };
 
 export default function CustomerPanMaster() {
@@ -21,6 +37,8 @@ export default function CustomerPanMaster() {
   const [isSearching, setIsSearching] = useState(false);
   const [addresses, setAddresses] = useState<PanAddress[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [customerName, setCustomerName] = useState("");
+  const [apiMessage, setApiMessage] = useState("");
   const navigate = useNavigate();
 
   const handleSearchClick = async () => {
@@ -35,18 +53,76 @@ export default function CustomerPanMaster() {
 
     try {
       setIsSearching(true);
-      // TODO: Integrate actual PAN search API here and set the addresses from response.
-      // Example:
-      // const response = await postAPICall(URL.panLookup, { pan }, API_HEADER);
-      // setAddresses(response?.data ?? []);
-
-      // For now, just clear any previous results.
-      setAddresses([]);
       setSelectedIds(new Set());
-      ToastNotification({
-        type: "info",
-        message: "PAN search API integration is pending.",
-      });
+      setAddresses([]);
+      setCustomerName("");
+      setApiMessage("");
+
+      const response = (await postAPICall(
+        URL.panGstByPan,
+        { pan_no: pan },
+        API_HEADER,
+      )) as {
+        status?: string;
+        message?: string;
+        data?: {
+          pan_no?: string;
+          customer_name?: string;
+          gst_uin_list?: Array<{
+            gst_uin?: string;
+            status?: string;
+            state?: string;
+            address?: string;
+          }>;
+        };
+      };
+
+      const status = response?.status;
+      const message = response?.message ?? "";
+      const data = response?.data;
+
+      if (!status || status.toLowerCase() !== "success" || !data) {
+        ToastNotification({
+          type: "error",
+          message:
+            message ||
+            "No GST registrations found for this PAN. Please verify the PAN number.",
+        });
+        return;
+      }
+
+      setCustomerName(data.customer_name ?? "");
+      setApiMessage(message);
+
+      const gstList = Array.isArray(data.gst_uin_list)
+        ? data.gst_uin_list
+        : [];
+
+      if (!gstList.length) {
+        ToastNotification({
+          type: "info",
+          message: "No GST registrations found for this PAN.",
+        });
+        setAddresses([]);
+        return;
+      }
+
+      const mapped: PanAddress[] = gstList.map((item, index) => ({
+        id: index + 1,
+        address: item.address ?? "",
+        city: "",
+        state: item.state ?? "",
+        country: "",
+        pincode: "",
+        phone_no: "",
+        mobile_no: "",
+        email: "",
+        pan_no: data.pan_no ?? pan,
+        gst_id: item.gst_uin ?? "",
+        gst_registration_status: item.status ?? "",
+      }));
+
+      setAddresses(mapped);
     } catch (error) {
       console.error("Error searching by PAN:", error);
       ToastNotification({
@@ -87,11 +163,14 @@ export default function CustomerPanMaster() {
       address: addr.address,
       city: addr.city,
       state: addr.state,
-      country: addr.country,
+      country: addr.country || "",
       pincode: addr.pincode,
       phone_no: addr.phone_no ?? "",
       mobile_no: addr.mobile_no ?? "",
       email: addr.email ?? "",
+      pan_no: addr.pan_no ?? panNumber.trim(),
+      gst_id: addr.gst_id ?? "",
+      gst_registration_status: addr.gst_registration_status ?? "",
       latitude: 0,
       longitude: 0,
     }));
@@ -99,8 +178,8 @@ export default function CustomerPanMaster() {
     navigate("/master/customer/create", {
       state: {
         customerData: {
-          customer_name: "",
-          customer_type_code: "",
+          customer_name: customerName || "",
+          customer_type_code: "customer",
           term_code: "",
           own_office: false,
           assigned_to: "",
@@ -139,36 +218,78 @@ export default function CustomerPanMaster() {
         </Button>
       </Group>
 
+      {customerName && (
+        <Box
+          mt="lg"
+          p="sm"
+          style={{
+            borderRadius: 8,
+            backgroundColor: "#f5fbff",
+            border: "1px solid #c5e4f5",
+          }}
+        >
+          <Text size="xs" c="dimmed" fw={500} tt="uppercase">
+            Customer from PAN
+          </Text>
+          <Text size="lg" fw={700} c="#105476" mt={4}>
+            {customerName}
+          </Text>
+          {apiMessage && (
+            <Text size="xs" c="dimmed" mt={4}>
+              {apiMessage}
+            </Text>
+          )}
+          <Divider mt="sm" />
+        </Box>
+      )}
+
       <Stack mt="xl" gap="sm">
         {addresses.length === 0 ? (
           <Text size="sm" c="dimmed">
             No addresses found. Enter a PAN number and search to see matching addresses.
           </Text>
         ) : (
-          addresses.map((addr) => (
-            <Card key={addr.id} withBorder padding="md" radius="md">
-              <Group justify="space-between" align="flex-start">
-                <Box>
-                  <Text size="sm" fw={500}>
-                    {addr.address}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {addr.city}, {addr.state}, {addr.country} - {addr.pincode}
-                  </Text>
-                  {(addr.phone_no || addr.mobile_no || addr.email) && (
-                    <Text size="xs" c="dimmed" mt={4}>
-                      {[addr.phone_no, addr.mobile_no, addr.email].filter(Boolean).join(" | ")}
+          <Group gap="md" wrap="wrap" align="stretch">
+            {addresses.map((addr) => (
+              <Card
+                key={addr.id}
+                withBorder
+                padding="md"
+                radius="md"
+                shadow="xs"
+                style={{
+                  width: 400,
+                  minHeight: 160,
+                  borderColor: selectedIds.has(addr.id) ? "#105476" : "#e0e0e0",
+                  backgroundColor: selectedIds.has(addr.id) ? "#f5fbff" : "#ffffff",
+                  display: "flex",
+                  alignItems: "stretch",
+                }}
+              >
+                <Group align="flex-start" gap="sm" wrap="nowrap" style={{ width: "100%" }}>
+                  <Checkbox
+                    checked={selectedIds.has(addr.id)}
+                    onChange={() => toggleAddressSelection(addr.id)}
+                    mt={4}
+                  />
+                  <Box style={{ flex: 1, minHeight: 80 }}>
+                    <Text size="sm" fw={600} c="#105476">
+                      {addr.gst_id || "GST UIN not available"}
                     </Text>
-                  )}
-                </Box>
-                <Checkbox
-                  checked={selectedIds.has(addr.id)}
-                  onChange={() => toggleAddressSelection(addr.id)}
-                  mt={4}
-                />
-              </Group>
-            </Card>
-          ))
+                    <Text size="xs" c="dimmed" mt={2}>
+                      {addr.state || "State not available"}
+                      {addr.gst_registration_status
+                        ? ` • ${addr.gst_registration_status}`
+                        : ""}
+                    </Text>
+                    <Text size="sm" mt={6}>
+                      {addr.address || "Address not available"}
+                    </Text>
+                  </Box>
+                </Group>
+              </Card>
+            ))}
+          </Group>
         )}
       </Stack>
 

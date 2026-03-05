@@ -80,6 +80,8 @@ type MAWBDetailsForm = {
   eta: Date | null;
   atd: Date | null;
   ata: Date | null;
+  igm_no: string;
+  igm_date: Date | null;
 };
 
 type CarrierDetailsForm = {
@@ -142,6 +144,8 @@ type HAWBDetail = {
   notify_customer1_email: string;
   commodity_description?: string;
   marks_no?: string;
+  item_no?: string;
+  sub_item_no?: string;
   shipment_terms_code?: string;
   cargo_details?: Array<{
     id?: number;
@@ -211,6 +215,8 @@ const mawbDetailsSchema = yup.object({
   eta: yup.date().required("ETA is required"),
   atd: yup.date().nullable(),
   ata: yup.date().nullable(),
+  igm_no: yup.string().optional(),
+  igm_date: yup.date().nullable(),
 });
 
 const carrierDetailsSchema = yup.object({
@@ -415,6 +421,20 @@ function AirImportJobCreate() {
         jobData?.ata && dayjs.utc(jobData.ata).isValid()
           ? dayjs.utc(jobData.ata).local().toDate()
           : location.state?.mawbDetails?.ata || null,
+      igm_no:
+        (jobData as { igm_no?: string } | undefined)?.igm_no ||
+        location.state?.mawbDetails?.igm_no ||
+        "",
+      igm_date:
+        (jobData as { igm_date?: string } | undefined)?.igm_date &&
+        dayjs(
+          (jobData as { igm_date?: string } | undefined)?.igm_date as string,
+        ).isValid()
+          ? dayjs(
+              (jobData as { igm_date?: string } | undefined)
+                ?.igm_date as string,
+            ).toDate()
+          : (location.state?.mawbDetails?.igm_date as Date | null) || null,
     },
     validate: yupResolver(mawbDetailsSchema),
   });
@@ -543,6 +563,18 @@ function AirImportJobCreate() {
           ata:
             jobData.ata && dayjs.utc(jobData.ata).isValid()
               ? dayjs.utc(jobData.ata).local().toDate()
+              : null,
+          igm_no: (jobData as { igm_no?: string } | undefined)?.igm_no || "",
+          igm_date:
+            (jobData as { igm_date?: string } | undefined)?.igm_date &&
+            dayjs(
+              (jobData as { igm_date?: string } | undefined)
+                ?.igm_date as string,
+            ).isValid()
+              ? dayjs(
+                  (jobData as { igm_date?: string } | undefined)
+                    ?.igm_date as string,
+                ).toDate()
               : null,
         };
 
@@ -1354,6 +1386,8 @@ function AirImportJobCreate() {
             eta: savedMawbDetails.eta || null,
             atd: savedMawbDetails.atd || null,
             ata: savedMawbDetails.ata || null,
+            igm_no: savedMawbDetails.igm_no || "",
+            igm_date: savedMawbDetails.igm_date || null,
           });
 
           // Update origin agent data ref if available in location state
@@ -1495,6 +1529,8 @@ function AirImportJobCreate() {
         eta: mawbDetailsForm.values.eta || null,
         atd: mawbDetailsForm.values.atd || null,
         ata: mawbDetailsForm.values.ata || null,
+        igm_no: mawbDetailsForm.values.igm_no || "",
+        igm_date: mawbDetailsForm.values.igm_date || null,
         // Use ref first (most recent), then fallback to location.state
         origin_agent_data:
           originAgentDataRef.current ||
@@ -1786,6 +1822,14 @@ function AirImportJobCreate() {
             ? dayjs(mawbDetailsForm.values.ata)
                 .utc()
                 .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
+            : null
+          : null,
+        igm_no: mawbDetailsForm.values.igm_no
+          ? mawbDetailsForm.values.igm_no.trim()
+          : null,
+        igm_date: mawbDetailsForm.values.igm_date
+          ? dayjs(mawbDetailsForm.values.igm_date).isValid()
+            ? dayjs(mawbDetailsForm.values.igm_date).format("YYYY-MM-DD")
             : null
           : null,
         carrier_code: carrierDetailsForm.values.carrier_code,
@@ -2466,6 +2510,37 @@ function AirImportJobCreate() {
                     mawbDetailsForm.setFieldValue("ata", value);
                   }}
                   error={mawbDetailsForm.errors.ata as string}
+                  size="sm"
+                />
+              </Grid.Col>
+            </Grid>
+
+            {/* IGM details row */}
+            <Grid mb="xl">
+              <Grid.Col span={3}>
+                <FormTextInput
+                  label="IGM Number"
+                  placeholder="Enter IGM Number"
+                  {...mawbDetailsForm.getInputProps("igm_no")}
+                  error={mawbDetailsForm.errors.igm_no}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="IGM Date"
+                  placeholder="YYYY-MM-DD"
+                  {...(() => {
+                    const inputProps =
+                      mawbDetailsForm.getInputProps("igm_date");
+                    return {
+                      value: inputProps.value as Date | null,
+                      error: inputProps.error as string | undefined,
+                      onChange: (value: Date | null) => {
+                        mawbDetailsForm.setFieldValue("igm_date", value);
+                      },
+                    };
+                  })()}
                   size="sm"
                 />
               </Grid.Col>
