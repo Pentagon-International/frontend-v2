@@ -1935,6 +1935,19 @@ function ExportJobCreate() {
           notify_customer1_email: house.notify_customer1_email || "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
+          item_no: house.item_no || "",
+          sub_item_no: house.sub_item_no || "",
+          events: Array.isArray((house as { events?: unknown }).events)
+            ? (
+                (house as {
+                  events?: Array<{ id?: number; type?: string; date?: string }>;
+                }).events ?? []
+              ).map((e) => ({
+                ...(e.id != null && { id: Number(e.id) }),
+                type: String(e.type ?? ""),
+                date: String(e.date ?? ""),
+              }))
+            : [],
           cargo_details: (house.cargo_details || []).map((cargo) => ({
             ...(cargo.id && { id: cargo.id }),
             ...(cargo.container_no && { container_no: cargo.container_no }),
@@ -2108,45 +2121,86 @@ function ExportJobCreate() {
                   </Menu.Label>
 
                   {housingDetails.map((housing, idx) => (
-                    <Menu.Item
-                      key={idx}
-                      leftSection={
-                        <Box
-                          style={{
-                            backgroundColor: "#E7F5FF",
+                    <Fragment key={idx}>
+                      <Menu.Item
+                        leftSection={
+                          <Box
+                            style={{
+                              backgroundColor: "#E7F5FF",
+                              borderRadius: "6px",
+                              padding: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconEye size={16} color="#105476" />
+                          </Box>
+                        }
+                        styles={{
+                          item: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
                             borderRadius: "6px",
-                            padding: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <IconEye size={16} color="#105476" />
-                        </Box>
-                      }
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": {
-                            backgroundColor: "#F8F9FA",
+                            padding: "10px 12px",
+                            marginBottom: "4px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
                           },
-                        },
-                        itemLabel: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                        },
-                      }}
-                      onClick={() => generateBillOfLadingPDFPreview(housing)}
-                    >
-                      Bill Of Lading - {housing.hbl_number || `HBL ${idx + 1}`}
-                    </Menu.Item>
+                          itemLabel: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                          },
+                        }}
+                        onClick={() => generateBillOfLadingPDFPreview(housing)}
+                      >
+                        Draft Bill Of Lading -{" "}
+                        {housing.hbl_number || `HBL ${idx + 1}`}
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={
+                          <Box
+                            style={{
+                              backgroundColor: "#E7F5FF",
+                              borderRadius: "6px",
+                              padding: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconEye size={16} color="#105476" />
+                          </Box>
+                        }
+                        styles={{
+                          item: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            borderRadius: "6px",
+                            padding: "10px 12px",
+                            marginBottom: "4px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
+                          },
+                          itemLabel: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                          },
+                        }}
+                        onClick={() => generateBillOfLadingPDFPreview(housing)}
+                      >
+                        Bill Of Lading -{" "}
+                        {housing.hbl_number || `HBL ${idx + 1}`}
+                      </Menu.Item>
+                    </Fragment>
                   ))}
 
                   {jobData?.id != null && (

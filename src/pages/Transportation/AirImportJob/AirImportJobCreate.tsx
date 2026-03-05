@@ -752,6 +752,8 @@ function AirImportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              item_no: house.item_no ? String(house.item_no) : "",
+              sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               shipment_terms_code: house.shipment_terms_code
                 ? String(house.shipment_terms_code)
                 : "",
@@ -1910,10 +1912,23 @@ function AirImportJobCreate() {
           notify_customer1_email: hawb.notify_customer1_email || "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
+          item_no: (hawb as { item_no?: string }).item_no ?? "",
+          sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           ...(hawb.shipment_terms_code != null &&
             hawb.shipment_terms_code !== "" && {
               shipment_terms_code: hawb.shipment_terms_code,
             }),
+          events: Array.isArray((hawb as { events?: unknown }).events)
+            ? (
+                (hawb as {
+                  events?: Array<{ id?: number; type?: string; date?: string }>;
+                }).events ?? []
+              ).map((e) => ({
+                ...(e.id != null && { id: Number(e.id) }),
+                type: String(e.type ?? ""),
+                date: String(e.date ?? ""),
+              }))
+            : [],
           cargo_details: (hawb.cargo_details || []).map((c) => ({
             ...(c.id != null && { id: Number(c.id) }),
             no_of_packages: c.no_of_packages ?? 0,

@@ -14,6 +14,7 @@ import {
   Center,
   Stack,
   ScrollArea,
+  Select,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -30,6 +31,7 @@ import {
   IconRefresh,
   IconChevronDown,
   IconChevronUp,
+  IconCalendar,
 } from "@tabler/icons-react";
 import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import { useDebouncedCallback } from "@mantine/hooks";
@@ -40,6 +42,7 @@ import {
   SearchableSelect,
   Dropdown,
   ToastNotification,
+  SingleDateInput,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
@@ -82,8 +85,14 @@ type HouseDetailsForm = {
   notify_customer1_email: string;
   commodity_description: string;
   marks_no: string;
-   item_no: string;
-   sub_item_no: string;
+  item_no: string;
+  sub_item_no: string;
+  events: Array<{ id?: number; type: string; date: string }>;
+  event_modal_rows: Array<{
+    id?: number;
+    eventType: string | null;
+    eventDate: Date | null;
+  }>;
 };
 
 // Type definitions for cargo details
@@ -199,6 +208,21 @@ const fetchUnitMaster = async () => {
   }
 };
 
+const fetchEventMaster = async () => {
+  try {
+    const payload = { filters: {} };
+    const response = (await postAPICall(
+      URL.eventMasterFilter,
+      payload,
+      API_HEADER,
+    )) as { data?: unknown[] };
+    return response?.data ?? [];
+  } catch (error) {
+    console.error("Error fetching event master:", error);
+    return [];
+  }
+};
+
 // Validation handled in validateStep1 and validateStep2 functions
 
 function HouseCreate() {
@@ -283,6 +307,22 @@ function HouseCreate() {
   const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<string | null>(
     null
   );
+  const [eventsModalOpen, setEventsModalOpen] = useState(false);
+
+  const { data: eventMasterData = [] } = useQuery({
+    queryKey: ["eventMaster"],
+    queryFn: fetchEventMaster,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const eventTypeOptions = useMemo(() => {
+    const list = eventMasterData as Array<{ name?: string }>;
+    if (!list?.length) return [];
+    return list.map((item) => {
+      const name = String(item.name ?? "");
+      return { value: name, label: name };
+    });
+  }, [eventMasterData]);
 
   // Charges Form - Using useForm similar to routings in ImportJobCreate
   const chargesForm = useForm<{ charges: ChargeDetail[] }>({
@@ -542,12 +582,82 @@ function HouseCreate() {
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
+      events: Array.isArray((editData as { events?: unknown } | undefined)?.events)
+        ? ((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
+            ?.events ?? []
+          ).map((e) => ({
+            id: e.id != null ? Number(e.id) : undefined,
+            type: String(e.type ?? ""),
+            date: String(e.date ?? ""),
+          }))
+        : [],
+      event_modal_rows: [
+        ...(Array.isArray((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)?.events)
+          ? ((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
+              ?.events ?? []
+            ).map((e) => ({
+              id: e.id != null ? Number(e.id) : undefined,
+              eventType: String(e.type ?? ""),
+              eventDate: e.date ? new Date(String(e.date)) : null,
+            }))
+          : []),
+        { id: undefined, eventType: null, eventDate: null },
+      ],
     },
     validate: () => {
       // Validation handled in validateStep functions
       return {};
     },
   });
+
+  const addEventRow = () => {
+    form.insertListItem("event_modal_rows", {
+      id: undefined,
+      eventType: null,
+      eventDate: null,
+    });
+  };
+
+  const updateEventRow = (
+    index: number,
+    field: "eventType" | "eventDate",
+    value: string | Date | null,
+  ) => {
+    form.setFieldValue(`event_modal_rows.${index}.${field}`, value);
+  };
+
+  const removeEventRow = (index: number) => {
+    if (form.values.event_modal_rows.length > 1) {
+      form.removeListItem("event_modal_rows", index);
+    }
+  };
+
+  const handleSubmitEventsModal = () => {
+    const rows = form.values.event_modal_rows;
+    const toAdd: Array<{ id?: number; type: string; date: string }> = [];
+
+    for (const row of rows) {
+      if (row.eventType && row.eventDate) {
+        const item: { id?: number; type: string; date: string } = {
+          type: row.eventType,
+          date:
+            row.eventDate instanceof Date
+              ? row.eventDate.toISOString().split("T")[0]
+              : String(row.eventDate),
+        };
+        if (row.id != null) {
+          item.id = typeof row.id === "number" ? row.id : Number(row.id);
+        }
+        toAdd.push(item);
+      }
+    }
+
+    form.setFieldValue("events", toAdd);
+    form.setFieldValue("event_modal_rows", [
+      { id: undefined, eventType: null, eventDate: null },
+    ]);
+    setEventsModalOpen(false);
+  };
 
   // Memoize additionalParams to prevent SearchableSelect from recreating fetchData on every render
   const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
@@ -1545,6 +1655,9 @@ function HouseCreate() {
       notify_customer1_email: form.values.notify_customer1_email,
       commodity_description: form.values.commodity_description,
       marks_no: form.values.marks_no,
+      item_no: form.values.item_no,
+      sub_item_no: form.values.sub_item_no,
+      events: form.values.events ?? [],
       cargo_details: cargoDetailsForPayload,
       charges: chargesForPayload,
     };
@@ -1943,6 +2056,65 @@ function HouseCreate() {
                       justifyContent: "center",
                     }}
                   >
+                    <IconCalendar size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
+                onClick={() => {
+                  const existing = form.values.events;
+                  if (existing.length > 0) {
+                    form.setFieldValue(
+                      "event_modal_rows",
+                      [
+                        ...existing.map((e) => ({
+                          id: e.id,
+                          eventType: e.type,
+                          eventDate: e.date ? new Date(String(e.date)) : null,
+                        })),
+                        { id: undefined, eventType: null, eventDate: null },
+                      ],
+                    );
+                  } else {
+                    form.setFieldValue("event_modal_rows", [
+                      { id: undefined, eventType: null, eventDate: null },
+                    ]);
+                  }
+                  setEventsModalOpen(true);
+                }}
+              >
+                Events
+              </Menu.Item>
+
+              <Menu.Item
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
                     <IconEye size={16} color="#105476" />
                   </Box>
                 }
@@ -2011,6 +2183,94 @@ function HouseCreate() {
           </Menu>
         </Group>
       </Group>
+
+      <Modal
+        opened={eventsModalOpen}
+        onClose={() => setEventsModalOpen(false)}
+        title="Events"
+        centered
+        size="xl"
+        styles={{ content: { maxWidth: 640 } }}
+      >
+        <Stack gap="md">
+          {form.values.event_modal_rows.length > 0 && (
+            <Grid gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+              <Grid.Col span={5}>
+                <RequiredLabel label="Event Type" required={false} />
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <RequiredLabel label="Event Date" required={false} />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <RequiredLabel label="Actions" required={false} />
+              </Grid.Col>
+            </Grid>
+          )}
+
+          {form.values.event_modal_rows.map((row, index) => (
+            <Grid key={index} align="flex-end" gutter="sm">
+              <Grid.Col span={5}>
+                <Select
+                  placeholder="Select event type"
+                  data={eventTypeOptions}
+                  value={row.eventType}
+                  onChange={(value) =>
+                    updateEventRow(index, "eventType", value ?? null)
+                  }
+                  clearable
+                />
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <SingleDateInput
+                  placeholder="Pick date"
+                  value={row.eventDate}
+                  onChange={(value) =>
+                    updateEventRow(index, "eventDate", value ?? null)
+                  }
+                  size="sm"
+                />
+              </Grid.Col>
+              <Grid.Col
+                span={2}
+                style={{ display: "flex", gap: 4, marginBottom: 4 }}
+              >
+                {form.values.event_modal_rows.length > 1 && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="lg"
+                    onClick={() => removeEventRow(index)}
+                    title="Remove row"
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                )}
+                {index === form.values.event_modal_rows.length - 1 && (
+                  <ActionIcon
+                    variant="light"
+                    color="blue"
+                    size="lg"
+                    onClick={addEventRow}
+                    title="Add row"
+                  >
+                    <IconPlus size={18} />
+                  </ActionIcon>
+                )}
+              </Grid.Col>
+            </Grid>
+          ))}
+
+          <Group justify="flex-end" mt="md">
+            <Button
+              variant="subtle"
+              onClick={() => setEventsModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitEventsModal}>Save Events</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Tabs
         value={String(active)}

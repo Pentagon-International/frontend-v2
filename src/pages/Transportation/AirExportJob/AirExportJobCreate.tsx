@@ -1694,6 +1694,19 @@ function AirExportJobCreate() {
           notify_customer1_email: hawb.notify_customer1_email || "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
+          item_no: (hawb as { item_no?: string }).item_no ?? "",
+          sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
+          events: Array.isArray((hawb as { events?: unknown }).events)
+            ? (
+                (hawb as {
+                  events?: Array<{ id?: number; type?: string; date?: string }>;
+                }).events ?? []
+              ).map((e) => ({
+                ...(e.id != null && { id: Number(e.id) }),
+                type: String(e.type ?? ""),
+                date: String(e.date ?? ""),
+              }))
+            : [],
           cargo_details: hawb.cargo_details || [],
           mawb_charges: hawb.charges
             ? hawb.charges.map((charge) => ({

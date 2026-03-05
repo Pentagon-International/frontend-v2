@@ -650,13 +650,30 @@ function ImportJobCreate() {
               notify_customer1_address: house.notify_customer1_address
                 ? String(house.notify_customer1_address)
                 : "",
-              notify_customer1_email: house.notify_customer1_email
-                ? String(house.notify_customer1_email)
-                : "",
-              commodity_description: house.commodity_description
-                ? String(house.commodity_description)
-                : "",
-              marks_no: house.marks_no ? String(house.marks_no) : "",
+          notify_customer1_email: house.notify_customer1_email
+            ? String(house.notify_customer1_email)
+            : "",
+          commodity_description: house.commodity_description
+            ? String(house.commodity_description)
+            : "",
+          marks_no: house.marks_no ? String(house.marks_no) : "",
+          item_no: house.item_no ? String(house.item_no) : "",
+          sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
+          events: Array.isArray(
+            (house as {
+              events?: Array<{ id?: number; type?: string; date?: string }>;
+            }).events,
+          )
+            ? (
+                (house as {
+                  events?: Array<{ id?: number; type?: string; date?: string }>;
+                }).events ?? []
+              ).map((e) => ({
+                id: e.id != null ? Number(e.id) : undefined,
+                type: String(e.type ?? ""),
+                date: String(e.date ?? ""),
+              }))
+            : [],
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -2042,6 +2059,17 @@ function ImportJobCreate() {
           marks_no: house.marks_no || "",
           item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
+          events: Array.isArray((house as { events?: unknown }).events)
+            ? (
+                (house as {
+                  events?: Array<{ id?: number; type?: string; date?: string }>;
+                }).events ?? []
+              ).map((e) => ({
+                ...(e.id != null && { id: Number(e.id) }),
+                type: String(e.type ?? ""),
+                date: String(e.date ?? ""),
+              }))
+            : [],
           cargo_details: (house.cargo_details || []).map((cargo) => ({
             ...(cargo.id && { id: cargo.id }),
             // Include both container_no and container_id in edit mode if they exist
