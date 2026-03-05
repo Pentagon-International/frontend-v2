@@ -2341,8 +2341,7 @@ function ExportJobCreate() {
                               .filter(
                                 (c) =>
                                   String(c.pp_cc ?? "")
-                                    .trim()
-                                    .toUpperCase() === "CC",
+                                    .trim() === "Collect",
                               )
                               .map((c) => ({
                                 ...c,

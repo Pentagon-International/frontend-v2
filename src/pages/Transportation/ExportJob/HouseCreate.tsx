@@ -3126,8 +3126,7 @@ function HouseCreate() {
                     const prepaidCharges = (fullDetail.charges ?? []).filter(
                       (c: { pp_cc?: string }) =>
                         String(c.pp_cc ?? "")
-                          .trim()
-                          .toUpperCase() === "PP",
+                          .trim() === "Prepaid",
                     );
                     const detailForInvoice = {
                       ...fullDetail,

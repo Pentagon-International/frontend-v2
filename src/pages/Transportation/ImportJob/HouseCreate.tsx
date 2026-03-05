@@ -3262,7 +3262,7 @@ function HouseCreate() {
                   const fullDetail = getCurrentHousingDetail();
                   const prepaidCharges = (fullDetail.charges ?? []).filter(
                     (c: { pp_cc?: string }) =>
-                      String(c.pp_cc ?? "").trim().toUpperCase() === "PP"
+                      String(c.pp_cc ?? "").trim() === "Prepaid"
                   );
                   const detailForInvoice = {
                     ...fullDetail,
