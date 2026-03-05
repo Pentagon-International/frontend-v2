@@ -1894,7 +1894,9 @@ function CustomerCreate() {
         addresses_data: addressForm.values.addresses_data,
       };
 
-      if (customerData) {
+      // Decide between create and update strictly based on route mode,
+      // so PAN-based prefill (which passes customerData without id) still uses create flow.
+      if (isEditMode && customerId) {
         updateCustomer(finalData);
       } else {
         createCustomer(finalData);
