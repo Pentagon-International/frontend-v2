@@ -224,6 +224,13 @@ type InvoiceListItem = {
 
 // Validation handled in validateStep1 and validateStep2 functions
 
+const normalizePpCc = (value: unknown): string => {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+  if (raw === "CC" || raw === "COLLECT") return "Collect";
+  return "";
+};
+
 function HouseCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
@@ -1032,8 +1039,7 @@ function HouseCreate() {
             currencyDetails?.currency_code ?? charge.currency_code ?? "",
           ).trim();
 
-          const ppCcRaw = charge.pp_cc ? String(charge.pp_cc) : "";
-          const pp_cc = ppCcRaw ? ppCcRaw.toUpperCase() : "";
+          const pp_cc = normalizePpCc(charge.pp_cc);
 
           const toNum = (v: unknown): number | null => {
             if (v == null) return null;
@@ -1323,8 +1329,7 @@ function HouseCreate() {
         const currencyCode = String(
           currencyDetails?.currency_code ?? charge.currency_code ?? "",
         ).trim();
-        const ppCcRaw = charge.pp_cc ? String(charge.pp_cc) : "";
-        const pp_cc = ppCcRaw ? ppCcRaw.toUpperCase() : "";
+        const pp_cc = normalizePpCc(charge.pp_cc);
         const toNum = (v: unknown): number | null => {
           if (v == null) return null;
           if (typeof v === "number" && !Number.isNaN(v)) return v;
@@ -1722,7 +1727,7 @@ function HouseCreate() {
         hasErrors = true;
       }
       if (!charge.pp_cc || charge.pp_cc.trim() === "") {
-        chargeError.pp_cc = "PP/CC is required";
+        chargeError.pp_cc = "Prepaid/Collect is required";
         hasErrors = true;
       }
       if (!charge.currency_id || charge.currency_id.trim() === "") {
@@ -3552,7 +3557,7 @@ function HouseCreate() {
                   <RequiredLabel label="Charge Name" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.25}>
-                  <RequiredLabel label="PP/CC" required={true} />
+                  <RequiredLabel label="Prepaid / Collect" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.25}>
                   <RequiredLabel label="Unit" required={false} />
@@ -3626,7 +3631,7 @@ function HouseCreate() {
                   </Grid.Col>
                   <Grid.Col span={1.25}>
                     <Dropdown
-                      placeholder="Select PP/CC"
+                      placeholder="Select Prepaid/Collect"
                       searchable
                       data={[
                         { value: "Prepaid", label: "Prepaid" },
@@ -3910,7 +3915,7 @@ function HouseCreate() {
                           chargesForm.insertListItem("charges", {
                             charge_id: null,
                             charge_name: "",
-                            pp_cc: "CC",
+                            pp_cc: "Collect",
                             unit_id: "",
                             no_of_unit: null,
                             currency_id: "",
