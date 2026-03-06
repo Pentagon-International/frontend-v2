@@ -1598,6 +1598,10 @@ function HouseCreate() {
         ...(location.state?.routings && {
           routings: location.state.routings,
         }),
+        // Preserve master-level estimates so they can be restored on the job screen
+        ...(location.state?.estimates && {
+          estimates: location.state.estimates,
+        }),
       },
     });
   };

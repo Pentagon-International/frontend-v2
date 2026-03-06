@@ -51,6 +51,8 @@ import {
   Dropdown,
   SingleDateInput,
   DateTimeInput,
+  EstimatesSection,
+  useEstimatesForm,
 } from "../../../components";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -484,6 +486,70 @@ function AirExportJobCreate() {
     },
   });
 
+  const estimatesForm = useEstimatesForm(
+    location.state?.estimates && Array.isArray(location.state.estimates)
+      ? { estimates: location.state.estimates }
+      : undefined,
+  );
+
+  // Cache the last mapped estimates from jobData (edit/view) and auto-heal if something overwrites them.
+  const lastJobMappedEstimatesRef = useRef<
+    (typeof estimatesForm.values.estimates) | null
+  >(null);
+  const lastAutoHealAtRef = useRef<number>(0);
+
+  // If something overwrites estimates (e.g. a restore effect), re-apply the job-mapped estimates
+  // so dropdown fields don't go blank in edit/view mode.
+  useEffect(() => {
+    if (!jobData) return;
+    if (mode !== "edit" && mode !== "view") return;
+    const expected = lastJobMappedEstimatesRef.current;
+    if (!expected || expected.length === 0) return;
+
+    const current = estimatesForm.values.estimates ?? [];
+    if (current.length !== expected.length) return;
+
+    const hasBlankDropdownRow = current.some((row, idx) => {
+      const exp = expected[idx];
+      const expHas =
+        !!exp?.supplier_code ||
+        !!exp?.supplier_name ||
+        exp?.charge_id != null ||
+        !!exp?.charge_name ||
+        !!exp?.pp_cc ||
+        !!exp?.unit_id ||
+        !!exp?.currency_id;
+      if (!expHas) return false;
+
+      return (
+        !row.supplier_code ||
+        !row.supplier_name ||
+        row.charge_id == null ||
+        !row.charge_name ||
+        !row.pp_cc ||
+        !row.unit_id ||
+        !row.currency_id
+      );
+    });
+
+    if (!hasBlankDropdownRow) return;
+
+    const now = Date.now();
+    if (now - lastAutoHealAtRef.current < 500) return;
+    lastAutoHealAtRef.current = now;
+
+    console.log(
+      "🧾 [AIR_EXPORT_JOB] Detected estimates overwrite. Re-applying job-mapped estimates.",
+      { current, expected },
+    );
+
+    estimatesForm.setFieldValue(
+      "estimates",
+      expected as unknown as typeof estimatesForm.values.estimates,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimatesForm.values.estimates, jobData, mode]);
+
   // Note: Container Details are not used for Air Export Jobs
 
   // Load job data if in edit or view mode - Only initialize once from jobData
@@ -853,6 +919,94 @@ function AirExportJobCreate() {
         }
 
         // Note: Container Details are not used for Air Export Jobs
+
+        // Populate Estimates (master level) from jobData if exists
+        const estimatesFromApi = (jobData as unknown as { estimates?: unknown })
+          ?.estimates;
+        const estimatesArray = Array.isArray(estimatesFromApi)
+          ? (estimatesFromApi as Array<Record<string, unknown>>)
+          : [];
+        if (estimatesArray.length > 0) {
+          const toNum = (v: unknown): number | null => {
+            if (v == null) return null;
+            if (typeof v === "number" && !Number.isNaN(v)) return v;
+            const n = parseFloat(String(v));
+            return Number.isNaN(n) ? null : n;
+          };
+          const normalizePpCc = (value: unknown): string => {
+            const raw = String(value ?? "")
+              .trim()
+              .toUpperCase();
+            if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+            if (raw === "CC" || raw === "COLLECT") return "Collect";
+            return "";
+          };
+          const mappedEstimates = estimatesArray.map((e) => {
+            const supplierId =
+              e.supplier_id != null ? Number(e.supplier_id) : null;
+            const supplierCode = String(
+              e.supplier_code ??
+                (supplierId != null && !Number.isNaN(supplierId)
+                  ? `CUST${supplierId}`
+                  : ""),
+            );
+            return {
+              id: e.id != null ? Number(e.id) : undefined,
+              supplier_code: supplierCode,
+              supplier_name: String(e.supplier_name ?? ""),
+              charge_id: e.charge_id != null ? Number(e.charge_id) : null,
+              charge_name: String(e.charge_name ?? e.charge_code ?? ""),
+              pp_cc: normalizePpCc(e.pp_cc),
+              unit_id: e.unit_id != null ? String(e.unit_id) : "",
+              unit_code: String(e.unit_code ?? e.unit_name ?? ""),
+              no_of_unit: toNum(e.no_of_unit),
+              currency_id:
+                e.currency_id != null
+                  ? String(e.currency_id)
+                  : e.currency != null
+                    ? String(e.currency)
+                    : "",
+              currency_code: String(e.currency_code ?? ""),
+              roe: toNum(e.roe),
+              cost_per_unit: toNum(e.cost_per_unit),
+              total_cost: toNum(e.total_cost),
+            };
+          });
+          console.log("🧾 [AIR_EXPORT_JOB] mappedEstimates (before setValues)", {
+            mappedEstimates,
+          });
+
+          // Hard replace estimates list (avoid partial merges on array items)
+          const sanitizedEstimates = mappedEstimates.map((row) => ({
+            id: row.id,
+            supplier_code: row.supplier_code ?? "",
+            supplier_name: row.supplier_name ?? "",
+            charge_id: row.charge_id ?? null,
+            charge_name: row.charge_name ?? "",
+            pp_cc: row.pp_cc ?? "",
+            unit_id: row.unit_id ?? "",
+            unit_code: row.unit_code ?? "",
+            no_of_unit: row.no_of_unit ?? null,
+            currency_id: row.currency_id ?? "",
+            currency_code: row.currency_code ?? "",
+            roe: row.roe ?? null,
+            cost_per_unit: row.cost_per_unit ?? null,
+            total_cost: row.total_cost ?? null,
+          }));
+
+          estimatesForm.setFieldValue(
+            "estimates",
+            sanitizedEstimates as unknown as typeof estimatesForm.values.estimates,
+          );
+
+          console.log("🧾 [AIR_EXPORT_JOB] estimatesForm.setFieldValue applied", {
+            sanitizedEstimates,
+          });
+
+          // Keep a copy so we can detect later overwrites/resets.
+          lastJobMappedEstimatesRef.current =
+            sanitizedEstimates as unknown as typeof estimatesForm.values.estimates;
+        }
         formsInitializedFromJobDataRef.current = true;
 
         // Force re-render of SearchableSelect components after all values are set
@@ -1079,6 +1233,8 @@ function AirExportJobCreate() {
             carrierDetails: carrierDetailsForm.values,
             // Save current Routings form values
             routings: routingsForm.values.routings,
+            // Save current Estimates form values
+            estimates: estimatesForm.values.estimates,
             // Preserve all other state
             ...(location.state?.hawbDetails && {
               hawbDetails: location.state.hawbDetails,
@@ -1093,7 +1249,7 @@ function AirExportJobCreate() {
       }
     } else if (active === 1) {
       if (validateStep2()) {
-        // Save ALL current form values before submitting
+        // Save ALL current form values before moving to Estimates
         navigate(location.pathname, {
           replace: true,
           state: {
@@ -1116,6 +1272,8 @@ function AirExportJobCreate() {
             carrierDetails: carrierDetailsForm.values,
             // Save current Routings form values
             routings: routingsForm.values.routings,
+            // Save current Estimates form values
+            estimates: estimatesForm.values.estimates,
             // Preserve all other state
             ...(location.state?.hawbDetails && {
               hawbDetails: location.state.hawbDetails,
@@ -1126,8 +1284,39 @@ function AirExportJobCreate() {
             ...(location.state?.job && { job: location.state.job }),
           },
         });
-        handleSubmit();
+        setActive(2);
       }
+    } else if (active === 2) {
+      navigate(location.pathname, {
+        replace: true,
+        state: {
+          ...location.state,
+          mawbDetails: {
+            service: mawbDetailsForm.values.service || "AIR",
+            origin_agent: mawbDetailsForm.values.origin_agent || "",
+            origin_code: mawbDetailsForm.values.origin_code || "",
+            origin_name: mawbDetailsForm.values.origin_name || "",
+            destination_code: mawbDetailsForm.values.destination_code || "",
+            destination_name: mawbDetailsForm.values.destination_name || "",
+            etd: mawbDetailsForm.values.etd || null,
+            eta: mawbDetailsForm.values.eta || null,
+            atd: mawbDetailsForm.values.atd || null,
+            ata: mawbDetailsForm.values.ata || null,
+            origin_agent_data: originAgentDataRef.current || null,
+          },
+          carrierDetails: carrierDetailsForm.values,
+          routings: routingsForm.values.routings,
+          estimates: estimatesForm.values.estimates,
+          ...(location.state?.hawbDetails && {
+            hawbDetails: location.state.hawbDetails,
+          }),
+          ...(location.state?.housingDetails && {
+            housingDetails: location.state.housingDetails,
+          }),
+          ...(location.state?.job && { job: location.state.job }),
+        },
+      });
+      handleSubmit();
     }
   };
 
@@ -1157,6 +1346,8 @@ function AirExportJobCreate() {
           carrierDetails: carrierDetailsForm.values,
           // Save current Routings form values
           routings: routingsForm.values.routings,
+          // Save current Estimates form values
+          estimates: estimatesForm.values.estimates,
           // Preserve all other state
           ...(location.state?.hawbDetails && {
             hawbDetails: location.state.hawbDetails,
@@ -1416,7 +1607,6 @@ function AirExportJobCreate() {
         fromLocationState: !!location.state?.mawbDetails?.origin_agent_data,
       });
 
-
       navigate("/air/export-job/house-create", {
         state: {
           hawbDetails: hawbDetails,
@@ -1429,6 +1619,8 @@ function AirExportJobCreate() {
           mawbDetails: mawbDetailsToPass,
           carrierDetails: carrierDetailsForm.values,
           routings: routingsForm.values.routings,
+          // Preserve master-level estimates so they can be restored on the job screen
+          estimates: estimatesForm.values.estimates,
         },
       });
 
@@ -1441,11 +1633,12 @@ function AirExportJobCreate() {
       mawbDetailsForm.values,
       carrierDetailsForm.values,
       routingsForm.values.routings,
+      estimatesForm.values.estimates,
       hawbDetails,
       jobData,
       location.state,
       navigate,
-    ]
+    ],
   );
 
   // Handle edit HAWB detail
@@ -1808,9 +2001,15 @@ function AirExportJobCreate() {
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           events: Array.isArray((hawb as { events?: unknown }).events)
             ? (
-                (hawb as {
-                  events?: Array<{ id?: number; type?: string; date?: string }>;
-                }).events ?? []
+                (
+                  hawb as {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                ).events ?? []
               ).map((e) => ({
                 ...(e.id != null && { id: Number(e.id) }),
                 type: String(e.type ?? ""),
@@ -1838,6 +2037,39 @@ function AirExportJobCreate() {
               }))
             : [],
         })),
+        estimates: (() => {
+          const raw = estimatesForm.values.estimates ?? [];
+          const nonEmpty = raw.filter((e) => {
+            return (
+              !!e.supplier_code ||
+              !!e.supplier_name ||
+              e.charge_id != null ||
+              !!e.charge_name ||
+              !!e.pp_cc ||
+              !!e.unit_id ||
+              !!e.currency_id ||
+              e.no_of_unit != null ||
+              e.cost_per_unit != null ||
+              e.total_cost != null
+            );
+          });
+
+          return nonEmpty.map((e) => ({
+            ...(mode === "edit" &&
+              e.id != null && {
+                id: typeof e.id === "number" ? e.id : Number(e.id),
+              }),
+            supplier_code: e.supplier_code || null,
+            charge_id: e.charge_id,
+            pp_cc: e.pp_cc || "",
+            unit_id: e.unit_id ? Number(e.unit_id) : null,
+            no_of_unit: e.no_of_unit ?? null,
+            currency_id: e.currency_id ? Number(e.currency_id) : null,
+            roe: e.roe ?? null,
+            cost_per_unit: e.cost_per_unit ?? null,
+            total_cost: e.total_cost ?? null,
+          }));
+        })(),
       };
       console.log("Payload value---", payload);
 
@@ -1875,9 +2107,9 @@ function AirExportJobCreate() {
     }
   };
 
-  // Fetch invoice list when Accounts tab (active === 2) is active
+  // Fetch invoice list when Accounts tab (active === 3) is active
   useEffect(() => {
-    if (active !== 2) return;
+    if (active !== 3) return;
     if (!jobData?.id) return;
     setInvoiceListLoading(true);
     postAPICall(
@@ -1960,7 +2192,7 @@ function AirExportJobCreate() {
                     },
                   }}
                 >
-                                    <Menu.Item
+                  <Menu.Item
                     leftSection={
                       <Box
                         style={{
@@ -2036,9 +2268,7 @@ function AirExportJobCreate() {
                       const allCollectCharges = hawbDetails.flatMap((hawb) =>
                         (hawb.charges ?? [])
                           .filter(
-                            (c) =>
-                              String(c.pp_cc ?? "")
-                                .trim() === "Collect",
+                            (c) => String(c.pp_cc ?? "").trim() === "Collect",
                           )
                           .map((c) => ({
                             ...c,
@@ -2085,7 +2315,6 @@ function AirExportJobCreate() {
                   >
                     Create Invoice
                   </Menu.Item>
-
                 </Menu.Dropdown>
               </Menu>
             )}
@@ -2135,17 +2364,31 @@ function AirExportJobCreate() {
           >
             Routings
           </Tabs.Tab>
+          <Tabs.Tab
+            value="2"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 2 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 2 ? 600 : 400,
+            }}
+          >
+            Estimates
+          </Tabs.Tab>
           {jobData?.id != null && (
             <Tabs.Tab
-              value="2"
+              value="3"
               style={{
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 2 ? "3px solid #105476" : "none",
+                borderBottom: active === 3 ? "3px solid #105476" : "none",
                 color: "#105476",
                 fontSize: 16,
-                fontWeight: active === 2 ? 600 : 400,
+                fontWeight: active === 3 ? 600 : 400,
               }}
             >
               Accounts
@@ -2958,8 +3201,23 @@ function AirExportJobCreate() {
           </Box>
         </Tabs.Panel>
 
+        {/* Tab 3: Estimates */}
+        <Tabs.Panel value="2">
+          <Box mt="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
+              Estimates
+            </Text>
+            <EstimatesSection
+              key={`estimates-${formInitializedKey}`}
+              form={estimatesForm}
+              readOnly={isReadOnly}
+              debugTag="AIR_EXPORT_JOB"
+            />
+          </Box>
+        </Tabs.Panel>
+
         {jobData?.id != null && (
-          <Tabs.Panel value="2">
+          <Tabs.Panel value="3">
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -3650,7 +3908,7 @@ function AirExportJobCreate() {
           >
             Back to List
           </Button>
-          {active === 1 && !isReadOnly && (
+          {(active === 1 || active === 2) && !isReadOnly && (
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
@@ -3683,6 +3941,16 @@ function AirExportJobCreate() {
             </Button>
           )}
           {active === 1 && !isReadOnly && (
+            <Button
+              rightSection={<IconChevronRight size={16} />}
+              color="#105476"
+              onClick={handleNext}
+            >
+              Next
+            </Button>
+          )}
+
+          {active === 2 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
