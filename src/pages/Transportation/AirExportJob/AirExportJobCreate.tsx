@@ -112,6 +112,7 @@ type RoutingDetail = {
 // ContainerDetail removed for Air Export Jobs
 
 type HAWBDetail = {
+  id: number;
   shipment_id: string;
   hawb_number: string;
   routed: string;
@@ -607,6 +608,7 @@ function AirExportJobCreate() {
         ) {
           const mappedHawbDetails = housingDetailsData.map(
             (house: Record<string, unknown>) => ({
+              id: house.id ? Number(house.id) : 0,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hawb_number:
                 house.hawb_number || house.hawb_no || house.hbl_number
@@ -1511,7 +1513,8 @@ function AirExportJobCreate() {
     try {
       const token = useAuthStore.getState().accessToken;
       const response = await fetch(
-        `${URL.base}invoice/proforma/${shipmentId}/pdf/`,
+        // `${URL.base}job-create/proforma/${shipmentId}/pdf/`,
+       `${URL.base}job-create/proforma/411/pdf/`,
         {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
@@ -2084,6 +2087,56 @@ function AirExportJobCreate() {
                     }}
                   >
                     Create Invoice
+                  </Menu.Item>
+
+                  <Menu.Item
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconFileInvoice size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
+                    onClick={() => {
+                      navigate("/payment-request/create", {
+                        state: {
+                          job_reference_1: jobData?.job_id || jobData?.id || "",
+                          job_reference_2: "",
+                          ...(jobData && { job: jobData }),
+                          ...(location.state?.mawbDetails && {
+                            mawbDetails: location.state.mawbDetails,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Payment Request
                   </Menu.Item>
 
                 </Menu.Dropdown>
@@ -3944,7 +3997,7 @@ function AirExportJobCreate() {
                           }}
                           onClick={() =>
                             // handleProformaPreview(hawb.shipment_id)
-                            handleProformaPreview(jobData.id)
+                            handleProformaPreview(hawb.id)
                           }
                         >
                           Proforma

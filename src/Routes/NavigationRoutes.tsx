@@ -99,6 +99,7 @@ import {
   AirHouseCreate,
   InvoiceCreate,
   InvoiceReverse,
+  PaymentRequestCreate,
   AirExportJobMaster,
   AirExportJobCreate,
   AirExportHouseCreate,
@@ -325,6 +326,10 @@ const NavigationRoutes = () => {
         <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
+        <Route path="/payment-request" element={<PaymentRequestCreate />} />
+        <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
+        <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />
+        <Route path="/payment-request/view/:id" element={<PaymentRequestCreate />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
         <Route path="/lead-create" element={<CreateLead />} />

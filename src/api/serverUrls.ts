@@ -134,6 +134,8 @@ export const URL = {
   reverseSupplierInvoiceFilter: "filter/reverse-supplier-invoice/",
   reverseSupplierInvoice: "reverse-supplier-invoice/",
   invoiceCombined: "invoice/combined/",
+  paymentRequest: "payment-request/",
+  paymentRequestFilter: "filter/payment-request/",
 
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",

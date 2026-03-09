@@ -1,0 +1,1951 @@
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Grid,
+  Group,
+  Loader,
+  Menu,
+  NumberInput,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import {
+  IconArrowLeft,
+  IconChevronDown,
+  IconChevronRight,
+  IconChevronUp,
+  IconDotsVertical,
+  IconFileInvoice,
+  IconPlus,
+  IconTrash,
+} from "@tabler/icons-react";
+import { useMemo, useCallback, useState } from "react";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { URL } from "../../../api/serverUrls";
+import {
+  SearchableSelect,
+  Dropdown,
+  ToastNotification,
+  SingleDateInput,
+} from "../../../components";
+import { getAPICall } from "../../../service/getApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
+import { postAPICall } from "../../../service/postApiCall";
+import { putAPICall } from "../../../service/putApiCall";
+import useAuthStore from "../../../store/authStore";
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function clampAmount(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value))
+    return value === undefined ? null : value;
+  const rounded = Math.round(value * 100) / 100;
+  const maxVal = 99999999.99;
+  if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
+  return rounded;
+}
+
+function normalizeDate(value: Date | string | null | undefined): Date | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const native = new Date(raw);
+  if (!isNaN(native.getTime())) return native;
+  const m = raw.match(
+    /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  );
+  if (m) {
+    const d = new Date(
+      Number(m[3]),
+      Number(m[2]) - 1,
+      Number(m[1]),
+      m[4] ? Number(m[4]) : 0,
+      m[5] ? Number(m[5]) : 0,
+      m[6] ? Number(m[6]) : 0,
+    );
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+// ─── API fetchers ────────────────────────────────────────────────────────────
+
+const fetchCurrencyMaster = async () => {
+  try {
+    return await getAPICall(`${URL.currencyMaster}`, API_HEADER);
+  } catch {
+    return [];
+  }
+};
+
+const fetchUnitMaster = async () => {
+  try {
+    const response = await postAPICall(
+      URL.unitMasterFilter,
+      { filters: { service_type: "AIR" } },
+      API_HEADER,
+    );
+    return (response as any)?.data || [];
+  } catch {
+    return [];
+  }
+};
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type ChargeItem = {
+  id?: number | null;
+  charge_id: number | null;
+  charge_name: string;
+  segment: string;
+  job_no: string;
+  sub_job: string;
+  cn_r: string;
+  currency: string;
+  currency_id?: string;
+  roe: number | null;
+  unit_code: string;
+  unit_id?: string;
+  no_of_unit: number | null;
+  amount_per_unit: number | null;
+  amount: number | null;
+  amount_in_local: number | null;
+  tax_code: string;
+  tax: string;
+};
+
+type PaymentRequestFormData = {
+  request_no: string;
+  job_reference_1: string;
+  job_reference_2: string;
+  payment_crj_did: string;
+  date: Date | null;
+  rejected_request_no: string;
+  proforma_invoice_no_1: string;
+  proforma_invoice_no_2: string;
+  payment_type: string;
+  voucher_type: string;
+  cinv: boolean;
+  actual_invoice_no: string;
+  account_code: string;
+  currency: string;
+  amount: number | null;
+  subledger_code: string;
+  crj_date: Date | null;
+  paid_to_type: string;
+  not_over: string;
+  paid_to: string;
+  approved: string;
+  state_code_1: string;
+  state_code_2: string;
+  approved_by_1: string;
+  approved_by_2: string;
+  tds_section_code: string;
+  approved_date: Date | null;
+  accountant_note: string;
+  prepared_by_1: string;
+  prepared_by_2: string;
+  note: string;
+  customer_gst_no: string;
+  rejected_note: string;
+  on_hold_note: string;
+  location_gst_no: string;
+  charges: ChargeItem[];
+};
+
+type SaveResponse = {
+  id?: number;
+  request_no?: string;
+  status?: string;
+};
+
+const PAYMENT_TYPE_OPTIONS = [
+  { value: "bank_transfer", label: "Bank Transfer" },
+  { value: "cheque", label: "Cheque" },
+  { value: "cash", label: "Cash" },
+  { value: "dd", label: "DD" },
+  { value: "neft", label: "NEFT" },
+  { value: "rtgs", label: "RTGS" },
+  { value: "imps", label: "IMPS" },
+];
+
+const VOUCHER_TYPE_OPTIONS = [
+  { value: "payment", label: "Payment" },
+  { value: "receipt", label: "Receipt" },
+  { value: "journal", label: "Journal" },
+  { value: "contra", label: "Contra" },
+];
+
+const PAID_TO_TYPE_OPTIONS = [
+  { value: "supplier", label: "Supplier" },
+  { value: "agent", label: "Agent" },
+  { value: "customer", label: "Customer" },
+  { value: "staff", label: "Staff" },
+];
+
+const APPROVED_OPTIONS = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+  { value: "pending", label: "Pending" },
+];
+
+const CN_R_OPTIONS = [
+  { value: "C", label: "C" },
+  { value: "N", label: "N" },
+  { value: "R", label: "R" },
+];
+
+const emptyCharge = (): ChargeItem => ({
+  charge_id: null,
+  charge_name: "",
+  segment: "",
+  job_no: "",
+  sub_job: "",
+  cn_r: "",
+  currency: "",
+  currency_id: "",
+  roe: null,
+  unit_code: "",
+  unit_id: "",
+  no_of_unit: null,
+  amount_per_unit: null,
+  amount: null,
+  amount_in_local: null,
+  tax_code: "",
+  tax: "",
+});
+
+const inputStyles = {
+  input: { fontSize: "13px", fontFamily: "Inter", height: "36px" },
+  label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
+};
+
+const textareaStyles = {
+  input: { fontSize: "13px", fontFamily: "Inter" },
+  label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+function PaymentRequest() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { id: requestId } = useParams<{ id: string }>();
+  const user = useAuthStore((state) => state.user);
+
+  const isViewMode = location.pathname.includes("/view/");
+  const isReadOnly = isViewMode;
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+  const [chargeErrors, setChargeErrors] = useState<
+    Record<number, Record<string, string>>
+  >({});
+  const [paidToDisplayName, setPaidToDisplayName] = useState<string | null>(
+    null,
+  );
+  const [isReferenceInfoOpen, setIsReferenceInfoOpen] = useState(true);
+
+  const defaultBranch = user?.branches?.find(
+    (b: { is_default?: boolean }) => b.is_default === true,
+  ) as { currency?: { currency_id?: number; currency_code?: string } } | undefined;
+  const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
+  const defaultBranchCurrencyId =
+    defaultBranch?.currency?.currency_id != null
+      ? String(defaultBranch.currency.currency_id)
+      : "";
+
+  const getRoeValue = useCallback(
+    (currency: string): number => {
+      const userCountryCode = user?.country?.country_code;
+      const currencyUpper = currency?.toUpperCase();
+      if (userCountryCode === "IN") {
+        if (currencyUpper === "INR") return 1;
+        if (currencyUpper === "USD") return 88.75;
+      } else if (userCountryCode === "AE") {
+        if (currencyUpper === "AED") return 1;
+        if (currencyUpper === "USD") return 3.67;
+      }
+      return 1;
+    },
+    [user?.country?.country_code],
+  );
+
+  // ─── Queries ───────────────────────────────────────────────────────────────
+
+  const { data: currencyData = [], isLoading: isCurrencyLoading } = useQuery({
+    queryKey: ["currencyMaster"],
+    queryFn: fetchCurrencyMaster,
+    staleTime: Infinity,
+  });
+
+  const { data: unitData = [] } = useQuery({
+    queryKey: ["unitMaster", "AIR"],
+    queryFn: fetchUnitMaster,
+    staleTime: Infinity,
+  });
+
+  // ─── Options ──────────────────────────────────────────────────────────────
+
+  const currencyOptions = useMemo(() => {
+    const data = currencyData as any[];
+    if (!Array.isArray(data)) return [];
+    return data.map((item: any) => {
+      const code = item.currency_code ?? item.code ?? "";
+      const id = item.id != null ? String(item.id) : "";
+      return { value: id || code, label: `${code || id}` };
+    });
+  }, [currencyData]);
+
+  const billingCurrencyOptions = useMemo(() => {
+    const data = currencyData as any[];
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((item: any) => {
+        const code = (item.currency_code ?? item.code ?? "").toString().trim();
+        return { value: code, label: code ? code.toUpperCase() : "" };
+      })
+      .filter((o) => o.value !== "");
+  }, [currencyData]);
+
+  const unitOptions = useMemo(() => {
+    const data = unitData as any[];
+    if (!Array.isArray(data)) return [];
+    return data.map((item: any) => ({
+      value: String(item.id ?? ""),
+      label: item.unit_code ?? item.unit_name ?? String(item.id ?? ""),
+    }));
+  }, [unitData]);
+
+  // ─── Form ─────────────────────────────────────────────────────────────────
+
+  const form = useForm<PaymentRequestFormData>({
+    initialValues: {
+      request_no: "",
+      job_reference_1: "",
+      job_reference_2: "",
+      payment_crj_did: "",
+      date: new Date(),
+      rejected_request_no: "",
+      proforma_invoice_no_1: "",
+      proforma_invoice_no_2: "",
+      payment_type: "",
+      voucher_type: "",
+      cinv: false,
+      actual_invoice_no: "",
+      account_code: "",
+      currency: defaultBranchCurrency,
+      amount: null,
+      subledger_code: "",
+      crj_date: null,
+      paid_to_type: "",
+      not_over: "",
+      paid_to: "",
+      approved: "",
+      state_code_1: "",
+      state_code_2: "",
+      approved_by_1: "",
+      approved_by_2: "",
+      tds_section_code: "",
+      approved_date: null,
+      accountant_note: "",
+      prepared_by_1: "",
+      prepared_by_2: "",
+      note: "",
+      customer_gst_no: "",
+      rejected_note: "",
+      on_hold_note: "",
+      location_gst_no: "",
+      charges: [emptyCharge()],
+    },
+    validate: {
+      date: (v) => (!v ? "Date is required" : null),
+      payment_type: (v) => (!v ? "Payment Type is required" : null),
+      paid_to: (v) => (!v?.trim() ? "Paid To is required" : null),
+    },
+  });
+
+  // ─── Submit ───────────────────────────────────────────────────────────────
+
+  const handleSubmit = async (values: PaymentRequestFormData) => {
+    setIsSubmitting(true);
+    try {
+      const formatDate = (d: Date | null) =>
+        d ? d.toISOString().split("T")[0] : null;
+
+      const payload = {
+        ...values,
+        date: formatDate(values.date),
+        crj_date: formatDate(values.crj_date),
+        approved_date: formatDate(values.approved_date),
+        charges: values.charges.map((c) => ({
+          id: c.id,
+          charge_id: c.charge_id,
+          charge_name: c.charge_name,
+          segment: c.segment,
+          job_no: c.job_no,
+          sub_job: c.sub_job,
+          cn_r: c.cn_r,
+          currency: c.currency,
+          currency_id: c.currency_id,
+          roe: c.roe,
+          unit_code: c.unit_code,
+          unit_id: c.unit_id,
+          no_of_unit: c.no_of_unit,
+          amount_per_unit: c.amount_per_unit,
+          amount: c.amount,
+          amount_in_local: c.amount_in_local,
+          tax_code: c.tax_code,
+          tax: c.tax,
+        })),
+      };
+
+      if (saveResponse?.id || requestId) {
+        const id = saveResponse?.id ?? Number(requestId);
+        const response = await putAPICall(
+          `${(URL as any).paymentRequest}${id}/`,
+          payload,
+          API_HEADER,
+        );
+        setSaveResponse(response as SaveResponse);
+        ToastNotification({
+          message: "Payment request updated successfully",
+          type: "success",
+        });
+      } else {
+        const response = await postAPICall(
+          (URL as any).paymentRequest,
+          payload,
+          API_HEADER,
+        );
+        setSaveResponse(response as SaveResponse);
+        ToastNotification({
+          message: "Payment request saved successfully",
+          type: "success",
+        });
+      }
+    } catch (error: unknown) {
+      console.error("Error saving payment request:", error);
+      ToastNotification({
+        message:
+          (error as { message?: string })?.message ??
+          "Failed to save payment request",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  return (
+    <Box p="md" style={{ position: "relative" }}>
+      {/* Full-page loader overlay when saving */}
+      {isSubmitting && (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(255,255,255,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="#105476" fw={500}>
+              Saving payment request...
+            </Text>
+          </Stack>
+        </Box>
+      )}
+
+      <Stack gap="md">
+        {/* ── Page header ── */}
+        <Group justify="space-between" mb="xs" wrap="nowrap">
+          <Text size="xl" fw={600} c="#105476">
+            Payment Request
+          </Text>
+          <Group gap="md" wrap="nowrap">
+            {saveResponse && (
+              <Group gap="sm" wrap="nowrap">
+                {saveResponse.request_no && (
+                  <Group gap="xs" wrap="nowrap" align="center">
+                    <Text size="sm" fw={500} c="dimmed">
+                      Request No
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color="#105476"
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {saveResponse.request_no}
+                    </Badge>
+                  </Group>
+                )}
+                {saveResponse.status && (
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm" fw={500} c="dimmed">
+                      Status:
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color={
+                        saveResponse.status?.toUpperCase() === "APPROVED"
+                          ? "green"
+                          : saveResponse.status?.toUpperCase() === "REJECTED"
+                            ? "red"
+                            : "gray"
+                      }
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {saveResponse.status?.toUpperCase()}
+                    </Badge>
+                  </Group>
+                )}
+              </Group>
+            )}
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconArrowLeft size={16} />}
+              onClick={() => navigate(-1)}
+            >
+              Back
+            </Button>
+            <Menu shadow="md" width={220} position="bottom-end">
+              <Menu.Target>
+                <ActionIcon
+                  variant="subtle"
+                  color="#105476"
+                  disabled={isReadOnly}
+                  size="lg"
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      border: "1px solid #E9ECEF",
+                      borderRadius: "8px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                  }}
+                >
+                  <IconDotsVertical size={18} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown
+                styles={{
+                  dropdown: {
+                    border: "1px solid #E9ECEF",
+                    borderRadius: "8px",
+                    padding: "8px",
+                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                  },
+                }}
+              >
+                <Menu.Item
+                  disabled={isReadOnly}
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileInvoice size={16} color="#105476" />
+                    </Box>
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                >
+                  Attach Documents
+                </Menu.Item>
+                <Menu.Item
+                  disabled={isReadOnly}
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileInvoice size={16} color="#105476" />
+                    </Box>
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                >
+                  Get OBL Charges
+                </Menu.Item>
+                <Menu.Item
+                  disabled={isReadOnly}
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileInvoice size={16} color="#105476" />
+                    </Box>
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                >
+                  Get Carrier Rate
+                </Menu.Item>
+                <Menu.Item
+                  disabled={isReadOnly}
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileInvoice size={16} color="#105476" />
+                    </Box>
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                >
+                  Get Default Cost
+                </Menu.Item>
+                <Menu.Item
+                  disabled={isReadOnly}
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileInvoice size={16} color="#105476" />
+                    </Box>
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                >
+                  Get Cost From Tariff
+                </Menu.Item>
+                <Menu.Item
+                  disabled={isReadOnly}
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileInvoice size={16} color="#105476" />
+                    </Box>
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                >
+                  Get Provisional Cost
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
+        </Group>
+
+        {/* ── Form ── */}
+        <Box
+          component="form"
+          onSubmit={
+            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+          }
+          style={
+            isReadOnly
+              ? {
+                  opacity: 0.92,
+                  backgroundColor: "#f5f5f5",
+                  borderRadius: 8,
+                  padding: 16,
+                }
+              : undefined
+          }
+        >
+          {/* ── Reference Information Panel ── */}
+          <Box
+            mb="lg"
+            style={{
+              borderRadius: 8,
+              border: "1px solid #cce4f0",
+              overflow: "hidden",
+            }}
+          >
+            {/* Header bar */}
+            <Box
+              px="md"
+              py="xs"
+              style={{ backgroundColor: "#105476" }}
+            >
+              <Group justify="space-between" align="center" wrap="nowrap">
+                <Text
+                  size="xs"
+                  fw={600}
+                  c="white"
+                  style={{
+                    fontFamily: "Inter",
+                    letterSpacing: "0.8px",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Reference Information
+                </Text>
+                <Button
+                  variant="subtle"
+                  color="white"
+                  size="compact-xs"
+                  px={4}
+                  onClick={() => setIsReferenceInfoOpen((prev) => !prev)}
+                  styles={{
+                    root: { minWidth: 24, height: 24 },
+                  }}
+                >
+                  {isReferenceInfoOpen ? (
+                    <IconChevronUp size={16} />
+                  ) : (
+                    <IconChevronDown size={16} />
+                  )}
+                </Button>
+              </Group>
+            </Box>
+
+            {/* Fields grid */}
+            {isReferenceInfoOpen && (
+              <Box p="md" style={{ backgroundColor: "#f8fcff" }}>
+                <Grid columns={12} gutter="sm">
+                  {(
+                    [
+                      {
+                        label: "Request No",
+                        value: form.values.request_no,
+                      },
+                      {
+                        label: "Job Reference",
+                        value: form.values.job_reference_1,
+                      },
+                      {
+                        label: "Payment / CRJ DID",
+                        value: form.values.payment_crj_did,
+                      },
+                      {
+                        label: "Rejected Request No",
+                        value: form.values.rejected_request_no,
+                      },
+                      {
+                        label: "Approved By",
+                        value: form.values.approved_by_1,
+                      },
+                      {
+                        label: "Approved Date",
+                        value: form.values.approved_date
+                          ? (normalizeDate(form.values.approved_date)?.toLocaleDateString(
+                              "en-IN",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            ) ?? "—")
+                          : "—",
+                      },
+                      {
+                        label: "Prepared By",
+                        value: form.values.prepared_by_1,
+                      },
+                      {
+                        label: "Customer GST No",
+                        value: form.values.customer_gst_no,
+                      },
+                      {
+                        label: "Location GST No",
+                        value: form.values.location_gst_no,
+                      },
+                    ] as { label: string; value: string }[]
+                  ).map(({ label, value }) => (
+                    <Grid.Col key={label} span={4}>
+                      <Box
+                        p="sm"
+                        style={{
+                          display: "flex",
+                          flexDirection: "row",
+                          backgroundColor: "white",
+                          borderRadius: 6,
+                          border: "1px solid #e3f2fc",
+                          gap: "10px",
+                        }}
+                      >
+                        <Text
+                          size="xs"
+                          c="dimmed"
+                          fw={500}
+                          mb={4}
+                          style={{
+                            fontFamily: "Inter",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.5px",
+                            fontSize: "11px",
+                          }}
+                        >
+                          {label}
+                          {" : "}
+                        </Text>
+                        <Text
+                          size="sm"
+                          fw={value && value !== "—" ? 600 : 400}
+                          c={value && value !== "—" ? "#105476" : "dimmed"}
+                          style={{ fontFamily: "Inter" }}
+                        >
+                          {value || "—"}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                  ))}
+                </Grid>
+              </Box>
+            )}
+          </Box>
+
+          <Grid columns={12} gutter="md">
+            {/* ── Row 1 (3+3+3+3): Date | Payment Type | Voucher Type | CINV ── */}
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="Date"
+                placeholder="Select date"
+                value={normalizeDate(form.values.date)}
+                onChange={(date) => form.setFieldValue("date", date)}
+                withAsterisk
+                readOnly={isReadOnly}
+                error={
+                  form.errors.date
+                    ? typeof form.errors.date === "string"
+                      ? form.errors.date
+                      : String(form.errors.date)
+                    : undefined
+                }
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Dropdown
+                label="Payment Type"
+                placeholder="Select payment type"
+                data={PAYMENT_TYPE_OPTIONS}
+                value={form.values.payment_type || null}
+                onChange={(value) =>
+                  form.setFieldValue("payment_type", value ?? "")
+                }
+                withAsterisk
+                readOnly={isReadOnly}
+                error={form.errors.payment_type}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Dropdown
+                label="Voucher Type"
+                placeholder="Select voucher type"
+                data={VOUCHER_TYPE_OPTIONS}
+                value={form.values.voucher_type || null}
+                onChange={(value) =>
+                  form.setFieldValue("voucher_type", value ?? "")
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Box
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "flex-end",
+                  height: "100%",
+                  paddingBottom: "6px",
+                }}
+              >
+                <Checkbox
+                  label="CINV"
+                  checked={form.values.cinv}
+                  onChange={(e) =>
+                    form.setFieldValue("cinv", e.currentTarget.checked)
+                  }
+                  disabled={isReadOnly}
+                  color="#105476"
+                  styles={{
+                    label: { fontSize: "13px", fontFamily: "Inter" },
+                  }}
+                />
+              </Box>
+            </Grid.Col>
+
+            {/* ── Row 2 (6+6): Proforma Invoice No | Actual Invoice No ── */}
+            <Grid.Col span={6}>
+              <TextInput
+                label="Proforma Invoice No"
+                placeholder="Enter proforma invoice no"
+                value={form.values.proforma_invoice_no_1}
+                onChange={(e) =>
+                  form.setFieldValue("proforma_invoice_no_1", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={6}>
+              <TextInput
+                label="Actual Invoice No."
+                placeholder="Enter actual invoice no"
+                value={form.values.actual_invoice_no}
+                onChange={(e) =>
+                  form.setFieldValue("actual_invoice_no", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            {/* ── Row 3 (2+2+2+2+4): Account Code | Subledger Code | Currency | Amount | CRJ Date ── */}
+            <Grid.Col span={2}>
+              <TextInput
+                label="Account Code"
+                placeholder="Enter account code"
+                value={form.values.account_code}
+                onChange={(e) =>
+                  form.setFieldValue("account_code", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2}>
+              <TextInput
+                label="Subledger Code"
+                placeholder="Enter subledger code"
+                value={form.values.subledger_code}
+                onChange={(e) =>
+                  form.setFieldValue("subledger_code", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2}>
+              <Dropdown
+                key={`currency-${form.values.currency}`}
+                label="Currency"
+                placeholder="Select currency"
+                data={billingCurrencyOptions}
+                value={form.values.currency || null}
+                onChange={(value) =>
+                  form.setFieldValue("currency", value ?? "")
+                }
+                searchable
+                readOnly={isCurrencyLoading || isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2}>
+              <NumberInput
+                label="Amount"
+                placeholder="Enter amount"
+                value={form.values.amount ?? undefined}
+                onChange={(value) =>
+                  form.setFieldValue("amount", (value as number) ?? null)
+                }
+                min={0}
+                decimalScale={2}
+                hideControls
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={4}>
+              <SingleDateInput
+                label="CRJ Date"
+                placeholder="Select CRJ date"
+                value={normalizeDate(form.values.crj_date)}
+                onChange={(date) => form.setFieldValue("crj_date", date)}
+                readOnly={isReadOnly}
+              />
+            </Grid.Col>
+
+            {/* ── Row 4 (2+4+2+2+2): Paid To Type | Paid To | Not Over | Approved | (spacer) ── */}
+            <Grid.Col span={2}>
+              <Dropdown
+                label="Paid To Type"
+                placeholder="Select paid to type"
+                data={PAID_TO_TYPE_OPTIONS}
+                value={form.values.paid_to_type || null}
+                onChange={(value) =>
+                  form.setFieldValue("paid_to_type", value ?? "")
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={4}>
+              <SearchableSelect
+                label="Paid To"
+                placeholder="Type vendor / supplier name"
+                apiEndpoint={URL.customer}
+                searchFields={["customer_name", "customer_code"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.customer_code ?? item.id ?? ""),
+                  label: String(item.customer_name ?? ""),
+                })}
+                value={form.values.paid_to}
+                displayValue={paidToDisplayName || undefined}
+                onChange={(value, selectedData) => {
+                  form.setFieldValue("paid_to", value ?? "");
+                  setPaidToDisplayName(selectedData?.label ?? null);
+                  if (form.errors.paid_to) {
+                    form.clearFieldError("paid_to");
+                  }
+                }}
+                withAsterisk
+                readOnly={isReadOnly}
+                dropdownZIndex={1000}
+                error={
+                  form.errors.paid_to
+                    ? String(form.errors.paid_to)
+                    : undefined
+                }
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2}>
+              <Dropdown
+                label="Not Over"
+                placeholder="Select"
+                data={[
+                  { value: "30", label: "30 Days" },
+                  { value: "60", label: "60 Days" },
+                  { value: "90", label: "90 Days" },
+                  { value: "120", label: "120 Days" },
+                ]}
+                value={form.values.not_over || null}
+                onChange={(value) =>
+                  form.setFieldValue("not_over", value ?? "")
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2}>
+              <Dropdown
+                label="Approved"
+                placeholder="Select approved"
+                data={APPROVED_OPTIONS}
+                value={form.values.approved || null}
+                onChange={(value) =>
+                  form.setFieldValue("approved", value ?? "")
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2} />
+
+            {/* ── Row 5 (6+6): State Code | TDS Section Code ── */}
+            <Grid.Col span={6}>
+              <TextInput
+                label="State Code"
+                placeholder="Enter state code"
+                value={form.values.state_code_1}
+                onChange={(e) =>
+                  form.setFieldValue("state_code_1", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={6}>
+              <TextInput
+                label="TDS Section Code"
+                placeholder="Enter TDS section code"
+                value={form.values.tds_section_code}
+                onChange={(e) =>
+                  form.setFieldValue("tds_section_code", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            {/* ── Row 6 (3+3+3+3): Notes ── */}
+            <Grid.Col span={3}>
+              <Textarea
+                label="Accountant Note"
+                placeholder="Enter accountant note"
+                value={form.values.accountant_note}
+                onChange={(e) =>
+                  form.setFieldValue("accountant_note", e.target.value)
+                }
+                readOnly={isReadOnly}
+                rows={3}
+                styles={textareaStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Textarea
+                label="Note"
+                placeholder="Enter note"
+                value={form.values.note}
+                onChange={(e) => form.setFieldValue("note", e.target.value)}
+                readOnly={isReadOnly}
+                rows={3}
+                styles={textareaStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Textarea
+                label="Rejected Note"
+                placeholder="Enter rejected note"
+                value={form.values.rejected_note}
+                onChange={(e) =>
+                  form.setFieldValue("rejected_note", e.target.value)
+                }
+                readOnly={isReadOnly}
+                rows={3}
+                styles={textareaStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Textarea
+                label="On Hold Note"
+                placeholder="Enter on hold note"
+                value={form.values.on_hold_note}
+                onChange={(e) =>
+                  form.setFieldValue("on_hold_note", e.target.value)
+                }
+                readOnly={isReadOnly}
+                rows={3}
+                styles={textareaStyles}
+              />
+            </Grid.Col>
+          </Grid>
+
+          {/* ── Charges Section ── */}
+          <Box mt="xl">
+            {/* Charges header row (sticky) */}
+            <Grid
+              w="100%"
+              py="sm"
+              style={{
+                position: "sticky",
+                top: 45,
+                zIndex: 100,
+                backgroundColor: "white",
+                fontWeight: 600,
+                color: "#105476",
+              }}
+            >
+              <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
+                SNo
+              </Grid.Col>
+              <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                Seg
+              </Grid.Col>
+              <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+                Job No
+              </Grid.Col>
+              <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
+                Subjob
+              </Grid.Col>
+              <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
+                C/N/R
+              </Grid.Col>
+              <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                Charge
+              </Grid.Col>
+              <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+                Currency
+              </Grid.Col>
+              <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                ROE
+              </Grid.Col>
+              <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                Unit
+              </Grid.Col>
+              <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+                No of Unit
+              </Grid.Col>
+              <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                Amt/Unit
+              </Grid.Col>
+              <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                Amount
+              </Grid.Col>
+              <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                Local Amt
+              </Grid.Col>
+              <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                SAC Code
+              </Grid.Col>
+              <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                Tax
+              </Grid.Col>
+              {!isReadOnly && (
+                <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                  Actions
+                </Grid.Col>
+              )}
+            </Grid>
+
+            {/* Charge rows */}
+            {form.values.charges.map((charge, index) => (
+              <Grid
+                key={index}
+                w="100%"
+                gutter="xs"
+                mt={index !== 0 ? "sm" : 0}
+              >
+                {/* SNo */}
+                <Grid.Col span={0.4}>
+                  <TextInput
+                    value={String(index + 1)}
+                    readOnly
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                        backgroundColor: "var(--mantine-color-gray-0)",
+                        textAlign: "center",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Seg */}
+                <Grid.Col span={0.5}>
+                  <TextInput
+                    placeholder="Seg"
+                    value={charge.segment}
+                    onChange={(e) =>
+                      form.setFieldValue(
+                        `charges.${index}.segment`,
+                        e.target.value,
+                      )
+                    }
+                    readOnly={isReadOnly}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Job No */}
+                <Grid.Col span={0.7}>
+                  <TextInput
+                    placeholder="Job No"
+                    value={charge.job_no}
+                    onChange={(e) =>
+                      form.setFieldValue(
+                        `charges.${index}.job_no`,
+                        e.target.value,
+                      )
+                    }
+                    readOnly={isReadOnly}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Subjob */}
+                <Grid.Col span={0.6}>
+                  <TextInput
+                    placeholder="Subjob"
+                    value={charge.sub_job}
+                    onChange={(e) =>
+                      form.setFieldValue(
+                        `charges.${index}.sub_job`,
+                        e.target.value,
+                      )
+                    }
+                    readOnly={isReadOnly}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* C/N/R */}
+                <Grid.Col span={0.6}>
+                  <Dropdown
+                    placeholder="C/N/R"
+                    data={CN_R_OPTIONS}
+                    value={charge.cn_r || null}
+                    readOnly={isReadOnly}
+                    onChange={(value) =>
+                      form.setFieldValue(
+                        `charges.${index}.cn_r`,
+                        value ?? "",
+                      )
+                    }
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Charge */}
+                <Grid.Col span={1}>
+                  <SearchableSelect
+                    placeholder="Type charge name"
+                    apiEndpoint={URL.chargeMaster}
+                    searchFields={["charge_name", "charge_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.id ?? ""),
+                      label: String(item.charge_name ?? ""),
+                    })}
+                    value={
+                      charge.charge_id != null
+                        ? String(charge.charge_id)
+                        : null
+                    }
+                    displayValue={charge.charge_name || undefined}
+                    onChange={(value, selectedData) => {
+                      const chargeId = value ? Number(value) : null;
+                      const chargeName = selectedData?.label ?? "";
+                      form.setFieldValue(
+                        `charges.${index}.charge_id`,
+                        chargeId,
+                      );
+                      form.setFieldValue(
+                        `charges.${index}.charge_name`,
+                        chargeName,
+                      );
+                      form.setFieldValue(
+                        `charges.${index}.tax_code`,
+                        "",
+                      );
+                      if (chargeErrors[index]?.charge_name) {
+                        const newErrors = { ...chargeErrors };
+                        if (newErrors[index]) {
+                          delete newErrors[index].charge_name;
+                          if (Object.keys(newErrors[index]).length === 0) {
+                            delete newErrors[index];
+                          }
+                        }
+                        setChargeErrors(newErrors);
+                      }
+                    }}
+                    withAsterisk
+                    readOnly={isReadOnly}
+                    error={chargeErrors[index]?.charge_name}
+                    minSearchLength={2}
+                    dropdownZIndex={1000}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Currency */}
+                <Grid.Col span={0.7}>
+                  <Dropdown
+                    placeholder="Curr."
+                    searchable
+                    data={currencyOptions}
+                    value={charge.currency_id || charge.currency || null}
+                    readOnly={isReadOnly}
+                    onChange={(value) => {
+                      const v = value ?? "";
+                      form.setFieldValue(`charges.${index}.currency_id`, v);
+                      const opt = currencyOptions.find((o) => o.value === v);
+                      const code = opt ? (opt.label ?? opt.value) : v;
+                      form.setFieldValue(`charges.${index}.currency`, code);
+                      const newRoe = code ? getRoeValue(code) : null;
+                      if (newRoe !== null) {
+                        form.setFieldValue(`charges.${index}.roe`, newRoe);
+                      }
+                      const currentCharge = form.values.charges[index];
+                      const amt = currentCharge.amount;
+                      if (
+                        amt != null &&
+                        amt > 0 &&
+                        newRoe != null &&
+                        newRoe > 0
+                      ) {
+                        const local = clampAmount(amt * newRoe);
+                        if (local != null)
+                          form.setFieldValue(
+                            `charges.${index}.amount_in_local`,
+                            local,
+                          );
+                      }
+                    }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* ROE */}
+                <Grid.Col span={0.5}>
+                  <NumberInput
+                    placeholder="ROE"
+                    min={0}
+                    hideControls
+                    readOnly={isReadOnly}
+                    value={charge.roe || undefined}
+                    onChange={(value) => {
+                      const roe = value as number | null;
+                      form.setFieldValue(`charges.${index}.roe`, roe);
+                      const currentCharge = form.values.charges[index];
+                      const amt = currentCharge.amount;
+                      if (
+                        amt != null &&
+                        amt > 0 &&
+                        roe != null &&
+                        roe > 0
+                      ) {
+                        const local = clampAmount(amt * roe);
+                        form.setFieldValue(
+                          `charges.${index}.amount_in_local`,
+                          local,
+                        );
+                      }
+                    }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Unit */}
+                <Grid.Col span={0.8}>
+                  <Dropdown
+                    placeholder="Unit"
+                    searchable
+                    data={unitOptions}
+                    value={charge.unit_id || charge.unit_code || null}
+                    readOnly={isReadOnly}
+                    onChange={(value) => {
+                      const v = value ?? "";
+                      form.setFieldValue(`charges.${index}.unit_id`, v);
+                      const opt = unitOptions.find((o) => o.value === v);
+                      form.setFieldValue(
+                        `charges.${index}.unit_code`,
+                        opt ? String(opt.label || opt.value) : v,
+                      );
+                    }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* No of Unit */}
+                <Grid.Col span={0.7}>
+                  <NumberInput
+                    placeholder="Units"
+                    min={0}
+                    hideControls
+                    readOnly={isReadOnly}
+                    value={charge.no_of_unit ?? undefined}
+                    onChange={(value) => {
+                      const noOfUnit = value as number | null;
+                      form.setFieldValue(
+                        `charges.${index}.no_of_unit`,
+                        noOfUnit,
+                      );
+                      const currentCharge = form.values.charges[index];
+                      if (
+                        noOfUnit != null &&
+                        noOfUnit > 0 &&
+                        currentCharge.amount_per_unit != null &&
+                        currentCharge.amount_per_unit > 0
+                      ) {
+                        const amt = clampAmount(
+                          noOfUnit * currentCharge.amount_per_unit,
+                        );
+                        form.setFieldValue(`charges.${index}.amount`, amt);
+                        const roe = currentCharge.roe;
+                        if (amt != null && roe != null && roe > 0) {
+                          form.setFieldValue(
+                            `charges.${index}.amount_in_local`,
+                            clampAmount(amt * roe),
+                          );
+                        }
+                      }
+                    }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Amount per Unit */}
+                <Grid.Col span={0.9}>
+                  <NumberInput
+                    placeholder="Amt/Unit"
+                    min={0}
+                    hideControls
+                    readOnly={isReadOnly}
+                    value={charge.amount_per_unit ?? undefined}
+                    onChange={(value) => {
+                      const amtPerUnit = value as number | null;
+                      form.setFieldValue(
+                        `charges.${index}.amount_per_unit`,
+                        amtPerUnit,
+                      );
+                      const currentCharge = form.values.charges[index];
+                      if (
+                        amtPerUnit != null &&
+                        amtPerUnit > 0 &&
+                        currentCharge.no_of_unit != null &&
+                        currentCharge.no_of_unit > 0
+                      ) {
+                        const amt = clampAmount(
+                          currentCharge.no_of_unit * amtPerUnit,
+                        );
+                        form.setFieldValue(`charges.${index}.amount`, amt);
+                        const roe = currentCharge.roe;
+                        if (amt != null && roe != null && roe > 0) {
+                          form.setFieldValue(
+                            `charges.${index}.amount_in_local`,
+                            clampAmount(amt * roe),
+                          );
+                        }
+                      }
+                    }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Amount */}
+                <Grid.Col span={0.9}>
+                  <NumberInput
+                    placeholder="Amount"
+                    min={0}
+                    hideControls
+                    readOnly={isReadOnly}
+                    value={charge.amount ?? undefined}
+                    onChange={(value) => {
+                      const amt = value as number | null;
+                      form.setFieldValue(`charges.${index}.amount`, amt);
+                      const roe = form.values.charges[index].roe;
+                      if (amt != null && roe != null && roe > 0) {
+                        form.setFieldValue(
+                          `charges.${index}.amount_in_local`,
+                          clampAmount(amt * roe),
+                        );
+                      }
+                    }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Local Amount */}
+                <Grid.Col span={0.9}>
+                  <NumberInput
+                    placeholder="Local Amt"
+                    hideControls
+                    readOnly
+                    value={charge.amount_in_local ?? undefined}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                        backgroundColor: "var(--mantine-color-gray-0)",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* SAC Code */}
+                <Grid.Col span={0.8}>
+                  <TextInput
+                    placeholder="SAC Code"
+                    value={charge.tax_code}
+                    onChange={(e) =>
+                      form.setFieldValue(
+                        `charges.${index}.tax_code`,
+                        e.target.value,
+                      )
+                    }
+                    readOnly={isReadOnly}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                      },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Tax */}
+                <Grid.Col span={0.5} style={{ justifyContent: "center", marginLeft: "10px", }}>
+                  <Box
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      height: "36px",
+                    }}
+                  >
+                    <Checkbox
+                      checked={
+                        charge.tax === "true" || charge.tax === true as any
+                      }
+                      onChange={(e) =>
+                        form.setFieldValue(
+                          `charges.${index}.tax`,
+                          e.currentTarget.checked ? "true" : "false",
+                        )
+                      }
+                      disabled={isReadOnly}
+                      color="#105476"
+                      styles={{
+                        label: { fontSize: "13px", fontFamily: "Inter" },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+
+                {/* Actions */}
+                {!isReadOnly && (
+                  <Grid.Col span={0.7}>
+                    <Group gap={4} wrap="nowrap">
+                      {form.values.charges.length > 1 && (
+                        <Button
+                          radius="sm"
+                          px={8}
+                          size="sm"
+                          variant="light"
+                          color="red"
+                          onClick={() => {
+                            setChargeErrors((prev) => {
+                              const next: Record<
+                                number,
+                                Record<string, string>
+                              > = {};
+                              Object.entries(prev).forEach(([key, value]) => {
+                                const idx = Number(key);
+                                if (Number.isNaN(idx) || idx === index) return;
+                                next[idx > index ? idx - 1 : idx] = value;
+                              });
+                              return next;
+                            });
+                            form.removeListItem("charges", index);
+                          }}
+                        >
+                          <IconTrash size={14} />
+                        </Button>
+                      )}
+                      {form.values.charges.length - 1 === index && (
+                        <Button
+                          radius="sm"
+                          px={8}
+                          size="sm"
+                          variant="light"
+                          color="#105476"
+                          onClick={() => {
+                            const newChargeCurrency =
+                              defaultBranchCurrency || "";
+                            const roe = newChargeCurrency
+                              ? getRoeValue(newChargeCurrency)
+                              : null;
+                            const newChargeCurrencyId =
+                              defaultBranchCurrencyId ||
+                              (currencyOptions.find(
+                                (o) =>
+                                  (o.label || "").toUpperCase() ===
+                                  (newChargeCurrency || "").toUpperCase(),
+                              )?.value ?? "");
+                            form.insertListItem("charges", {
+                              ...emptyCharge(),
+                              currency: newChargeCurrency,
+                              currency_id: newChargeCurrencyId,
+                              roe,
+                            });
+                          }}
+                        >
+                          <IconPlus size={14} />
+                        </Button>
+                      )}
+                    </Group>
+                  </Grid.Col>
+                )}
+              </Grid>
+            ))}
+
+            {/* ── Totals row – aligns under the "Local Amt" column ── */}
+            <Grid
+              w="100%"
+              gutter="xs"
+              mt="xs"
+              style={{ borderTop: "2px solid #dee2e6", paddingTop: "6px" }}
+            >
+              {/* spans before Local Amt: 0.4+0.5+0.7+0.6+0.6+1+0.7+0.5+0.8+0.7+0.9+0.9 = 8.3 */}
+              <Grid.Col span={8.3}>
+                <Box
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    alignItems: "center",
+                    height: "100%",
+                    paddingRight: "8px",
+                  }}
+                >
+                  <Text size="sm" fw={600} c="#105476">
+                    Total
+                  </Text>
+                </Box>
+              </Grid.Col>
+
+              {/* Local Amt column */}
+              <Grid.Col span={0.9}>
+                <Text size="sm" fw={700} c="#105476">
+                  {form.values.charges
+                    .reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0)
+                    .toFixed(2)}
+                </Text>
+              </Grid.Col>
+
+              {/* remaining cols: SAC(0.8) + Tax(0.5) + Actions(0.5) = 1.8 */}
+              <Grid.Col span={1.8} />
+            </Grid>
+          </Box>
+
+          {/* ── Form action buttons ── */}
+          <Group justify="flex-end" mt="xl">
+            <Button
+              variant="outline"
+              color="#105476"
+              onClick={() => navigate(-1)}
+            >
+              Cancel
+            </Button>
+            {!isReadOnly && (
+              <Button
+                type="submit"
+                color="#105476"
+                rightSection={<IconChevronRight size={16} />}
+                loading={isSubmitting}
+              >
+                {saveResponse?.id
+                  ? "Update Payment Request"
+                  : "Save Payment Request"}
+              </Button>
+            )}
+          </Group>
+        </Box>
+      </Stack>
+    </Box>
+  );
+}
+
+export default PaymentRequest;

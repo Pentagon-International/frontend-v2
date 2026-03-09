@@ -312,6 +312,10 @@ function ExportJobCreate() {
     string | null
   >(null);
 
+  // Proforma PDF preview state
+  const [proformaPreviewOpen, setProformaPreviewOpen] = useState(false);
+  const [proformaPdfBlob, setProformaPdfBlob] = useState<string | null>(null);
+
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
   const [invoiceListLoading, setInvoiceListLoading] = useState(false);
@@ -1697,6 +1701,55 @@ function ExportJobCreate() {
       const link = document.createElement("a");
       link.href = cargoManifestPdfBlob;
       link.download = `CargoManifest-${jobData?.id || "draft"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  // Proforma PDF preview handlers
+  const handleProformaPreview = async (shipmentId: string) => {
+    if (!shipmentId) return;
+    setProformaPreviewOpen(true);
+    setProformaPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}job-create/proforma/${shipmentId}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setProformaPdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching proforma PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load proforma PDF",
+      });
+      setProformaPreviewOpen(false);
+    }
+  };
+
+  const handleProformaClosePreview = () => {
+    setProformaPreviewOpen(false);
+    if (proformaPdfBlob) {
+      window.URL.revokeObjectURL(proformaPdfBlob);
+    }
+    setProformaPdfBlob(null);
+  };
+
+  const handleProformaDownloadPDF = () => {
+    if (proformaPdfBlob) {
+      const link = document.createElement("a");
+      link.href = proformaPdfBlob;
+      link.download = `Proforma.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -4486,6 +4539,47 @@ function ExportJobCreate() {
                             >
                               Bill Of Lading
                             </Menu.Item>
+
+                            <Menu.Item
+                              leftSection={
+                                <Box
+                                  style={{
+                                    backgroundColor: "#E7F5FF",
+                                    borderRadius: "6px",
+                                    padding: "6px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconFileInvoice size={16} color="#105476" />
+                                </Box>
+                              }
+                              styles={{
+                                item: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  borderRadius: "6px",
+                                  padding: "10px 12px",
+                                  marginBottom: "4px",
+                                  "&:hover": {
+                                    backgroundColor: "#F8F9FA",
+                                  },
+                                },
+                                itemLabel: {
+                                  fontFamily: "Inter",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "#424242",
+                                },
+                              }}
+                              onClick={() =>
+                                handleProformaPreview(house.id)
+                              }
+                            >
+                              Proforma
+                            </Menu.Item>
                           </Menu.Dropdown>
                         </Menu>
                       )}
@@ -4622,6 +4716,73 @@ function ExportJobCreate() {
           </Stack>
         </Box>
       )}
+
+      {/* Proforma PDF Preview Modal */}
+      <Modal
+        opened={proformaPreviewOpen}
+        onClose={handleProformaClosePreview}
+        title="Proforma"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {proformaPdfBlob ? (
+            <>
+              <iframe
+                src={proformaPdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Proforma Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleProformaClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleProformaDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
 
       {/* Cargo Manifest PDF Preview Modal */}
       <Modal
