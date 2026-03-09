@@ -43,6 +43,8 @@ import {
   SearchableSelect,
   Dropdown,
   SingleDateInput,
+  EstimatesSection,
+  useEstimatesForm,
 } from "../../../components";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
@@ -475,6 +477,8 @@ function ImportJobCreate() {
     },
     validate: yupResolver(containerDetailsFormSchema),
   });
+
+  const estimatesForm = useEstimatesForm();
 
   // Load job data if in edit or view mode
   useEffect(() => {
@@ -1052,6 +1056,81 @@ function ImportJobCreate() {
           );
           containerDetailsForm.setValues({ containers: mappedContainers });
         }
+
+        // Populate Estimates (master level) from jobData if exists
+        const estimatesFromApi = (jobData as unknown as { estimates?: unknown })
+          ?.estimates;
+        const estimatesArray = Array.isArray(estimatesFromApi)
+          ? (estimatesFromApi as Array<Record<string, unknown>>)
+          : [];
+        if (estimatesArray.length > 0) {
+          const toNum = (v: unknown): number | null => {
+            if (v == null) return null;
+            if (typeof v === "number" && !Number.isNaN(v)) return v;
+            const n = parseFloat(String(v));
+            return Number.isNaN(n) ? null : n;
+          };
+          const normalizePpCc = (value: unknown): string => {
+            const raw = String(value ?? "").trim().toUpperCase();
+            if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+            if (raw === "CC" || raw === "COLLECT") return "Collect";
+            return "";
+          };
+
+          const mappedEstimates = estimatesArray.map((e) => {
+            const supplierId =
+              e.supplier_id != null ? Number(e.supplier_id) : null;
+            const supplierCode = String(
+              e.supplier_code ??
+                (supplierId != null && !Number.isNaN(supplierId)
+                  ? `CUST${supplierId}`
+                  : ""),
+            );
+            return {
+              id: e.id != null ? Number(e.id) : undefined,
+              supplier_code: supplierCode,
+              supplier_name: String(e.supplier_name ?? ""),
+              charge_id: e.charge_id != null ? Number(e.charge_id) : null,
+              charge_name: String(e.charge_name ?? e.charge_code ?? ""),
+              pp_cc: normalizePpCc(e.pp_cc),
+              unit_id: e.unit_id != null ? String(e.unit_id) : "",
+              unit_code: String(e.unit_code ?? e.unit_name ?? ""),
+              no_of_unit: toNum(e.no_of_unit),
+              currency_id:
+                e.currency_id != null
+                  ? String(e.currency_id)
+                  : e.currency != null
+                    ? String(e.currency)
+                    : "",
+              currency_code: String(e.currency_code ?? ""),
+              roe: toNum(e.roe),
+              cost_per_unit: toNum(e.cost_per_unit),
+              total_cost: toNum(e.total_cost),
+            };
+          });
+
+          const sanitizedEstimates = mappedEstimates.map((row) => ({
+            id: row.id,
+            supplier_code: row.supplier_code ?? "",
+            supplier_name: row.supplier_name ?? "",
+            charge_id: row.charge_id ?? null,
+            charge_name: row.charge_name ?? "",
+            pp_cc: row.pp_cc ?? "",
+            unit_id: row.unit_id ?? "",
+            unit_code: row.unit_code ?? "",
+            no_of_unit: row.no_of_unit ?? null,
+            currency_id: row.currency_id ?? "",
+            currency_code: row.currency_code ?? "",
+            roe: row.roe ?? null,
+            cost_per_unit: row.cost_per_unit ?? null,
+            total_cost: row.total_cost ?? null,
+          }));
+
+          estimatesForm.setFieldValue(
+            "estimates",
+            sanitizedEstimates as unknown as typeof estimatesForm.values.estimates,
+          );
+        }
       } catch (error) {
         console.error("Error loading job data:", error);
         ToastNotification({
@@ -1065,12 +1144,12 @@ function ImportJobCreate() {
 
   // Reset active when not in edit mode and on Accounts tab
   useEffect(() => {
-    if (mode !== "edit" && active === 3) setActive(0);
+    if (mode !== "edit" && active === 4) setActive(0);
   }, [active, mode]);
 
   // Fetch invoice list when Accounts tab is active
   useEffect(() => {
-    if (active !== 3) return;
+    if (active !== 4) return;
     if (!jobData?.id) return;
     setInvoiceListLoading(true);
     postAPICall(
@@ -1164,6 +1243,18 @@ function ImportJobCreate() {
         containerDetailsForm.setValues({
           containers: location.state.containerDetails,
         });
+      }
+
+      // Restore Estimates (master-level) if present in location.state when coming back
+      if (
+        location.state?.estimates &&
+        Array.isArray(location.state.estimates) &&
+        location.state.estimates.length > 0
+      ) {
+        estimatesForm.setFieldValue(
+          "estimates",
+          location.state.estimates as typeof estimatesForm.values.estimates,
+        );
       }
 
       // Set active step to 2 (Container Details) when navigating back from HouseCreate
@@ -1426,30 +1517,10 @@ function ImportJobCreate() {
       }
     } else if (active === 2) {
       if (validateStep3()) {
-        // Save container details before submitting
-        // navigate(location.pathname, {
-        //   replace: true,
-        //   state: {
-        //     ...location.state,
-        //     containerDetails: containerDetailsForm.values.containers,
-        //     // Preserve all other state
-        //     ...(location.state?.housingDetails && {
-        //       housingDetails: location.state.housingDetails,
-        //     }),
-        //     ...(location.state?.mblDetails && {
-        //       mblDetails: location.state.mblDetails,
-        //     }),
-        //     ...(location.state?.carrierDetails && {
-        //       carrierDetails: location.state.carrierDetails,
-        //     }),
-        //     ...(location.state?.routings && {
-        //       routings: location.state.routings,
-        //     }),
-        //     ...(location.state?.job && { job: location.state.job }),
-        //   },
-        // });
-        handleSubmit();
+        setActive(3);
       }
+    } else if (active === 3) {
+      handleSubmit();
     }
   };
 
@@ -1667,6 +1738,8 @@ function ImportJobCreate() {
           routings: routingsForm.values.routings,
           containerNumbers: containerNumbers,
           containerDetails: containerDetailsForm.values.containers,
+          // NEW: preserve master-level estimates when going to HouseCreate
+          estimates: estimatesForm.values.estimates,
         },
       });
     },
@@ -1675,6 +1748,7 @@ function ImportJobCreate() {
       containerDetailsForm.values.containers,
       carrierDetailsForm.values,
       routingsForm.values.routings,
+      estimatesForm.values.estimates,
       housingDetails,
       jobData,
     ],
@@ -2125,6 +2199,39 @@ function ImportJobCreate() {
             };
           },
         ),
+        estimates: (() => {
+          const raw = estimatesForm.values.estimates ?? [];
+          const nonEmpty = raw.filter((e) => {
+            return (
+              !!e.supplier_code ||
+              !!e.supplier_name ||
+              e.charge_id != null ||
+              !!e.charge_name ||
+              !!e.pp_cc ||
+              !!e.unit_id ||
+              !!e.currency_id ||
+              e.no_of_unit != null ||
+              e.cost_per_unit != null ||
+              e.total_cost != null
+            );
+          });
+
+          return nonEmpty.map((e) => ({
+            ...(mode === "edit" &&
+              e.id != null && {
+                id: typeof e.id === "number" ? e.id : Number(e.id),
+              }),
+            supplier_code: e.supplier_code || null,
+            charge_id: e.charge_id,
+            pp_cc: e.pp_cc || "",
+            unit_id: e.unit_id ? Number(e.unit_id) : null,
+            no_of_unit: e.no_of_unit ?? null,
+            currency_id: e.currency_id ? Number(e.currency_id) : null,
+            roe: e.roe ?? null,
+            cost_per_unit: e.cost_per_unit ?? null,
+            total_cost: e.total_cost ?? null,
+          }));
+        })(),
       };
 
       // API call to create or update import job
@@ -2486,17 +2593,31 @@ function ImportJobCreate() {
           >
             Container Details
           </Tabs.Tab>
+          <Tabs.Tab
+            value="3"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 3 ? 600 : 400,
+            }}
+          >
+            Estimates
+          </Tabs.Tab>
           {mode === "edit" && jobData?.id && (
             <Tabs.Tab
-              value="3"
+              value="4"
               style={{
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 3 ? "3px solid #105476" : "none",
+                borderBottom: active === 4 ? "3px solid #105476" : "none",
                 color: "#105476",
                 fontSize: 16,
-                fontWeight: active === 3 ? 600 : 400,
+                fontWeight: active === 4 ? 600 : 400,
               }}
             >
               Accounts
@@ -3615,8 +3736,18 @@ function ImportJobCreate() {
           </Box>
         </Tabs.Panel>
 
+        {/* Tab 4: Estimates */}
+        <Tabs.Panel value="3">
+          <Box mt="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
+              Estimates
+            </Text>
+            <EstimatesSection form={estimatesForm} readOnly={isReadOnly} />
+          </Box>
+        </Tabs.Panel>
+
         {mode === "edit" && jobData?.id && (
-          <Tabs.Panel value="3">
+          <Tabs.Panel value="4">
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -4312,7 +4443,8 @@ function ImportJobCreate() {
           </Button>
           {(active === 1 ||
             active === 2 ||
-            (active === 3 && mode === "edit" && jobData?.id)) &&
+            active === 3 ||
+            (active === 4 && mode === "edit" && jobData?.id)) &&
             !isReadOnly && (
               <Button
                 leftSection={<IconChevronLeft size={16} />}
@@ -4358,6 +4490,16 @@ function ImportJobCreate() {
           )}
 
           {active === 1 && !isReadOnly && (
+            <Button
+              rightSection={<IconChevronRight size={16} />}
+              color="#105476"
+              onClick={handleNext}
+            >
+              Next
+            </Button>
+          )}
+
+          {active === 2 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
