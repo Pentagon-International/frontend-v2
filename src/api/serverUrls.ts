@@ -18,6 +18,7 @@ export const URL = {
   agent: "customer_master/customer-master/agent/",
   supplierByType: "customer_master/customer-master/by-type/Supplier/",
   shipper: "customer_master/customer-master/shipper/",
+  shipmentParty: "shipment-party/",
   forwarder: "customer_master/customer-master/forwarder/",
   cha: "customer_master/customer-master/cha/",
   followUpAction: "followup-master/",

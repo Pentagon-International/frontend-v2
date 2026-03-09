@@ -54,6 +54,7 @@ import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
 import SingleDateInput from "../../../components/SingleDateInput";
 import RequiredLabel from "../../../components/RequiredLabel";
+import { commonSearchAPI } from "../../../service/searchApi";
 
 interface ExportShipmentStepperProps {
   onStepChange?: (step: number) => void;
@@ -131,10 +132,14 @@ interface FormValues {
 
   // Party Details fields
   shipper_code: string;
+  shipper_name: string;
+  shipper_address: string;
   shipper_address_id: number;
   shipper_email: string;
   consignee_code: string;
+  consignee_name: string;
   consignee_address_id: number;
+  consignee_address: string;
   consignee_email: string;
   forwarder_code: string;
   forwarder_address_id: number;
@@ -585,9 +590,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [deliveryFromDisplayName, setDeliveryFromDisplayName] = useState<
     string | null
   >(null);
-  const [consigneeDisplayName, setConsigneeDisplayName] = useState<
-    string | null
-  >(null);
   const [forwarderDisplayName, setForwarderDisplayName] = useState<
     string | null
   >(null);
@@ -608,9 +610,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   >(null);
 
   // State for address options
-  const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
-    Array<{ value: string; label: string }>
-  >([]);
   const [agentAddressOptions, setAgentAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
@@ -627,6 +626,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     useState<Array<{ value: string; label: string }>>([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
+
+  // Consignee (shipment-party) lookup: mirror city field behavior
+  // - When API returns options, show searchable dropdown
+  // - When API returns no options for search text, show plain text input
+  const [consigneeSearch, setConsigneeSearch] = useState("");
+  const [consigneeOptions, setConsigneeOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [consigneeHasResults, setConsigneeHasResults] = useState<boolean | null>(
+    null,
+  );
+  const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
 
   const defaultCurrency = (() => {
     const userData = localStorage.getItem("user");
@@ -901,12 +912,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       // Party Details fields - map from the provided data structure
       // Check for both _read and regular versions to handle API response format
       shipper_code: String(data.shipper_code_read || data.shipper_code || ""),
+      shipper_name: String(data.shipper_name || ""),
+      shipper_address: String(data.shipper_address || data.shipper_address_text || ""),
       shipper_address_id: Number(data.shipper_address_id) || 0,
       shipper_email: String(data.shipper_email || ""),
       consignee_code: String(
         data.consignee_code_read || data.consignee_code || ""
       ),
+      consignee_name: String(data.consignee_name || ""),
       consignee_address_id: Number(data.consignee_address_id) || 0,
+      consignee_address: String(
+        data.consignee_address || data.consignee_address_text || ""
+      ),
       consignee_email: String(data.consignee_email || ""),
       forwarder_code: String(
         data.forwarder_code_read || data.forwarder_code || ""
@@ -1135,10 +1152,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
       // Party Details fields
       shipper_code: "",
+      shipper_name: "",
+      shipper_address: "",
       shipper_address_id: 0,
       shipper_email: "",
       consignee_code: "",
+      consignee_name: "",
       consignee_address_id: 0,
+      consignee_address: "",
       consignee_email: "",
       forwarder_code: "",
       forwarder_address_id: 0,
@@ -1652,6 +1673,56 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     onQuotationAlreadyBooked,
   ]);
 
+  // Debounced consignee search that hits shipment-party/ endpoint and
+  // fills dropdown options, similar to the City field logic.
+  const debouncedConsigneeSearch = useDebouncedCallback(async (term: string) => {
+    
+    const query = term.trim();
+    if (!query || query.length < 2) {
+      setConsigneeOptions([]);
+      setConsigneeHasResults(null);
+      consigneeDataRef.current = {};
+      return;
+    }
+
+    try {
+      const results = await commonSearchAPI({
+        endpoint: URL.shipmentParty,
+        query,
+      });
+
+      const arr = Array.isArray(results)
+        ? (results as Record<string, unknown>[])
+        : [];
+
+      if (!arr.length) {
+        setConsigneeOptions([]);
+        setConsigneeHasResults(false);
+        consigneeDataRef.current = {};
+        return;
+      }
+
+      const map: Record<string, Record<string, unknown>> = {};
+      const opts = arr.map((item) => {
+        const id = String(item.id ?? "");
+        map[id] = item;
+        return {
+          value: id,
+          label: String(item.customer_name || ""),
+        };
+      });
+
+      consigneeDataRef.current = map;
+      setConsigneeOptions(opts);
+      setConsigneeHasResults(true);
+    } catch (error) {
+      console.error("Consignee shipment-party search failed:", error);
+      setConsigneeOptions([]);
+      setConsigneeHasResults(null);
+      consigneeDataRef.current = {};
+    }
+  }, 500);
+
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
   const populatedJobIdRef = useRef<number | null>(null);
 
@@ -1666,7 +1737,16 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     form.setValues(mappedData as FormValues);
 
     if (jobData.shipper_name) setShipperDisplayName(String(jobData.shipper_name));
-    if (jobData.consignee_name) setConsigneeDisplayName(String(jobData.consignee_name));
+    if (jobData.consignee_name) {
+      const name = String(jobData.consignee_name);
+      form.setFieldValue("consignee_name", name);
+      setConsigneeSearch(name);
+    }
+    if (jobData.consignee_address) {
+      form.setFieldValue("consignee_address", String(jobData.consignee_address));
+    } else if (jobData.consignee_address_text) {
+      form.setFieldValue("consignee_address", String(jobData.consignee_address_text));
+    }
     if (jobData.forwarder_name) setForwarderDisplayName(String(jobData.forwarder_name));
     if (jobData.destination_agent_name) setDestinationAgentDisplayName(String(jobData.destination_agent_name));
     if (jobData.billing_customer_name) setBillingCustomerDisplayName(String(jobData.billing_customer_name));
@@ -1680,12 +1760,21 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (jobData.pickup_address_text || jobData.pickup_address) setPickupAddressDisplayName(String(jobData.pickup_address_text ?? jobData.pickup_address ?? ""));
     if (jobData.delivery_address_text || jobData.delivery_address) setDeliveryAddressDisplayName(String(jobData.delivery_address_text ?? jobData.delivery_address ?? ""));
 
-    if (jobData.shipper_address_id != null && jobData.shipper_address) {
-      setShipperAddressOptions([{ value: String(jobData.shipper_address_id), label: String(jobData.shipper_address) }]);
+    if (jobData.shipper_address) {
+      const addrId = jobData.shipper_address_id;
+      if (addrId != null && addrId !== 0) {
+        setShipperAddressOptions([
+          { value: String(addrId), label: String(jobData.shipper_address) },
+        ]);
+      } else {
+        setShipperAddressOptions([
+          { value: "0", label: String(jobData.shipper_address) },
+        ]);
+        form.setFieldValue("shipper_address_id", 0);
+      }
+      form.setFieldValue("shipper_address", String(jobData.shipper_address));
     }
-    if (jobData.consignee_address != null || jobData.consignee_address_id != null) {
-      setConsigneeAddressOptions([{ value: String(jobData.consignee_address_id ?? 0), label: String(jobData.consignee_address ?? "") }]);
-    }
+    // Consignee address is handled as text for shipment-party flow
     if (jobData.forwarder_address_id != null && jobData.forwarder_address) {
       setForwarderAddressOptions([{ value: String(jobData.forwarder_address_id), label: String(jobData.forwarder_address) }]);
     }
@@ -1736,7 +1825,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         setShipperDisplayName(String(initialData.shipper_name));
       }
       if (initialData.consignee_name) {
-        setConsigneeDisplayName(String(initialData.consignee_name));
+        const name = String(initialData.consignee_name);
+        form.setFieldValue("consignee_name", name);
+        setConsigneeSearch(name);
+      }
+      if (initialData.consignee_address) {
+        form.setFieldValue("consignee_address", String(initialData.consignee_address));
+      } else if (initialData.consignee_address_text) {
+        form.setFieldValue("consignee_address", String(initialData.consignee_address_text));
       }
       if (initialData.forwarder_name) {
         setForwarderDisplayName(String(initialData.forwarder_name));
@@ -1827,15 +1923,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         form.setFieldValue("shipper_address_id", Number(initialData.shipper_address_id) || 0);
       }
 
-      // Consignee Address
-      if (initialData.consignee_address_id && initialData.consignee_address) {
-        setConsigneeAddressOptions([
-          {
-            value: String(initialData.consignee_address_id),
-            label: String(initialData.consignee_address),
-          },
-        ]);
-      }
+      // Consignee address is handled as text for shipment-party flow
 
       // Forwarder Address
       if (initialData.forwarder_address_id && initialData.forwarder_address) {
@@ -2197,19 +2285,12 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
 
-        shipper_code: form.values.shipper_code,
-        shipper_address_id:
-          form.values.shipper_address_id && form.values.shipper_address_id > 0
-            ? Number(form.values.shipper_address_id)
-            : null,
+        shipper_name: form.values.shipper_name,
+        shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
 
-        consignee_code: form.values.consignee_code,
-        consignee_address_id:
-          form.values.consignee_address_id &&
-          form.values.consignee_address_id > 0
-            ? Number(form.values.consignee_address_id)
-            : null,
+        consignee_name: form.values.consignee_name,
+        consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,
 
         forwarder_code: form.values.forwarder_code,
@@ -3651,11 +3732,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
                       form.setFieldValue("shipper_code", newValue);
 
-                      // Store the selected shipper name for display
+                      // Store the selected shipper name for display and payload
                       if (newValue && selectedData) {
                         setShipperDisplayName(selectedData.label);
+                        form.setFieldValue("shipper_name", selectedData.label);
                       } else {
                         setShipperDisplayName(null);
+                        form.setFieldValue("shipper_name", "");
                       }
 
                       // Use originalData to populate address options
@@ -3710,6 +3793,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         "shipper_address_id",
                         value ? parseInt(value) : 0
                       );
+                      const opt = shipperAddressOptions.find((o) => o.value === value);
+                      form.setFieldValue("shipper_address", opt?.label ?? "");
                     }}
                     error={form.errors.shipper_address_id}
                     disabled={shipperAddressOptions.length === 0}
@@ -3732,85 +3817,95 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Text>
               <Grid mb="md">
                 <Grid.Col span={5}>
-                  <SearchableSelect
-                    label="Consignee Name"
-                    placeholder="Type consignee name"
-                    apiEndpoint={URL.consignee}
-                    searchFields={["customer_name", "customer_code"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
-                    value={form.values.consignee_code}
-                    displayValue={consigneeDisplayName}
-                    onChange={(value, selectedData, originalData) => {
-                      const previousValue = form.values.consignee_code;
-                      const newValue = value || "";
-
-                      form.setFieldValue("consignee_code", newValue);
-
-                      // Store the selected consignee name for display
-                      if (newValue && selectedData) {
-                        setConsigneeDisplayName(selectedData.label);
-                      } else {
-                        setConsigneeDisplayName(null);
-                      }
-
-                      // Use originalData to populate address options
-                      if (
-                        newValue &&
-                        originalData &&
-                        (originalData as Record<string, unknown>).addresses_data
-                      ) {
-                        // Create address options from addresses_data
-                        const addressOptions = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                          }>
-                        ).map((addr: { id: number; address: string }) => ({
-                          value: String(addr.id),
-                          label: addr.address,
-                        }));
-
-                        setConsigneeAddressOptions(addressOptions);
-
-                        // Reset address selection only when consignee changes (new name selected)
-                        if (previousValue !== newValue) {
-                          form.setFieldValue("consignee_address_id", 0);
-                        }
-                      } else {
-                        setConsigneeAddressOptions([]);
+                  {consigneeHasResults === false &&
+                  consigneeSearch.trim().length >= 2 ? (
+                    <FormTextInput
+                      label="Consignee Name"
+                      placeholder="Enter consignee name"
+                      value={form.values.consignee_name || consigneeSearch}
+                      onChange={(e) => {
+                        const v = toTitleCase(e.currentTarget.value);
+                        setConsigneeSearch(v);
+                        form.setFieldValue("consignee_name", v);
+                        form.setFieldValue("consignee_code", "");
+                      }}
+                    />
+                  ) : (
+                    <Select
+                      label="Consignee Name"
+                      placeholder="Select or search consignee"
+                      searchable
+                      data={consigneeOptions}
+                      comboboxProps={{ zIndex: 10 }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          height: "36px",
+                          fontFamily: "Inter",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                      searchValue={consigneeSearch}
+                      onSearchChange={(value) => {
+                        const v = toTitleCase(value);
+                        setConsigneeSearch(v);
+                        debouncedConsigneeSearch(v);
+                      }}
+                    value={form.values.consignee_code || ""}
+                    onChange={(value) => {
+                      if (!value) {
+                        form.setFieldValue("consignee_code", "");
+                        form.setFieldValue("consignee_name", "");
+                        form.setFieldValue("consignee_address", "");
                         form.setFieldValue("consignee_address_id", 0);
+                        form.setFieldValue("consignee_email", "");
+                        return;
                       }
+
+                      const original = consigneeDataRef.current[value] || {};
+                      const name = String(
+                        (original as any).customer_name || "",
+                      );
+                      const addr =
+                        (
+                          ((original as any)
+                            .addresses_data as Array<{ address?: string }> | undefined)?.[0]
+                            ?.address ?? ""
+                        ).toString();
+                      const email = String(
+                        (original as any).customer_email || "",
+                      );
+
+                      form.setFieldValue("consignee_code", value);
+                      form.setFieldValue("consignee_name", toTitleCase(name));
+                      form.setFieldValue(
+                        "consignee_address",
+                        toTitleCase(addr),
+                      );
+                      form.setFieldValue("consignee_address_id", 0);
+                      form.setFieldValue("consignee_email", email);
+                      setConsigneeSearch(name);
                     }}
-                    returnOriginalData={true}
-                    error={form.errors.consignee_code as string}
-                    minSearchLength={2}
-                    // required
-                  />
+                      nothingFoundMessage="No consignee found - type to enter new consignee"
+                    />
+                  )}
                 </Grid.Col>
                 <Grid.Col span={7}>
-                  <Dropdown
+                  <FormTextInput
                     label="Consignee Address"
-                    placeholder="Select consignee address"
-                    // withAsterisk
-                    searchable
-                    data={consigneeAddressOptions}
-                    value={
-                      form.values.consignee_address_id != null
-                        ? String(form.values.consignee_address_id)
-                        : ""
-                    }
-                    onChange={(value) => {
-                      form.setFieldValue(
-                        "consignee_address_id",
-                        value ? parseInt(value) : 0
-                      );
+                    placeholder="Enter consignee address"
+                    value={form.values.consignee_address}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue("consignee_address", v);
                     }}
-                    error={form.errors.consignee_address_id}
-                    disabled={consigneeAddressOptions.length === 0}
                   />
                 </Grid.Col>
                 <Grid.Col span={5}>
