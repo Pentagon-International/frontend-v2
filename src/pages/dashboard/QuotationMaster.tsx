@@ -51,6 +51,7 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconSend,
+  IconBook,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { DateInput } from "@mantine/dates";
@@ -1861,6 +1862,115 @@ console.log("currentQuotation: ", currentQuotation);
     }
   };
 
+  const canCreateBookingFromRow = (rowData: QuotationData) => {
+    // Show option for quotations that are gained
+    return rowData.status === "GAINED";
+  };
+
+  const handleCreateBookingFromRow = (rowData: QuotationData) => {
+    if (!canCreateBookingFromRow(rowData)) {
+      ToastNotification({
+        type: "warning",
+        message: "Create booking is available only for gained quotations.",
+      });
+      return;
+    }
+
+    const quotationServices = Array.isArray(rowData.quotation)
+      ? rowData.quotation
+      : [];
+
+    if (!quotationServices.length) {
+      ToastNotification({
+        type: "warning",
+        message: "No quotation services found for this quotation.",
+      });
+      return;
+    }
+
+    // Use the first quotation service, similar to how a selected service
+    // is used inside the quotation page when creating a booking.
+    const service: any = quotationServices[0];
+
+    // Derive cargo summary fields from quotation cargo_details so booking
+    // steppers receive the same shape they expect from the quotation page.
+    const firstCargo =
+      Array.isArray(service.cargo_details) && service.cargo_details.length > 0
+        ? service.cargo_details[0]
+        : undefined;
+
+    const serviceDetails = {
+      ...service,
+      origin_code: service.origin_code,
+      origin_code_read: service.origin_code,
+      origin_name: service.origin,
+      destination_code: service.destination_code,
+      destination_code_read: service.destination_code,
+      destination_name: service.destination,
+      shipment_terms_code: service.shipment_terms_code,
+      shipment_terms_code_read: service.shipment_terms_code,
+      shipment_terms_name: service.shipment_terms,
+      no_of_packages: firstCargo?.no_of_packages,
+      gross_weight: firstCargo?.gross_weight,
+      volume_weight: firstCargo?.volume_weight,
+      chargeable_weight: firstCargo?.chargeable_weight,
+      volume: firstCargo?.volume,
+      chargeable_volume: firstCargo?.chargeable_volume,
+      container_type_code:
+        firstCargo?.container_type_code || firstCargo?.container_type,
+      no_of_containers: firstCargo?.no_of_containers,
+    };
+
+    const bookingData = {
+      enquiryData: {
+        enquiry_id: rowData.enquiry_id,
+        customer_name: rowData.customer_name,
+        customer_address: rowData.customer_address || "",
+        customer_address_id:
+          rowData.customer_address_id != null
+            ? Number(rowData.customer_address_id)
+            : undefined,
+        sales_person: rowData.sales_person,
+        enquiry_received_date: rowData.enquiry_received_date,
+        customer_code: rowData.customer_code || "",
+      },
+      quotationData: service,
+      serviceDetails,
+      quotation_primary_id: rowData.id,
+    };
+
+    const trade = service.trade;
+    const serviceType = service.service_type;
+
+    if (serviceType === "AIR") {
+      if (trade === "Export") {
+        navigate("/air/export-booking/create", { state: { bookingData } });
+      } else if (trade === "Import") {
+        navigate("/air/import-booking/create", { state: { bookingData } });
+      } else {
+        ToastNotification({ type: "error", message: "Invalid trade type" });
+      }
+    } else if (serviceType === "FCL" || serviceType === "LCL") {
+      if (trade === "Export") {
+        navigate("/SeaExport/export-booking/create", {
+          state: { bookingData },
+        });
+      } else if (trade === "Import") {
+        navigate("/SeaExport/import-booking/create", {
+          state: { bookingData },
+        });
+      } else {
+        ToastNotification({ type: "error", message: "Invalid trade type" });
+      }
+    } else {
+      ToastNotification({
+        type: "error",
+        message:
+          "Create booking is only supported for AIR, FCL and LCL services",
+      });
+    }
+  };
+
   const handleSendEmail = async () => {
     const includeQuotationBody = Boolean(
       user?.screen_permissions?.include_quotation_body,
@@ -2475,6 +2585,8 @@ console.log("currentQuotation: ", currentQuotation);
         header: "Action",
         Cell: ({ row }) => {
           const [menuOpened, setMenuOpened] = useState(false);
+          const rowData = row.original as QuotationData;
+          const showCreateBooking = canCreateBookingFromRow(rowData);
           return (
             <Menu
               withinPortal
@@ -2525,6 +2637,27 @@ console.log("currentQuotation: ", currentQuotation);
                     </Box>
                   </>
                 )}
+                {showCreateBooking && (
+                  <>
+                    <Menu.Divider />
+                    <Box px={10} py={5}>
+                      <UnstyledButton
+                        onClick={() => {
+                          setMenuOpened(false);
+                          handleCreateBookingFromRow(rowData);
+                        }}
+                      >
+                        <Group gap={"sm"}>
+                          <IconBook
+                            size={16}
+                            style={{ color: "#105476" }}
+                          />
+                          <Text size="sm">Create Booking</Text>
+                        </Group>
+                      </UnstyledButton>
+                    </Box>
+                  </>
+                )}
               </Menu.Dropdown>
             </Menu>
           );
@@ -2545,6 +2678,8 @@ console.log("currentQuotation: ", currentQuotation);
       location,
       buildFilterPayload,
       filteredQuotationData,
+      canCreateBookingFromRow,
+      handleCreateBookingFromRow,
     ]
   );
 
