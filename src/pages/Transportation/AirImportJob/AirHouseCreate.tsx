@@ -45,6 +45,7 @@ import { useDebouncedCallback } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
+import { commonSearchAPI } from "../../../service/searchApi";
 import {
   SearchableSelect,
   Dropdown,
@@ -287,6 +288,18 @@ function HouseCreate() {
     Array<{ value: string; label: string }>
   >([]);
 
+  // Shipment-party search state for Shipper (import flow)
+  const [shipperSearch, setShipperSearch] = useState("");
+  const [shipperOptions, setShipperOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  // Separate "manual mode" flag to avoid rapid flipping between Select/TextInput (prevents focus loss)
+  const [shipperManualMode, setShipperManualMode] = useState(false);
+  const [shipperHasResults, setShipperHasResults] = useState<boolean | null>(
+    null,
+  );
+  const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
+
   // State for cargo details
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
     {
@@ -347,6 +360,93 @@ function HouseCreate() {
       ],
     },
   });
+
+  // Debounced shipment-party search for Shipper (import flow)
+  const debouncedShipperSearch = useDebouncedCallback(
+    async (term: string) => {
+      const query = term.trim();
+      if (!query || query.length < 2) {
+        setShipperOptions([]);
+        setShipperHasResults(null);
+        setShipperManualMode(false);
+        shipperDataRef.current = {};
+        return;
+      }
+
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.shipmentParty,
+          query,
+        });
+
+        const arr = Array.isArray(results)
+          ? (results as Record<string, unknown>[])
+          : [];
+
+        if (!arr.length) {
+          setShipperOptions([]);
+          setShipperHasResults(false);
+          setShipperManualMode(true);
+          shipperDataRef.current = {};
+          // When shipment-party has no matches, keep the user's typed text
+          // as the shipper name (manual entry flow like booking page).
+          form.setFieldValue("shipper_code", "");
+          form.setFieldValue("shipper_name", query);
+          return;
+        }
+
+        const map: Record<string, Record<string, unknown>> = {};
+        const opts = arr.map((item) => {
+          const id = String(item.id ?? "");
+          map[id] = item;
+          return {
+            value: id,
+            label: String(item.customer_name || ""),
+          };
+        });
+
+        shipperDataRef.current = map;
+        setShipperOptions(opts);
+        setShipperHasResults(true);
+        setShipperManualMode(false);
+      } catch (error) {
+        console.error("Shipper shipment-party search failed:", error);
+        setShipperOptions([]);
+        setShipperHasResults(null);
+        setShipperManualMode(false);
+        shipperDataRef.current = {};
+      }
+    },
+    500,
+  );
+
+  const getPartyEmail = (original: Record<string, unknown>): string => {
+    const email =
+      (original.customer_email as string | undefined) ??
+      (original.email as string | undefined) ??
+      (original.customerEmail as string | undefined) ??
+      "";
+    return String(email || "");
+  };
+
+  const getPartyAddresses = (
+    original: Record<string, unknown>,
+  ): Array<{ address?: string; state_id?: number }> => {
+    const raw =
+      (original.addresses_data as unknown) ??
+      (original.addresses as unknown) ??
+      (original.address_data as unknown);
+
+    if (!Array.isArray(raw)) return [];
+
+    return (raw as Array<Record<string, unknown>>).map((a) => ({
+      address: (a.address as string | undefined) ?? (a.address1 as string | undefined),
+      state_id:
+        a.state_id != null && !Number.isNaN(Number(a.state_id))
+          ? Number(a.state_id)
+          : undefined,
+    }));
+  };
 
   // Get existing housing details from location state if available
   // Check both hawbDetails and housingDetails for backward compatibility
@@ -417,7 +517,11 @@ function HouseCreate() {
       origin_agent_name: editData?.origin_agent_name || "",
       origin_agent_address: editData?.origin_agent_address || "",
       origin_agent_email: editData?.origin_agent_email || "",
-      shipper_code: editData?.shipper_code || "", // Will be set when user selects from SearchableSelect
+      // shipment-party uses customer id as value; API may send shipper_id or shipper_code
+      shipper_code:
+        editData?.shipper_id != null
+          ? String(editData.shipper_id)
+          : String(editData?.shipper_code || ""),
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
@@ -425,7 +529,10 @@ function HouseCreate() {
         editData?.shipper_state_id != null
           ? String(editData.shipper_state_id)
           : "",
-      consignee_code: editData?.consignee_code || "", // Will be set when user selects from SearchableSelect
+      consignee_code:
+        editData?.consignee_id != null
+          ? String(editData.consignee_id)
+          : String(editData?.consignee_code || ""),
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
@@ -865,7 +972,11 @@ function HouseCreate() {
         origin_agent_name: editData.origin_agent_name || "",
         origin_agent_address: editData.origin_agent_address || "",
         origin_agent_email: editData.origin_agent_email || "",
-        shipper_code: "", // Will be set when user selects from SearchableSelect
+        // Preserve party ids for shipment-party Select; name/address/email from API housing_details
+        shipper_code:
+          editData.shipper_id != null
+            ? String(editData.shipper_id)
+            : String(editData.shipper_code || ""),
         shipper_name: editData.shipper_name || "",
         shipper_address: editData.shipper_address || "",
         shipper_email: editData.shipper_email || "",
@@ -873,7 +984,10 @@ function HouseCreate() {
           editData.shipper_state_id != null
             ? String(editData.shipper_state_id)
             : "",
-        consignee_code: "", // Will be set when user selects from SearchableSelect
+        consignee_code:
+          editData.consignee_id != null
+            ? String(editData.consignee_id)
+            : String(editData.consignee_code || ""),
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
         consignee_email: editData.consignee_email || "",
@@ -883,6 +997,20 @@ function HouseCreate() {
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
       });
+
+      // Sync search display and address options from housing_details (like booking edit load)
+      const shipperName = String(editData.shipper_name || "");
+      if (shipperName) setShipperSearch(shipperName);
+      const shipperAddr = editData.shipper_address;
+      if (shipperAddr) {
+        const addrStr = toTitleCase(String(shipperAddr));
+        setShipperAddressOptions([{ value: addrStr, label: addrStr }]);
+      }
+      const consigneeAddr = editData.consignee_address;
+      if (consigneeAddr) {
+        const addrStr = toTitleCase(String(consigneeAddr));
+        setConsigneeAddressOptions([{ value: addrStr, label: addrStr }]);
+      }
     }
 
     // Always load cargo_details and charges when editData has them (run every time so data is set even if init ref was already true)
@@ -1633,6 +1761,14 @@ function HouseCreate() {
   // Validate step 2 - Validate required fields and email format
   const validateStep2 = () => {
     const errors: Record<string, string> = {};
+
+    // If shipper_name is empty but user has typed search text, sync it before validating.
+    if (
+      (!form.values.shipper_name || !form.values.shipper_name.trim()) &&
+      shipperSearch.trim()
+    ) {
+      form.setFieldValue("shipper_name", shipperSearch.trim());
+    }
 
     if (!form.values.shipper_name?.trim()) {
       errors.shipper_name = "Shipper Name is required";
@@ -2811,65 +2947,78 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Shipper Name"
-                  required
-                  placeholder="Type shipper name"
-                  apiEndpoint={URL.shipper}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code),
-                    label: String(item.customer_name),
-                  })}
-                  value={form.values.shipper_code}
-                  displayValue={form.values.shipper_name}
-                  onChange={(value, selectedData, originalData) => {
-                    form.setFieldValue("shipper_code", value || "");
-                    form.setFieldValue(
-                      "shipper_name",
-                      selectedData?.label || "",
-                    );
-
-                    // Use originalData to populate address options and shipper_state_id
-                    if (
-                      value &&
-                      originalData &&
-                      (originalData as Record<string, unknown>).addresses_data
-                    ) {
-                      // Create address options from addresses_data
-                      const addressesData = (
-                        originalData as Record<string, unknown>
-                      ).addresses_data as Array<{
-                        id: number;
-                        address: string;
-                        state_id?: number;
-                      }>;
-
-                      const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
-                          value: addr.address,
-                          label: addr.address,
-                        }),
+                {shipperManualMode && shipperSearch.trim().length >= 2 ? (
+                  <FormTextInput
+                    label="Shipper Name"
+                    required
+                    placeholder="Enter shipper name"
+                    value={shipperSearch}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      setShipperSearch(v);
+                      form.setFieldValue("shipper_name", v);
+                      form.setFieldValue("shipper_code", "");
+                    }}
+                    error={form.errors.shipper_name as string}
+                  />
+                ) : (
+                  <Select
+                    label="Shipper Name"
+                    required
+                    placeholder="Select or search shipper"
+                    searchable
+                    data={shipperOptions}
+                    searchValue={shipperSearch}
+                    onSearchChange={(value) => {
+                      const v = toTitleCase(value);
+                      setShipperSearch(v);
+                      debouncedShipperSearch(v);
+                    }}
+                    value={form.values.shipper_code || ""}
+                    onChange={(value) => {
+                      if (!value) {
+                        form.setFieldValue("shipper_code", "");
+                        form.setFieldValue("shipper_name", "");
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
+                        setShipperAddressOptions([]);
+                        return;
+                      }
+                      const original = shipperDataRef.current[value] || {};
+                      const name = String(
+                        (original as Record<string, unknown>).customer_name || "",
+                      );
+                    const email = getPartyEmail(original as Record<string, unknown>);
+                      const addressesData = getPartyAddresses(
+                        original as Record<string, unknown>,
                       );
 
+                      // Populate address options and state_id, preserving existing UX
+                      const addressOptions = addressesData
+                        .filter((a) => a.address)
+                        .map((a) => {
+                          const addr = toTitleCase(String(a.address || ""));
+                          return {
+                            value: addr,
+                            label: addr,
+                          };
+                        });
+                      // Reset address field so dropdown doesn't keep old selection
+                      form.setFieldValue("shipper_address", "");
                       setShipperAddressOptions(addressOptions);
 
-                      // Auto-select the first address if available
-                      if (
-                        addressesData.length > 0 &&
-                        addressesData[0].address
-                      ) {
+                      if (addressesData.length > 0 && addressesData[0].address) {
                         form.setFieldValue(
                           "shipper_address",
-                          addressesData[0].address,
+                          toTitleCase(String(addressesData[0].address)),
                         );
                       } else {
                         form.setFieldValue("shipper_address", "");
                       }
 
-                      // Set shipper_state_id from first address that has state_id
                       const addrWithState = addressesData.find(
-                        (a: { state_id?: number }) => a.state_id != null,
+                        (a) => a.state_id != null,
                       );
                       if (addrWithState?.state_id != null) {
                         form.setFieldValue(
@@ -2879,16 +3028,32 @@ function HouseCreate() {
                       } else {
                         form.setFieldValue("shipper_state_id", "");
                       }
-                    } else {
-                      setShipperAddressOptions([]);
-                      form.setFieldValue("shipper_address", "");
-                      form.setFieldValue("shipper_state_id", "");
-                    }
-                  }}
-                  returnOriginalData={true}
-                  error={form.errors.shipper_name as string}
-                  minSearchLength={3}
-                />
+
+                      form.setFieldValue("shipper_code", value);
+                      form.setFieldValue("shipper_name", toTitleCase(name));
+                      form.setFieldValue("shipper_email", email);
+                      setShipperSearch(name);
+                    }}
+                    comboboxProps={{ zIndex: 10 }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        height: "36px",
+                        fontFamily: "Inter",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    nothingFoundMessage="No shipper found - type to enter new shipper"
+                    error={form.errors.shipper_name as string}
+                  />
+                )}
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
@@ -2903,6 +3068,7 @@ function HouseCreate() {
               <Grid.Col span={4}>
                 {shipperAddressOptions.length > 0 ? (
                   <Dropdown
+                    key={`shipper-address-${form.values.shipper_code || "none"}`}
                     label="Shipper Address"
                     placeholder="Select shipper address"
                     searchable
@@ -2940,6 +3106,7 @@ function HouseCreate() {
                   required
                   placeholder="Type consignee name"
                   apiEndpoint={URL.consignee}
+                  dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code),
@@ -2949,49 +3116,31 @@ function HouseCreate() {
                   displayValue={form.values.consignee_name}
                   onChange={(value, selectedData, originalData) => {
                     form.setFieldValue("consignee_code", value || "");
-                    form.setFieldValue(
-                      "consignee_name",
-                      selectedData?.label || "",
+                    form.setFieldValue("consignee_name", selectedData?.label || "");
+
+                    // Map email + addresses from customer-master response (addresses_data)
+                    const original = (originalData || {}) as Record<string, unknown>;
+                    const email = String(
+                      original.customer_email ?? original.email ?? "",
                     );
+                    form.setFieldValue("consignee_email", email);
 
-                    // Use originalData to populate address options
-                    if (
-                      value &&
-                      originalData &&
-                      (originalData as Record<string, unknown>).addresses_data
-                    ) {
-                      // Create address options from addresses_data
-                      const addressesData = (
-                        originalData as Record<string, unknown>
-                      ).addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>;
+                    const addressesData = Array.isArray(original.addresses_data)
+                      ? (original.addresses_data as Array<{ address?: string }>)
+                      : [];
+                    const addressOptions = addressesData
+                      .filter((a) => a.address)
+                      .map((a) => {
+                        const addr = toTitleCase(String(a.address || ""));
+                        return { value: addr, label: addr };
+                      });
+                    setConsigneeAddressOptions(addressOptions);
 
-                      const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
-                          value: addr.address,
-                          label: addr.address,
-                        }),
-                      );
-
-                      setConsigneeAddressOptions(addressOptions);
-
-                      // Auto-select the first address if available
-                      if (
-                        addressesData.length > 0 &&
-                        addressesData[0].address
-                      ) {
-                        form.setFieldValue(
-                          "consignee_address",
-                          addressesData[0].address,
-                        );
-                      } else {
-                        form.setFieldValue("consignee_address", "");
-                      }
+                    if (addressOptions.length > 0) {
+                      form.setFieldValue("consignee_address", addressOptions[0].value);
                     } else {
-                      setConsigneeAddressOptions([]);
-                      form.setFieldValue("consignee_address", "");
+                      // If customer has no address list, keep any typed value
+                      if (!value) form.setFieldValue("consignee_address", "");
                     }
                   }}
                   returnOriginalData={true}

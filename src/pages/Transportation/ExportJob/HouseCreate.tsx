@@ -33,7 +33,14 @@ import {
   IconChevronUp,
   IconCalendar,
 } from "@tabler/icons-react";
-import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  Fragment,
+  useRef,
+} from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -43,6 +50,8 @@ import {
   ToastNotification,
   SingleDateInput,
 } from "../../../components";
+import { useDebouncedCallback } from "@mantine/hooks";
+import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
@@ -276,6 +285,18 @@ function HouseCreate() {
     Array<{ value: string; label: string }>
   >([]);
 
+  // Consignee (shipment-party) search state
+  const [consigneeSearch, setConsigneeSearch] = useState("");
+  const [consigneeOptions, setConsigneeOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  // Manual mode flag so we don't rapidly flip between Select/TextInput (prevents focus loss)
+  const [consigneeManualMode, setConsigneeManualMode] = useState(false);
+  const [consigneeHasResults, setConsigneeHasResults] = useState<boolean | null>(
+    null,
+  );
+  const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
+
   // State for cargo details
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
     {
@@ -345,6 +366,86 @@ function HouseCreate() {
       ],
     },
   });
+
+  // Debounced shipment-party search for Consignee (export flow)
+  const debouncedConsigneeSearch = useDebouncedCallback(
+    async (term: string) => {
+      const query = term.trim();
+      if (!query || query.length < 2) {
+        setConsigneeOptions([]);
+        setConsigneeHasResults(null);
+        setConsigneeManualMode(false);
+        consigneeDataRef.current = {};
+        return;
+      }
+
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.shipmentParty,
+          query,
+        });
+
+        const arr = Array.isArray(results)
+          ? (results as Record<string, unknown>[])
+          : [];
+
+        if (!arr.length) {
+          setConsigneeOptions([]);
+          setConsigneeHasResults(false);
+          setConsigneeManualMode(true);
+          consigneeDataRef.current = {};
+          // When shipment-party has no matches, keep user's typed text as manual entry
+          form.setFieldValue("consignee_code", "");
+          form.setFieldValue("consignee_name", query);
+          return;
+        }
+
+        const map: Record<string, Record<string, unknown>> = {};
+        const opts = arr.map((item) => {
+          const id = String(item.id ?? "");
+          map[id] = item;
+          return {
+            value: id,
+            label: String(item.customer_name || ""),
+          };
+        });
+
+        consigneeDataRef.current = map;
+        setConsigneeOptions(opts);
+        setConsigneeHasResults(true);
+        setConsigneeManualMode(false);
+      } catch (error) {
+        console.error("Consignee shipment-party search failed:", error);
+        setConsigneeOptions([]);
+        setConsigneeHasResults(null);
+        setConsigneeManualMode(false);
+        consigneeDataRef.current = {};
+      }
+    },
+    500,
+  );
+
+  const getPartyEmail = (original: Record<string, unknown>): string => {
+    const email =
+      (original.customer_email as string | undefined) ??
+      (original.email as string | undefined) ??
+      (original.customerEmail as string | undefined) ??
+      "";
+    return String(email || "");
+  };
+
+  const getPartyAddresses = (
+    original: Record<string, unknown>,
+  ): Array<{ address?: string }> => {
+    const raw =
+      (original.addresses_data as unknown) ??
+      (original.addresses as unknown) ??
+      (original.address_data as unknown);
+    if (!Array.isArray(raw)) return [];
+    return (raw as Array<Record<string, unknown>>).map((a) => ({
+      address: (a.address as string | undefined) ?? (a.address1 as string | undefined),
+    }));
+  };
 
   // Get existing housing details from location state if available
   // Support both hawbDetails and housingDetails for backward compatibility (same as AirHouseCreate)
@@ -1530,7 +1631,6 @@ function HouseCreate() {
       origin_agent_name: form.values.origin_agent_name,
       origin_agent_address: form.values.origin_agent_address,
       origin_agent_email: form.values.origin_agent_email,
-      shipper_code: form.values.shipper_code,
       shipper_name: form.values.shipper_name,
       shipper_address: form.values.shipper_address,
       shipper_email: form.values.shipper_email,
@@ -1543,7 +1643,6 @@ function HouseCreate() {
           )?.shipper_state_id ?? null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
-      consignee_code: form.values.consignee_code,
       consignee_name: form.values.consignee_name,
       consignee_address: form.values.consignee_address,
       consignee_email: form.values.consignee_email,
@@ -2602,69 +2701,92 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Consignee Name"
-                  required
-                  placeholder="Type consignee name"
-                  apiEndpoint={URL.consignee}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code),
-                    label: String(item.customer_name),
-                  })}
-                  value={form.values.consignee_code}
-                  displayValue={form.values.consignee_name}
-                  onChange={(value, selectedData, originalData) => {
-                    form.setFieldValue("consignee_code", value || "");
-                    form.setFieldValue(
-                      "consignee_name",
-                      selectedData?.label || "",
-                    );
-
-                    // Use originalData to populate address options
-                    if (
-                      value &&
-                      originalData &&
-                      (originalData as Record<string, unknown>).addresses_data
-                    ) {
-                      // Create address options from addresses_data
-                      const addressesData = (
-                        originalData as Record<string, unknown>
-                      ).addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>;
-
-                      const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
-                          value: addr.address,
-                          label: addr.address,
-                        }),
-                      );
-
-                      setConsigneeAddressOptions(addressOptions);
-
-                      // Auto-select the first address if available
-                      if (
-                        addressesData.length > 0 &&
-                        addressesData[0].address
-                      ) {
-                        form.setFieldValue(
-                          "consignee_address",
-                          addressesData[0].address,
-                        );
-                      } else {
+                {consigneeManualMode && consigneeSearch.trim().length >= 2 ? (
+                  <FormTextInput
+                    label="Consignee Name"
+                    required
+                    placeholder="Enter consignee name"
+                    value={consigneeSearch}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      setConsigneeSearch(v);
+                      form.setFieldValue("consignee_name", v);
+                      form.setFieldValue("consignee_code", "");
+                    }}
+                    error={form.errors.consignee_name as string}
+                  />
+                ) : (
+                  <Select
+                    label="Consignee Name"
+                    required
+                    placeholder="Select or search consignee"
+                    searchable
+                    data={consigneeOptions}
+                    searchValue={consigneeSearch}
+                    onSearchChange={(value) => {
+                      const v = toTitleCase(value);
+                      setConsigneeSearch(v);
+                      form.setFieldValue("consignee_name", v);
+                      form.setFieldValue("consignee_code", "");
+                      debouncedConsigneeSearch(v);
+                    }}
+                    value={form.values.consignee_code || ""}
+                    onChange={(value) => {
+                      if (!value) {
+                        form.setFieldValue("consignee_code", "");
+                        form.setFieldValue("consignee_name", "");
                         form.setFieldValue("consignee_address", "");
+                        form.setFieldValue("consignee_email", "");
+                        setConsigneeAddressOptions([]);
+                        return;
                       }
-                    } else {
-                      setConsigneeAddressOptions([]);
+                      const original = consigneeDataRef.current[value] || {};
+                      const name = String(
+                        (original as Record<string, unknown>).customer_name || "",
+                      );
+                      const email = getPartyEmail(original as Record<string, unknown>);
+                      const addressesData = getPartyAddresses(
+                        original as Record<string, unknown>,
+                      );
+                      const addressOptions = addressesData
+                        .filter((a) => a.address)
+                        .map((a) => {
+                          const addr = toTitleCase(String(a.address || ""));
+                          return { value: addr, label: addr };
+                        });
+
+                      // Reset address value so it always replaces on re-select
                       form.setFieldValue("consignee_address", "");
-                    }
-                  }}
-                  returnOriginalData={true}
-                  error={form.errors.consignee_name as string}
-                  minSearchLength={3}
-                />
+                      setConsigneeAddressOptions(addressOptions);
+                      if (addressOptions.length > 0) {
+                        form.setFieldValue("consignee_address", addressOptions[0].value);
+                      }
+
+                      form.setFieldValue("consignee_code", value);
+                      form.setFieldValue("consignee_name", toTitleCase(name));
+                      form.setFieldValue("consignee_email", email);
+                      setConsigneeSearch(name);
+                    }}
+                    comboboxProps={{ zIndex: 10 }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        height: "36px",
+                        fontFamily: "Inter",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    nothingFoundMessage="No consignee found - type to enter new consignee"
+                    error={form.errors.consignee_name as string}
+                  />
+                )}
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
@@ -2677,6 +2799,7 @@ function HouseCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <Dropdown
+                  key={`consignee-address-${form.values.consignee_code || "none"}`}
                   label="Consignee Address"
                   placeholder="Select consignee address"
                   searchable
