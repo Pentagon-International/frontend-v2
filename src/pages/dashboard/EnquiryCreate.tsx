@@ -226,6 +226,8 @@ const customerFormSchema = yup.object({
     .optional()
     .max(100, "Reference number cannot exceed 100 characters"),
   customer_address: yup.string().nullable().optional(),
+  network_id: yup.string().nullable().optional(),
+  network_name: yup.string().nullable().optional(),
 });
 
 const serviceFormSchema = yup.object({
@@ -667,6 +669,8 @@ function EnquiryCreate() {
       customer_services: "",
       reference_no: "",
       customer_address: "",
+      network_id: "",
+      network_name: "",
       supporting_documents: [] as Array<{
         name: string;
         file: File | null;
@@ -1236,8 +1240,10 @@ function EnquiryCreate() {
   const getEnquiryPayload = (isEdit: boolean) => {
     const { supporting_documents, ...customerFormDataWithoutFiles } =
       customerForm.values;
+    const networkIdVal = (customerFormDataWithoutFiles as { network_id?: string }).network_id;
     const baseData = {
       ...customerFormDataWithoutFiles,
+      network_id: networkIdVal ? Number(networkIdVal) : null,
       ...(enq?.call_entry_id && { call_entry: enq.call_entry_id }),
       services: serviceForm.values.service_details.map((serviceDetail) => {
         const cargo = serviceDetail.cargo_details[0];
@@ -2279,7 +2285,8 @@ function EnquiryCreate() {
           setActive(2); // Go to step 3 (Quotation) for create quote
         }
 
-        // Set basic fields first
+        // Set basic fields first (include network from filter/enquiry response for edit)
+        const enqWithNetwork = enq as { network_id?: number | null; network_name?: string | null };
         console.log("📝 Setting basic fields:", {
           sales_person: enq?.sales_person,
           sales_coordinator: enq?.sales_coordinator,
@@ -2287,6 +2294,8 @@ function EnquiryCreate() {
           enquiry_received_date: enq?.enquiry_received_date,
           reference_no: enq?.reference_no,
           customer_address: enq?.customer_address,
+          network_id: enqWithNetwork?.network_id,
+          network_name: enqWithNetwork?.network_name,
         });
 
         customerForm.setFieldValue(
@@ -2304,6 +2313,14 @@ function EnquiryCreate() {
         customerForm.setFieldValue(
           "customer_address",
           enq?.customer_address || ""
+        );
+        customerForm.setFieldValue(
+          "network_id",
+          enqWithNetwork?.network_id != null ? String(enqWithNetwork.network_id) : ""
+        );
+        customerForm.setFieldValue(
+          "network_name",
+          enqWithNetwork?.network_name || ""
         );
 
         // Handle customer selection and sales person population
@@ -3384,6 +3401,22 @@ function EnquiryCreate() {
           }
           setCustomerCurrency(customerData.customer_info.currency || "");
         }
+        const customerDataWithNetwork = customerData as CustomerDataResponse & { network_id?: number | null; network_name?: string | null };
+        if (
+          customerDataWithNetwork.network_id != null ||
+          customerDataWithNetwork.network_name
+        ) {
+          customerForm.setFieldValue(
+            "network_id",
+            customerDataWithNetwork.network_id != null
+              ? String(customerDataWithNetwork.network_id)
+              : ""
+          );
+          customerForm.setFieldValue(
+            "network_name",
+            customerDataWithNetwork.network_name || ""
+          );
+        }
 
         // Set quotations data
         if (customerData.quotations && customerData.quotations.data) {
@@ -3820,7 +3853,22 @@ function EnquiryCreate() {
                                     originalData &&
                                     typeof originalData === "object"
                                   ) {
-                                    const customerData = originalData as any;
+                                    const customerData = originalData as Record<string, unknown>;
+                                    if (
+                                      customerData.network_id != null ||
+                                      customerData.network_name
+                                    ) {
+                                      customerForm.setFieldValue(
+                                        "network_id",
+                                        customerData.network_id != null
+                                          ? String(customerData.network_id)
+                                          : ""
+                                      );
+                                      customerForm.setFieldValue(
+                                        "network_name",
+                                        (customerData.network_name as string) || ""
+                                      );
+                                    }
                                     if (
                                       customerData.addresses_data &&
                                       Array.isArray(customerData.addresses_data)
@@ -3885,11 +3933,13 @@ function EnquiryCreate() {
                                 } else {
                                   setCustomerDisplayName(null);
                                   setSelectedCustomerName(null);
-                                  // Clear customer_address when customer is cleared
+                                  // Clear customer_address and network when customer is cleared
                                   customerForm.setFieldValue(
                                     "customer_address",
                                     ""
                                   );
+                                  customerForm.setFieldValue("network_id", "");
+                                  customerForm.setFieldValue("network_name", "");
                                   // Reset salespersons to initial state (empty customer_id)
                                   if (
                                     !isInitialDataLoad &&
@@ -4293,6 +4343,29 @@ function EnquiryCreate() {
                               fontStyle: "medium",
                             },
                           }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <SearchableSelect
+                          label="Network Name"
+                          placeholder="Search network..."
+                          apiEndpoint={URL.networkMaster}
+                          value={customerForm.values.network_id || null}
+                          displayValue={customerForm.values.network_name || null}
+                          onChange={(value, selectedData) => {
+                            customerForm.setFieldValue("network_id", value ?? "");
+                            customerForm.setFieldValue(
+                              "network_name",
+                              selectedData?.label ?? ""
+                            );
+                          }}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.id ?? ""),
+                            label: String(item.network_name ?? ""),
+                          })}
+                          searchFields={["network_name"]}
+                          dropdownZIndex={1000}
+                          minSearchLength={1}
                         />
                       </Grid.Col>
                       {/* Customer Address field is hidden in the new design */}

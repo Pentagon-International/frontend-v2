@@ -20,6 +20,7 @@ import {
   IconLink,
   IconReceiptTax,
   IconPercentage,
+  IconWorld,
 } from "@tabler/icons-react";
 import MasterCard from "../../components/MasterCard";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -77,6 +78,10 @@ export default function MastersPage() {
           {
             icon: <IconSquareRotated size={28} color="#105476" />,
             label: "Frequency",
+          },
+          {
+            icon: <IconWorld size={28} color="#105476" />,
+            label: "Network Master",
           },
           // Conditionally include Sales Co-ordinator Reassignation
           ...(hasManagerOrStaffAccess

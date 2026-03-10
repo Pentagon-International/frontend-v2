@@ -106,6 +106,7 @@ export const URL = {
   lead: "lead/",
   chargeMaster: "charge-master/",
   chargeMasterFilter: "filter/charge-master/",
+  networkMaster: "network-master/",
   chartOfAccounts: "chart-of-accounts/",
   chartOfAccountsFilter: "filter/chart-of-accounts/",
   glChargeMapping: "gl-charge-mapping/",
