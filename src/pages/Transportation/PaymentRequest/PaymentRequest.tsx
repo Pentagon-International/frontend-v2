@@ -168,20 +168,22 @@ type SaveResponse = {
 };
 
 const PAYMENT_TYPE_OPTIONS = [
-  { value: "bank_transfer", label: "Bank Transfer" },
-  { value: "cheque", label: "Cheque" },
-  { value: "cash", label: "Cash" },
-  { value: "dd", label: "DD" },
-  { value: "neft", label: "NEFT" },
-  { value: "rtgs", label: "RTGS" },
-  { value: "imps", label: "IMPS" },
+  { value: "Bank", label: "Bank" },
+  { value: "CASH", label: "Cash" },
+  { value: "PDC", label: "PDC" },
+  { value: "ONLINE TRANSFER", label: "Online Transfer" },
+  { value: "DD/PO", label: "DD/PO" },
 ];
 
 const VOUCHER_TYPE_OPTIONS = [
-  { value: "payment", label: "Payment" },
-  { value: "receipt", label: "Receipt" },
-  { value: "journal", label: "Journal" },
-  { value: "contra", label: "Contra" },
+  { value: "SEA EXPORTS", label: "Sea Exports" },
+  { value: "SEA IMPORTS", label: "Sea Imports" },
+  { value: "CFS", label: "CFS" },
+  { value: "BROKERAGE", label: "Brokerage" },
+  { value: "AIR EXPORTS", label: "Air Exports" },
+  { value: "AIR IMPORTS", label: "Air Imports" },
+  { value: "TRANSPORTATION", label: "Transportation" },
+  { value: "COASTAL", label: "Coastal" },
 ];
 
 const PAID_TO_TYPE_OPTIONS = [
@@ -222,6 +224,40 @@ const emptyCharge = (): ChargeItem => ({
   tax_code: "",
   tax: "",
 });
+
+function mapChargesFromState(state: unknown): { charges: ChargeItem[]; job_reference_1: string } | null {
+  const s = state as {
+    chargesFromEstimates?: Array<Record<string, unknown>>;
+    job_reference_1?: string;
+  } | null;
+  if (!s?.chargesFromEstimates?.length) return null;
+  const charges: ChargeItem[] = s.chargesFromEstimates.map((c: Record<string, unknown>) => ({
+    ...emptyCharge(),
+    charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+    charge_name: String(c.charge_name ?? ""),
+    segment: String(c.segment ?? ""),
+    job_no: String(c.job_no ?? ""),
+    sub_job: String(c.sub_job ?? ""),
+    cn_r: String(c.cn_r ?? ""),
+    currency: String(c.currency ?? ""),
+    currency_id: c.currency_id != null ? String(c.currency_id) : "",
+    roe: c.roe != null && c.roe !== "" ? Number(c.roe) : null,
+    unit_code: String(c.unit_code ?? ""),
+    unit_id: c.unit_id != null ? String(c.unit_id) : "",
+    no_of_unit: c.no_of_unit != null && c.no_of_unit !== "" ? Number(c.no_of_unit) : null,
+    amount_per_unit:
+      c.amount_per_unit != null && c.amount_per_unit !== "" ? Number(c.amount_per_unit) : null,
+    amount: c.amount != null && c.amount !== "" ? Number(c.amount) : null,
+    amount_in_local:
+      c.amount_in_local != null && c.amount_in_local !== "" ? Number(c.amount_in_local) : null,
+    tax_code: String(c.tax_code ?? ""),
+    tax: String(c.tax ?? ""),
+  }));
+  return {
+    charges,
+    job_reference_1: s.job_reference_1 ?? "",
+  };
+}
 
 const inputStyles = {
   input: { fontSize: "13px", fontFamily: "Inter", height: "36px" },
@@ -325,12 +361,19 @@ function PaymentRequest() {
     }));
   }, [unitData]);
 
+  // ─── Prefill from Air Export Job (Create PR) ───────────────────────────────
+  // Use initialValues from location.state so charges are set on first render (no useEffect timing)
+  const prefillFromState = useMemo(() => {
+    if (requestId) return null;
+    return mapChargesFromState(location.state);
+  }, [location.state, requestId]);
+
   // ─── Form ─────────────────────────────────────────────────────────────────
 
   const form = useForm<PaymentRequestFormData>({
     initialValues: {
       request_no: "",
-      job_reference_1: "",
+      job_reference_1: prefillFromState?.job_reference_1 ?? "",
       job_reference_2: "",
       payment_crj_did: "",
       date: new Date(),
@@ -364,7 +407,7 @@ function PaymentRequest() {
       rejected_note: "",
       on_hold_note: "",
       location_gst_no: "",
-      charges: [emptyCharge()],
+      charges: prefillFromState?.charges ?? [emptyCharge()],
     },
     validate: {
       date: (v) => (!v ? "Date is required" : null),
@@ -381,32 +424,59 @@ function PaymentRequest() {
       const formatDate = (d: Date | null) =>
         d ? d.toISOString().split("T")[0] : null;
 
-      const payload = {
-        ...values,
-        date: formatDate(values.date),
-        crj_date: formatDate(values.crj_date),
+      // Resolve main form currency code to currency_id (number)
+      const currencyList = currencyData as Array<{ id?: number; currency_code?: string; code?: string }>;
+      const mainCurrencyId = currencyList?.find(
+        (item) =>
+          (item.currency_code ?? item.code ?? "").toString().trim().toUpperCase() ===
+          (values.currency ?? "").toString().trim().toUpperCase(),
+      )?.id;
+
+      const stateIdNum = values.state_code_1 ? Number(values.state_code_1) : undefined;
+      const payload: Record<string, unknown> = {
+        job_reference: values.job_reference_1 ?? "",
+        payment_crj: values.payment_crj_did ?? "",
+        approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
-        charges: values.charges.map((c) => ({
-          id: c.id,
-          charge_id: c.charge_id,
-          charge_name: c.charge_name,
-          segment: c.segment,
-          job_no: c.job_no,
-          sub_job: c.sub_job,
-          cn_r: c.cn_r,
-          currency: c.currency,
-          currency_id: c.currency_id,
-          roe: c.roe,
-          unit_code: c.unit_code,
-          unit_id: c.unit_id,
-          no_of_unit: c.no_of_unit,
-          amount_per_unit: c.amount_per_unit,
-          amount: c.amount,
-          amount_in_local: c.amount_in_local,
-          tax_code: c.tax_code,
-          tax: c.tax,
+        customer_gst_no: values.customer_gst_no ?? "",
+        location_gst_no: values.location_gst_no ?? "",
+        date: formatDate(values.date),
+        payment_type: values.payment_type ?? "",
+        vouchar_type: values.voucher_type ?? "",
+        CINV: values.cinv ?? false,
+        proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+        actual_inv_no: values.actual_invoice_no ?? "",
+        account_code: values.account_code ?? "",
+        subledger_code: values.subledger_code ?? "",
+        amount: values.amount != null ? Number(values.amount) : null,
+        crj_date: formatDate(values.crj_date),
+        paid_to_type: values.paid_to_type ?? "",
+        paid_to: values.paid_to ?? "",
+        not_over: values.not_over ?? "",
+        tds_section_code: values.tds_section_code ?? "",
+        account_note: values.accountant_note ?? "",
+        note: values.note ?? "",
+        rejected_note: values.rejected_note || null,
+        on_hold_note: values.on_hold_note || null,
+        status: values.approved || "Approved",
+        charges_data: values.charges.map((c) => ({
+          charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
+          currency_id: c.currency_id ? Number(c.currency_id) : undefined,
+          unit_id: c.unit_id ? Number(c.unit_id) : undefined,
+          roe: c.roe != null ? Number(c.roe) : undefined,
+          no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : undefined,
+          amount_per_unit: c.amount_per_unit != null ? Number(c.amount_per_unit) : undefined,
+          amount: c.amount != null ? Number(c.amount) : undefined,
+          local_amount: c.amount_in_local != null ? Number(c.amount_in_local) : undefined,
+          sac_code: c.tax_code ?? "",
         })),
       };
+      if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
+        payload.currency_id = mainCurrencyId;
+      }
+      if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
+        payload.state_id = stateIdNum;
+      }
 
       if (saveResponse?.id || requestId) {
         const id = saveResponse?.id ?? Number(requestId);
@@ -901,10 +971,10 @@ function PaymentRequest() {
                         label: "Customer GST No",
                         value: form.values.customer_gst_no,
                       },
-                      {
-                        label: "Location GST No",
-                        value: form.values.location_gst_no,
-                      },
+                      // {
+                      //   label: "Location GST No",
+                      //   value: form.values.location_gst_no,
+                      // },
                     ] as { label: string; value: string }[]
                   ).map(({ label, value }) => (
                     <Grid.Col key={label} span={4}>
@@ -1055,8 +1125,8 @@ function PaymentRequest() {
             {/* ── Row 3 (2+2+2+2+4): Account Code | Subledger Code | Currency | Amount | CRJ Date ── */}
             <Grid.Col span={2}>
               <TextInput
-                label="Account Code"
-                placeholder="Enter account code"
+                label="Account"
+                placeholder="Enter account"
                 value={form.values.account_code}
                 onChange={(e) =>
                   form.setFieldValue("account_code", e.target.value)
@@ -1186,7 +1256,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={2}>
+            {/* <Grid.Col span={2}>
               <Dropdown
                 label="Approved"
                 placeholder="Select approved"
@@ -1198,7 +1268,7 @@ function PaymentRequest() {
                 readOnly={isReadOnly}
                 styles={inputStyles}
               />
-            </Grid.Col>
+            </Grid.Col> */}
 
             <Grid.Col span={2} />
 
@@ -1303,18 +1373,18 @@ function PaymentRequest() {
               <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
                 SNo
               </Grid.Col>
-              <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+              {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Seg
-              </Grid.Col>
+              </Grid.Col> */}
               <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
                 Job No
               </Grid.Col>
-              <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
+              {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 Subjob
               </Grid.Col>
               <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 C/N/R
-              </Grid.Col>
+              </Grid.Col> */}
               <Grid.Col span={1} style={{ fontSize: "13px" }}>
                 Charge
               </Grid.Col>
@@ -1378,7 +1448,7 @@ function PaymentRequest() {
                 </Grid.Col>
 
                 {/* Seg */}
-                <Grid.Col span={0.5}>
+                {/* <Grid.Col span={0.5}>
                   <TextInput
                     placeholder="Seg"
                     value={charge.segment}
@@ -1397,7 +1467,7 @@ function PaymentRequest() {
                       },
                     }}
                   />
-                </Grid.Col>
+                </Grid.Col> */}
 
                 {/* Job No */}
                 <Grid.Col span={0.7}>
@@ -1422,7 +1492,7 @@ function PaymentRequest() {
                 </Grid.Col>
 
                 {/* Subjob */}
-                <Grid.Col span={0.6}>
+                {/* <Grid.Col span={0.6}>
                   <TextInput
                     placeholder="Subjob"
                     value={charge.sub_job}
@@ -1441,10 +1511,10 @@ function PaymentRequest() {
                       },
                     }}
                   />
-                </Grid.Col>
+                </Grid.Col> */}
 
                 {/* C/N/R */}
-                <Grid.Col span={0.6}>
+                {/* <Grid.Col span={0.6}>
                   <Dropdown
                     placeholder="C/N/R"
                     data={CN_R_OPTIONS}
@@ -1464,13 +1534,13 @@ function PaymentRequest() {
                       },
                     }}
                   />
-                </Grid.Col>
+                </Grid.Col> */}
 
                 {/* Charge */}
                 <Grid.Col span={1}>
                   <SearchableSelect
                     placeholder="Type charge name"
-                    apiEndpoint={URL.chargeMaster}
+                    apiEndpoint={(URL as any).chargeMaster}
                     searchFields={["charge_name", "charge_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.id ?? ""),

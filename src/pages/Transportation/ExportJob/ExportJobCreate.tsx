@@ -3756,9 +3756,71 @@ function ExportJobCreate() {
         {/* Tab 4: Estimates */}
         <Tabs.Panel value="3">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
-              Estimates
-            </Text>
+            <Group justify="space-between" align="center" mb="md" wrap="nowrap">
+              <Text size="lg" fw={600} c="#105476">
+                Estimates
+              </Text>
+              <Button
+                variant="light"
+                color="#105476"
+                size="sm"
+                leftSection={<IconFileInvoice size={16} />}
+                styles={{
+                  root: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                  },
+                }}
+                onClick={() => {
+                  const estimates = estimatesForm.values.estimates ?? [];
+                  const chargesFromEstimates = estimates
+                    .filter(
+                      (e) =>
+                        e.charge_id != null ||
+                        (e.charge_name && e.charge_name.trim() !== ""),
+                    )
+                    .map((e) => ({
+                      charge_id: e.charge_id,
+                      charge_name: e.charge_name ?? "",
+                      segment: "",
+                      job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                      sub_job: "",
+                      cn_r: "",
+                      currency: e.currency_code ?? "",
+                      currency_id: e.currency_id ?? "",
+                      roe: e.roe,
+                      unit_code: e.unit_code ?? "",
+                      unit_id: e.unit_id ?? "",
+                      no_of_unit: e.no_of_unit,
+                      amount_per_unit: e.cost_per_unit,
+                      amount: e.total_cost,
+                      amount_in_local:
+                        e.total_cost != null && e.roe != null
+                          ? Math.round(e.total_cost * e.roe * 100) / 100
+                          : e.total_cost,
+                      tax_code: "",
+                      tax: "false",
+                    }));
+                  navigate("/payment-request/create", {
+                    state: {
+                      chargesFromEstimates:
+                        chargesFromEstimates.length > 0
+                          ? chargesFromEstimates
+                          : undefined,
+                      job_reference_1:
+                        jobData?.job_id != null
+                          ? String(jobData.job_id)
+                          : jobData?.id != null
+                            ? String(jobData.id)
+                            : "",
+                    },
+                  });
+                }}
+              >
+                Create PR
+              </Button>
+            </Group>
             <EstimatesSection form={estimatesForm} readOnly={isReadOnly} />
           </Box>
         </Tabs.Panel>
