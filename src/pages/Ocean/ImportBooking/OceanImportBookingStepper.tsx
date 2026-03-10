@@ -54,6 +54,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../../store/authStore";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { commonSearchAPI } from "../../../service/searchApi";
 
 interface ImportShipmentStepperProps {
   onStepChange?: (step: number) => void;
@@ -153,10 +154,12 @@ interface FormValues {
   // Party Details fields
   shipper_code: string;
   shipper_name: string;
+  shipper_address: string;
   shipper_address_id: number;
   shipper_email: string;
   consignee_code: string;
   consignee_name: string;
+  consignee_address: string;
   consignee_address_id: number;
   consignee_email: string;
   forwarder_code: string;
@@ -543,9 +546,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [quotationId, setQuotationId] = useState("");
 
   // State for display values
-  const [shipperDisplayName, setShipperDisplayName] = useState<string | null>(
-    null,
-  );
   const [pickupFromDisplayName, setPickupFromDisplayName] = useState<
     string | null
   >(null);
@@ -581,9 +581,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [agentAddressOptions, setAgentAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
-  const [shipperAddressOptions, setShipperAddressOptions] = useState<
-    Array<{ value: string; label: string }>
-  >([]);
   const [forwarderAddressOptions, setForwarderAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
@@ -594,6 +591,16 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [chaAddressOptions, setChaAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
+
+  // Shipment party lookup (Ocean Import: Shipper only) - same pattern as Air Export consignee
+  const [shipperSearch, setShipperSearch] = useState("");
+  const [shipperOptions, setShipperOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [shipperHasResults, setShipperHasResults] = useState<boolean | null>(
+    null,
+  );
+  const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
 
   const defaultCurrency = (() => {
     const userData = localStorage.getItem("user");
@@ -893,9 +900,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
       // Party Details fields - map from the provided data structure
       shipper_code: String(data.shipper_code || ""),
+      shipper_name: String(data.shipper_name || ""),
+      shipper_address: String(data.shipper_address || data.shipper_address_text || ""),
       shipper_address_id: Number(data.shipper_address_id) || 0,
       shipper_email: String(data.shipper_email || ""),
       consignee_code: String(data.consignee_code || ""),
+      consignee_name: String(data.consignee_name || ""),
+      consignee_address: String(data.consignee_address || data.consignee_address_text || ""),
       consignee_address_id: Number(data.consignee_address_id) || 0,
       consignee_email: String(data.consignee_email || ""),
       forwarder_code: String(data.forwarder_code || ""),
@@ -1121,10 +1132,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       // Party Details fields
       shipper_code: "",
       shipper_name: "",
+      shipper_address: "",
       shipper_address_id: 0,
       shipper_email: "",
       consignee_code: "",
       consignee_name: "",
+      consignee_address: "",
       consignee_address_id: 0,
       consignee_email: "",
       forwarder_code: "",
@@ -1625,6 +1638,48 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
   }, [isFromQuotationFlow, quotationsData, onQuotationAlreadyBooked]);
 
+  const debouncedShipperSearch = useDebouncedCallback(async (term: string) => {
+    const query = term.trim();
+    if (!query || query.length < 2) {
+      setShipperOptions([]);
+      setShipperHasResults(null);
+      shipperDataRef.current = {};
+      return;
+    }
+    try {
+      const results = await commonSearchAPI({
+        endpoint: URL.shipmentParty,
+        query,
+      });
+      const arr = Array.isArray(results)
+        ? (results as Record<string, unknown>[])
+        : [];
+      if (!arr.length) {
+        setShipperOptions([]);
+        setShipperHasResults(false);
+        shipperDataRef.current = {};
+        return;
+      }
+      const map: Record<string, Record<string, unknown>> = {};
+      const opts = arr.map((item) => {
+        const id = String(item.id ?? "");
+        map[id] = item;
+        return {
+          value: id,
+          label: String(item.customer_name || ""),
+        };
+      });
+      shipperDataRef.current = map;
+      setShipperOptions(opts);
+      setShipperHasResults(true);
+    } catch (error) {
+      console.error("Shipper shipment-party search failed:", error);
+      setShipperOptions([]);
+      setShipperHasResults(null);
+      shipperDataRef.current = {};
+    }
+  }, 500);
+
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
   const populatedJobIdRef = useRef<number | null>(null);
 
@@ -1643,10 +1698,24 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     const mappedData = mapInitialDataToFormValues(jobData);
     form.setValues(mappedData as FormValues);
 
-    if (jobData.shipper_name)
-      setShipperDisplayName(String(jobData.shipper_name));
-    if (jobData.consignee_name)
+    if (jobData.shipper_name) {
+      form.setFieldValue("shipper_name", String(jobData.shipper_name));
+      setShipperSearch(String(jobData.shipper_name));
+    }
+    if (jobData.shipper_address) {
+      form.setFieldValue("shipper_address", String(jobData.shipper_address));
+    } else if (jobData.shipper_address_text) {
+      form.setFieldValue(
+        "shipper_address",
+        String(jobData.shipper_address_text),
+      );
+    }
+    if (jobData.consignee_name) {
       setConsigneeDisplayName(String(jobData.consignee_name));
+      form.setFieldValue("consignee_name", String(jobData.consignee_name));
+    }
+    if (jobData.consignee_address)
+      form.setFieldValue("consignee_address", String(jobData.consignee_address));
     if (jobData.forwarder_name)
       setForwarderDisplayName(String(jobData.forwarder_name));
     if (jobData.destination_agent_name)
@@ -1682,14 +1751,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         String(jobData.delivery_address_text ?? jobData.delivery_address ?? ""),
       );
 
-    if (jobData.shipper_address_id && jobData.shipper_address) {
-      setShipperAddressOptions([
-        {
-          value: String(jobData.shipper_address_id),
-          label: String(jobData.shipper_address),
-        },
-      ]);
-    }
     if (jobData.consignee_address || jobData.consignee_address_id != null) {
       setConsigneeAddressOptions([
         {
@@ -1799,10 +1860,23 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
     // Set display names for SearchableSelect components
     if (initialData.shipper_name) {
-      setShipperDisplayName(String(initialData.shipper_name));
+      form.setFieldValue("shipper_name", String(initialData.shipper_name));
+      setShipperSearch(String(initialData.shipper_name));
+    }
+    if (initialData.shipper_address) {
+      form.setFieldValue("shipper_address", String(initialData.shipper_address));
+    } else if (initialData.shipper_address_text) {
+      form.setFieldValue(
+        "shipper_address",
+        String(initialData.shipper_address_text),
+      );
     }
     if (initialData.consignee_name) {
       setConsigneeDisplayName(String(initialData.consignee_name));
+      form.setFieldValue("consignee_name", String(initialData.consignee_name));
+    }
+    if (initialData.consignee_address) {
+      form.setFieldValue("consignee_address", String(initialData.consignee_address));
     }
     if (initialData.forwarder_name) {
       setForwarderDisplayName(String(initialData.forwarder_name));
@@ -1879,18 +1953,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
 
     // Populate address options from response data for Party Details
-    // Shipper Address
-    if (initialData.shipper_address_id && initialData.shipper_address) {
-      setShipperAddressOptions([
-        {
-          value: String(initialData.shipper_address_id),
-          label: String(initialData.shipper_address),
-        },
-      ]);
-    }
-
     // Consignee Address (from quotation list address string or with id)
     if (initialData.consignee_address) {
+      form.setFieldValue("consignee_address", String(initialData.consignee_address));
       setConsigneeAddressOptions([
         {
           value: String(initialData.consignee_address_id || 0),
@@ -2253,13 +2318,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         vessel_name: form.values.vessel_name,
         voyage_no: form.values.voyage_no,
 
-        // Party Details - send only codes and address_ids (as numbers)
-        shipper_code: form.values.shipper_code || "",
-        shipper_address_id: Number(form.values.shipper_address_id) || 0,
+        // Party Details - shipper and consignee use name/address/email (text only)
+        shipper_name: form.values.shipper_name || "",
+        shipper_address: form.values.shipper_address || "",
         shipper_email: form.values.shipper_email || "",
 
-        consignee_code: form.values.consignee_code || "",
-        consignee_address_id: Number(form.values.consignee_address_id) || 0,
+        consignee_name: form.values.consignee_name || "",
+        consignee_address: form.values.consignee_address || "",
         consignee_email: form.values.consignee_email || "",
 
         forwarder_code: form.values.forwarder_code || "",
@@ -3788,73 +3853,91 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               </Text>
               <Grid mb="md">
                 <Grid.Col span={5}>
-                  <SearchableSelect
-                    label="Shipper Name"
-                    placeholder="Type shipper name"
-                    apiEndpoint={URL.shipper}
-                    searchFields={["customer_name", "customer_code"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
-                    value={form.values.shipper_code}
-                    displayValue={shipperDisplayName}
-                    onChange={(value, selectedData, originalData) => {
-                      form.setFieldValue("shipper_code", value || "");
-                      setShipperDisplayName(selectedData?.label || null);
-
-                      // Use originalData to populate address options
-                      if (
-                        value &&
-                        originalData &&
-                        (originalData as Record<string, unknown>).addresses_data
-                      ) {
-                        // Create address options from addresses_data
-                        const addressOptions = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                          }>
-                        ).map((addr: { id: number; address: string }) => ({
-                          value: String(addr.id),
-                          label: addr.address,
-                        }));
-
-                        setShipperAddressOptions(addressOptions);
-
-                        // Reset address selection when shipper changes
+                  {shipperHasResults === false &&
+                  shipperSearch.trim().length >= 2 ? (
+                    <FormTextInput
+                      label="Shipper Name"
+                      placeholder="Enter shipper name"
+                      value={form.values.shipper_name || shipperSearch}
+                      onChange={(e) => {
+                        const v = toTitleCase(e.currentTarget.value);
+                        setShipperSearch(v);
+                        form.setFieldValue("shipper_name", v);
+                        form.setFieldValue("shipper_code", "");
+                      }}
+                    />
+                  ) : (
+                    <Select
+                      label="Shipper Name"
+                      placeholder="Select or search shipper"
+                      searchable
+                      data={shipperOptions}
+                      searchValue={shipperSearch}
+                      onSearchChange={(value) => {
+                        const v = toTitleCase(value);
+                        setShipperSearch(v);
+                        debouncedShipperSearch(v);
+                      }}
+                      value={form.values.shipper_code || ""}
+                      onChange={(value) => {
+                        if (!value) {
+                          form.setFieldValue("shipper_code", "");
+                          form.setFieldValue("shipper_name", "");
+                          form.setFieldValue("shipper_address", "");
+                          form.setFieldValue("shipper_address_id", 0);
+                          form.setFieldValue("shipper_email", "");
+                          return;
+                        }
+                        const original = shipperDataRef.current[value] || {};
+                        const name = String(
+                          (original as Record<string, unknown>).customer_name || "",
+                        );
+                        const addr = (
+                          (
+                            ((original as Record<string, unknown>)
+                              .addresses_data as Array<{ address?: string }> | undefined)?.[0]
+                              ?.address ?? ""
+                          ) as string
+                        ).toString();
+                        const email = String(
+                          (original as Record<string, unknown>).customer_email || "",
+                        );
+                        form.setFieldValue("shipper_code", value);
+                        form.setFieldValue("shipper_name", toTitleCase(name));
+                        form.setFieldValue("shipper_address", toTitleCase(addr));
                         form.setFieldValue("shipper_address_id", 0);
-                      } else {
-                        setShipperAddressOptions([]);
-                        form.setFieldValue("shipper_address_id", 0);
-                      }
-                    }}
-                    returnOriginalData={true}
-                    error={form.errors.shipper_code as string}
-                    minSearchLength={3}
-                  />
+                        form.setFieldValue("shipper_email", email);
+                        setShipperSearch(name);
+                      }}
+                      comboboxProps={{ zIndex: 10 }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          height: "36px",
+                          fontFamily: "Inter",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
+                      }}
+                      nothingFoundMessage="No shipper found - type to enter new shipper"
+                    />
+                  )}
                 </Grid.Col>
                 <Grid.Col span={7}>
-                  <Dropdown
+                  <FormTextInput
                     label="Shipper Address"
-                    placeholder="Select shipper address"
-                    // withAsterisk
-                    searchable
-                    data={shipperAddressOptions}
-                    value={
-                      form.values.shipper_address_id != null
-                        ? String(form.values.shipper_address_id)
-                        : ""
-                    }
-                    onChange={(value) => {
-                      form.setFieldValue(
-                        "shipper_address_id",
-                        value ? parseInt(value) : 0,
-                      );
+                    placeholder="Enter shipper address"
+                    value={form.values.shipper_address}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue("shipper_address", v);
                     }}
-                    error={form.errors.shipper_address_id}
-                    disabled={shipperAddressOptions.length === 0}
                   />
                 </Grid.Col>
                 <Grid.Col span={5}>
@@ -3887,7 +3970,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     displayValue={consigneeDisplayName}
                     onChange={(value, selectedData, originalData) => {
                       form.setFieldValue("consignee_code", value || "");
-                      setConsigneeDisplayName(selectedData?.label || null);
+                      if (value && selectedData) {
+                        setConsigneeDisplayName(selectedData.label);
+                        form.setFieldValue("consignee_name", selectedData.label);
+                      } else {
+                        setConsigneeDisplayName(null);
+                        form.setFieldValue("consignee_name", "");
+                      }
 
                       // Use originalData to populate address options
                       if (
@@ -3938,6 +4027,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         "consignee_address_id",
                         value ? parseInt(value) : 0,
                       );
+                      const opt = consigneeAddressOptions.find((o) => o.value === value);
+                      form.setFieldValue("consignee_address", opt?.label ?? "");
                     }}
                     error={form.errors.consignee_address_id}
                     disabled={consigneeAddressOptions.length === 0}

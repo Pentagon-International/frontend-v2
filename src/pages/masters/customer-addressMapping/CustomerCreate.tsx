@@ -229,9 +229,9 @@ const addressValidationSchema = yup.object({
 
 // Term code options
 const termCodeOptions = [
-  { label: "CREDIT", value: "CREDIT" },
-  { label: "CASH", value: "CASH" },
-  { label: "PREPAID", value: "PREPAID" },
+  { label: "Credit", value: "CREDIT" },
+  { label: "Cash", value: "CASH" },
+  { label: "Prepaid", value: "PREPAID" },
 ];
 
 // Memoized AddressCard component for better performance
@@ -2031,21 +2031,29 @@ function CustomerCreate() {
                   />
                 </Grid.Col>
 
-                <Grid.Col span={4}>
-                  <Dropdown
-                    label="Assign To"
-                    key={customerForm.key("assigned_to")}
-                    placeholder="Select Salesperson"
-                    searchable
-                    data={salespersonsData}
-                    disabled={isViewMode}
-                    nothingFoundMessage="No salespersons found"
-                    {...customerForm.getInputProps("assigned_to")}
-                    onChange={(value) => {
-                      customerForm.setFieldValue("assigned_to", value || "");
-                    }}
-                  />
-                </Grid.Col>
+                {(!customerForm.values.customer_type_code ||
+                  customerTypeOptions.find(
+                    (o) =>
+                      o.value === customerForm.values.customer_type_code &&
+                      (o.label?.toLowerCase() === "agent" ||
+                        o.value?.toLowerCase() === "agent"),
+                  ) == null) && (
+                  <Grid.Col span={4}>
+                    <Dropdown
+                      label="Assign To"
+                      key={customerForm.key("assigned_to")}
+                      placeholder="Select Salesperson"
+                      searchable
+                      data={salespersonsData}
+                      disabled={isViewMode}
+                      nothingFoundMessage="No salespersons found"
+                      {...customerForm.getInputProps("assigned_to")}
+                      onChange={(value) => {
+                        customerForm.setFieldValue("assigned_to", value || "");
+                      }}
+                    />
+                  </Grid.Col>
+                )}
               </Grid>
 
               <Group justify="space-between" mt="xl">
