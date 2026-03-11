@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Autocomplete,
   Badge,
   Box,
   Button,
@@ -17,6 +18,7 @@ import {
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
+  IconCheck,
   IconChevronDown,
   IconChevronRight,
   IconChevronUp,
@@ -25,7 +27,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { useMemo, useCallback, useState, useEffect } from "react";
+import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -36,6 +38,7 @@ import {
   SingleDateInput,
 } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
+import { commonSearchAPI } from "../../../service/searchApi";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
@@ -200,7 +203,7 @@ type PaymentRequestFromApi = {
   id?: number;
   request_no?: string;
   job_reference?: string;
-  payment_crj?: string;
+  crj_number?: string;
   approved_by?: string;
   approved_date?: string | null;
   customer_gst_no?: string;
@@ -370,6 +373,8 @@ function PaymentRequest() {
   const jobServiceId =
     (location.state as { job?: { service_id?: number } } | null)?.job?.service_id ?? 0;
 
+  const shouldApproveRef = useRef(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sacCodeLoadingByIndex, setSacCodeLoadingByIndex] = useState<Record<number, boolean>>({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
@@ -378,9 +383,10 @@ function PaymentRequest() {
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
   >({});
-  const [paidToDisplayName, setPaidToDisplayName] = useState<string | null>(
-    null,
-  );
+  const [paidToDisplayName, setPaidToDisplayName] = useState<string | null>(null);
+  const [paidToSuggestions, setPaidToSuggestions] = useState<Array<{ code: string; name: string }>>([]);
+  const [paidToFetching, setPaidToFetching] = useState(false);
+  const paidToDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isReferenceInfoOpen, setIsReferenceInfoOpen] = useState(true);
 
   // isUpdate: driven by saveResponse.id OR requestId in URL
@@ -587,7 +593,16 @@ function PaymentRequest() {
 
   // ─── Submit ───────────────────────────────────────────────────────────────
 
+  const handleApprove = async () => {
+    const validation = form.validate();
+    if (validation.hasErrors) return;
+    shouldApproveRef.current = true;
+    await handleSubmit(form.values);
+  };
+
   const handleSubmit = async (values: PaymentRequestFormData) => {
+    const isApproveAction = shouldApproveRef.current;
+    shouldApproveRef.current = false;
     setIsSubmitting(true);
     try {
       const formatDate = (d: Date | null) =>
@@ -606,7 +621,7 @@ function PaymentRequest() {
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
         job_reference: values.job_reference_1 ?? "",
-        payment_crj: values.payment_crj_did ?? "",
+        crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
         customer_gst_no: values.customer_gst_no ?? "",
@@ -629,7 +644,7 @@ function PaymentRequest() {
         note: values.note ?? "",
         rejected_note: values.rejected_note || null,
         on_hold_note: values.on_hold_note || null,
-        status: values.approved || "Approved",
+        // status: isApproveAction ? "Approved" : (values.approved || ""),
         charges_data: values.charges.map((c) => ({
           ...(c.id != null ? { id: c.id } : {}),
           charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
@@ -644,6 +659,13 @@ function PaymentRequest() {
           sac_code: c.tax_code ?? "",
         })),
       };
+
+      if (isApproveAction) {
+        payload.status = "Approved";
+      }
+      else if(values.approved) {
+        payload.status = values.approved;
+      }
       if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
         payload.currency_id = mainCurrencyId;
       }
@@ -717,7 +739,7 @@ function PaymentRequest() {
               request_no: d.request_no ?? "",
               job_reference_1: d.job_reference ?? "",
               job_reference_2: form.values.job_reference_2,
-              payment_crj_did: d.payment_crj ?? "",
+              payment_crj_did: d.crj_number ?? "",
               date: normalizeDate(d.date) ?? values.date,
               rejected_request_no: form.values.rejected_request_no,
               proforma_invoice_no_1: d.proforma_inv_no ?? "",
@@ -814,15 +836,15 @@ function PaymentRequest() {
       status: d.status,
     });
 
-    if (d.paid_to_name) {
-      setPaidToDisplayName(d.paid_to_name);
+    if (d.paid_to) {
+      setPaidToDisplayName(d.paid_to ?? "");
     }
 
     form.setValues({
       request_no: d.request_no ?? "",
       job_reference_1: d.job_reference ?? "",
       job_reference_2: "",
-      payment_crj_did: d.payment_crj ?? "",
+      payment_crj_did: d.crj_number ?? "",
       date: normalizeDate(d.date) ?? new Date(),
       rejected_request_no: "",
       proforma_invoice_no_1: d.proforma_inv_no ?? "",
@@ -1498,7 +1520,7 @@ function PaymentRequest() {
             {/* ── Row 3 (2+2+2+2+4): Account Code | Subledger Code | Currency | Amount | CRJ Date ── */}
             <Grid.Col span={2}>
               <Dropdown
-                label="Account"
+                label="Account Name"
                 placeholder="Select account"
                 data={accountOptions}
                 value={form.values.account_code || null}
@@ -1591,32 +1613,52 @@ function PaymentRequest() {
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <SearchableSelect
+              <Autocomplete
                 label="Paid To"
                 placeholder="Type vendor / supplier name"
-                apiEndpoint={URL.supplierByType}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code ?? item.id ?? ""),
-                  label: String(item.customer_name ?? ""),
-                })}
-                value={form.values.paid_to}
-                displayValue={paidToDisplayName || undefined}
-                onChange={(value, selectedData) => {
-                  form.setFieldValue("paid_to", value ?? "");
-                  setPaidToDisplayName(selectedData?.label ?? null);
-                  if (form.errors.paid_to) {
-                    form.clearFieldError("paid_to");
+                withAsterisk
+                data={paidToSuggestions.map((s) => s.name)}
+                value={paidToDisplayName ?? ""}
+                onChange={(val) => {
+                  setPaidToDisplayName(val || null);
+                  form.setFieldValue("paid_to", val ?? "");
+                  if (form.errors.paid_to) form.clearFieldError("paid_to");
+
+                  // Debounced API suggestion fetch
+                  if (paidToDebounceRef.current) clearTimeout(paidToDebounceRef.current);
+                  if (!isReadOnly && val.trim().length >= 2) {
+                    setPaidToFetching(true);
+                    paidToDebounceRef.current = setTimeout(async () => {
+                      try {
+                        const res = await commonSearchAPI({
+                          endpoint: URL.supplierByType,
+                          query: val,
+                        });
+                        if (Array.isArray(res)) {
+                          setPaidToSuggestions(
+                            res.map((item: any) => ({
+                              code: String(item.customer_code ?? item.id ?? ""),
+                              name: String(item.customer_name ?? ""),
+                            })),
+                          );
+                        } else {
+                          setPaidToSuggestions([]);
+                        }
+                      } catch {
+                        setPaidToSuggestions([]);
+                      } finally {
+                        setPaidToFetching(false);
+                      }
+                    }, 600);
+                  } else {
+                    setPaidToSuggestions([]);
+                    setPaidToFetching(false);
                   }
                 }}
-                withAsterisk
                 readOnly={isReadOnly}
-                dropdownZIndex={1000}
-                error={
-                  form.errors.paid_to
-                    ? String(form.errors.paid_to)
-                    : undefined
-                }
+                error={form.errors.paid_to ? String(form.errors.paid_to) : undefined}
+                rightSection={paidToFetching ? <Loader size="xs" color="#105476" /> : null}
+                comboboxProps={{ zIndex: 1000 }}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -2398,16 +2440,28 @@ function PaymentRequest() {
               Cancel
             </Button>
             {!isReadOnly && (
-              <Button
-                type="submit"
-                color="#105476"
-                rightSection={<IconChevronRight size={16} />}
-                loading={isSubmitting}
-              >
-                {saveResponse?.id
-                  ? "Update Payment Request"
-                  : "Save Payment Request"}
-              </Button>
+              <>
+                {isEditMode && (
+                  <Button
+                    color="green"
+                    leftSection={<IconCheck size={16} />}
+                    loading={isSubmitting}
+                    onClick={handleApprove}
+                  >
+                    Approve
+                  </Button>
+                )}
+                <Button
+                  type="submit"
+                  color="#105476"
+                  rightSection={<IconChevronRight size={16} />}
+                  loading={isSubmitting}
+                >
+                  {saveResponse?.id
+                    ? "Update Payment Request"
+                    : "Save Payment Request"}
+                </Button>
+              </>
             )}
           </Group>
         </Box>

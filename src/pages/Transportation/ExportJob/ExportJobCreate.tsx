@@ -3814,11 +3814,12 @@ function ExportJobCreate() {
                           : jobData?.id != null
                             ? String(jobData.id)
                             : "",
+                      ...(jobData && { job: jobData }),
                     },
                   });
                 }}
               >
-                Create PR
+                Create PRQ
               </Button>
             </Group>
             <EstimatesSection serviceType="SEA" form={estimatesForm} readOnly={isReadOnly} />

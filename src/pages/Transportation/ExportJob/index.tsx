@@ -46,6 +46,7 @@ import FormTextInput from "../../../components/FormTextInput";
 // Type definitions
 type ExportJobData = {
   id: number;
+  service_id?: number;
   service: string;
   agent_code: string | null;
   agent_name: string | null;
