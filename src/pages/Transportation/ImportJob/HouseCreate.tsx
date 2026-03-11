@@ -1854,6 +1854,7 @@ function HouseCreate() {
       agent_name: v.agent_name,
       agent_address: v.agent_address,
       agent_email: v.agent_email,
+      shipper_code: v.shipper_code,
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
@@ -1869,6 +1870,7 @@ function HouseCreate() {
         null),
     shipment_id:
       (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+      consignee_code: v.consignee_code,
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
@@ -3493,19 +3495,22 @@ function HouseCreate() {
                 color="#105476"
                 onClick={() => {
                   const fullDetail = getCurrentHousingDetail();
-                  const prepaidCharges = (fullDetail.charges ?? []).filter(
+                  // For ocean import customer invoice, only Collect charges
+                  const collectCharges = (fullDetail.charges ?? []).filter(
                     (c: { pp_cc?: string }) =>
-                      String(c.pp_cc ?? "").trim() === "Prepaid"
+                      String(c.pp_cc ?? "").trim() === "Collect",
                   );
                   const detailForInvoice = {
                     ...fullDetail,
-                    charges: prepaidCharges,
+                    charges: collectCharges,
                   };
                   navigate("/SeaExport/import-job/invoice", {
                     state: {
                       hawbDetails: [detailForInvoice],
                       housingDetails: [detailForInvoice],
                       is_agent: false,
+                      // Explicitly indicate that Bill To / State / Address should come from consignee
+                      billToFrom: "consignee",
                       ...(location.state?.job && { job: location.state.job }),
                       ...(location.state?.mblDetails && {
                         mblDetails: location.state.mblDetails,
