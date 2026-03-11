@@ -658,6 +658,22 @@ function HouseCreate() {
           String(editData.origin_agent_name),
         );
       }
+
+      // Prefill consignee search and options so the Consignee field shows on edit
+      if (editData.consignee_name) {
+        const name = toTitleCase(String(editData.consignee_name));
+        setConsigneeSearch(name);
+      }
+      if (editData.consignee_name) {
+        const name = toTitleCase(String(editData.consignee_name));
+        // Use name as the Select value since API does not use consignee_code in payload
+        setConsigneeOptions([{ value: name, label: name }]);
+        consigneeDataRef.current[name] = {
+          customer_name: name,
+          // address and email already set on form from editData; they are read-only for payload
+        } as Record<string, unknown>;
+        form.setFieldValue("consignee_code", name);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, editData, editIndex, unitDataRaw, currencyData]);
@@ -719,7 +735,13 @@ function HouseCreate() {
         editData?.shipper_state_id != null
           ? String(editData.shipper_state_id)
           : "",
-      consignee_code: editData?.consignee_code || "", // Will be set when user selects from SearchableSelect
+      // Preserve consignee id/code for shipment-party Select (like Air Import)
+      consignee_code:
+        (editData as { consignee_id?: number } | undefined)?.consignee_id != null
+          ? String(
+              (editData as { consignee_id?: number } | undefined).consignee_id,
+            )
+          : String(editData?.consignee_code || ""),
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",

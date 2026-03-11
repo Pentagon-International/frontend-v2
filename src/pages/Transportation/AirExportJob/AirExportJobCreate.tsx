@@ -71,8 +71,8 @@ import FormTextInput from "../../../components/FormTextInput";
 // Type definitions
 type MAWBDetailsForm = {
   service: string;
-  origin_agent: string; // Stores agent_code (code) for API payload
-  origin_agent_name: string; // Stores agent_name (name) for display
+  agent_code: string; // Stores agent_code (code) for API payload
+  agent_name: string; // Stores agent_name (name) for display
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -124,9 +124,9 @@ type HAWBDetail = {
   destination_name?: string;
   customer_service: string;
   trade: string;
-  origin_agent_name: string;
-  origin_agent_address: string;
-  origin_agent_email: string;
+  agent_name: string;
+  agent_address: string;
+  agent_email: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
@@ -200,7 +200,7 @@ type InvoiceListItem = {
 // Validation schemas
 const mawbDetailsSchema = yup.object({
   service: yup.string().required("Service is required"),
-  origin_agent: yup.string().required("Destination Agent is required"),
+  agent_code: yup.string().required("Destination Agent is required"),
   origin_code: yup.string().required("Origin is required"),
   destination_code: yup.string().required("Destination is required"),
   etd: yup.date().required("ETD is required"),
@@ -277,7 +277,7 @@ function AirExportJobCreate() {
   const routingStateInitializedRef = useRef(false);
   // Store origin agent data to persist across navigations
   const originAgentDataRef = useRef<Record<string, unknown> | null>(
-    location.state?.mawbDetails?.origin_agent_data || null,
+    location.state?.mawbDetails?.agent_data || null,
   );
   // Ref to track if navigation is in progress to prevent multiple navigations
   const navigationInProgressRef = useRef(false);
@@ -374,16 +374,13 @@ function AirExportJobCreate() {
     initialValues: {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
-      origin_agent:
+      agent_code:
         jobData?.agent_code ||
         jobData?.origin_agent ||
-        location.state?.mawbDetails?.origin_agent ||
+        location.state?.mawbDetails?.agent_code ||
         "",
-      origin_agent_name:
-        jobData?.agent_name ||
-        jobData?.origin_agent_name ||
-        location.state?.mawbDetails?.origin_agent_name ||
-        "",
+      agent_name:
+        jobData?.agent_name || location.state?.mawbDetails?.agent_name || "",
       origin_code:
         jobData?.origin_code || location.state?.mawbDetails?.origin_code || "",
       origin_name:
@@ -565,7 +562,7 @@ function AirExportJobCreate() {
       try {
         console.log("🔧 [EDIT MODE] Initializing forms from jobData:", {
           jobData,
-          hasOriginAgent: !!jobData.origin_agent_name || !!jobData.origin_agent,
+          hasOriginAgent: !!jobData.agent_name || !!jobData.agent_code,
           originCode: jobData.origin_code,
           originName: jobData.origin_name,
           destinationCode: jobData.destination_code,
@@ -578,9 +575,8 @@ function AirExportJobCreate() {
         const mawbInitialValues = {
           service: jobData.service || "AIR",
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
-          origin_agent: jobData.agent_code || jobData.origin_agent || "",
-          origin_agent_name:
-            jobData.agent_name || jobData.origin_agent_name || "",
+          agent_code: jobData.agent_code || jobData.origin_agent || "",
+          agent_name: jobData.agent_name || jobData.origin_agent_name || "",
           origin_code: jobData.origin_code || "",
           origin_name: jobData.origin_name || "",
           destination_code: jobData.destination_code || "",
@@ -610,7 +606,7 @@ function AirExportJobCreate() {
         console.log(
           "✅ MAWB Details initialized - Form values after setValues:",
           {
-            origin_agent: mawbDetailsForm.values.origin_agent,
+            agent_code: mawbDetailsForm.values.agent_code,
             origin_code: mawbDetailsForm.values.origin_code,
             origin_name: mawbDetailsForm.values.origin_name,
             destination_code: mawbDetailsForm.values.destination_code,
@@ -700,15 +696,9 @@ function AirExportJobCreate() {
                 ? String(house.customer_service)
                 : "",
               trade: house.trade ? String(house.trade) : "",
-              origin_agent_name: house.origin_agent_name
-                ? String(house.origin_agent_name)
-                : "",
-              origin_agent_address: house.origin_agent_address
-                ? String(house.origin_agent_address)
-                : "",
-              origin_agent_email: house.origin_agent_email
-                ? String(house.origin_agent_email)
-                : "",
+              agent_name: house.agent_name ? String(house.agent_name) : "",
+              agent_address: house.agent_address ? String(house.agent_address) : "",
+              agent_email: house.agent_email ? String(house.agent_email) : "",
               shipper_code: house.shipper_code
                 ? String(house.shipper_code)
                 : "",
@@ -1218,7 +1208,8 @@ function AirExportJobCreate() {
             // Save current MAWB form values
             mawbDetails: {
               service: mawbDetailsForm.values.service || "AIR",
-              origin_agent: mawbDetailsForm.values.origin_agent || "",
+              agent_code: mawbDetailsForm.values.agent_code || "",
+              agent_name: mawbDetailsForm.values.agent_name || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
               origin_name: mawbDetailsForm.values.origin_name || "",
               destination_code: mawbDetailsForm.values.destination_code || "",
@@ -1227,7 +1218,7 @@ function AirExportJobCreate() {
               eta: mawbDetailsForm.values.eta || null,
               atd: mawbDetailsForm.values.atd || null,
               ata: mawbDetailsForm.values.ata || null,
-              origin_agent_data: originAgentDataRef.current || null,
+              agent_data: originAgentDataRef.current || null,
             },
             // Save current Carrier form values
             carrierDetails: carrierDetailsForm.values,
@@ -1257,7 +1248,8 @@ function AirExportJobCreate() {
             // Save current MAWB form values
             mawbDetails: {
               service: mawbDetailsForm.values.service || "AIR",
-              origin_agent: mawbDetailsForm.values.origin_agent || "",
+              agent_code: mawbDetailsForm.values.agent_code || "",
+              agent_name: mawbDetailsForm.values.agent_name || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
               origin_name: mawbDetailsForm.values.origin_name || "",
               destination_code: mawbDetailsForm.values.destination_code || "",
@@ -1266,7 +1258,7 @@ function AirExportJobCreate() {
               eta: mawbDetailsForm.values.eta || null,
               atd: mawbDetailsForm.values.atd || null,
               ata: mawbDetailsForm.values.ata || null,
-              origin_agent_data: originAgentDataRef.current || null,
+              agent_data: originAgentDataRef.current || null,
             },
             // Save current Carrier form values
             carrierDetails: carrierDetailsForm.values,
@@ -1293,7 +1285,8 @@ function AirExportJobCreate() {
           ...location.state,
           mawbDetails: {
             service: mawbDetailsForm.values.service || "AIR",
-            origin_agent: mawbDetailsForm.values.origin_agent || "",
+            agent_code: mawbDetailsForm.values.agent_code || "",
+            agent_name: mawbDetailsForm.values.agent_name || "",
             origin_code: mawbDetailsForm.values.origin_code || "",
             origin_name: mawbDetailsForm.values.origin_name || "",
             destination_code: mawbDetailsForm.values.destination_code || "",
@@ -1302,7 +1295,7 @@ function AirExportJobCreate() {
             eta: mawbDetailsForm.values.eta || null,
             atd: mawbDetailsForm.values.atd || null,
             ata: mawbDetailsForm.values.ata || null,
-            origin_agent_data: originAgentDataRef.current || null,
+            agent_data: originAgentDataRef.current || null,
           },
           carrierDetails: carrierDetailsForm.values,
           routings: routingsForm.values.routings,
@@ -1331,7 +1324,8 @@ function AirExportJobCreate() {
           // Save current MAWB form values
           mawbDetails: {
             service: mawbDetailsForm.values.service || "AIR",
-            origin_agent: mawbDetailsForm.values.origin_agent || "",
+            agent_code: mawbDetailsForm.values.agent_code || "",
+            agent_name: mawbDetailsForm.values.agent_name || "",
             origin_code: mawbDetailsForm.values.origin_code || "",
             origin_name: mawbDetailsForm.values.origin_name || "",
             destination_code: mawbDetailsForm.values.destination_code || "",
@@ -1340,7 +1334,7 @@ function AirExportJobCreate() {
             eta: mawbDetailsForm.values.eta || null,
             atd: mawbDetailsForm.values.atd || null,
             ata: mawbDetailsForm.values.ata || null,
-            origin_agent_data: originAgentDataRef.current || null,
+            agent_data: originAgentDataRef.current || null,
           },
           // Save current Carrier form values
           carrierDetails: carrierDetailsForm.values,
@@ -1429,7 +1423,7 @@ function AirExportJobCreate() {
         const mawbDetailsKey = savedMawbDetails
           ? JSON.stringify({
               service: savedMawbDetails.service,
-              origin_agent: savedMawbDetails.origin_agent,
+              agent_code: savedMawbDetails.agent_code,
               origin_code: savedMawbDetails.origin_code,
               destination_code: savedMawbDetails.destination_code,
               etd: savedMawbDetails.etd,
@@ -1446,7 +1440,8 @@ function AirExportJobCreate() {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
             service: savedMawbDetails.service || "AIR",
-            origin_agent: savedMawbDetails.origin_agent || "",
+            agent_code: savedMawbDetails.agent_code || "",
+            agent_name: savedMawbDetails.agent_name || "",
             origin_code: savedMawbDetails.origin_code || "",
             origin_name: savedMawbDetails.origin_name || "",
             destination_code: savedMawbDetails.destination_code || "",
@@ -1458,9 +1453,9 @@ function AirExportJobCreate() {
           });
 
           // Update origin agent data ref if available in location state
-          if (savedMawbDetails.origin_agent_data) {
+          if (savedMawbDetails.agent_data) {
             originAgentDataRef.current =
-              savedMawbDetails.origin_agent_data as Record<string, unknown>;
+              savedMawbDetails.agent_data as Record<string, unknown>;
           }
 
           // Track that we've restored from this state
@@ -1542,7 +1537,7 @@ function AirExportJobCreate() {
       if (!mawbDetailsForm.values.service?.trim()) {
         missingFields.push("Service");
       }
-      if (!mawbDetailsForm.values.origin_agent?.trim()) {
+      if (!mawbDetailsForm.values.agent_code?.trim()) {
         missingFields.push("Origin Agent");
       }
       if (!mawbDetailsForm.values.origin_code?.trim()) {
@@ -1579,11 +1574,8 @@ function AirExportJobCreate() {
       // Prepare MAWB details with ALL current form values including origin_name and destination_name
       const mawbDetailsToPass = {
         service: mawbDetailsForm.values.service || "AIR",
-        origin_agent:
-          mawbDetailsForm.values.origin_agent ||
-          location.state?.mawbDetails?.origin_agent ||
-          location.state?.mawbDetails?.origin_agent ||
-          "",
+        agent_code: mawbDetailsForm.values.agent_code || "",
+        agent_name: mawbDetailsForm.values.agent_name || "",
         origin_code: mawbDetailsForm.values.origin_code || "",
         origin_name: mawbDetailsForm.values.origin_name || "",
         destination_code: mawbDetailsForm.values.destination_code || "",
@@ -1593,18 +1585,15 @@ function AirExportJobCreate() {
         atd: mawbDetailsForm.values.atd || null,
         ata: mawbDetailsForm.values.ata || null,
         // Use ref first (most recent), then fallback to location.state
-        origin_agent_data:
-          originAgentDataRef.current ||
-          location.state?.mawbDetails?.origin_agent_data ||
-          null,
+        agent_data: originAgentDataRef.current || null,
       };
 
       console.log("🚀 Navigating to HAWBCreate with mawbDetails:", {
         mawbDetailsToPass,
-        origin_agent_data: mawbDetailsToPass.origin_agent_data,
-        hasAddressesData: mawbDetailsToPass.origin_agent_data?.addresses_data,
+        agent_data: mawbDetailsToPass.agent_data,
+        hasAddressesData: mawbDetailsToPass.agent_data?.addresses_data,
         fromRef: !!originAgentDataRef.current,
-        fromLocationState: !!location.state?.mawbDetails?.origin_agent_data,
+        fromLocationState: !!location.state?.mawbDetails?.agent_data,
       });
 
       navigate("/air/export-job/house-create", {
@@ -1615,7 +1604,7 @@ function AirExportJobCreate() {
           ...(editIndex !== undefined && { editIndex }),
           ...(editData && { editData }),
           ...(jobData && { job: jobData }),
-          // Preserve form state including origin_agent and origin_agent_data
+          // Preserve form state including agent_code and agent_data
           mawbDetails: mawbDetailsToPass,
           carrierDetails: carrierDetailsForm.values,
           routings: routingsForm.values.routings,
@@ -1750,7 +1739,7 @@ function AirExportJobCreate() {
     // Check MAWB mandatory fields
     const mawbFieldsValid =
       mawbDetailsForm.values.service?.trim() &&
-      mawbDetailsForm.values.origin_agent?.trim() &&
+      mawbDetailsForm.values.agent_code?.trim() &&
       mawbDetailsForm.values.origin_code?.trim() &&
       mawbDetailsForm.values.destination_code?.trim() &&
       mawbDetailsForm.values.etd &&
@@ -1762,7 +1751,7 @@ function AirExportJobCreate() {
     return mawbFieldsValid && hasHawbDetails;
   }, [
     mawbDetailsForm.values.service,
-    mawbDetailsForm.values.origin_agent,
+    mawbDetailsForm.values.agent_code,
     mawbDetailsForm.values.origin_code,
     mawbDetailsForm.values.destination_code,
     mawbDetailsForm.values.etd,
@@ -1873,7 +1862,7 @@ function AirExportJobCreate() {
       const payload = {
         service: mawbDetailsForm.values.service,
         service_type: "Export",
-        agent: mawbDetailsForm.values.origin_agent || null,
+        agent: mawbDetailsForm.values.agent_code || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
         etd: mawbDetailsForm.values.etd
@@ -1981,9 +1970,9 @@ function AirExportJobCreate() {
           destination_code: hawb.destination_code,
           customer_service: hawb.customer_service || "",
           trade: hawb.trade,
-          origin_agent_name: hawb.origin_agent_name,
-          origin_agent_address: hawb.origin_agent_address || "",
-          origin_agent_email: hawb.origin_agent_email || "",
+          agent_name: hawb.agent_name,
+          agent_address: hawb.agent_address || "",
+          agent_email: hawb.agent_email || "",
           shipper_code: hawb.shipper_code,
           shipper_name: hawb.shipper_name,
           shipper_address: hawb.shipper_address || "",
@@ -2429,18 +2418,13 @@ function AirExportJobCreate() {
                     value: String(item.customer_code), // Use code as value for API payload
                     label: String(item.customer_name), // Display name to user
                   })}
-                  value={mawbDetailsForm.values.origin_agent || null} // Stores agent_code
-                  displayValue={
-                    mawbDetailsForm.values.origin_agent_name || null
-                  } // Displays agent_name
+                  value={mawbDetailsForm.values.agent_code || null} // Stores agent_code
+                  displayValue={mawbDetailsForm.values.agent_name || null} // Displays agent_name
                   onChange={(value, selectedData, originalData) => {
                     // Store customer_code as value (for API payload)
-                    mawbDetailsForm.setFieldValue("origin_agent", value || "");
+                    mawbDetailsForm.setFieldValue("agent_code", value || "");
                     // Store customer_name for display
-                    mawbDetailsForm.setFieldValue(
-                      "origin_agent_name",
-                      selectedData?.label || "",
-                    );
+                    mawbDetailsForm.setFieldValue("agent_name", selectedData?.label || "");
 
                     console.log("🔍 MAWB Destination Agent Selected:", {
                       agentCode: value,
@@ -2456,7 +2440,7 @@ function AirExportJobCreate() {
                     // This prevents infinite re-renders and API calls
                   }}
                   returnOriginalData={true}
-                  error={mawbDetailsForm.errors.origin_agent as string}
+                  error={mawbDetailsForm.errors.agent_code as string}
                   minSearchLength={2}
                 />
               </Grid.Col>

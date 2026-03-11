@@ -74,9 +74,9 @@ type HAWBDetailsForm = {
   destination_name: string;
   customer_service: string;
   trade: string;
-  origin_agent_name: string;
-  origin_agent_address: string;
-  origin_agent_email: string;
+  agent_name: string;
+  agent_address: string;
+  agent_email: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
@@ -227,7 +227,9 @@ const fetchEventMaster = async () => {
 // Validation handled in validateStep1 and validateStep2 functions
 
 const normalizePpCc = (value: unknown): string => {
-  const raw = String(value ?? "").trim().toUpperCase();
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return "";
@@ -278,7 +280,7 @@ function HouseCreate() {
   >([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
-  const [originAgentAddressOptions, setOriginAgentAddressOptions] = useState<
+  const [agentAddressOptions, setAgentAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
 
@@ -289,9 +291,9 @@ function HouseCreate() {
   >([]);
   // Manual mode flag so we don't rapidly flip between Select/TextInput (prevents focus loss)
   const [consigneeManualMode, setConsigneeManualMode] = useState(false);
-  const [consigneeHasResults, setConsigneeHasResults] = useState<boolean | null>(
-    null,
-  );
+  const [consigneeHasResults, setConsigneeHasResults] = useState<
+    boolean | null
+  >(null);
   const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
 
   // State for cargo details
@@ -410,9 +412,10 @@ function HouseCreate() {
           : ""),
       customer_service: editData?.customer_service || "",
       trade: editData?.trade || "Re Export",
-      origin_agent_name: editData?.origin_agent_name || "",
-      origin_agent_address: editData?.origin_agent_address || "",
-      origin_agent_email: editData?.origin_agent_email || "",
+      agent_name: (editData as { agent_name?: string } | undefined)?.agent_name || "",
+      agent_address:
+        (editData as { agent_address?: string } | undefined)?.agent_address || "",
+      agent_email: (editData as { agent_email?: string } | undefined)?.agent_email || "",
       shipper_code: editData?.shipper_code || "", // Will be set when user selects from SearchableSelect
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
@@ -433,9 +436,21 @@ function HouseCreate() {
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
-      events: Array.isArray((editData as { events?: unknown } | undefined)?.events)
-        ? ((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
-            ?.events ?? []
+      events: Array.isArray(
+        (editData as { events?: unknown } | undefined)?.events,
+      )
+        ? (
+            (
+              editData as
+                | {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                | undefined
+            )?.events ?? []
           ).map((e) => ({
             id: e.id != null ? Number(e.id) : undefined,
             type: String(e.type ?? ""),
@@ -446,7 +461,11 @@ function HouseCreate() {
               (
                 location.state?.job as {
                   housing_details?: Array<{
-                    events?: Array<{ id?: number; type?: string; date?: string }>;
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
                   }>;
                 }
               )?.housing_details?.[editIndex ?? 0]?.events ?? [];
@@ -460,15 +479,25 @@ function HouseCreate() {
       event_modal_rows: [
         ...(() => {
           const sourceEvents =
-            (editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
-              ?.events ??
+            (
+              editData as
+                | {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                | undefined
+            )?.events ??
             (
               location.state?.job as {
                 housing_details?: Array<{
                   events?: Array<{ id?: number; type?: string; date?: string }>;
                 }>;
               }
-            )?.housing_details?.[editIndex ?? 0]?.events ?? [];
+            )?.housing_details?.[editIndex ?? 0]?.events ??
+            [];
           if (!Array.isArray(sourceEvents) || sourceEvents.length === 0) {
             return [];
           }
@@ -634,9 +663,9 @@ function HouseCreate() {
         destination_name: editData.destination_name || "",
         customer_service: editData.customer_service || "",
         trade: editData.trade || "Re Export",
-        origin_agent_name: editData.origin_agent_name || "",
-        origin_agent_address: editData.origin_agent_address || "",
-        origin_agent_email: editData.origin_agent_email || "",
+        agent_name: (editData as { agent_name?: string }).agent_name || "",
+        agent_address: (editData as { agent_address?: string }).agent_address || "",
+        agent_email: (editData as { agent_email?: string }).agent_email || "",
         shipper_code: "", // Will be set when user selects from SearchableSelect
         shipper_name: editData.shipper_name || "",
         shipper_address: editData.shipper_address || "",
@@ -645,7 +674,11 @@ function HouseCreate() {
           editData.shipper_state_id != null
             ? String(editData.shipper_state_id)
             : "",
-        consignee_code: "", // Will be set when user selects from SearchableSelect
+        // For Air Export house, API payload only needs name/address/email.
+        // Use consignee_name as the internal Select key so it shows in-field on edit.
+        consignee_code: editData.consignee_name
+          ? toTitleCase(String(editData.consignee_name))
+          : "",
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
         consignee_email: editData.consignee_email || "",
@@ -655,6 +688,16 @@ function HouseCreate() {
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
       });
+
+      // Prefill consignee search and options so the Consignee field shows on edit
+      if (editData.consignee_name) {
+        const name = toTitleCase(String(editData.consignee_name));
+        setConsigneeSearch(name);
+        setConsigneeOptions([{ value: name, label: name }]);
+        consigneeDataRef.current[name] = {
+          customer_name: name,
+        } as Record<string, unknown>;
+      }
     }
 
     // Always load cargo_details and charges when editData has them (run every time so data is set even if init ref was already true) - same as AirImportJob
@@ -979,7 +1022,8 @@ function HouseCreate() {
       (original.address_data as unknown);
     if (!Array.isArray(raw)) return [];
     return (raw as Array<Record<string, unknown>>).map((a) => ({
-      address: (a.address as string | undefined) ?? (a.address1 as string | undefined),
+      address:
+        (a.address as string | undefined) ?? (a.address1 as string | undefined),
     }));
   };
 
@@ -1256,8 +1300,8 @@ function HouseCreate() {
       location.state?.mawbDetails || location.state?.mawbDetails;
     if (!mawbDetails) return;
 
-    const mawbOriginAgent = mawbDetails.origin_agent || "";
-    const mawbOriginAgentData = mawbDetails.origin_agent_data as
+    const mawbOriginAgent = (mawbDetails as { agent_name?: string })?.agent_name || "";
+    const mawbOriginAgentData = (mawbDetails as { agent_data?: unknown })?.agent_data as
       | Record<string, unknown>
       | null
       | undefined;
@@ -1272,7 +1316,7 @@ function HouseCreate() {
 
     if (mawbOriginAgent && mawbOriginAgent.trim() !== "") {
       // Auto-set HAWB origin agent name from MAWB origin agent
-      form.setFieldValue("origin_agent_name", mawbOriginAgent);
+      form.setFieldValue("agent_name", mawbOriginAgent);
 
       // Auto-set HAWB origin agent address from MAWB origin agent addresses_data
       if (mawbOriginAgentData && mawbOriginAgentData.addresses_data) {
@@ -1294,16 +1338,16 @@ function HouseCreate() {
         ) {
           const firstAddress = addressesData[0].address;
           console.log("✅ Setting HBL origin agent address:", firstAddress);
-          form.setFieldValue("origin_agent_address", firstAddress);
+          form.setFieldValue("agent_address", firstAddress);
         } else {
           console.log("⚠️ No valid address found in addresses_data");
           // Clear address if no addresses_data available
-          form.setFieldValue("origin_agent_address", "");
+          form.setFieldValue("agent_address", "");
         }
       } else {
         console.log("⚠️ No mawbOriginAgentData or addresses_data found");
-        // Clear address if no origin_agent_data
-        form.setFieldValue("origin_agent_address", "");
+        // Clear address if no agent_data
+        form.setFieldValue("agent_address", "");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1315,17 +1359,17 @@ function HouseCreate() {
       const mawbDetails = location.state?.mawbDetails;
       if (!mawbDetails) return;
 
-      // Get origin agent name from mawbDetails
-      // origin_agent should be the name (from SearchableSelect which uses customer_name)
-      let mawbOriginAgentName = mawbDetails.origin_agent || "";
+      // Get agent name from mawbDetails (display name)
+      let mawbOriginAgentName =
+        (mawbDetails as { agent_name?: string })?.agent_name || "";
 
-      // If origin_agent is empty, try to get it from origin_agent_data
-      if (!mawbOriginAgentName && mawbDetails.origin_agent_data) {
-        const originAgentData = mawbDetails.origin_agent_data as Record<
+      // If agent_name is empty, try to get it from agent_data
+      if (!mawbOriginAgentName && (mawbDetails as { agent_data?: unknown })?.agent_data) {
+        const originAgentData = (mawbDetails as { agent_data?: unknown }).agent_data as Record<
           string,
           unknown
         >;
-        // Try to get customer_name from origin_agent_data
+        // Try to get customer_name from agent_data
         mawbOriginAgentName = (originAgentData.customer_name as string) || "";
       }
 
@@ -1342,14 +1386,14 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     form.values.routed,
-    location.state?.mawbDetails?.origin_agent,
-    location.state?.mawbDetails?.origin_agent_data,
+    location.state?.mawbDetails?.agent_name,
+    location.state?.mawbDetails?.agent_data,
   ]);
 
   // Auto-set routed_by to MAWB origin agent when routed is "agent"
   useEffect(() => {
     if (form.values.routed === "agent") {
-      const mawbOriginAgent = location.state?.mawbDetails?.origin_agent || "";
+      const mawbOriginAgent = location.state?.mawbDetails?.agent_name || "";
       if (mawbOriginAgent && mawbOriginAgent.trim() !== "") {
         // Auto-set routed_by to MAWB origin agent if not already set or if MAWB origin agent changed
         if (
@@ -1361,7 +1405,7 @@ function HouseCreate() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routed, location.state?.mawbDetails?.origin_agent]);
+  }, [form.values.routed, location.state?.mawbDetails?.agent_name]);
 
   // Validate step 1 - Validate required fields
   const validateStep1 = () => {
@@ -1417,10 +1461,10 @@ function HouseCreate() {
       errors.consignee_email = "Invalid email format";
     }
     if (
-      form.values.origin_agent_email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.origin_agent_email)
+      form.values.agent_email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.agent_email)
     ) {
-      errors.origin_agent_email = "Invalid email format";
+      errors.agent_email = "Invalid email format";
     }
     if (
       form.values.notify_customer1_email &&
@@ -1562,9 +1606,9 @@ function HouseCreate() {
       destination_name: v.destination_name,
       customer_service: v.customer_service,
       trade: v.trade,
-      origin_agent_name: v.origin_agent_name,
-      origin_agent_address: v.origin_agent_address,
-      origin_agent_email: v.origin_agent_email,
+      agent_name: v.agent_name,
+      agent_address: v.agent_address,
+      agent_email: v.agent_email,
       shipper_code: v.shipper_code,
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
@@ -1624,10 +1668,9 @@ function HouseCreate() {
       destination_name: currentFormValues.destination_name,
       customer_service: currentFormValues.customer_service,
       trade: currentFormValues.trade,
-      origin_agent_name: currentFormValues.origin_agent_name,
-      origin_agent_address: currentFormValues.origin_agent_address,
-      origin_agent_email: currentFormValues.origin_agent_email,
-      shipper_code: currentFormValues.shipper_code,
+      agent_name: currentFormValues.agent_name,
+      agent_address: currentFormValues.agent_address,
+      agent_email: currentFormValues.agent_email,
       shipper_name: currentFormValues.shipper_name,
       shipper_address: currentFormValues.shipper_address,
       shipper_email: currentFormValues.shipper_email,
@@ -1641,7 +1684,6 @@ function HouseCreate() {
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: currentFormValues.consignee_name,
-      consignee_code: currentFormValues.consignee_code,
       consignee_address: currentFormValues.consignee_address,
       consignee_email: currentFormValues.consignee_email,
       notify_customer1_name: currentFormValues.notify_customer1_name,
@@ -1722,9 +1764,9 @@ function HouseCreate() {
         destination_name: form.values.destination_name,
         customer_service: form.values.customer_service,
         trade: form.values.trade,
-        origin_agent_name: form.values.origin_agent_name,
-        origin_agent_address: form.values.origin_agent_address,
-        origin_agent_email: form.values.origin_agent_email,
+        agent_name: form.values.agent_name,
+        agent_address: form.values.agent_address,
+        agent_email: form.values.agent_email,
         shipper_name: form.values.shipper_name,
         shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
@@ -1973,17 +2015,14 @@ function HouseCreate() {
                 onClick={() => {
                   const existing = form.values.events;
                   if (existing.length > 0) {
-                    form.setFieldValue(
-                      "event_modal_rows",
-                      [
-                        ...existing.map((e) => ({
-                          id: e.id,
-                          eventType: e.type,
-                          eventDate: e.date ? new Date(String(e.date)) : null,
-                        })),
-                        { id: undefined, eventType: null, eventDate: null },
-                      ],
-                    );
+                    form.setFieldValue("event_modal_rows", [
+                      ...existing.map((e) => ({
+                        id: e.id,
+                        eventType: e.type,
+                        eventDate: e.date ? new Date(String(e.date)) : null,
+                      })),
+                      { id: undefined, eventType: null, eventDate: null },
+                    ]);
                   } else {
                     form.setFieldValue("event_modal_rows", [
                       { id: undefined, eventType: null, eventDate: null },
@@ -2076,10 +2115,7 @@ function HouseCreate() {
           ))}
 
           <Group justify="flex-end" mt="md">
-            <Button
-              variant="subtle"
-              onClick={() => setEventsModalOpen(false)}
-            >
+            <Button variant="subtle" onClick={() => setEventsModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmitEventsModal}>Save Events</Button>
@@ -2569,8 +2605,6 @@ function HouseCreate() {
                     onSearchChange={(value) => {
                       const v = toTitleCase(value);
                       setConsigneeSearch(v);
-                      form.setFieldValue("consignee_name", v);
-                      form.setFieldValue("consignee_code", "");
                       debouncedConsigneeSearch(v);
                     }}
                     value={form.values.consignee_code || ""}
@@ -2585,9 +2619,12 @@ function HouseCreate() {
                       }
                       const original = consigneeDataRef.current[value] || {};
                       const name = String(
-                        (original as Record<string, unknown>).customer_name || "",
+                        (original as Record<string, unknown>).customer_name ||
+                          "",
                       );
-                      const email = getPartyEmail(original as Record<string, unknown>);
+                      const email = getPartyEmail(
+                        original as Record<string, unknown>,
+                      );
 
                       // Populate address options for Dropdown (keep existing UX)
                       const addressesData = getPartyAddresses(
@@ -2604,7 +2641,10 @@ function HouseCreate() {
                       // Reset address value so it always replaces on re-select
                       form.setFieldValue("consignee_address", "");
                       if (addressOptions.length > 0) {
-                        form.setFieldValue("consignee_address", addressOptions[0].value);
+                        form.setFieldValue(
+                          "consignee_address",
+                          addressOptions[0].value,
+                        );
                       }
 
                       form.setFieldValue("consignee_code", value);
@@ -2694,7 +2734,6 @@ function HouseCreate() {
                   }
                   displayValue={form.values.notify_customer1_name}
                   onChange={(value, selectedData, originalData) => {
-                    const previousValue = form.values.notify_customer1_name;
                     const newValue = selectedData?.label || value || "";
 
                     form.setFieldValue("notify_customer1_name", newValue);
@@ -2720,13 +2759,10 @@ function HouseCreate() {
                       setNotifyCustomerAddressOptions(addressOptions);
 
                       // Auto-select the first address if available
-                      if (
-                        addressOptions.length > 0 &&
-                        addressOptions[0].address
-                      ) {
+                      if (addressOptions.length > 0 && addressOptions[0].value) {
                         form.setFieldValue(
                           "notify_customer1_address",
-                          addressOptions[0].address,
+                          addressOptions[0].value,
                         );
                       } else {
                         form.setFieldValue("notify_customer1_address", "");
@@ -2801,13 +2837,12 @@ function HouseCreate() {
                     value: String(item.customer_code),
                     label: String(item.customer_name),
                   })}
-                  value={form.values.origin_agent_name}
-                  displayValue={form.values.origin_agent_name}
+                  value={form.values.agent_name}
+                  displayValue={form.values.agent_name}
                   onChange={(value, _selectedData, originalData) => {
-                    const previousValue = form.values.origin_agent_name;
                     const newValue = value || "";
 
-                    form.setFieldValue("origin_agent_name", newValue);
+                    form.setFieldValue("agent_name", newValue);
 
                     // Use originalData to populate address options
                     if (
@@ -2829,27 +2864,21 @@ function HouseCreate() {
                         }),
                       );
 
-                      setOriginAgentAddressOptions(addressOptions);
+                      setAgentAddressOptions(addressOptions);
 
                       // Auto-select the first address if available
-                      if (
-                        addressOptions.length > 0 &&
-                        addressOptions[0].address
-                      ) {
-                        form.setFieldValue(
-                          "origin_agent_address",
-                          addressOptions[0].address,
-                        );
+                      if (addressOptions.length > 0 && addressOptions[0].value) {
+                        form.setFieldValue("agent_address", addressOptions[0].value);
                       } else {
-                        form.setFieldValue("origin_agent_address", "");
+                        form.setFieldValue("agent_address", "");
                       }
                     } else {
-                      setOriginAgentAddressOptions([]);
-                      form.setFieldValue("origin_agent_address", "");
+                      setAgentAddressOptions([]);
+                      form.setFieldValue("agent_address", "");
                     }
                   }}
                   returnOriginalData={true}
-                  error={form.errors.origin_agent_name as string}
+                  error={form.errors.agent_name as string}
                   minSearchLength={2}
                 />
               </Grid.Col>
@@ -2858,42 +2887,36 @@ function HouseCreate() {
                   label="Destination Agent Email"
                   type="email"
                   placeholder="Enter Destination Agent Email"
-                  {...form.getInputProps("origin_agent_email")}
-                  error={form.errors.origin_agent_email}
+                  {...form.getInputProps("agent_email")}
+                  error={form.errors.agent_email}
                 />
               </Grid.Col>
 
               <Grid.Col span={4}>
-                {originAgentAddressOptions.length > 0 ? (
+                {agentAddressOptions.length > 0 ? (
                   <Dropdown
                     label="Destination Agent Address"
                     placeholder="Select destination agent address"
                     searchable
-                    data={originAgentAddressOptions}
-                    value={form.values.origin_agent_address || ""}
+                    data={agentAddressOptions}
+                    value={form.values.agent_address || ""}
                     onChange={(value) => {
                       const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue(
-                        "origin_agent_address",
-                        formattedValue,
-                      );
+                      form.setFieldValue("agent_address", formattedValue);
                     }}
-                    error={form.errors.origin_agent_address}
+                    error={form.errors.agent_address}
                   />
                 ) : (
                   <FormTextInput
                     label="Destination Agent Address"
                     placeholder="Enter Destination Agent Address"
                     minRows={2}
-                    value={form.values.origin_agent_address}
+                    value={form.values.agent_address}
                     onChange={(e) => {
                       const formattedValue = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue(
-                        "origin_agent_address",
-                        formattedValue,
-                      );
+                      form.setFieldValue("agent_address", formattedValue);
                     }}
-                    error={form.errors.origin_agent_address}
+                    error={form.errors.agent_address}
                   />
                 )}
               </Grid.Col>
@@ -3152,8 +3175,7 @@ function HouseCreate() {
                     const fullDetail = getCurrentHousingDetail();
                     const prepaidCharges = (fullDetail.charges ?? []).filter(
                       (c: { pp_cc?: string }) =>
-                        String(c.pp_cc ?? "")
-                          .trim() === "Prepaid",
+                        String(c.pp_cc ?? "").trim() === "Prepaid",
                     );
                     const detailForInvoice = {
                       ...fullDetail,
