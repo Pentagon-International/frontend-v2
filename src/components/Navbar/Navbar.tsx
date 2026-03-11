@@ -665,6 +665,19 @@ const Navbar = ({
                       setIsSeaExportOpen,
                     }}
                   />
+<SubNavLink
+                    parent="Accounts"
+                    label="Payment Request Approval"
+                    icon={IconCircleCheck}
+                    path="/payment-request-approval"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
                   <SubNavLink
                     parent="Accounts"
                     label="Supplier Invoice"

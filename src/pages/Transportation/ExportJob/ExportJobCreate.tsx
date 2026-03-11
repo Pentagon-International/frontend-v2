@@ -3821,7 +3821,7 @@ function ExportJobCreate() {
                 Create PR
               </Button>
             </Group>
-            <EstimatesSection form={estimatesForm} readOnly={isReadOnly} />
+            <EstimatesSection serviceType="SEA" form={estimatesForm} readOnly={isReadOnly} />
           </Box>
         </Tabs.Panel>
 

@@ -71,8 +71,8 @@ async function fetchCurrencyMaster(): Promise<CurrencyMasterItem[]> {
   return Array.isArray(raw) ? (raw as CurrencyMasterItem[]) : [];
 }
 
-async function fetchUnitMaster(): Promise<UnitMasterItem[]> {
-  const payload = { filters: {} };
+async function fetchUnitMaster( serviceType: string ): Promise<UnitMasterItem[]> {
+  const payload = { filters: { service_type: serviceType } };
   const response = (await postAPICall(
     URL.unitMasterFilter,
     payload,
@@ -113,6 +113,7 @@ function normalizePpCc(value: unknown): string {
 
 export type EstimatesSectionProps = {
   form: UseFormReturnType<EstimatesFormValues>;
+  serviceType?: string;
   readOnly?: boolean;
   /** Defaults to URL.supplierByType */
   supplierEndpoint?: string;
@@ -126,6 +127,7 @@ export type EstimatesSectionProps = {
 
 export function EstimatesSection({
   form,
+  serviceType,
   readOnly = false,
   supplierEndpoint = URL.supplierByType,
   chargeEndpoint = URL.chargeMaster,
@@ -141,8 +143,8 @@ export function EstimatesSection({
   });
 
   const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster"],
-    queryFn: fetchUnitMaster,
+    queryKey: ["unitMaster", serviceType ?? ""],
+    queryFn: () => fetchUnitMaster(serviceType ?? ""),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });

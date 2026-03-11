@@ -25,7 +25,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { useMemo, useCallback, useState } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -99,6 +99,35 @@ const fetchUnitMaster = async () => {
   }
 };
 
+const fetchChartOfAccounts = async () => {
+  try {
+    const response = await postAPICall(
+      (URL as any).chartOfAccountsFilter,
+      { filters: {} },
+      API_HEADER,
+    );
+    return (response as { data?: unknown[] })?.data ?? [];
+  } catch {
+    return [];
+  }
+};
+
+// Fetch effective SAC (tax code) for charge + service
+const fetchGetEffectiveSac = async (
+  items: { charge_id: number; service_id:  number }[],
+): Promise<Array<{ charge_id: number; service_id: number; sac_code?: string | null; error?: string }>> => {
+  try {
+    const response = await postAPICall(
+      (URL as any).gstChargeMappingGetEffectiveSac,
+      { items },
+      API_HEADER,
+    );
+    return (response as { data?: Array<{ charge_id: number; service_id: number; sac_code?: string | null; error?: string }> })?.data ?? [];
+  } catch {
+    return [];
+  }
+};
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type ChargeItem = {
@@ -165,6 +194,61 @@ type SaveResponse = {
   id?: number;
   request_no?: string;
   status?: string;
+};
+
+type PaymentRequestFromApi = {
+  id?: number;
+  request_no?: string;
+  job_reference?: string;
+  payment_crj?: string;
+  approved_by?: string;
+  approved_date?: string | null;
+  customer_gst_no?: string;
+  location_gst_no?: string;
+  date?: string | null;
+  payment_type?: string;
+  vouchar_type?: string;
+  CINV?: boolean;
+  proforma_inv_no?: string;
+  actual_inv_no?: string;
+  account_code?: string;
+  subledger_code?: string;
+  amount?: number | string | null;
+  crj_date?: string | null;
+  paid_to_type?: string;
+  paid_to?: string;
+  paid_to_name?: string;
+  not_over?: string;
+  tds_section_code?: string;
+  account_note?: string;
+  note?: string;
+  rejected_note?: string | null;
+  on_hold_note?: string | null;
+  status?: string;
+  currency_code?: string;
+  currency_id?: number;
+  state_id?: number;
+  // API returns charges as "charges" (both POST and GET responses)
+  charges?: Array<{
+    id?: number;
+    charge_id?: number;
+    charge_name?: string;
+    segment?: string;
+    job_no?: string;
+    sub_job?: string;
+    cn_r?: string;
+    currency_code?: string;
+    currency_id?: number;
+    roe?: number | string;
+    unit_code?: string;
+    unit_id?: number;
+    no_of_unit?: number | string;
+    amount_per_unit?: number | string;
+    amount?: number | string;
+    local_amount?: number | string;
+    sac_code?: string;
+    tax?: boolean | string;
+  }>;
 };
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -236,7 +320,7 @@ function mapChargesFromState(state: unknown): { charges: ChargeItem[]; job_refer
     charge_id: c.charge_id != null ? Number(c.charge_id) : null,
     charge_name: String(c.charge_name ?? ""),
     segment: String(c.segment ?? ""),
-    job_no: String(c.job_no ?? ""),
+    job_no: String(c.job_no ?? "") || String(c.job_id ?? ""),
     sub_job: String(c.sub_job ?? ""),
     cn_r: String(c.cn_r ?? ""),
     currency: String(c.currency ?? ""),
@@ -278,10 +362,19 @@ function PaymentRequest() {
   const user = useAuthStore((state) => state.user);
 
   const isViewMode = location.pathname.includes("/view/");
+  const isEditMode = location.pathname.includes("/edit/");
+  const isEditOrViewMode = Boolean(requestId && (isViewMode || isEditMode));
   const isReadOnly = isViewMode;
 
+  // service_id for get-effective-sac API (available when navigating from a job page)
+  const jobServiceId =
+    (location.state as { job?: { service_id?: number } } | null)?.job?.service_id ?? 0;
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sacCodeLoadingByIndex, setSacCodeLoadingByIndex] = useState<Record<number, boolean>>({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+  const [paymentRequestDataFromApi, setPaymentRequestDataFromApi] =
+    useState<PaymentRequestFromApi | null>(null);
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
   >({});
@@ -289,6 +382,9 @@ function PaymentRequest() {
     null,
   );
   const [isReferenceInfoOpen, setIsReferenceInfoOpen] = useState(true);
+
+  // isUpdate: driven by saveResponse.id OR requestId in URL
+  const isUpdate = (saveResponse?.id != null && saveResponse.id > 0) || Boolean(requestId);
 
   const defaultBranch = user?.branches?.find(
     (b: { is_default?: boolean }) => b.is_default === true,
@@ -329,6 +425,35 @@ function PaymentRequest() {
     staleTime: Infinity,
   });
 
+  const { data: chartOfAccountsData = [] } = useQuery({
+    queryKey: ["chartOfAccounts"],
+    queryFn: fetchChartOfAccounts,
+    staleTime: Infinity,
+  });
+
+  // Fetch payment request data when opening edit/view URL (/edit/:id or /view/:id)
+  const { data: requestFetchRes, isFetching: requestFetchLoading } = useQuery({
+    queryKey: ["payment-request-view", requestId, location.key],
+    enabled: Boolean(isEditOrViewMode && requestId),
+    queryFn: async () =>
+      getAPICall(`${(URL as any).paymentRequest}${requestId}/`, API_HEADER),
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
+  });
+
+  // Extract API data from response and store in state
+  useEffect(() => {
+    if (!isEditOrViewMode || !requestId) return;
+    const payload = requestFetchRes as any;
+    const data = payload?.data?.data ?? payload?.data ?? payload;
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      setPaymentRequestDataFromApi(data as PaymentRequestFromApi);
+    } else {
+      setPaymentRequestDataFromApi(null);
+    }
+  }, [requestId, isEditOrViewMode, requestFetchRes]);
+
   // ─── Options ──────────────────────────────────────────────────────────────
 
   const currencyOptions = useMemo(() => {
@@ -360,6 +485,22 @@ function PaymentRequest() {
       label: item.unit_code ?? item.unit_name ?? String(item.id ?? ""),
     }));
   }, [unitData]);
+
+  const accountOptions = useMemo(() => {
+    const data = chartOfAccountsData as Array<{
+      gl_account_code?: string;
+      account_name?: string;
+      sl_code?: string;
+    }>;
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((item) => ({
+        value: String(item.gl_account_code ?? ""),
+        label: item.account_name ?? item.gl_account_code ?? "",
+        sl_code: item.sl_code ?? "",
+      }))
+      .filter((o) => o.value);
+  }, [chartOfAccountsData]);
 
   // ─── Prefill from Air Export Job (Create PR) ───────────────────────────────
   // Use initialValues from location.state so charges are set on first render (no useEffect timing)
@@ -416,6 +557,34 @@ function PaymentRequest() {
     },
   });
 
+  // ─── Batch-fetch SAC codes for charges prefilled from location.state ─────
+  useEffect(() => {
+    if (!prefillFromState?.charges?.length) return;
+    const chargesWithIds = prefillFromState.charges
+      .map((c, idx) => ({ charge: c, originalIdx: idx }))
+      .filter(({ charge }) => charge.charge_id != null);
+    if (chargesWithIds.length === 0) return;
+
+    const items = chargesWithIds.map(({ charge }) => ({
+      charge_id: charge.charge_id!,
+      service_id: jobServiceId as number,
+    }));
+
+    fetchGetEffectiveSac(items).then((data) => {
+      data.forEach((item, responseIdx) => {
+        const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
+        if (
+          originalIdx !== undefined &&
+          item?.sac_code != null &&
+          item.sac_code !== ""
+        ) {
+          form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ─── Submit ───────────────────────────────────────────────────────────────
 
   const handleSubmit = async (values: PaymentRequestFormData) => {
@@ -424,7 +593,7 @@ function PaymentRequest() {
       const formatDate = (d: Date | null) =>
         d ? d.toISOString().split("T")[0] : null;
 
-      // Resolve main form currency code to currency_id (number)
+      // Resolve billing currency code → numeric id
       const currencyList = currencyData as Array<{ id?: number; currency_code?: string; code?: string }>;
       const mainCurrencyId = currencyList?.find(
         (item) =>
@@ -433,7 +602,9 @@ function PaymentRequest() {
       )?.id;
 
       const stateIdNum = values.state_code_1 ? Number(values.state_code_1) : undefined;
+
       const payload: Record<string, unknown> = {
+        ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
         job_reference: values.job_reference_1 ?? "",
         payment_crj: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
@@ -460,7 +631,9 @@ function PaymentRequest() {
         on_hold_note: values.on_hold_note || null,
         status: values.approved || "Approved",
         charges_data: values.charges.map((c) => ({
+          ...(c.id != null ? { id: c.id } : {}),
           charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
+          job_id: (c.job_no ?? "") || (c.job_id ?? ""),
           currency_id: c.currency_id ? Number(c.currency_id) : undefined,
           unit_id: c.unit_id ? Number(c.unit_id) : undefined,
           roe: c.roe != null ? Number(c.roe) : undefined,
@@ -478,29 +651,144 @@ function PaymentRequest() {
         payload.state_id = stateIdNum;
       }
 
-      if (saveResponse?.id || requestId) {
-        const id = saveResponse?.id ?? Number(requestId);
-        const response = await putAPICall(
-          `${(URL as any).paymentRequest}${id}/`,
+      if (isUpdate) {
+        // PUT — update existing record (stays on same page)
+        const rawPut = (await putAPICall(
+          `${(URL as any).paymentRequest}`,
           payload,
           API_HEADER,
-        );
-        setSaveResponse(response as SaveResponse);
-        ToastNotification({
-          message: "Payment request updated successfully",
-          type: "success",
-        });
+        )) as any;
+        if (rawPut) {
+          // Handle wrapped response: { status, message, data: {...} } or unwrapped
+          const d: PaymentRequestFromApi =
+            rawPut?.data?.data ?? rawPut?.data ?? rawPut;
+
+          setSaveResponse((prev) => ({
+            ...prev,
+            id: d.id ?? prev?.id,
+            request_no: d.request_no ?? prev?.request_no ?? "",
+            status: d.status ?? prev?.status,
+          }));
+
+          if (d.request_no) {
+            form.setFieldValue("request_no", d.request_no);
+          }
+
+          // Merge returned charge ids back into form
+          const resCharges = d.charges;
+          if (resCharges && Array.isArray(resCharges)) {
+            form.setFieldValue(
+              "charges",
+              values.charges.map((c, i) => ({
+                ...c,
+                id:
+                  resCharges[i]?.id != null
+                    ? Number(resCharges[i].id)
+                    : c.id,
+              })),
+            );
+          }
+          ToastNotification({
+            message: "Payment request updated successfully",
+            type: "success",
+          });
+        }
       } else {
-        const response = await postAPICall(
+        // POST — create new record, then switch to edit mode in-place
+        const rawResponse = (await postAPICall(
           (URL as any).paymentRequest,
           payload,
           API_HEADER,
-        );
-        setSaveResponse(response as SaveResponse);
-        ToastNotification({
-          message: "Payment request saved successfully",
-          type: "success",
-        });
+        )) as any;
+        if (rawResponse) {
+          // Handle wrapped response: { status, message, data: {...} } or unwrapped
+          const d: PaymentRequestFromApi =
+            rawResponse?.data?.data ?? rawResponse?.data ?? rawResponse;
+
+          if (d && d.id) {
+            setSaveResponse({
+              id: d.id,
+              request_no: d.request_no ?? "",
+              status: d.status,
+            });
+
+            // Populate the form with all saved values so the screen is in edit mode
+            form.setValues({
+              request_no: d.request_no ?? "",
+              job_reference_1: d.job_reference ?? "",
+              job_reference_2: form.values.job_reference_2,
+              payment_crj_did: d.payment_crj ?? "",
+              date: normalizeDate(d.date) ?? values.date,
+              rejected_request_no: form.values.rejected_request_no,
+              proforma_invoice_no_1: d.proforma_inv_no ?? "",
+              proforma_invoice_no_2: form.values.proforma_invoice_no_2,
+              payment_type: d.payment_type ?? "",
+              voucher_type: d.vouchar_type ?? "",
+              cinv: d.CINV ?? false,
+              actual_invoice_no: d.actual_inv_no ?? "",
+              account_code: d.account_code ?? "",
+              currency: d.currency_code ?? values.currency,
+              amount: d.amount != null ? Number(d.amount) : null,
+              subledger_code: d.subledger_code ?? "",
+              crj_date: normalizeDate(d.crj_date),
+              paid_to_type: d.paid_to_type ?? "",
+              not_over: d.not_over ?? "",
+              paid_to: d.paid_to ?? "",
+              approved: d.status ?? "",
+              state_code_1:
+                d.state_id != null ? String(d.state_id) : values.state_code_1,
+              state_code_2: form.values.state_code_2,
+              approved_by_1: d.approved_by ?? "",
+              approved_by_2: form.values.approved_by_2,
+              tds_section_code: d.tds_section_code ?? "",
+              approved_date: normalizeDate(d.approved_date),
+              accountant_note: d.account_note ?? "",
+              prepared_by_1: form.values.prepared_by_1,
+              prepared_by_2: form.values.prepared_by_2,
+              note: d.note ?? "",
+              customer_gst_no: d.customer_gst_no ?? "",
+              rejected_note: d.rejected_note ?? "",
+              on_hold_note: d.on_hold_note ?? "",
+              location_gst_no: d.location_gst_no ?? "",
+              charges:
+                d.charges && d.charges.length > 0
+                  ? d.charges.map((c) => ({
+                      id: c.id != null ? Number(c.id) : null,
+                      charge_id:
+                        c.charge_id != null ? Number(c.charge_id) : null,
+                      charge_name: c.charge_name ?? "",
+                      segment: c.segment ?? "",
+                      job_no: (c.job_no ?? "") || (c.job_id ?? ""),
+                      sub_job: c.sub_job ?? "",
+                      cn_r: c.cn_r ?? "",
+                      currency: c.currency_code ?? "",
+                      currency_id:
+                        c.currency_id != null ? String(c.currency_id) : "",
+                      roe: c.roe != null ? Number(c.roe) : null,
+                      unit_code: c.unit_code ?? "",
+                      unit_id: c.unit_id != null ? String(c.unit_id) : "",
+                      no_of_unit:
+                        c.no_of_unit != null ? Number(c.no_of_unit) : null,
+                      amount_per_unit:
+                        c.amount_per_unit != null
+                          ? Number(c.amount_per_unit)
+                          : null,
+                      amount: c.amount != null ? Number(c.amount) : null,
+                      amount_in_local:
+                        c.local_amount != null ? Number(c.local_amount) : null,
+                      tax_code: c.sac_code ?? "",
+                      tax:
+                        c.tax === true || c.tax === "true" ? "true" : "false",
+                    }))
+                  : values.charges,
+            });
+          }
+
+          ToastNotification({
+            message: "Payment request saved successfully",
+            type: "success",
+          });
+        }
       }
     } catch (error: unknown) {
       console.error("Error saving payment request:", error);
@@ -515,12 +803,95 @@ function PaymentRequest() {
     }
   };
 
+  // ─── Populate form when opening edit/view URL ─────────────────────────────
+  useEffect(() => {
+    if (!isEditOrViewMode || !requestId || !paymentRequestDataFromApi) return;
+    const d = paymentRequestDataFromApi;
+
+    setSaveResponse({
+      id: d.id,
+      request_no: d.request_no ?? "",
+      status: d.status,
+    });
+
+    if (d.paid_to_name) {
+      setPaidToDisplayName(d.paid_to_name);
+    }
+
+    form.setValues({
+      request_no: d.request_no ?? "",
+      job_reference_1: d.job_reference ?? "",
+      job_reference_2: "",
+      payment_crj_did: d.payment_crj ?? "",
+      date: normalizeDate(d.date) ?? new Date(),
+      rejected_request_no: "",
+      proforma_invoice_no_1: d.proforma_inv_no ?? "",
+      proforma_invoice_no_2: "",
+      payment_type: d.payment_type ?? "",
+      voucher_type: d.vouchar_type ?? "",
+      cinv: d.CINV ?? false,
+      actual_invoice_no: d.actual_inv_no ?? "",
+      account_code: d.account_code ?? "",
+      currency: d.currency_code ?? defaultBranchCurrency,
+      amount: d.amount != null ? Number(d.amount) : null,
+      subledger_code: d.subledger_code ?? "",
+      crj_date: normalizeDate(d.crj_date),
+      paid_to_type: d.paid_to_type ?? "",
+      not_over: d.not_over ?? "",
+      paid_to: d.paid_to ?? "",
+      approved: d.status ?? "",
+      state_code_1: d.state_id != null ? String(d.state_id) : "",
+      state_code_2: "",
+      approved_by_1: d.approved_by ?? "",
+      approved_by_2: "",
+      tds_section_code: d.tds_section_code ?? "",
+      approved_date: normalizeDate(d.approved_date),
+      accountant_note: d.account_note ?? "",
+      prepared_by_1: "",
+      prepared_by_2: "",
+      note: d.note ?? "",
+      customer_gst_no: d.customer_gst_no ?? "",
+      rejected_note: d.rejected_note ?? "",
+      on_hold_note: d.on_hold_note ?? "",
+      location_gst_no: d.location_gst_no ?? "",
+      charges:
+        d.charges && d.charges.length > 0
+          ? d.charges.map((c) => ({
+              id: c.id != null ? Number(c.id) : null,
+              charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+              charge_name: c.charge_name ?? "",
+              segment: c.segment ?? "",
+              job_no: (c.job_no ?? "") || (c.job_id ?? ""),
+              sub_job: c.sub_job ?? "",
+              cn_r: c.cn_r ?? "",
+              currency: c.currency_code ?? "",
+              currency_id: c.currency_id != null ? String(c.currency_id) : "",
+              roe: c.roe != null ? Number(c.roe) : null,
+              unit_code: c.unit_code ?? "",
+              unit_id: c.unit_id != null ? String(c.unit_id) : "",
+              no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : null,
+              amount_per_unit:
+                c.amount_per_unit != null ? Number(c.amount_per_unit) : null,
+              amount: c.amount != null ? Number(c.amount) : null,
+              amount_in_local:
+                c.local_amount != null ? Number(c.local_amount) : null,
+              tax_code: c.sac_code ?? "",
+              tax:
+                c.tax === true || c.tax === "true"
+                  ? "true"
+                  : "false",
+            }))
+          : [emptyCharge()],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestId, isEditOrViewMode, paymentRequestDataFromApi]);
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <Box p="md" style={{ position: "relative" }}>
-      {/* Full-page loader overlay when saving */}
-      {isSubmitting && (
+      {/* Full-page loader overlay when saving or loading edit data */}
+      {(isSubmitting || requestFetchLoading) && (
         <Box
           style={{
             position: "fixed",
@@ -535,7 +906,9 @@ function PaymentRequest() {
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
-              Saving payment request...
+              {requestFetchLoading
+                ? "Loading payment request..."
+                : "Saving payment request..."}
             </Text>
           </Stack>
         </Box>
@@ -930,10 +1303,10 @@ function PaymentRequest() {
                 <Grid columns={12} gutter="sm">
                   {(
                     [
-                      {
-                        label: "Request No",
-                        value: form.values.request_no,
-                      },
+                      // {
+                      //   label: "Request No",
+                      //   value: form.values.request_no,
+                      // },
                       {
                         label: "Job Reference",
                         value: form.values.job_reference_1,
@@ -1096,7 +1469,7 @@ function PaymentRequest() {
             </Grid.Col>
 
             {/* ── Row 2 (6+6): Proforma Invoice No | Actual Invoice No ── */}
-            <Grid.Col span={6}>
+            {/* <Grid.Col span={6}>
               <TextInput
                 label="Proforma Invoice No"
                 placeholder="Enter proforma invoice no"
@@ -1107,7 +1480,7 @@ function PaymentRequest() {
                 readOnly={isReadOnly}
                 styles={inputStyles}
               />
-            </Grid.Col>
+            </Grid.Col> */}
 
             <Grid.Col span={6}>
               <TextInput
@@ -1124,13 +1497,21 @@ function PaymentRequest() {
 
             {/* ── Row 3 (2+2+2+2+4): Account Code | Subledger Code | Currency | Amount | CRJ Date ── */}
             <Grid.Col span={2}>
-              <TextInput
+              <Dropdown
                 label="Account"
-                placeholder="Enter account"
-                value={form.values.account_code}
-                onChange={(e) =>
-                  form.setFieldValue("account_code", e.target.value)
-                }
+                placeholder="Select account"
+                data={accountOptions}
+                value={form.values.account_code || null}
+                onChange={(value) => {
+                  const code = value ?? "";
+                  form.setFieldValue("account_code", code);
+                  const opt = accountOptions.find((o) => o.value === code) as
+                    | { sl_code?: string }
+                    | undefined;
+                  form.setFieldValue("subledger_code", opt?.sl_code ?? "");
+                }}
+                searchable
+                clearable
                 readOnly={isReadOnly}
                 styles={inputStyles}
               />
@@ -1139,13 +1520,16 @@ function PaymentRequest() {
             <Grid.Col span={2}>
               <TextInput
                 label="Subledger Code"
-                placeholder="Enter subledger code"
+                placeholder="Subledger"
                 value={form.values.subledger_code}
-                onChange={(e) =>
-                  form.setFieldValue("subledger_code", e.target.value)
-                }
-                readOnly={isReadOnly}
-                styles={inputStyles}
+                readOnly
+                styles={{
+                  ...inputStyles,
+                  input: {
+                    ...inputStyles.input,
+                    backgroundColor: isReadOnly ? "var(--mantine-color-gray-0)" : undefined,
+                  },
+                }}
               />
             </Grid.Col>
 
@@ -1210,7 +1594,7 @@ function PaymentRequest() {
               <SearchableSelect
                 label="Paid To"
                 placeholder="Type vendor / supplier name"
-                apiEndpoint={URL.customer}
+                apiEndpoint={URL.supplierByType}
                 searchFields={["customer_name", "customer_code"]}
                 displayFormat={(item: Record<string, unknown>) => ({
                   value: String(item.customer_code ?? item.id ?? ""),
@@ -1377,7 +1761,7 @@ function PaymentRequest() {
                 Seg
               </Grid.Col> */}
               <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
-                Job No
+                Job Id
               </Grid.Col>
               {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 Subjob
@@ -1472,7 +1856,7 @@ function PaymentRequest() {
                 {/* Job No */}
                 <Grid.Col span={0.7}>
                   <TextInput
-                    placeholder="Job No"
+                    placeholder="Job Id"
                     value={charge.job_no}
                     onChange={(e) =>
                       form.setFieldValue(
@@ -1576,6 +1960,20 @@ function PaymentRequest() {
                           }
                         }
                         setChargeErrors(newErrors);
+                      }
+                      // Auto-fetch SAC code whenever a charge is selected/changed
+                      if (chargeId != null) {
+                        setSacCodeLoadingByIndex((prev) => ({ ...prev, [index]: true }));
+                        fetchGetEffectiveSac([{ charge_id: chargeId, service_id: jobServiceId ?? 0 }])
+                          .then((data) => {
+                            const item = data[0];
+                            if (item?.sac_code != null && item.sac_code !== "") {
+                              form.setFieldValue(`charges.${index}.tax_code`, item.sac_code);
+                            }
+                          })
+                          .finally(() => {
+                            setSacCodeLoadingByIndex((prev) => ({ ...prev, [index]: false }));
+                          });
                       }
                     }}
                     withAsterisk
@@ -1840,13 +2238,13 @@ function PaymentRequest() {
                   <TextInput
                     placeholder="SAC Code"
                     value={charge.tax_code}
-                    onChange={(e) =>
-                      form.setFieldValue(
-                        `charges.${index}.tax_code`,
-                        e.target.value,
-                      )
-                    }
                     readOnly={isReadOnly}
+                    rightSection={
+                      sacCodeLoadingByIndex[index] &&
+                      (!charge.tax_code || charge.tax_code.trim() === "") ? (
+                        <Loader size="xs" color="#105476" />
+                      ) : null
+                    }
                     styles={{
                       input: {
                         fontSize: "13px",

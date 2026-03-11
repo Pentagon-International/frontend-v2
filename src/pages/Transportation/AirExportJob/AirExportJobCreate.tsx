@@ -3316,14 +3316,16 @@ function AirExportJobCreate() {
                           : jobData?.id != null
                             ? String(jobData.id)
                             : "",
+                      ...(jobData && { job: jobData }),
                     },
                   });
                 }}
               >
-                Create PR
+                Create PRQ
               </Button>
             </Group>
             <EstimatesSection
+              serviceType="AIR"
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}

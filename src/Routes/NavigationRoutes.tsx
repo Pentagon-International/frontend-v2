@@ -100,6 +100,7 @@ import {
   InvoiceCreate,
   InvoiceReverse,
   PaymentRequestCreate,
+  PaymentRequestApproval,
   AirExportJobMaster,
   AirExportJobCreate,
   AirExportHouseCreate,
@@ -330,6 +331,7 @@ const NavigationRoutes = () => {
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/view/:id" element={<PaymentRequestCreate />} />
+        <Route path="/payment-request-approval" element={<PaymentRequestApproval />} />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
         <Route path="/lead-create" element={<CreateLead />} />

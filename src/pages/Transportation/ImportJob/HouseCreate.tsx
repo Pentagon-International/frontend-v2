@@ -193,7 +193,7 @@ const fetchUnitMaster = async () => {
   try {
     const payload = {
       filters: {
-        // service_type: "SEA",
+        service_type: "FCL,LCL",
       },
     };
     const response = (await postAPICall(

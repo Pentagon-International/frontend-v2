@@ -38,6 +38,7 @@ dayjs.extend(utc);
 // Type definitions
 type AirExportJobData = {
   id: number;
+  service_id?: number;
   service: string;
   service_type: string;
   agent_code: string | null;

@@ -3453,6 +3453,7 @@ function AirImportJobCreate() {
               Estimates
             </Text>
             <EstimatesSection
+              serviceType="AIR"
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}

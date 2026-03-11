@@ -3742,7 +3742,7 @@ function ImportJobCreate() {
             <Text size="lg" fw={600} c="#105476" mb="md">
               Estimates
             </Text>
-            <EstimatesSection form={estimatesForm} readOnly={isReadOnly} />
+            <EstimatesSection serviceType="SEA" form={estimatesForm} readOnly={isReadOnly} />
           </Box>
         </Tabs.Panel>
 

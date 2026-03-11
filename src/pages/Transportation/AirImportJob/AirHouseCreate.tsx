@@ -161,7 +161,7 @@ const fetchUnitMaster = async (serviceType: string = "AIR") => {
   try {
     const payload = {
       filters: {
-        // service_type: serviceType,
+        service_type: serviceType,
       },
     };
     const response = (await postAPICall(
