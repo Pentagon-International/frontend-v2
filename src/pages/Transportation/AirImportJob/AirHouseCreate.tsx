@@ -45,6 +45,7 @@ import { useDebouncedCallback } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
+import { commonSearchAPI } from "../../../service/searchApi";
 import {
   SearchableSelect,
   Dropdown,
@@ -225,7 +226,9 @@ type InvoiceListItem = {
 // Validation handled in validateStep1 and validateStep2 functions
 
 const normalizePpCc = (value: unknown): string => {
-  const raw = String(value ?? "").trim().toUpperCase();
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return "";
@@ -287,6 +290,18 @@ function HouseCreate() {
     Array<{ value: string; label: string }>
   >([]);
 
+  // Shipment-party search state for Shipper (import flow)
+  const [shipperSearch, setShipperSearch] = useState("");
+  const [shipperOptions, setShipperOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  // Separate "manual mode" flag to avoid rapid flipping between Select/TextInput (prevents focus loss)
+  const [shipperManualMode, setShipperManualMode] = useState(false);
+  const [shipperHasResults, setShipperHasResults] = useState<boolean | null>(
+    null,
+  );
+  const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
+
   // State for cargo details
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
     {
@@ -318,7 +333,7 @@ function HouseCreate() {
     setInvoiceListLoading(true);
     postAPICall(
       URL.invoiceCombined,
-      { filters: { shipment_no: editData?.shipment_id , "is_agent":false} },
+      { filters: { shipment_no: editData?.shipment_id, is_agent: false } },
       API_HEADER,
     )
       .then((res: unknown) => {
@@ -347,6 +362,91 @@ function HouseCreate() {
       ],
     },
   });
+
+  // Debounced shipment-party search for Shipper (import flow)
+  const debouncedShipperSearch = useDebouncedCallback(async (term: string) => {
+    const query = term.trim();
+    if (!query || query.length < 2) {
+      setShipperOptions([]);
+      setShipperHasResults(null);
+      setShipperManualMode(false);
+      shipperDataRef.current = {};
+      return;
+    }
+
+    try {
+      const results = await commonSearchAPI({
+        endpoint: URL.shipmentParty,
+        query,
+      });
+
+      const arr = Array.isArray(results)
+        ? (results as Record<string, unknown>[])
+        : [];
+
+      if (!arr.length) {
+        setShipperOptions([]);
+        setShipperHasResults(false);
+        setShipperManualMode(true);
+        shipperDataRef.current = {};
+        // When shipment-party has no matches, keep the user's typed text
+        // as the shipper name (manual entry flow like booking page).
+        form.setFieldValue("shipper_code", "");
+        form.setFieldValue("shipper_name", query);
+        return;
+      }
+
+      const map: Record<string, Record<string, unknown>> = {};
+      const opts = arr.map((item) => {
+        const id = String(item.id ?? "");
+        map[id] = item;
+        return {
+          value: id,
+          label: String(item.customer_name || ""),
+        };
+      });
+
+      shipperDataRef.current = map;
+      setShipperOptions(opts);
+      setShipperHasResults(true);
+      setShipperManualMode(false);
+    } catch (error) {
+      console.error("Shipper shipment-party search failed:", error);
+      setShipperOptions([]);
+      setShipperHasResults(null);
+      setShipperManualMode(false);
+      shipperDataRef.current = {};
+    }
+  }, 500);
+
+  const getPartyEmail = (original: Record<string, unknown>): string => {
+    const email =
+      (original.customer_email as string | undefined) ??
+      (original.email as string | undefined) ??
+      (original.customerEmail as string | undefined) ??
+      "";
+    return String(email || "");
+  };
+
+  const getPartyAddresses = (
+    original: Record<string, unknown>,
+  ): Array<{ address?: string; state_id?: number }> => {
+    const raw =
+      (original.addresses_data as unknown) ??
+      (original.addresses as unknown) ??
+      (original.address_data as unknown);
+
+    if (!Array.isArray(raw)) return [];
+
+    return (raw as Array<Record<string, unknown>>).map((a) => ({
+      address:
+        (a.address as string | undefined) ?? (a.address1 as string | undefined),
+      state_id:
+        a.state_id != null && !Number.isNaN(Number(a.state_id))
+          ? Number(a.state_id)
+          : undefined,
+    }));
+  };
 
   // Get existing housing details from location state if available
   // Check both hawbDetails and housingDetails for backward compatibility
@@ -417,7 +517,11 @@ function HouseCreate() {
       origin_agent_name: editData?.origin_agent_name || "",
       origin_agent_address: editData?.origin_agent_address || "",
       origin_agent_email: editData?.origin_agent_email || "",
-      shipper_code: editData?.shipper_code || "", // Will be set when user selects from SearchableSelect
+      // shipment-party uses customer id as value; API may send shipper_id or shipper_code
+      shipper_code:
+        editData?.shipper_id != null
+          ? String(editData.shipper_id)
+          : String(editData?.shipper_code || ""),
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
@@ -425,7 +529,10 @@ function HouseCreate() {
         editData?.shipper_state_id != null
           ? String(editData.shipper_state_id)
           : "",
-      consignee_code: editData?.consignee_code || "", // Will be set when user selects from SearchableSelect
+      consignee_code:
+        editData?.consignee_id != null
+          ? String(editData.consignee_id)
+          : String(editData?.consignee_code || ""),
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
@@ -437,9 +544,21 @@ function HouseCreate() {
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
-      events: Array.isArray((editData as { events?: unknown } | undefined)?.events)
-        ? ((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
-            ?.events ?? []
+      events: Array.isArray(
+        (editData as { events?: unknown } | undefined)?.events,
+      )
+        ? (
+            (
+              editData as
+                | {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                | undefined
+            )?.events ?? []
           ).map((e) => ({
             id: e.id != null ? Number(e.id) : undefined,
             type: String(e.type ?? ""),
@@ -450,7 +569,11 @@ function HouseCreate() {
               (
                 location.state?.job as {
                   housing_details?: Array<{
-                    events?: Array<{ id?: number; type?: string; date?: string }>;
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
                   }>;
                 }
               )?.housing_details?.[editIndex ?? 0]?.events ?? [];
@@ -464,15 +587,25 @@ function HouseCreate() {
       event_modal_rows: [
         ...(() => {
           const sourceEvents =
-            (editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
-              ?.events ??
+            (
+              editData as
+                | {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                | undefined
+            )?.events ??
             (
               location.state?.job as {
                 housing_details?: Array<{
                   events?: Array<{ id?: number; type?: string; date?: string }>;
                 }>;
               }
-            )?.housing_details?.[editIndex ?? 0]?.events ?? [];
+            )?.housing_details?.[editIndex ?? 0]?.events ??
+            [];
           if (!Array.isArray(sourceEvents) || sourceEvents.length === 0) {
             return [];
           }
@@ -562,7 +695,10 @@ function HouseCreate() {
 
   // Similar booking check - modal and API (Air Import Job Create flow only)
   const [similarBookingModalOpen, setSimilarBookingModalOpen] = useState(false);
-  const [similarBookingData, setSimilarBookingData] = useState<Record<string, unknown> | null>(null);
+  const [similarBookingData, setSimilarBookingData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
   const fetchSimilarBookings = useCallback(
     async (hawbNo: string, agentCode: string) => {
@@ -574,13 +710,18 @@ function HouseCreate() {
             filters: {
               service_type: "IMPORT",
               service:"AIR",
+              status: ["BOOKED", "RECEIVED"],
               houseno: hawbNo.trim(),
               destination_agent_code: agentCode.trim(),
             },
           },
-          API_HEADER
+          API_HEADER,
         )) as { success?: boolean; data?: unknown[] };
-        if (response?.success && Array.isArray(response.data) && response.data.length > 0) {
+        if (
+          response?.success &&
+          Array.isArray(response.data) &&
+          response.data.length > 0
+        ) {
           setSimilarBookingData(response.data[0] as Record<string, unknown>);
           setSimilarBookingModalOpen(true);
         }
@@ -588,14 +729,14 @@ function HouseCreate() {
         // Silent fail for optional feature
       }
     },
-    []
+    [],
   );
 
   const debouncedFetchSimilarBookings = useDebouncedCallback(
     (hawbNo: string, agentCode: string) => {
       fetchSimilarBookings(hawbNo, agentCode);
     },
-    2000
+    2000,
   );
 
   useEffect(() => {
@@ -605,7 +746,12 @@ function HouseCreate() {
     if (hawbNo && agentCode) {
       debouncedFetchSimilarBookings(hawbNo, agentCode);
     }
-  }, [isEditMode, form.values.hawb_number, form.values.origin_agent, debouncedFetchSimilarBookings]);
+  }, [
+    isEditMode,
+    form.values.hawb_number,
+    form.values.origin_agent,
+    debouncedFetchSimilarBookings,
+  ]);
 
   const fillFormFromSimilarBooking = useCallback(() => {
     const b = similarBookingData;
@@ -636,7 +782,10 @@ function HouseCreate() {
     }
     if (rb.routed) {
       const routed = String(rb.routed).toLowerCase();
-      form.setFieldValue("routed", routed === "self" || routed === "agent" ? routed : "self");
+      form.setFieldValue(
+        "routed",
+        routed === "self" || routed === "agent" ? routed : "self",
+      );
     }
     if (rb.routed_by) {
       form.setFieldValue("routed_by", String(rb.routed_by));
@@ -680,10 +829,16 @@ function HouseCreate() {
 
     // Origin agent address and email (booking uses destination_agent_* for import)
     if (rb.destination_agent_address) {
-      form.setFieldValue("origin_agent_address", String(rb.destination_agent_address));
+      form.setFieldValue(
+        "origin_agent_address",
+        String(rb.destination_agent_address),
+      );
     }
     if (rb.destination_agent_email) {
-      form.setFieldValue("origin_agent_email", String(rb.destination_agent_email));
+      form.setFieldValue(
+        "origin_agent_email",
+        String(rb.destination_agent_email),
+      );
     }
 
     // Cargo details - from cargo_details array OR top-level fields
@@ -691,7 +846,8 @@ function HouseCreate() {
       | Array<Record<string, unknown>>
       | undefined;
     const isHazardous = (rb as { is_hazardous?: boolean }).is_hazardous;
-    const haz = isHazardous === true ? "Yes" : isHazardous === false ? "No" : "";
+    const haz =
+      isHazardous === true ? "Yes" : isHazardous === false ? "No" : "";
 
     const toNum = (v: unknown): number | null => {
       if (v == null) return null;
@@ -699,7 +855,11 @@ function HouseCreate() {
       return Number.isNaN(n) ? null : n;
     };
 
-    if (cargoDetailsData && Array.isArray(cargoDetailsData) && cargoDetailsData.length > 0) {
+    if (
+      cargoDetailsData &&
+      Array.isArray(cargoDetailsData) &&
+      cargoDetailsData.length > 0
+    ) {
       const mapped = cargoDetailsData.map((c) => {
         const no_of_packages = toNum(c.no_of_packages ?? rb.no_of_packages);
         const gross_weight = toNum(c.gross_weight ?? rb.gross_weight);
@@ -728,7 +888,8 @@ function HouseCreate() {
         no_of_packages: toNum(rb.no_of_packages),
         gross_weight: toNum(rb.gross_weight),
         volume: toNum(rb.volume) ?? toNum(rb.volume_weight),
-        chargeable_weight: toNum(rb.chargeable_volume) ?? toNum(rb.chargeable_weight),
+        chargeable_weight:
+          toNum(rb.chargeable_volume) ?? toNum(rb.chargeable_weight),
         haz,
       };
       setCargoDetails([row]);
@@ -741,12 +902,20 @@ function HouseCreate() {
     if (rateDetails && Array.isArray(rateDetails) && rateDetails.length > 0) {
       const mappedCharges = rateDetails.map((r) => {
         const unitId =
-          r.unit_id != null ? String(r.unit_id) : r.unit != null ? String(r.unit) : "";
+          r.unit_id != null
+            ? String(r.unit_id)
+            : r.unit != null
+              ? String(r.unit)
+              : "";
         const currencyId =
           (r as { currency_id?: unknown }).currency_id != null
             ? String((r as { currency_id?: unknown }).currency_id)
-            : (r as { currency_country_code?: string }).currency_country_code != null
-              ? String((r as { currency_country_code?: string }).currency_country_code)
+            : (r as { currency_country_code?: string }).currency_country_code !=
+                null
+              ? String(
+                  (r as { currency_country_code?: string })
+                    .currency_country_code,
+                )
               : "";
         return {
           charge_id: r.charge_id != null ? Number(r.charge_id) : null,
@@ -756,7 +925,8 @@ function HouseCreate() {
           no_of_unit: r.no_of_units != null ? Number(r.no_of_units) : null,
           currency_id: currencyId,
           roe: r.roe != null ? Number(r.roe) : null,
-          amount_per_unit: r.sell_per_unit != null ? Number(r.sell_per_unit) : null,
+          amount_per_unit:
+            r.sell_per_unit != null ? Number(r.sell_per_unit) : null,
           amount: r.total_sell != null ? Number(r.total_sell) : null,
         };
       });
@@ -865,7 +1035,11 @@ function HouseCreate() {
         origin_agent_name: editData.origin_agent_name || "",
         origin_agent_address: editData.origin_agent_address || "",
         origin_agent_email: editData.origin_agent_email || "",
-        shipper_code: "", // Will be set when user selects from SearchableSelect
+        // Preserve party ids for shipment-party Select; name/address/email from API housing_details
+        shipper_code:
+          editData.shipper_id != null
+            ? String(editData.shipper_id)
+            : String(editData.shipper_code || ""),
         shipper_name: editData.shipper_name || "",
         shipper_address: editData.shipper_address || "",
         shipper_email: editData.shipper_email || "",
@@ -873,7 +1047,10 @@ function HouseCreate() {
           editData.shipper_state_id != null
             ? String(editData.shipper_state_id)
             : "",
-        consignee_code: "", // Will be set when user selects from SearchableSelect
+        consignee_code:
+          editData.consignee_id != null
+            ? String(editData.consignee_id)
+            : String(editData.consignee_code || ""),
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
         consignee_email: editData.consignee_email || "",
@@ -883,6 +1060,23 @@ function HouseCreate() {
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
       });
+
+      // Sync search display and address options from housing_details (like booking edit load)
+      const shipperName = String(editData.shipper_name || "");
+      if (shipperName) setShipperSearch(shipperName);
+      const shipperAddr = editData.shipper_address;
+      if (shipperAddr) {
+        const addrStr = toTitleCase(String(shipperAddr));
+        // Set both the form value and the dropdown options so the address shows in-field
+        form.setFieldValue("shipper_address", addrStr);
+        setShipperAddressOptions([{ value: addrStr, label: addrStr }]);
+      }
+      const consigneeAddr = editData.consignee_address;
+      if (consigneeAddr) {
+        const addrStr = toTitleCase(String(consigneeAddr));
+        form.setFieldValue("consignee_address", addrStr);
+        setConsigneeAddressOptions([{ value: addrStr, label: addrStr }]);
+      }
     }
 
     // Always load cargo_details and charges when editData has them (run every time so data is set even if init ref was already true)
@@ -1540,7 +1734,7 @@ function HouseCreate() {
         "origin_agent_name",
         mawbOriginAgentName && mawbOriginAgentName.trim() !== ""
           ? mawbOriginAgentName
-          : ""
+          : "",
       );
 
       // Origin Agent Address: only set when master has address data from agent selection.
@@ -1633,6 +1827,14 @@ function HouseCreate() {
   // Validate step 2 - Validate required fields and email format
   const validateStep2 = () => {
     const errors: Record<string, string> = {};
+
+    // If shipper_name is empty but user has typed search text, sync it before validating.
+    if (
+      (!form.values.shipper_name || !form.values.shipper_name.trim()) &&
+      shipperSearch.trim()
+    ) {
+      form.setFieldValue("shipper_name", shipperSearch.trim());
+    }
 
     if (!form.values.shipper_name?.trim()) {
       errors.shipper_name = "Shipper Name is required";
@@ -1812,7 +2014,6 @@ function HouseCreate() {
       origin_agent_name: v.origin_agent_name,
       origin_agent_address: v.origin_agent_address,
       origin_agent_email: v.origin_agent_email,
-      shipper_code: v.shipper_code,
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
@@ -2072,7 +2273,6 @@ function HouseCreate() {
     }
   };
 
-
   return (
     <Box p="md" mx="auto">
       <Group justify="space-between" mb="lg">
@@ -2294,17 +2494,14 @@ function HouseCreate() {
                 onClick={() => {
                   const existing = form.values.events;
                   if (existing.length > 0) {
-                    form.setFieldValue(
-                      "event_modal_rows",
-                      [
-                        ...existing.map((e) => ({
-                          id: e.id,
-                          eventType: e.type,
-                          eventDate: e.date ? new Date(String(e.date)) : null,
-                        })),
-                        { id: undefined, eventType: null, eventDate: null },
-                      ],
-                    );
+                    form.setFieldValue("event_modal_rows", [
+                      ...existing.map((e) => ({
+                        id: e.id,
+                        eventType: e.type,
+                        eventDate: e.date ? new Date(String(e.date)) : null,
+                      })),
+                      { id: undefined, eventType: null, eventDate: null },
+                    ]);
                   } else {
                     form.setFieldValue("event_modal_rows", [
                       { id: undefined, eventType: null, eventDate: null },
@@ -2322,7 +2519,7 @@ function HouseCreate() {
                   <Box
                     style={{
                       backgroundColor: "#E7F5FF",
-                    borderRadius: "6px",
+                      borderRadius: "6px",
                       padding: "6px",
                       display: "flex",
                       alignItems: "center",
@@ -2442,10 +2639,7 @@ function HouseCreate() {
           ))}
 
           <Group justify="flex-end" mt="md">
-            <Button
-              variant="subtle"
-              onClick={() => setEventsModalOpen(false)}
-            >
+            <Button variant="subtle" onClick={() => setEventsModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmitEventsModal}>Save Events</Button>
@@ -2473,7 +2667,7 @@ function HouseCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom:active === 0 ? "3px solid #105476" : "none",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
               color: "#105476",
               fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
@@ -2487,7 +2681,7 @@ function HouseCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom:active === 1 ? "3px solid #105476" : "none",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
               color: "#105476",
               fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
@@ -2501,7 +2695,7 @@ function HouseCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom:active === 2 ? "3px solid #105476" : "none",
+              borderBottom: active === 2 ? "3px solid #105476" : "none",
               color: "#105476",
               fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
@@ -2515,7 +2709,7 @@ function HouseCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom:active === 3 ? "3px solid #105476" : "none",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
               color: "#105476",
               fontSize: 16,
               fontWeight: active === 3 ? 600 : 400,
@@ -2526,15 +2720,15 @@ function HouseCreate() {
           {isEditMode && (
             <Tabs.Tab
               value="4"
-            style={{
-              textAlign: "center",
-              padding: "12px",
-              backgroundColor: "transparent",
-              borderBottom:active === 4 ? "3px solid #105476" : "none",
-              color: "#105476",
-              fontSize: 16,
-              fontWeight: active === 4 ? 600 : 400,
-            }}
+              style={{
+                textAlign: "center",
+                padding: "12px",
+                backgroundColor: "transparent",
+                borderBottom: active === 4 ? "3px solid #105476" : "none",
+                color: "#105476",
+                fontSize: 16,
+                fontWeight: active === 4 ? 600 : 400,
+              }}
             >
               Accounts
             </Tabs.Tab>
@@ -2811,65 +3005,84 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Shipper Name"
-                  required
-                  placeholder="Type shipper name"
-                  apiEndpoint={URL.shipper}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code),
-                    label: String(item.customer_name),
-                  })}
-                  value={form.values.shipper_code}
-                  displayValue={form.values.shipper_name}
-                  onChange={(value, selectedData, originalData) => {
-                    form.setFieldValue("shipper_code", value || "");
-                    form.setFieldValue(
-                      "shipper_name",
-                      selectedData?.label || "",
-                    );
-
-                    // Use originalData to populate address options and shipper_state_id
-                    if (
-                      value &&
-                      originalData &&
-                      (originalData as Record<string, unknown>).addresses_data
-                    ) {
-                      // Create address options from addresses_data
-                      const addressesData = (
-                        originalData as Record<string, unknown>
-                      ).addresses_data as Array<{
-                        id: number;
-                        address: string;
-                        state_id?: number;
-                      }>;
-
-                      const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
-                          value: addr.address,
-                          label: addr.address,
-                        }),
+                {shipperManualMode && shipperSearch.trim().length >= 2 ? (
+                  <FormTextInput
+                    label="Shipper Name"
+                    required
+                    placeholder="Enter shipper name"
+                    value={shipperSearch}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      setShipperSearch(v);
+                      form.setFieldValue("shipper_name", v);
+                      form.setFieldValue("shipper_code", "");
+                    }}
+                    error={form.errors.shipper_name as string}
+                  />
+                ) : (
+                  <Select
+                    label="Shipper Name"
+                    required
+                    placeholder="Select or search shipper"
+                    searchable
+                    data={shipperOptions}
+                    searchValue={shipperSearch}
+                    onSearchChange={(value) => {
+                      const v = toTitleCase(value);
+                      setShipperSearch(v);
+                      debouncedShipperSearch(v);
+                    }}
+                    value={form.values.shipper_code || ""}
+                    onChange={(value) => {
+                      if (!value) {
+                        form.setFieldValue("shipper_code", "");
+                        form.setFieldValue("shipper_name", "");
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
+                        setShipperAddressOptions([]);
+                        return;
+                      }
+                      const original = shipperDataRef.current[value] || {};
+                      const name = String(
+                        (original as Record<string, unknown>).customer_name ||
+                          "",
+                      );
+                      const email = getPartyEmail(
+                        original as Record<string, unknown>,
+                      );
+                      const addressesData = getPartyAddresses(
+                        original as Record<string, unknown>,
                       );
 
+                      // Populate address options and state_id, preserving existing UX
+                      const addressOptions = addressesData
+                        .filter((a) => a.address)
+                        .map((a) => {
+                          const addr = toTitleCase(String(a.address || ""));
+                          return {
+                            value: addr,
+                            label: addr,
+                          };
+                        });
+                      // Reset address field so dropdown doesn't keep old selection
+                      form.setFieldValue("shipper_address", "");
                       setShipperAddressOptions(addressOptions);
 
-                      // Auto-select the first address if available
                       if (
                         addressesData.length > 0 &&
                         addressesData[0].address
                       ) {
                         form.setFieldValue(
                           "shipper_address",
-                          addressesData[0].address,
+                          toTitleCase(String(addressesData[0].address)),
                         );
                       } else {
                         form.setFieldValue("shipper_address", "");
                       }
 
-                      // Set shipper_state_id from first address that has state_id
                       const addrWithState = addressesData.find(
-                        (a: { state_id?: number }) => a.state_id != null,
+                        (a) => a.state_id != null,
                       );
                       if (addrWithState?.state_id != null) {
                         form.setFieldValue(
@@ -2879,16 +3092,32 @@ function HouseCreate() {
                       } else {
                         form.setFieldValue("shipper_state_id", "");
                       }
-                    } else {
-                      setShipperAddressOptions([]);
-                      form.setFieldValue("shipper_address", "");
-                      form.setFieldValue("shipper_state_id", "");
-                    }
-                  }}
-                  returnOriginalData={true}
-                  error={form.errors.shipper_name as string}
-                  minSearchLength={3}
-                />
+
+                      form.setFieldValue("shipper_code", value);
+                      form.setFieldValue("shipper_name", toTitleCase(name));
+                      form.setFieldValue("shipper_email", email);
+                      setShipperSearch(name);
+                    }}
+                    comboboxProps={{ zIndex: 10 }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        height: "36px",
+                        fontFamily: "Inter",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    nothingFoundMessage="No shipper found - type to enter new shipper"
+                    error={form.errors.shipper_name as string}
+                  />
+                )}
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
@@ -2903,6 +3132,7 @@ function HouseCreate() {
               <Grid.Col span={4}>
                 {shipperAddressOptions.length > 0 ? (
                   <Dropdown
+                    key={`shipper-address-${form.values.shipper_code || "none"}`}
                     label="Shipper Address"
                     placeholder="Select shipper address"
                     searchable
@@ -2940,6 +3170,7 @@ function HouseCreate() {
                   required
                   placeholder="Type consignee name"
                   apiEndpoint={URL.consignee}
+                  dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code),
@@ -2954,44 +3185,35 @@ function HouseCreate() {
                       selectedData?.label || "",
                     );
 
-                    // Use originalData to populate address options
-                    if (
-                      value &&
-                      originalData &&
-                      (originalData as Record<string, unknown>).addresses_data
-                    ) {
-                      // Create address options from addresses_data
-                      const addressesData = (
-                        originalData as Record<string, unknown>
-                      ).addresses_data as Array<{
-                        id: number;
-                        address: string;
-                      }>;
+                    // Map email + addresses from customer-master response (addresses_data)
+                    const original = (originalData || {}) as Record<
+                      string,
+                      unknown
+                    >;
+                    const email = String(
+                      original.customer_email ?? original.email ?? "",
+                    );
+                    form.setFieldValue("consignee_email", email);
 
-                      const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
-                          value: addr.address,
-                          label: addr.address,
-                        }),
+                    const addressesData = Array.isArray(original.addresses_data)
+                      ? (original.addresses_data as Array<{ address?: string }>)
+                      : [];
+                    const addressOptions = addressesData
+                      .filter((a) => a.address)
+                      .map((a) => {
+                        const addr = toTitleCase(String(a.address || ""));
+                        return { value: addr, label: addr };
+                      });
+                    setConsigneeAddressOptions(addressOptions);
+
+                    if (addressOptions.length > 0) {
+                      form.setFieldValue(
+                        "consignee_address",
+                        addressOptions[0].value,
                       );
-
-                      setConsigneeAddressOptions(addressOptions);
-
-                      // Auto-select the first address if available
-                      if (
-                        addressesData.length > 0 &&
-                        addressesData[0].address
-                      ) {
-                        form.setFieldValue(
-                          "consignee_address",
-                          addressesData[0].address,
-                        );
-                      } else {
-                        form.setFieldValue("consignee_address", "");
-                      }
                     } else {
-                      setConsigneeAddressOptions([]);
-                      form.setFieldValue("consignee_address", "");
+                      // If customer has no address list, keep any typed value
+                      if (!value) form.setFieldValue("consignee_address", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -3170,9 +3392,13 @@ function HouseCreate() {
                   displayValue={form.values.origin_agent_name}
                   onChange={(value, _selectedData, originalData) => {
                     const newValue = value || "";
-                    const code = (originalData as Record<string, unknown> | undefined)
-                      ?.customer_code
-                      ? String((originalData as Record<string, unknown>).customer_code)
+                    const code = (
+                      originalData as Record<string, unknown> | undefined
+                    )?.customer_code
+                      ? String(
+                          (originalData as Record<string, unknown>)
+                            .customer_code,
+                        )
                       : "";
 
                     form.setFieldValue("origin_agent", code);
@@ -3325,7 +3551,10 @@ function HouseCreate() {
                   <RequiredLabel label="Volume (KG)" required={true} />
                 </Grid.Col>
                 <Grid.Col span={2.2}>
-                  <RequiredLabel label="Chargeable Weight (KG)" required={false} />
+                  <RequiredLabel
+                    label="Chargeable Weight (KG)"
+                    required={false}
+                  />
                 </Grid.Col>
                 <Grid.Col span={2.2}>
                   <RequiredLabel label="Haz" required={false} />
@@ -3513,20 +3742,22 @@ function HouseCreate() {
                   color="#105476"
                   onClick={() => {
                     const fullDetail = getCurrentHousingDetail();
-                    const prepaidCharges = (fullDetail.charges ?? []).filter(
+                    // For air import customer invoice, only Collect charges (mirrors Ocean Import)
+                    const collectCharges = (fullDetail.charges ?? []).filter(
                       (c: { pp_cc?: string }) =>
-                        String(c.pp_cc ?? "")
-                          .trim() === "Prepaid",
+                        String(c.pp_cc ?? "").trim() === "Collect",
                     );
                     const detailForInvoice = {
                       ...fullDetail,
-                      charges: prepaidCharges,
+                      charges: collectCharges,
                     };
                     navigate("/air/import-job/invoice", {
                       state: {
                         hawbDetails: [detailForInvoice],
                         housingDetails: [detailForInvoice],
                         is_agent: false,
+                        // Indicate that Bill To / State / Address should come from consignee
+                        billToFrom: "consignee",
                         ...(location.state?.job && { job: location.state.job }),
                         ...(location.state?.mawbDetails && {
                           mawbDetails: location.state.mawbDetails,
@@ -3878,6 +4109,7 @@ function HouseCreate() {
                       placeholder="Amount"
                       min={0}
                       hideControls
+                      decimalScale={2}
                       value={charge.amount || undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
@@ -4740,8 +4972,8 @@ function HouseCreate() {
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            A similar booking is found for the house number. Do you want to add it
-            to the house?
+            A similar booking is found for the house number. Do you want to add
+            it to the house?
           </Text>
           <Group justify="flex-end" mt="md">
             <Button variant="outline" onClick={dismissSimilarBookingModal}>

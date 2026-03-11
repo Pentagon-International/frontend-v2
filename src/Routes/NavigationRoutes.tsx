@@ -70,6 +70,8 @@ import {
   CustomerRelationshipMappingCreate,
   ChargeMaster,
   ChargeCreate,
+  NetworkMaster,
+  NetworkCreate,
   ChartOfAccountsMaster,
   ChartOfAccountsCreate,
   GLChargeMappingMaster,
@@ -481,6 +483,12 @@ const NavigationRoutes = () => {
             <Route index element={<ChargeMaster />} />
             <Route path="create" element={<ChargeCreate />} />
             <Route path="edit" element={<ChargeCreate />} />
+          </Route>
+
+          <Route path="network-master">
+            <Route index element={<NetworkMaster />} />
+            <Route path="create" element={<NetworkCreate />} />
+            <Route path="edit" element={<NetworkCreate />} />
           </Route>
 
           <Route path="chart-of-accounts">

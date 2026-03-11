@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
-import { Dropdown, ToastNotification } from "../../../components";
+import { Dropdown, SearchableSelect, ToastNotification } from "../../../components";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -124,7 +124,8 @@ type CustomerFormData = {
   term_code: string;
   own_office: string;
   assigned_to: string;
-  // assigned_to_display: string;
+  network_id: string;
+  network_name: string;
   addresses_data: AddressData[];
 };
 
@@ -815,6 +816,8 @@ function CustomerCreate() {
       term_code: "",
       own_office: "",
       assigned_to: "",
+      network_id: "",
+      network_name: "",
       addresses_data: [
         {
           customer_location: "",
@@ -918,6 +921,8 @@ function CustomerCreate() {
           term_code: restoredCustomerData.term_code || "",
           own_office: restoredCustomerData.own_office || "",
           assigned_to: restoredCustomerData.assigned_to || "",
+          network_id: restoredCustomerData.network_id != null ? String(restoredCustomerData.network_id) : "",
+          network_name: restoredCustomerData.network_name || "",
           addresses_data: addressDataToRestore,
         });
       }
@@ -1128,6 +1133,7 @@ function CustomerCreate() {
             },
           ];
 
+          const fetched = fetchedCustomerData as typeof fetchedCustomerData & { network_id?: number | null; network_name?: string | null };
           const formData = {
             customer_name:
               fetchedCustomerData.customer_name ||
@@ -1143,6 +1149,8 @@ function CustomerCreate() {
               "",
             own_office: fetchedCustomerData.own_office ? "true" : "false",
             assigned_to: fetchedCustomerData.assigned_to_display || "",
+            network_id: fetched.network_id != null ? String(fetched.network_id) : "",
+            network_name: fetched.network_name || "",
             addresses_data: addressData,
           };
 
@@ -1153,6 +1161,8 @@ function CustomerCreate() {
             term_code: formData.term_code,
             own_office: formData.own_office,
             assigned_to: formData.assigned_to,
+            network_id: formData.network_id,
+            network_name: formData.network_name,
             addresses_data: formData.addresses_data,
           });
 
@@ -1324,6 +1334,7 @@ function CustomerCreate() {
         },
       ];
 
+      const customerDataWithNetwork = customerData as typeof customerData & { network_id?: number | null; network_name?: string | null };
       const formData = {
         customer_name: customerData.customer_name || customerData.name || "",
         customer_type_code:
@@ -1331,6 +1342,8 @@ function CustomerCreate() {
         term_code: customerData.term_code || customerData.credit_type || "",
         own_office: customerData.own_office ? "true" : "false",
         assigned_to: customerData.assigned_to_display || "",
+        network_id: customerDataWithNetwork.network_id != null ? String(customerDataWithNetwork.network_id) : "",
+        network_name: customerDataWithNetwork.network_name || "",
         addresses_data: addressData,
       };
 
@@ -1341,6 +1354,8 @@ function CustomerCreate() {
         term_code: formData.term_code,
         own_office: formData.own_office,
         assigned_to: formData.assigned_to,
+        network_id: formData.network_id,
+        network_name: formData.network_name,
         addresses_data: formData.addresses_data,
       });
 
@@ -1738,6 +1753,7 @@ function CustomerCreate() {
         term_code: values.term_code,
         own_office: values.own_office === "true",
         assigned_to: values.assigned_to,
+        network_id: values.network_id ? Number(values.network_id) : null,
         addresses_data: values.addresses_data.map((addr) => ({
           ...addr,
           address_type:
@@ -1799,14 +1815,13 @@ function CustomerCreate() {
     try {
       setIsSubmitting(true);
       const payload = {
-        // id: customerData.id,
-        // customerData: {
         id: customerData.id,
         customer_name: values.customer_name,
         customer_type_code: values.customer_type_code,
         term_code: values.term_code,
         own_office: values.own_office === "true",
         assigned_to: values.assigned_to,
+        network_id: values.network_id ? Number(values.network_id) : null,
         addresses_data: values.addresses_data.map((addr) => {
           const addressPayload: any = {
             ...addr,
@@ -2028,6 +2043,28 @@ function CustomerCreate() {
                     placeholder="Select Own Office"
                     disabled={isViewMode}
                     {...customerForm.getInputProps("own_office")}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={4}>
+                  <SearchableSelect
+                    label="Network Name"
+                    placeholder="Search network..."
+                    apiEndpoint={URL.networkMaster}
+                    value={customerForm.values.network_id || null}
+                    displayValue={customerForm.values.network_name || null}
+                    onChange={(value, selectedData) => {
+                      customerForm.setFieldValue("network_id", value ?? "");
+                      customerForm.setFieldValue("network_name", selectedData?.label ?? "");
+                    }}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.id ?? ""),
+                      label: String(item.network_name ?? ""),
+                    })}
+                    searchFields={["network_name"]}
+                    dropdownZIndex={1000}
+                    minSearchLength={1}
+                    disabled={!!isViewMode}
                   />
                 </Grid.Col>
 

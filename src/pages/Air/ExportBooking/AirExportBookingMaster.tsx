@@ -17,6 +17,7 @@ import {
   ActionIcon,
   Box,
   Badge,
+  Modal,
 } from "@mantine/core";
 import {
   IconCalendar,
@@ -38,6 +39,8 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
+import { putAPICall } from "../../../service/putApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 
@@ -95,9 +98,14 @@ function AirExportBookingMaster() {
     if (label === "BOOKED") color = "green";
     else if (label === "GENERATED") color = "#105476";
     else if (label === "RECEIVED") color = "blue";
+    else if (label === "CANCEL") color = "red";
     else color = "gray";
     return { label, color } as const;
   };
+
+  // Cancel confirmation modal
+  const [cancelConfirmRow, setCancelConfirmRow] = useState<ExportShipmentData | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // State to store the actual applied filter values
   const filterForm = useForm<FilterState>({
@@ -629,6 +637,28 @@ function AirExportBookingMaster() {
     }
   };
 
+  const handleConfirmCancel = async () => {
+    if (!cancelConfirmRow) return;
+    setIsCancelling(true);
+    try {
+      const payload = { ...cancelConfirmRow, status: "CANCEL" };
+      await putAPICall(URL.customerServiceShipment, payload, API_HEADER);
+      ToastNotification({ type: "success", message: "Booking cancelled successfully" });
+      setCancelConfirmRow(null);
+      queryClient.invalidateQueries({ queryKey: ["air-export-booking/filter/"] });
+      queryClient.invalidateQueries({ queryKey: ["filteredAirExportBooking"] });
+      if (filtersApplied) refetchFilteredExportShipments();
+      else refetchExportShipments();
+    } catch (err: any) {
+      ToastNotification({
+        type: "error",
+        message: err?.message || "Failed to cancel booking",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const columns = useMemo<MRT_ColumnDef<ExportShipmentData>[]>(
     () => [
       {
@@ -696,27 +726,44 @@ function AirExportBookingMaster() {
         id: "actions",
         header: "Actions",
         size: 80,
-        Cell: ({ row }) => (
-          <Menu shadow="md" width={120}>
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<IconEdit size={14} />}
-                onClick={() => {
-                  navigate(`./edit`, {
-                    state: { job: row.original },
-                  });
-                }}
-              >
-                Edit
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-        ),
+        Cell: ({ row }) => {
+          const statusUpper = (row.original.status ?? "").toUpperCase();
+          const isCancel = statusUpper === "CANCEL";
+          const canCancel = statusUpper !== "GENERATED" && !isCancel;
+          return (
+            <Menu shadow="md" width={140}>
+              <Menu.Target>
+                <ActionIcon variant="subtle" color="gray">
+                  <IconDotsVertical size={16} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconEdit size={14} />}
+                  disabled={isCancel}
+                  onClick={() => {
+                    if (!isCancel) {
+                      navigate(`./edit`, {
+                        state: { job: row.original },
+                      });
+                    }
+                  }}
+                >
+                  Edit
+                </Menu.Item>
+                {canCancel && (
+                  <Menu.Item
+                    leftSection={<IconX size={14} />}
+                    color="red"
+                    onClick={() => setCancelConfirmRow(row.original)}
+                  >
+                    Cancel
+                  </Menu.Item>
+                )}
+              </Menu.Dropdown>
+            </Menu>
+          );
+        },
       },
     ],
     [navigate]
@@ -1176,6 +1223,24 @@ function AirExportBookingMaster() {
           )}
         </Card>
       )}
+      <Modal
+        opened={!!cancelConfirmRow}
+        onClose={() => !isCancelling && setCancelConfirmRow(null)}
+        title="Cancel booking"
+        centered
+      >
+        <Text size="sm" c="dimmed" mb="md">
+          Are you sure you want to cancel this booking? This action cannot be undone.
+        </Text>
+        <Group justify="flex-end" gap="xs">
+          <Button variant="subtle" onClick={() => setCancelConfirmRow(null)} disabled={isCancelling}>
+            No
+          </Button>
+          <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
+            Yes, cancel
+          </Button>
+        </Group>
+      </Modal>
       <Outlet />
     </>
   );

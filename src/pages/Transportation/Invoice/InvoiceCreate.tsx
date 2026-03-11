@@ -128,9 +128,7 @@ const fetchChargeMaster = async () => {
 const fetchUnitMaster = async () => {
   try {
     const payload = {
-      filters: {
-        service_type: "AIR",
-      },
+      filters: {},
     };
     const response = await postAPICall(
       URL.unitMasterFilter,
@@ -434,8 +432,9 @@ function InvoiceCreate() {
     const fromApi = (invoiceDataFromApi as { is_agent?: boolean } | null)
       ?.is_agent;
     if (fromApi === true) return true;
-    const fromState = (location.state?.invoiceData as { is_agent?: boolean }
-      | undefined)?.is_agent;
+    const fromState = (
+      location.state?.invoiceData as { is_agent?: boolean } | undefined
+    )?.is_agent;
     return fromState === true;
   }, [
     location.state?.is_agent,
@@ -451,8 +450,9 @@ function InvoiceCreate() {
   // When opened from Air House Create (house level): show "Shipment No"
   const isFromAirExportJob = useMemo(
     () =>
-      (location.state as { fromJobLevel?: boolean } | null)?.fromJobLevel === true,
-    [location.state]
+      (location.state as { fromJobLevel?: boolean } | null)?.fromJobLevel ===
+      true,
+    [location.state],
   );
 
   // Show "Shipment id" column in charges tab when from Air/Sea Export/Import Job Create (job level), hide when from House Create
@@ -463,7 +463,7 @@ function InvoiceCreate() {
         location.pathname.includes("/air/import-job") ||
         location.pathname.includes("/SeaExport/export-job") ||
         location.pathname.includes("/SeaExport/import-job")),
-    [isFromAirExportJob, location.pathname]
+    [isFromAirExportJob, location.pathname],
   );
 
   // User's local currency code (for ROE = 1 when billing currency matches)
@@ -553,7 +553,7 @@ function InvoiceCreate() {
 
   // Fetch unit master data
   const { data: unitData = [], isLoading: isUnitLoading } = useQuery({
-    queryKey: ["unitMaster", "AIR"],
+    queryKey: ["unitMaster", ""],
     queryFn: fetchUnitMaster,
     staleTime: Infinity,
   });
@@ -592,38 +592,55 @@ function InvoiceCreate() {
   }, [stateData]);
 
   // State from housing is set after state API loads
-  // Agent invoice: use agent_state_id; Customer invoice: use shipper_state_id
+  // Agent invoice: use agent_state_id; Customer invoice: use shipper_state_id by default,
+  // but allow ocean import customer invoice flow to use consignee_state_id when billToFrom === "consignee"
   useEffect(() => {
     if (isStateLoading) return;
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
-    const job = location.state?.job as {
-      housing_details?: Array<{
-        shipper_state_id?: number | null;
-        agent_state_id?: number | null;
-      }>;
-    } | undefined;
+    const job = location.state?.job as
+      | {
+          housing_details?: Array<{
+            shipper_state_id?: number | null;
+            agent_state_id?: number | null;
+            consignee_state_id?: number | null;
+          }>;
+        }
+      | undefined;
     const jobHousing = job?.housing_details;
     const firstHawb =
       Array.isArray(hawbDetails) && hawbDetails.length > 0
         ? hawbDetails[0]
-        : jobHousing?.[0] ?? null;
+        : (jobHousing?.[0] ?? null);
     const firstHawbAny = firstHawb as
-      | { shipper_state_id?: number | null; agent_state_id?: number | null }
+      | {
+          shipper_state_id?: number | null;
+          agent_state_id?: number | null;
+          consignee_state_id?: number | null;
+        }
       | null
       | undefined;
     const isAgent =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
 
-    const stateId =
-      isAgent
-        ? (firstHawbAny?.agent_state_id ?? jobHousing?.[0]?.agent_state_id ?? null)
-        : (firstHawbAny?.shipper_state_id ?? jobHousing?.[0]?.shipper_state_id ?? null);
+    const billToFrom = (
+      location.state as { billToFrom?: "shipper" | "consignee" } | null
+    )?.billToFrom;
+    const useConsigneeForBillTo = !isAgent && billToFrom === "consignee";
 
-    if (
-      stateId != null &&
-      String(stateId) !== form.values.state
-    ) {
+    const stateId = isAgent
+      ? (firstHawbAny?.agent_state_id ??
+        jobHousing?.[0]?.agent_state_id ??
+        null)
+      : useConsigneeForBillTo
+        ? (firstHawbAny?.consignee_state_id ??
+          jobHousing?.[0]?.consignee_state_id ??
+          null)
+        : (firstHawbAny?.shipper_state_id ??
+          jobHousing?.[0]?.shipper_state_id ??
+          null);
+
+    if (stateId != null && String(stateId) !== form.values.state) {
       form.setFieldValue("state", String(stateId));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -712,6 +729,12 @@ function InvoiceCreate() {
   // Keep Bill To, State and Address in sync: when customer (Bill To) is empty, clear state and address
   useEffect(() => {
     const billTo = form.values.bill_to;
+    console.log(
+      "[InvoiceCreate] Bill To effect - current bill_to value:",
+      billTo,
+      "displayName:",
+      billToDisplayName,
+    );
     if (!billTo || (typeof billTo === "string" && billTo.trim() === "")) {
       if (form.values.address) form.setFieldValue("address", "");
       if (form.values.state) form.setFieldValue("state", "");
@@ -725,8 +748,16 @@ function InvoiceCreate() {
       location.state?.hawbDetails || location.state?.housingDetails || [];
     const isAgent =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
-    const job = (location.state as { job?: { agent_code?: string; agent_name?: string } } | null)
-      ?.job;
+    const job = (
+      location.state as {
+        job?: { agent_code?: string; agent_name?: string };
+      } | null
+    )?.job;
+
+    const billToFrom = (
+      location.state as { billToFrom?: "shipper" | "consignee" } | null
+    )?.billToFrom;
+    const useConsigneeForBillTo = !isAgent && billToFrom === "consignee";
 
     if (Array.isArray(hawbDetails) && hawbDetails.length > 0) {
       // Get the first HAWB detail
@@ -754,7 +785,7 @@ function InvoiceCreate() {
             form.setFieldValue("address", agentAddress);
           }
         } else {
-          // Customer invoice: branch currency, Bill To = shipper
+          // Customer invoice: by default Bill To = shipper, but allow ocean import to use consignee when requested
           if (defaultBranchCurrency) {
             form.setFieldValue("currency", defaultBranchCurrency);
             const roe = getRoeValue(defaultBranchCurrency);
@@ -762,23 +793,109 @@ function InvoiceCreate() {
               form.setFieldValue("roe", roe);
             }
           }
-          if (firstHawb.shipper_address) {
-            form.setFieldValue("address", firstHawb.shipper_address);
-          }
-          const shipperCode = String(firstHawb.shipper_code || "").trim();
-          if (shipperCode) {
-            form.setFieldValue("bill_to", shipperCode);
-          }
-          if (firstHawb.shipper_name) {
-            setBillToDisplayName(
-              String(firstHawb.shipper_name || (firstHawb as { bill_to_name?: string }).bill_to_name),
+          if (useConsigneeForBillTo) {
+            // Ocean import customer invoice: Bill To / address from consignee
+            console.log(
+              "[InvoiceCreate] Ocean import - using consignee for Bill To. Raw firstHawb:",
+              firstHawb,
             );
+            if (
+              (firstHawb as { consignee_address?: string }).consignee_address
+            ) {
+              form.setFieldValue(
+                "address",
+                (firstHawb as { consignee_address?: string }).consignee_address,
+              );
+            }
+            // Prefer consignee_code from firstHawb; if missing, fall back to job.housing_details[0].consignee_code
+            let consigneeCode = String(
+              (firstHawb as { consignee_code?: string }).consignee_code || "",
+            ).trim();
+            if (!consigneeCode && job && Array.isArray((job as { housing_details?: Array<{ consignee_code?: string }> }).housing_details)) {
+              const jobHousing = (job as {
+                housing_details?: Array<{ consignee_code?: string }>;
+              }).housing_details;
+              const fromJob = jobHousing?.[0]?.consignee_code;
+              if (fromJob) {
+                consigneeCode = String(fromJob).trim();
+              }
+            }
+            console.log(
+              "[InvoiceCreate] Consignee mapping - extracted consignee_code:",
+              consigneeCode,
+            );
+            if (consigneeCode) {
+              form.setFieldValue("bill_to", consigneeCode);
+              console.log(
+                "[InvoiceCreate] Consignee mapping - set form.bill_to to consignee_code",
+              );
+            }
+            const consigneeName = (
+              firstHawb as {
+                consignee_name?: string;
+                bill_to_name?: string;
+              }
+            ).consignee_name;
+            if (consigneeName) {
+              console.log(
+                "[InvoiceCreate] Consignee mapping - extracted consignee_name:",
+                consigneeName,
+              );
+              setBillToDisplayName(
+                String(
+                  consigneeName ||
+                    (firstHawb as { bill_to_name?: string }).bill_to_name,
+                ),
+              );
+              console.log(
+                "[InvoiceCreate] Consignee mapping - set billToDisplayName",
+              );
+            }
+          } else {
+            // Default customer invoice: Bill To / address from shipper (export / non-consignee flows)
+            if (firstHawb.shipper_address) {
+              form.setFieldValue("address", firstHawb.shipper_address);
+            }
+            // Prefer shipper_code from firstHawb; if missing, fall back to job.housing_details[0].shipper_code
+            let shipperCode = String(
+              (firstHawb as { shipper_code?: string }).shipper_code || "",
+            ).trim();
+            if (
+              !shipperCode &&
+              job &&
+              Array.isArray(
+                (job as { housing_details?: Array<{ shipper_code?: string }> })
+                  .housing_details,
+              )
+            ) {
+              const jobHousing = (job as {
+                housing_details?: Array<{ shipper_code?: string }>;
+              }).housing_details;
+              const fromJob = jobHousing?.[0]?.shipper_code;
+              if (fromJob) {
+                shipperCode = String(fromJob).trim();
+              }
+            }
+            if (shipperCode) {
+              form.setFieldValue("bill_to", shipperCode);
+            }
+            if (firstHawb.shipper_name) {
+              setBillToDisplayName(
+                String(
+                  firstHawb.shipper_name ||
+                    (firstHawb as { bill_to_name?: string }).bill_to_name,
+                ),
+              );
+            }
           }
         }
 
         // Set shipment_no: when from Air Export Job use job.id, else use firstHawb.shipment_id
-        if (isFromAirExportJob ) {
-          form.setFieldValue("shipment_no", String((job as { job_id: number }).job_id));
+        if (isFromAirExportJob) {
+          form.setFieldValue(
+            "shipment_no",
+            String((job as { job_id: number }).job_id),
+          );
         } else if (firstHawb.shipment_id) {
           form.setFieldValue("shipment_no", String(firstHawb.shipment_id));
         }
@@ -905,18 +1022,24 @@ function InvoiceCreate() {
                   : null,
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
               shipment_id:
-                charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+                charge.shipment_id != null &&
+                String(charge.shipment_id).trim() !== ""
                   ? String(charge.shipment_id)
-                  : charge.shipment_no != null && String(charge.shipment_no).trim() !== ""
+                  : charge.shipment_no != null &&
+                      String(charge.shipment_no).trim() !== ""
                     ? String(charge.shipment_no)
-                    :  firstHawb.shipment_id ? firstHawb.shipment_id: null,
+                    : firstHawb.shipment_id
+                      ? firstHawb.shipment_id
+                      : null,
               shipper_id:
                 charge.shipper_id != null
                   ? String(charge.shipper_id)
                   : charge.shipper_code != null
                     ? String(charge.shipper_code)
                     : (firstHawb as { shipper_code?: string }).shipper_code
-                      ? String((firstHawb as { shipper_code: string }).shipper_code)
+                      ? String(
+                          (firstHawb as { shipper_code: string }).shipper_code,
+                        )
                       : "",
               unit_code: unitCode,
               unit_id,
@@ -998,11 +1121,7 @@ function InvoiceCreate() {
         }
       }
     } else {
-      if (
-        isFromAirExportJob &&
-        job &&
-        (job as { id?: number }).id != null
-      ) {
+      if (isFromAirExportJob && job && (job as { id?: number }).id != null) {
         form.setFieldValue("shipment_no", String((job as { id: number }).id));
       }
       form.setFieldValue("charges", [
@@ -1105,7 +1224,11 @@ function InvoiceCreate() {
               id: c.id != null ? Number(c.id) : null,
               charge_id: c.charge_id != null ? Number(c.charge_id) : null,
               charge_name: c.charge_name ?? "",
-              shipment_id: c.shipment_id ? String(c.shipment_id) : c.shipment_no ? String(c.shipment_no) : "",
+              shipment_id: c.shipment_id
+                ? String(c.shipment_id)
+                : c.shipment_no
+                  ? String(c.shipment_no)
+                  : "",
               shipper_id: c.shipper_id ?? "",
               unit_id:
                 c.unit_id != null && String(c.unit_id).trim() !== ""
@@ -1614,7 +1737,8 @@ function InvoiceCreate() {
 
       const isAgentInvoiceFlow =
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
+          true;
       if (!isAgentInvoiceFlow && (!stateId || stateId <= 0)) {
         ToastNotification({
           message: "Please select a valid State",
@@ -1653,7 +1777,8 @@ function InvoiceCreate() {
 
       const isAgentSave =
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
+          true;
 
       // Agent invoice: no tax integration — skip GST endpoint, use zeros for tax fields
       // Customer invoice: resolve GST rates per charge (gst-rates-by-state-sac)
@@ -1675,15 +1800,21 @@ function InvoiceCreate() {
                   [k: string]: unknown;
                 };
                 const payload = resObj?.data?.data ?? resObj?.data ?? res;
-                const gstData = payload as GstRatesBySacResponse | null | undefined;
+                const gstData = payload as
+                  | GstRatesBySacResponse
+                  | null
+                  | undefined;
                 const igstRaw = gstData?.igst_percent;
                 const cgstRaw = gstData?.cgst_percent;
                 const sgstRaw = gstData?.sgst_percent;
                 const sameState = gstData?.same_state ?? false;
                 return {
-                  igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-                  cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-                  sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+                  igst:
+                    igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+                  cgst:
+                    cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+                  sgst:
+                    sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
                   same_state: sameState,
                 };
               } catch {
@@ -1739,10 +1870,11 @@ function InvoiceCreate() {
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
           shipment_no:
-            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+            charge.shipment_id != null &&
+            String(charge.shipment_id).trim() !== ""
               ? String(charge.shipment_id)
               : null,
-              // : values.shipment_no,
+          // : values.shipment_no,
           ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
@@ -1767,16 +1899,26 @@ function InvoiceCreate() {
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
       const isAgent =
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
-      const job = (location.state as { job?: { job_id?: number; id?: number } } | null)?.job;
-      const jobId = job && (job.job_id != null || job.id != null) ? (job.job_id ?? job.id) : undefined;
+        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
+          true;
+      const job = (
+        location.state as { job?: { job_id?: number; id?: number } } | null
+      )?.job;
+      const jobId =
+        job && (job.job_id != null || job.id != null)
+          ? (job.job_id ?? job.id)
+          : undefined;
 
       const payload = {
         ...(isUpdate ? { id: saveResponse.id } : {}),
         ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
         address: values.address,
-        state_id: isAgent ? (stateId != null && stateId > 0 ? stateId : null) : stateId,
+        state_id: isAgent
+          ? stateId != null && stateId > 0
+            ? stateId
+            : null
+          : stateId,
         gstn: values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
@@ -1911,9 +2053,14 @@ function InvoiceCreate() {
         currencyItem?.id != null ? Number(currencyItem.id) : null;
       const isAgentPost =
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
+          true;
       const stateValid = stateId != null && stateId > 0;
-      if ((!isAgentPost && !stateValid) || currencyId == null || currencyId <= 0) {
+      if (
+        (!isAgentPost && !stateValid) ||
+        currencyId == null ||
+        currencyId <= 0
+      ) {
         ToastNotification({
           message: "Please ensure State and Currency are valid.",
           type: "error",
@@ -1938,7 +2085,12 @@ function InvoiceCreate() {
       };
 
       // Agent invoice: no tax integration — do not hit fetchInvoiceCalculateGstBreakup or gst-rates-by-state-sac
-      let sacWiseTotals: Array<{ sac_code?: string; charge_id?: number; total_amount?: number; rate?: number }> = [];
+      let sacWiseTotals: Array<{
+        sac_code?: string;
+        charge_id?: number;
+        total_amount?: number;
+        rate?: number;
+      }> = [];
       let taxes: Array<{ tax_code: string; rate: number; amount: number }> = [];
       if (!isAgentPost) {
         let breakupData = gstBreakup;
@@ -1988,15 +2140,21 @@ function InvoiceCreate() {
                   [k: string]: unknown;
                 };
                 const payload = resObj?.data?.data ?? resObj?.data ?? res;
-                const gstData = payload as GstRatesBySacResponse | null | undefined;
+                const gstData = payload as
+                  | GstRatesBySacResponse
+                  | null
+                  | undefined;
                 const igstRaw = gstData?.igst_percent;
                 const cgstRaw = gstData?.cgst_percent;
                 const sgstRaw = gstData?.sgst_percent;
                 const sameState = gstData?.same_state ?? false;
                 return {
-                  igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-                  cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-                  sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+                  igst:
+                    igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+                  cgst:
+                    cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+                  sgst:
+                    sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
                   same_state: sameState,
                 };
               } catch {
@@ -2043,10 +2201,11 @@ function InvoiceCreate() {
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
           shipment_no:
-            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+            charge.shipment_id != null &&
+            String(charge.shipment_id).trim() !== ""
               ? String(charge.shipment_id)
-              :null,
-              // : values.shipment_no,
+              : null,
+          // : values.shipment_no,
           ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
@@ -2088,15 +2247,26 @@ function InvoiceCreate() {
               Dr_Cr: "Cr",
             };
           });
-      const allChargesPayload = isAgentPost ? chargesPayload : [...chargesPayload, ...taxCharges];
-      const jobForPost = (location.state as { job?: { job_id?: number; id?: number } } | null)?.job;
-      const jobIdForPost = jobForPost && (jobForPost.job_id != null || jobForPost.id != null) ? (jobForPost.job_id ?? jobForPost.id) : undefined;
+      const allChargesPayload = isAgentPost
+        ? chargesPayload
+        : [...chargesPayload, ...taxCharges];
+      const jobForPost = (
+        location.state as { job?: { job_id?: number; id?: number } } | null
+      )?.job;
+      const jobIdForPost =
+        jobForPost && (jobForPost.job_id != null || jobForPost.id != null)
+          ? (jobForPost.job_id ?? jobForPost.id)
+          : undefined;
       const payload = {
         id: saveResponse.id,
         ...(jobIdForPost != null ? { job_id: jobIdForPost } : {}),
         bill_to: values.bill_to,
         address: values.address,
-        state_id: isAgentPost ? (stateId != null && stateId > 0 ? stateId : null) : stateId,
+        state_id: isAgentPost
+          ? stateId != null && stateId > 0
+            ? stateId
+            : null
+          : stateId,
         gstn: values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
@@ -2195,7 +2365,11 @@ function InvoiceCreate() {
               id: c.id ?? undefined,
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
-              shipment_id: (c as { shipment_id?: string }).shipment_id ? String((c as { shipment_id: string }).shipment_id) : (c as { shipment_no?: string }).shipment_no ? String((c as { shipment_no: string }).shipment_no) : "",
+              shipment_id: (c as { shipment_id?: string }).shipment_id
+                ? String((c as { shipment_id: string }).shipment_id)
+                : (c as { shipment_no?: string }).shipment_no
+                  ? String((c as { shipment_no: string }).shipment_no)
+                  : "",
               shipper_id: (c as { shipper_id?: string }).shipper_id ?? "",
               unit_code: c.unit_code ?? "",
               unit_id: c.unit_id != null ? String(c.unit_id) : undefined,
@@ -2506,9 +2680,7 @@ function InvoiceCreate() {
               <TextInput
                 label={isFromAirExportJob ? "Job id" : "Shipment No"}
                 placeholder={
-                  isFromAirExportJob
-                    ? "Job id"
-                    : "Enter shipment number"
+                  isFromAirExportJob ? "Job id" : "Enter shipment number"
                 }
                 readOnly={isReadOnly}
                 // disabled={isReadOnly}
@@ -2899,7 +3071,10 @@ function InvoiceCreate() {
                       Shipment id
                     </Grid.Col>
                   )}
-                  <Grid.Col span={showShipmentIdInCharges ? 1.3 : 1.5} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={showShipmentIdInCharges ? 1.3 : 1.5}
+                    style={{ fontSize: "13px" }}
+                  >
                     Charge
                   </Grid.Col>
                   <Grid.Col span={1} style={{ fontSize: "13px" }}>
@@ -3952,53 +4127,51 @@ function InvoiceCreate() {
                                 return sum + (amount ?? 0);
                               }, 0)
                               .toFixed(2)}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
+                          </Text>
+                        </Box>
+                      </Grid.Col>
                       <Grid.Col span={3}>
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             CGST Total
                           </Text>
-                            <Text size="lg" fw={600} c="#105476">
-                              {form.values.charges
-                                .reduce((sum, c, idx) => {
-                                  const rate =
-                                    gstRatesByChargeIndex[idx]?.cgst;
-                                  const localAmount = c.amount_in_local;
-                                  if (rate == null || localAmount == null)
-                                    return sum;
-                                  const amount = clampAmount(
-                                    (localAmount * rate) / 100,
-                                  );
-                                  return sum + (amount ?? 0);
-                                }, 0)
-                                .toFixed(2)}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
+                          <Text size="lg" fw={600} c="#105476">
+                            {form.values.charges
+                              .reduce((sum, c, idx) => {
+                                const rate = gstRatesByChargeIndex[idx]?.cgst;
+                                const localAmount = c.amount_in_local;
+                                if (rate == null || localAmount == null)
+                                  return sum;
+                                const amount = clampAmount(
+                                  (localAmount * rate) / 100,
+                                );
+                                return sum + (amount ?? 0);
+                              }, 0)
+                              .toFixed(2)}
+                          </Text>
+                        </Box>
+                      </Grid.Col>
                       <Grid.Col span={3}>
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             SGST Total
                           </Text>
-                              <Text size="lg" fw={600} c="#105476">
-                                {form.values.charges
-                                  .reduce((sum, c, idx) => {
-                                    const rate =
-                                      gstRatesByChargeIndex[idx]?.sgst;
-                                    const localAmount = c.amount_in_local;
-                                    if (rate == null || localAmount == null)
-                                      return sum;
-                                    const amount = clampAmount(
-                                      (localAmount * rate) / 100,
-                                    );
-                                    return sum + (amount ?? 0);
-                                  }, 0)
-                                  .toFixed(2)}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
+                          <Text size="lg" fw={600} c="#105476">
+                            {form.values.charges
+                              .reduce((sum, c, idx) => {
+                                const rate = gstRatesByChargeIndex[idx]?.sgst;
+                                const localAmount = c.amount_in_local;
+                                if (rate == null || localAmount == null)
+                                  return sum;
+                                const amount = clampAmount(
+                                  (localAmount * rate) / 100,
+                                );
+                                return sum + (amount ?? 0);
+                              }, 0)
+                              .toFixed(2)}
+                          </Text>
+                        </Box>
+                      </Grid.Col>
                     </Grid>
                   </Box>
                 )}

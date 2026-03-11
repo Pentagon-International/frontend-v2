@@ -143,6 +143,8 @@ import ServiceMasterView from "../pages/masters/service-master/ServiceMasterView
 // Accounts Masters
 import ChargeMaster from "./masters/charge/ChargeMaster";
 import ChargeCreate from "./masters/charge/ChargeCreate";
+import NetworkMaster from "./masters/network-master/NetworkMaster";
+import NetworkCreate from "./masters/network-master/NetworkCreate";
 import ChartOfAccountsMaster from "./masters/chart-of-accounts/ChartOfAccountsMaster";
 import ChartOfAccountsCreate from "./masters/chart-of-accounts/ChartOfAccountsCreate";
 import GLChargeMappingMaster from "./masters/gl-charge-mapping/GLChargeMappingMaster";
@@ -225,6 +227,8 @@ export {
   ServiceMasterView,
   ChargeMaster,
   ChargeCreate,
+  NetworkMaster,
+  NetworkCreate,
   ChartOfAccountsMaster,
   ChartOfAccountsCreate,
   GLChargeMappingMaster,

@@ -713,14 +713,19 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   );
 
   const triggerCodeOptions = useMemo(() => {
-    const list = triggerMasterData as Array<{ code?: string }>;
+    const list = triggerMasterData as Array<{ name?: string }>;
     if (!list?.length) return [];
-    const codes = new Set<string>();
+    const names = new Set<string>();
+    const options: Array<{ value: string; label: string }> = [];
     list.forEach((item) => {
-      const c = item.code;
-      if (c != null && String(c).trim()) codes.add(String(c));
+      const rawName = item.name;
+      if (rawName == null || !String(rawName).trim()) return;
+      const name = String(rawName);
+      if (names.has(name)) return;
+      names.add(name);
+      options.push({ value: name, label: name });
     });
-    return Array.from(codes).map((c) => ({ value: c, label: c }));
+    return options;
   }, [triggerMasterData]);
 
   const updateCharge = (index: number, field: string, value: string) => {
@@ -2809,6 +2814,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   onChange={(value) =>
                     updateTriggerRow(index, "type", value ?? null)
                   }
+                  searchable
                   clearable
                 />
               </Grid.Col>
@@ -2817,9 +2823,35 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   placeholder="Select code"
                   data={triggerCodeOptions}
                   value={row.code}
-                  onChange={(value) =>
-                    updateTriggerRow(index, "code", value ?? null)
-                  }
+                  onChange={(value) => {
+                    const name = value ?? null;
+                    updateTriggerRow(index, "code", name);
+
+                    const list = triggerMasterData as Array<{
+                      name?: string;
+                      code?: string;
+                      note?: string;
+                    }>;
+
+                    if (name) {
+                      const match = list.find(
+                        (item) => item.name != null && String(item.name) === name,
+                      );
+                      if (match && match.note != null) {
+                        updateTriggerRow(
+                          index,
+                          "description",
+                          String(match.note),
+                        );
+                      } else {
+                        updateTriggerRow(index, "description", "");
+                      }
+                    } else {
+                      // Code cleared via clearable button – also clear description
+                      updateTriggerRow(index, "description", "");
+                    }
+                  }}
+                  searchable
                   clearable
                 />
               </Grid.Col>
