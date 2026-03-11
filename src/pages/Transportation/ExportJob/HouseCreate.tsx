@@ -74,10 +74,9 @@ type HouseDetailsForm = {
   destination_name: string;
   customer_service: string;
   trade: string;
-  origin_agent: string; // Stores customer_code (code) for API payload
-  origin_agent_name: string; // Stores customer_name (name) for display
-  origin_agent_address: string;
-  origin_agent_email: string;
+  agent_name: string;
+  agent_address: string;
+  agent_email: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
@@ -282,6 +281,11 @@ function HouseCreate() {
     Array<{ value: string; label: string }>
   >([]);
   const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
+    useState<Array<{ value: string; label: string }>>([]);
+  const [agentAddressOptions, setAgentAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
 
@@ -648,15 +652,36 @@ function HouseCreate() {
       if (editData.consignee_code) {
         form.setFieldValue("consignee_code", String(editData.consignee_code));
       }
-      // Set origin_agent (code) and origin_agent_name if available in editData
-      // Note: editData may not have origin_agent_code, but we can try to get it from the name
-      // For now, we'll set origin_agent_name from editData
-      // The user will need to re-select the agent to get the code, or we can try to find it
-      if (editData.origin_agent_name) {
+      // Set agent fields from editData (party details)
+      if ((editData as { agent_name?: string }).agent_name) {
         form.setFieldValue(
-          "origin_agent_name",
-          String(editData.origin_agent_name),
+          "agent_name",
+          String((editData as { agent_name?: string }).agent_name),
         );
+      }
+      if ((editData as { agent_address?: string }).agent_address) {
+        form.setFieldValue(
+          "agent_address",
+          String((editData as { agent_address?: string }).agent_address),
+        );
+      }
+      if ((editData as { agent_email?: string }).agent_email) {
+        form.setFieldValue(
+          "agent_email",
+          String((editData as { agent_email?: string }).agent_email),
+        );
+      }
+
+      // Ensure address fields show on edit even when address option lists are empty/disabled
+      if (editData.shipper_address) {
+        const addr = toTitleCase(String(editData.shipper_address));
+        form.setFieldValue("shipper_address", addr);
+        setShipperAddressOptions([{ value: addr, label: addr }]);
+      }
+      if (editData.consignee_address) {
+        const addr = toTitleCase(String(editData.consignee_address));
+        form.setFieldValue("consignee_address", addr);
+        setConsigneeAddressOptions([{ value: addr, label: addr }]);
       }
 
       // Prefill consignee search and options so the Consignee field shows on edit
@@ -723,10 +748,10 @@ function HouseCreate() {
           : ""),
       customer_service: editData?.customer_service || "",
       trade: editData?.trade || "Re Export",
-      origin_agent: "", // Will be set from editData or MBL details if available
-      origin_agent_name: editData?.origin_agent_name || "",
-      origin_agent_address: editData?.origin_agent_address || "",
-      origin_agent_email: editData?.origin_agent_email || "",
+      agent_name: (editData as { agent_name?: string } | undefined)?.agent_name || "",
+      agent_address:
+        (editData as { agent_address?: string } | undefined)?.agent_address || "",
+      agent_email: (editData as { agent_email?: string } | undefined)?.agent_email || "",
       shipper_code: editData?.shipper_code || "", // Will be set when user selects from SearchableSelect
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
@@ -739,7 +764,7 @@ function HouseCreate() {
       consignee_code:
         (editData as { consignee_id?: number } | undefined)?.consignee_id != null
           ? String(
-              (editData as { consignee_id?: number } | undefined).consignee_id,
+              (editData as { consignee_id?: number } | undefined)?.consignee_id,
             )
           : String(editData?.consignee_code || ""),
       consignee_name: editData?.consignee_name || "",
@@ -750,30 +775,6 @@ function HouseCreate() {
       notify_customer1_email: editData?.notify_customer1_email || "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
-      item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
-      sub_item_no:
-        (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
-      events: Array.isArray((editData as { events?: unknown } | undefined)?.events)
-        ? ((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
-            ?.events ?? []
-          ).map((e) => ({
-            id: e.id != null ? Number(e.id) : undefined,
-            type: String(e.type ?? ""),
-            date: String(e.date ?? ""),
-          }))
-        : [],
-      event_modal_rows: [
-        ...(Array.isArray((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)?.events)
-          ? ((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
-              ?.events ?? []
-            ).map((e) => ({
-              id: e.id != null ? Number(e.id) : undefined,
-              eventType: String(e.type ?? ""),
-              eventDate: e.date ? new Date(String(e.date)) : null,
-            }))
-          : []),
-        { id: undefined, eventType: null, eventDate: null },
-      ],
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
@@ -1186,8 +1187,7 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, location.state?.mblDetails]);
 
-  // Auto-update HBL origin agent name and address from MBL origin agent
-  // This runs in both create and edit mode to ensure origin_agent (code) is set from MBL if available
+  // Auto-update house Agent name/address from MBL origin agent
   useEffect(() => {
     const mblDetails = location.state?.mblDetails;
     if (!mblDetails) return;
@@ -1207,23 +1207,17 @@ function HouseCreate() {
       addressesData: mblOriginAgentData?.addresses_data,
       fullMblDetails: mblDetails,
       isEditMode,
-      currentOriginAgent: form.values.origin_agent,
-      currentOriginAgentName: form.values.origin_agent_name,
+      currentAgentName: form.values.agent_name,
     });
 
     // In create mode: always set from MBL if available
     // In edit mode: only set if not already set (to preserve user edits)
     if (mblOriginAgent && mblOriginAgent.trim() !== "") {
-      // Auto-set HBL origin agent code from MBL origin agent (code)
-      // Only set if not already set in edit mode, or always in create mode
-      if (!isEditMode || !form.values.origin_agent) {
-        form.setFieldValue("origin_agent", mblOriginAgent);
-      }
       // Auto-set HBL origin agent name from MBL origin agent name
       if (mblOriginAgentName && mblOriginAgentName.trim() !== "") {
         // Only set if not already set in edit mode, or always in create mode
-        if (!isEditMode || !form.values.origin_agent_name) {
-          form.setFieldValue("origin_agent_name", mblOriginAgentName);
+        if (!isEditMode || !form.values.agent_name) {
+          form.setFieldValue("agent_name", mblOriginAgentName);
         }
       } else if (
         mblOriginAgentData &&
@@ -1234,8 +1228,8 @@ function HouseCreate() {
           .customer_name as string;
         if (customerName && customerName.trim() !== "") {
           // Only set if not already set in edit mode, or always in create mode
-          if (!isEditMode || !form.values.origin_agent_name) {
-            form.setFieldValue("origin_agent_name", customerName);
+          if (!isEditMode || !form.values.agent_name) {
+            form.setFieldValue("agent_name", customerName);
           }
         }
       }
@@ -1249,12 +1243,12 @@ function HouseCreate() {
       if (mblOriginAgentAddress && mblOriginAgentAddress.trim() !== "") {
         // Use direct origin_agent_address field from mblDetails if available
         // Only set if not already set in edit mode, or always in create mode
-        if (!isEditMode || !form.values.origin_agent_address) {
+        if (!isEditMode || !form.values.agent_address) {
           console.log(
             "✅ Setting HBL origin agent address from mblDetails.origin_agent_address:",
             mblOriginAgentAddress,
           );
-          form.setFieldValue("origin_agent_address", mblOriginAgentAddress);
+          form.setFieldValue("agent_address", mblOriginAgentAddress);
         }
       } else if (mblOriginAgentData && mblOriginAgentData.addresses_data) {
         // Fallback: Check if addresses_data exists and is an array
@@ -1275,25 +1269,25 @@ function HouseCreate() {
         ) {
           const firstAddress = addressesData[0].address;
           // Only set if not already set in edit mode, or always in create mode
-          if (!isEditMode || !form.values.origin_agent_address) {
+          if (!isEditMode || !form.values.agent_address) {
             console.log(
               "✅ Setting HBL origin agent address from addresses_data:",
               firstAddress,
             );
-            form.setFieldValue("origin_agent_address", firstAddress);
+            form.setFieldValue("agent_address", firstAddress);
           }
         } else {
           console.log("⚠️ No valid address found in addresses_data");
           // Clear address if no addresses_data available (only in create mode)
           if (!isEditMode) {
-            form.setFieldValue("origin_agent_address", "");
+            form.setFieldValue("agent_address", "");
           }
         }
       } else {
         console.log("⚠️ No mblOriginAgentData or addresses_data found");
         // Clear address if no origin_agent_data (only in create mode)
         if (!isEditMode) {
-          form.setFieldValue("origin_agent_address", "");
+          form.setFieldValue("agent_address", "");
         }
       }
     }
@@ -1391,10 +1385,10 @@ function HouseCreate() {
       errors.consignee_email = "Invalid email format";
     }
     if (
-      form.values.origin_agent_email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.origin_agent_email)
+      form.values.agent_email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.agent_email)
     ) {
-      errors.origin_agent_email = "Invalid email format";
+      errors.agent_email = "Invalid email format";
     }
     if (
       form.values.notify_customer1_email &&
@@ -1650,9 +1644,9 @@ function HouseCreate() {
       destination_name: form.values.destination_name,
       customer_service: form.values.customer_service,
       trade: form.values.trade,
-      origin_agent_name: form.values.origin_agent_name,
-      origin_agent_address: form.values.origin_agent_address,
-      origin_agent_email: form.values.origin_agent_email,
+      agent_name: form.values.agent_name,
+      agent_address: form.values.agent_address,
+      agent_email: form.values.agent_email,
       shipper_name: form.values.shipper_name,
       shipper_address: form.values.shipper_address,
       shipper_email: form.values.shipper_email,
@@ -1756,11 +1750,9 @@ function HouseCreate() {
       destination_name: v.destination_name,
       customer_service: v.customer_service,
       trade: v.trade,
-      origin_agent: v.origin_agent,
-      origin_agent_name: v.origin_agent_name,
-      origin_agent_address: v.origin_agent_address,
-      origin_agent_email: v.origin_agent_email,
-      shipper_code: v.shipper_code,
+      agent_name: v.agent_name,
+      agent_address: v.agent_address,
+      agent_email: v.agent_email,
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
@@ -1776,7 +1768,6 @@ function HouseCreate() {
           null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
-      consignee_code: v.consignee_code,
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
@@ -1809,10 +1800,9 @@ function HouseCreate() {
         destination_name: form.values.destination_name,
         customer_service: form.values.customer_service,
         trade: form.values.trade,
-        origin_agent_name: form.values.origin_agent_name,
-        origin_agent_address: form.values.origin_agent_address,
-        origin_agent_email: form.values.origin_agent_email,
-        shipper_code: form.values.shipper_code,
+        agent_name: form.values.agent_name,
+        agent_address: form.values.agent_address,
+        agent_email: form.values.agent_email,
         shipper_name: form.values.shipper_name,
         shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
@@ -1826,7 +1816,6 @@ function HouseCreate() {
         shipment_id:
           (editData as { shipment_id?: string } | undefined)?.shipment_id ??
           null,
-        consignee_code: form.values.consignee_code,
         consignee_name: form.values.consignee_name,
         consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,
@@ -2701,19 +2690,35 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                <Dropdown
-                  label="Shipper Address"
-                  placeholder="Select shipper address"
-                  searchable
-                  data={shipperAddressOptions}
-                  value={form.values.shipper_address || ""}
-                  onChange={(value) => {
-                    const formattedValue = value ? toTitleCase(value) : "";
-                    form.setFieldValue("shipper_address", formattedValue);
-                  }}
-                  error={form.errors.shipper_address}
-                  disabled={shipperAddressOptions.length === 0}
-                />
+                {shipperAddressOptions.length > 0 ? (
+                  <Dropdown
+                    key={`shipper-address-${form.values.shipper_code || "none"}`}
+                    label="Shipper Address"
+                    placeholder="Select shipper address"
+                    searchable
+                    data={shipperAddressOptions}
+                    value={form.values.shipper_address || ""}
+                    onChange={(value) => {
+                      const formattedValue = value ? toTitleCase(value) : "";
+                      form.setFieldValue("shipper_address", formattedValue);
+                    }}
+                    error={form.errors.shipper_address}
+                  />
+                ) : (
+                  <FormTextArea
+                    label="Shipper Address"
+                    placeholder="Enter shipper address"
+                    minRows={2}
+                    size="sm"
+                    radius="sm"
+                    value={form.values.shipper_address || ""}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue("shipper_address", formattedValue);
+                    }}
+                    error={form.errors.shipper_address}
+                  />
+                )}
               </Grid.Col>
             </Grid>
 
@@ -2748,8 +2753,6 @@ function HouseCreate() {
                     onSearchChange={(value) => {
                       const v = toTitleCase(value);
                       setConsigneeSearch(v);
-                      form.setFieldValue("consignee_name", v);
-                      form.setFieldValue("consignee_code", "");
                       debouncedConsigneeSearch(v);
                     }}
                     value={form.values.consignee_code || ""}
@@ -2820,20 +2823,35 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <Dropdown
-                  key={`consignee-address-${form.values.consignee_code || "none"}`}
-                  label="Consignee Address"
-                  placeholder="Select consignee address"
-                  searchable
-                  data={consigneeAddressOptions}
-                  value={form.values.consignee_address || ""}
-                  onChange={(value) => {
-                    const formattedValue = value ? toTitleCase(value) : "";
-                    form.setFieldValue("consignee_address", formattedValue);
-                  }}
-                  error={form.errors.consignee_address}
-                  disabled={consigneeAddressOptions.length === 0}
-                />
+                {consigneeAddressOptions.length > 0 ? (
+                  <Dropdown
+                    key={`consignee-address-${form.values.consignee_code || "none"}`}
+                    label="Consignee Address"
+                    placeholder="Select consignee address"
+                    searchable
+                    data={consigneeAddressOptions}
+                    value={form.values.consignee_address || ""}
+                    onChange={(value) => {
+                      const formattedValue = value ? toTitleCase(value) : "";
+                      form.setFieldValue("consignee_address", formattedValue);
+                    }}
+                    error={form.errors.consignee_address}
+                  />
+                ) : (
+                  <FormTextArea
+                    label="Consignee Address"
+                    placeholder="Enter consignee address"
+                    minRows={2}
+                    size="sm"
+                    radius="sm"
+                    value={form.values.consignee_address || ""}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue("consignee_address", formattedValue);
+                    }}
+                    error={form.errors.consignee_address}
+                  />
+                )}
               </Grid.Col>
             </Grid>
 
@@ -2843,11 +2861,48 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <FormTextInput
+                <SearchableSelect
                   label="Notify Customer Name"
-                  placeholder="Enter Notify Customer Name"
-                  {...form.getInputProps("notify_customer1_name")}
-                  error={form.errors.notify_customer1_name}
+                  placeholder="Type notify customer name"
+                  apiEndpoint={URL.customer}
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.customer_code),
+                    label: String(item.customer_name),
+                  })}
+                  value={form.values.notify_customer1_name || ""}
+                  displayValue={form.values.notify_customer1_name || ""}
+                  onChange={(value, selectedData, originalData) => {
+                    const newValue = selectedData?.label || value || "";
+                    form.setFieldValue("notify_customer1_name", newValue);
+
+                    const email = getPartyEmail(
+                      (originalData as Record<string, unknown>) || {},
+                    );
+                    form.setFieldValue("notify_customer1_email", email);
+
+                    const addressesData = getPartyAddresses(
+                      (originalData as Record<string, unknown>) || {},
+                    );
+                    const addressOptions = addressesData
+                      .filter((a) => a.address)
+                      .map((a) => {
+                        const addr = toTitleCase(String(a.address || ""));
+                        return { value: addr, label: addr };
+                      });
+                    setNotifyCustomerAddressOptions(addressOptions);
+
+                    form.setFieldValue("notify_customer1_address", "");
+                    if (addressOptions.length > 0) {
+                      form.setFieldValue(
+                        "notify_customer1_address",
+                        addressOptions[0].value,
+                      );
+                    }
+                  }}
+                  returnOriginalData={true}
+                  error={form.errors.notify_customer1_name as string}
+                  minSearchLength={2}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -2861,22 +2916,41 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                <FormTextArea
-                  label="Notify Customer Address"
-                  placeholder="Enter Notify Customer Address"
-                  minRows={2}
-                  size="sm"
-                  radius="sm"
-                  value={form.values.notify_customer1_address}
-                  onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue(
-                      "notify_customer1_address",
-                      formattedValue,
-                    );
-                  }}
-                  error={form.errors.notify_customer1_address}
-                />
+                {notifyCustomerAddressOptions.length > 0 ? (
+                  <Dropdown
+                    key={`notify-address-${form.values.notify_customer1_name || "none"}`}
+                    label="Notify Customer Address"
+                    placeholder="Select notify customer address"
+                    searchable
+                    data={notifyCustomerAddressOptions}
+                    value={form.values.notify_customer1_address || ""}
+                    onChange={(value) => {
+                      const formattedValue = value ? toTitleCase(value) : "";
+                      form.setFieldValue(
+                        "notify_customer1_address",
+                        formattedValue,
+                      );
+                    }}
+                    error={form.errors.notify_customer1_address}
+                  />
+                ) : (
+                  <FormTextArea
+                    label="Notify Customer Address"
+                    placeholder="Enter Notify Customer Address"
+                    minRows={2}
+                    size="sm"
+                    radius="sm"
+                    value={form.values.notify_customer1_address}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue(
+                        "notify_customer1_address",
+                        formattedValue,
+                      );
+                    }}
+                    error={form.errors.notify_customer1_address}
+                  />
+                )}
               </Grid.Col>
             </Grid>
 
@@ -2895,20 +2969,15 @@ function HouseCreate() {
                     value: String(item.customer_code), // Use code as value for API payload
                     label: String(item.customer_name), // Display name to user
                   })}
-                  value={form.values.origin_agent} // Stores customer_code
-                  displayValue={form.values.origin_agent_name} // Displays customer_name
+                  value={form.values.agent_name}
+                  displayValue={form.values.agent_name}
                   onChange={(value, selectedData, originalData) => {
-                    // Store customer_code as value (for API payload)
-                    form.setFieldValue("origin_agent", value || "");
-                    // Store customer_name for display
-                    form.setFieldValue(
-                      "origin_agent_name",
-                      selectedData?.label || "",
-                    );
+                    const newValue = selectedData?.label || value || "";
+                    form.setFieldValue("agent_name", newValue);
 
                     // Auto-fill address from addresses_data if available
                     if (
-                      value &&
+                      newValue &&
                       originalData &&
                       (originalData as Record<string, unknown>).addresses_data
                     ) {
@@ -2919,24 +2988,25 @@ function HouseCreate() {
                         address: string;
                       }>;
 
-                      // Auto-select the first address if available
-                      if (
-                        addressesData.length > 0 &&
-                        addressesData[0].address
-                      ) {
-                        form.setFieldValue(
-                          "origin_agent_address",
-                          addressesData[0].address,
-                        );
-                      } else {
-                        form.setFieldValue("origin_agent_address", "");
+                      const addressOptions = addressesData
+                        .filter((a) => a.address)
+                        .map((a) => {
+                          const addr = toTitleCase(String(a.address || ""));
+                          return { value: addr, label: addr };
+                        });
+                      setAgentAddressOptions(addressOptions);
+
+                      form.setFieldValue("agent_address", "");
+                      if (addressOptions.length > 0) {
+                        form.setFieldValue("agent_address", addressOptions[0].value);
                       }
                     } else {
-                      form.setFieldValue("origin_agent_address", "");
+                      setAgentAddressOptions([]);
+                      form.setFieldValue("agent_address", "");
                     }
                   }}
                   returnOriginalData={true}
-                  error={form.errors.origin_agent_name as string}
+                  error={form.errors.agent_name as string}
                   minSearchLength={2}
                 />
               </Grid.Col>
@@ -2945,25 +3015,40 @@ function HouseCreate() {
                   label="Destination Agent Email"
                   type="email"
                   placeholder="Enter Destination Agent Email"
-                  {...form.getInputProps("origin_agent_email")}
-                  error={form.errors.origin_agent_email}
+                  {...form.getInputProps("agent_email")}
+                  error={form.errors.agent_email}
                 />
               </Grid.Col>
 
               <Grid.Col span={4}>
-                <FormTextArea
-                  label="Destination Agent Address"
-                  placeholder="Enter Destination Agent Address"
-                  minRows={2}
-                  size="sm"
-                  radius="sm"
-                  value={form.values.origin_agent_address}
-                  onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue("origin_agent_address", formattedValue);
-                  }}
-                  error={form.errors.origin_agent_address}
-                />
+                {agentAddressOptions.length > 0 ? (
+                  <Dropdown
+                    label="Destination Agent Address"
+                    placeholder="Select destination agent address"
+                    searchable
+                    data={agentAddressOptions}
+                    value={form.values.agent_address || ""}
+                    onChange={(value) => {
+                      const formattedValue = value ? toTitleCase(value) : "";
+                      form.setFieldValue("agent_address", formattedValue);
+                    }}
+                    error={form.errors.agent_address}
+                  />
+                ) : (
+                  <FormTextArea
+                    label="Destination Agent Address"
+                    placeholder="Enter Destination Agent Address"
+                    minRows={2}
+                    size="sm"
+                    radius="sm"
+                    value={form.values.agent_address}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue("agent_address", formattedValue);
+                    }}
+                    error={form.errors.agent_address}
+                  />
+                )}
               </Grid.Col>
             </Grid>
           </Box>

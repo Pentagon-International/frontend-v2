@@ -65,8 +65,8 @@ import RequiredLabel from "../../../components/RequiredLabel";
 type MBLDetailsForm = {
   service: string;
   origin_agent: string; // Stores customer_code (code) for API payload
-  origin_agent_name: string; // Stores customer_name (name) for display
-  origin_agent_address: string; // Stores address from addresses_data
+  agent_name: string;
+  agent_address: string;
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -237,15 +237,13 @@ type HousingDetail = {
   destination_name?: string;
   customer_service: string;
   trade: string;
-  origin_agent_name: string;
-  origin_agent_address: string;
-  origin_agent_email: string;
-  shipper_code: string;
+  agent_name: string;
+  agent_address: string;
+  agent_email: string;
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
   shipper_state_id: string;
-  consignee_code: string;
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
@@ -404,8 +402,8 @@ function ImportJobCreate() {
     initialValues: {
       service: "",
       origin_agent: "", // Stores customer_code
-      origin_agent_name: "", // Stores customer_name for display
-      origin_agent_address: "", // Stores address from addresses_data
+      agent_name: "",
+      agent_address: "",
       origin_code: "",
       origin_name: "",
       destination_code: "",
@@ -532,9 +530,8 @@ function ImportJobCreate() {
             mblData.origin_agent_code ||
             mblData.origin_agent ||
             "",
-          origin_agent_name:
-            mblData.agent_name || mblData.origin_agent_name || "",
-          origin_agent_address: originAgentAddress,
+          agent_name: mblData.agent_name || mblData.origin_agent_name || "",
+          agent_address: originAgentAddress,
           origin_code: mblData.origin_code || "",
           origin_name: mblData.origin_name || "",
           destination_code: mblData.destination_code || "",
@@ -612,20 +609,11 @@ function ImportJobCreate() {
                 ? String(house.customer_service)
                 : "",
               trade: house.trade ? String(house.trade) : "",
-              origin_agent_name: house.origin_agent_name
-                ? String(house.origin_agent_name)
-                : "",
-              origin_agent_address: house.origin_agent_address
-                ? String(house.origin_agent_address)
-                : "",
-              origin_agent_email: house.origin_agent_email
-                ? String(house.origin_agent_email)
-                : "",
+              agent_name: house.agent_name ? String(house.agent_name) : "",
+              agent_address: house.agent_address ? String(house.agent_address) : "",
+              agent_email: house.agent_email ? String(house.agent_email) : "",
               shipper_name: house.shipper_name
                 ? String(house.shipper_name)
-                : "",
-              shipper_code: house.shipper_code
-                ? String(house.shipper_code)
                 : "",
               shipper_address: house.shipper_address
                 ? String(house.shipper_address)
@@ -635,9 +623,6 @@ function ImportJobCreate() {
                 : "",
               shipper_state_id: house.shipper_state_id
                 ? String(house.shipper_state_id)
-                : "",
-              consignee_code: house.consignee_code
-                ? String(house.consignee_code)
                 : "",
               consignee_name: house.consignee_name
                 ? String(house.consignee_name)
@@ -1205,8 +1190,11 @@ function ImportJobCreate() {
         mblDetailsForm.setValues({
           service: mblDetails.service || "",
           origin_agent: mblDetails.origin_agent || "",
-          origin_agent_name: mblDetails.origin_agent_name || "",
-          origin_agent_address: mblDetails.origin_agent_address || "",
+          agent_name:
+            (mblDetails as { agent_name?: string } | undefined)?.agent_name || "",
+          agent_address:
+            (mblDetails as { agent_address?: string } | undefined)?.agent_address ||
+            "",
           origin_code: mblDetails.origin_code || "",
           origin_name: mblDetails.origin_name || "",
           destination_code: mblDetails.destination_code || "",
@@ -1722,9 +1710,8 @@ function ImportJobCreate() {
           mblDetails: {
             service: mblDetailsForm.values.service || "",
             origin_agent: mblDetailsForm.values.origin_agent || "",
-            origin_agent_name: mblDetailsForm.values.origin_agent_name || "",
-            origin_agent_address:
-              mblDetailsForm.values.origin_agent_address || "",
+            agent_name: mblDetailsForm.values.agent_name || "",
+            agent_address: mblDetailsForm.values.agent_address || "",
             origin_code: mblDetailsForm.values.origin_code || "",
             origin_name: mblDetailsForm.values.origin_name || "",
             destination_code: mblDetailsForm.values.destination_code || "",
@@ -2114,15 +2101,13 @@ function ImportJobCreate() {
           destination_code: house.destination_code,
           customer_service: house.customer_service || "",
           trade: house.trade,
-          origin_agent_name: house.origin_agent_name,
-          origin_agent_address: house.origin_agent_address || "",
-          origin_agent_email: house.origin_agent_email || "",
-          shipper_code: house.shipper_code || "",
+          agent_name: house.agent_name,
+          agent_address: house.agent_address || "",
+          agent_email: house.agent_email || "",
           shipper_name: house.shipper_name,
           shipper_address: house.shipper_address || "",
           shipper_email: house.shipper_email || "",
           shipper_state_id: house.shipper_state_id || "",
-          consignee_code: house.consignee_code || "",
           consignee_name: house.consignee_name,
           consignee_address: house.consignee_address || "",
           consignee_email: house.consignee_email || "",
@@ -2654,19 +2639,20 @@ function ImportJobCreate() {
                   required
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
+                  dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code), // Use code as value for API payload
                     label: String(item.customer_name), // Display name to user
                   })}
                   value={mblDetailsForm.values.origin_agent} // Stores customer_code
-                  displayValue={mblDetailsForm.values.origin_agent_name} // Displays customer_name
+                  displayValue={mblDetailsForm.values.agent_name} // Displays customer_name
                   onChange={(value, selectedData, originalData) => {
                     // Store customer_code as value (for API payload)
                     mblDetailsForm.setFieldValue("origin_agent", value || "");
                     // Store customer_name for display
                     mblDetailsForm.setFieldValue(
-                      "origin_agent_name",
+                      "agent_name",
                       selectedData?.label || "",
                     );
 
@@ -2690,17 +2676,17 @@ function ImportJobCreate() {
                         addressesData[0].address
                       ) {
                         mblDetailsForm.setFieldValue(
-                          "origin_agent_address",
+                          "agent_address",
                           addressesData[0].address,
                         );
                       } else {
                         mblDetailsForm.setFieldValue(
-                          "origin_agent_address",
+                          "agent_address",
                           "",
                         );
                       }
                     } else {
-                      mblDetailsForm.setFieldValue("origin_agent_address", "");
+                      mblDetailsForm.setFieldValue("agent_address", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -2715,6 +2701,7 @@ function ImportJobCreate() {
                   label="Origin"
                   required
                   apiEndpoint={URL.portMaster}
+                  dropdownZIndex={10}
                   placeholder="Type the origin"
                   searchFields={["port_code", "port_name"]}
                   displayFormat={(item: Record<string, unknown>) => ({
@@ -2750,6 +2737,7 @@ function ImportJobCreate() {
                   label="Destination"
                   required
                   apiEndpoint={URL.portMaster}
+                  dropdownZIndex={10}
                   placeholder="Type the destination"
                   searchFields={["port_code", "port_name"]}
                   displayFormat={(item: Record<string, unknown>) => ({
@@ -2906,6 +2894,7 @@ function ImportJobCreate() {
                   label="Carrier"
                   required
                   apiEndpoint={URL.carrier}
+                  dropdownZIndex={10}
                   placeholder="Type carrier name"
                   searchFields={["carrier_code", "carrier_name"]}
                   displayFormat={(item: Record<string, unknown>) => ({
@@ -3038,6 +3027,7 @@ function ImportJobCreate() {
                         label="From"
                         required
                         apiEndpoint={URL.portMaster}
+                        dropdownZIndex={10}
                         placeholder="Type from location"
                         searchFields={["port_code", "port_name"]}
                         displayFormat={(item: Record<string, unknown>) => ({
@@ -3088,6 +3078,7 @@ function ImportJobCreate() {
                         label="To"
                         required
                         apiEndpoint={URL.portMaster}
+                        dropdownZIndex={10}
                         placeholder="Type to location"
                         searchFields={["port_code", "port_name"]}
                         displayFormat={(item: Record<string, unknown>) => ({
@@ -3192,6 +3183,7 @@ function ImportJobCreate() {
                             label="Carrier"
                             required
                             apiEndpoint={URL.carrier}
+                            dropdownZIndex={10}
                             placeholder="Type carrier name"
                             searchFields={["carrier_code", "carrier_name"]}
                             displayFormat={(item: Record<string, unknown>) => ({
@@ -3257,6 +3249,7 @@ function ImportJobCreate() {
                             label="Carrier"
                             required
                             apiEndpoint={URL.carrier}
+                            dropdownZIndex={10}
                             placeholder="Type carrier name"
                             searchFields={["carrier_code", "carrier_name"]}
                             displayFormat={(item: Record<string, unknown>) => ({

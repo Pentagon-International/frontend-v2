@@ -64,8 +64,8 @@ import RequiredLabel from "../../../components/RequiredLabel";
 type MBLDetailsForm = {
   service: string;
   origin_agent: string; // Stores customer_code (code) for API payload
-  origin_agent_name: string; // Stores customer_name (name) for display
-  origin_agent_address: string; // Stores address from addresses_data
+  agent_name: string;
+  agent_address: string;
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -232,14 +232,12 @@ type HousingDetail = {
   destination_name?: string;
   customer_service: string;
   trade: string;
-  origin_agent_name: string;
-  origin_agent_address: string;
-  origin_agent_email: string;
-  shipper_code: string;
+  agent_name: string;
+  agent_address: string;
+  agent_email: string;
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
-  consignee_code: string;
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
@@ -248,6 +246,8 @@ type HousingDetail = {
   notify_customer1_email: string;
   commodity_description: string;
   marks_no: string;
+  item_no?: string;
+  sub_item_no?: string;
   cargo_details?: Array<{
     id?: number | string;
     container_no?: number | string;
@@ -399,8 +399,8 @@ function ExportJobCreate() {
     initialValues: {
       service: "",
       origin_agent: "", // Stores customer_code
-      origin_agent_name: "", // Stores customer_name for display
-      origin_agent_address: "", // Stores address from addresses_data
+      agent_name: "",
+      agent_address: "",
       origin_code: "",
       origin_name: "",
       destination_code: "",
@@ -497,8 +497,8 @@ function ExportJobCreate() {
               : [];
         }
         // Populate MBL Details
-        // Extract origin_agent_address from origin_agent_data if available
-        let originAgentAddress = "";
+        // Extract agent_address from origin_agent_data if available
+        let agentAddress = "";
         if (mblData.origin_agent_data) {
           const originAgentData = mblData.origin_agent_data as Record<
             string,
@@ -513,7 +513,7 @@ function ExportJobCreate() {
               address: string;
             }>;
             if (addressesData.length > 0 && addressesData[0].address) {
-              originAgentAddress = addressesData[0].address;
+              agentAddress = addressesData[0].address;
             }
           }
         }
@@ -525,9 +525,8 @@ function ExportJobCreate() {
             mblData.origin_agent_code ||
             mblData.origin_agent ||
             "",
-          origin_agent_name:
-            mblData.agent_name || mblData.origin_agent_name || "",
-          origin_agent_address: originAgentAddress,
+          agent_name: mblData.agent_name || mblData.origin_agent_name || "",
+          agent_address: agentAddress,
           origin_code: mblData.origin_code || "",
           origin_name: mblData.origin_name || "",
           destination_code: mblData.destination_code || "",
@@ -600,18 +599,9 @@ function ExportJobCreate() {
                 ? String(house.customer_service)
                 : "",
               trade: house.trade ? String(house.trade) : "",
-              origin_agent_name: house.origin_agent_name
-                ? String(house.origin_agent_name)
-                : "",
-              origin_agent_address: house.origin_agent_address
-                ? String(house.origin_agent_address)
-                : "",
-              origin_agent_email: house.origin_agent_email
-                ? String(house.origin_agent_email)
-                : "",
-              shipper_code: house.shipper_code
-                ? String(house.shipper_code)
-                : "",
+              agent_name: house.agent_name ? String(house.agent_name) : "",
+              agent_address: house.agent_address ? String(house.agent_address) : "",
+              agent_email: house.agent_email ? String(house.agent_email) : "",
               shipper_name: house.shipper_name
                 ? String(house.shipper_name)
                 : "",
@@ -620,9 +610,6 @@ function ExportJobCreate() {
                 : "",
               shipper_email: house.shipper_email
                 ? String(house.shipper_email)
-                : "",
-              consignee_code: house.consignee_code
-                ? String(house.consignee_code)
                 : "",
               consignee_name: house.consignee_name
                 ? String(house.consignee_name)
@@ -1175,8 +1162,11 @@ function ExportJobCreate() {
         mblDetailsForm.setValues({
           service: mblDetails.service || "",
           origin_agent: mblDetails.origin_agent || "",
-          origin_agent_name: mblDetails.origin_agent_name || "",
-          origin_agent_address: mblDetails.origin_agent_address || "",
+          agent_name:
+            (mblDetails as { agent_name?: string } | undefined)?.agent_name || "",
+          agent_address:
+            (mblDetails as { agent_address?: string } | undefined)
+              ?.agent_address || "",
           origin_code: mblDetails.origin_code || "",
           origin_name: mblDetails.origin_name || "",
           destination_code: mblDetails.destination_code || "",
@@ -1845,9 +1835,8 @@ function ExportJobCreate() {
           mblDetails: {
             service: mblDetailsForm.values.service || "",
             origin_agent: mblDetailsForm.values.origin_agent || "",
-            origin_agent_name: mblDetailsForm.values.origin_agent_name || "",
-            origin_agent_address:
-              mblDetailsForm.values.origin_agent_address || "",
+            agent_name: mblDetailsForm.values.agent_name || "",
+            agent_address: mblDetailsForm.values.agent_address || "",
             origin_code: mblDetailsForm.values.origin_code || "",
             origin_name: mblDetailsForm.values.origin_name || "",
             destination_code: mblDetailsForm.values.destination_code || "",
@@ -2071,14 +2060,12 @@ function ExportJobCreate() {
           destination_code: house.destination_code,
           customer_service: house.customer_service || "",
           trade: house.trade,
-          origin_agent_name: house.origin_agent_name,
-          origin_agent_address: house.origin_agent_address || "",
-          origin_agent_email: house.origin_agent_email || "",
-          shipper_code: house.shipper_code || "",
+          agent_name: house.agent_name,
+          agent_address: house.agent_address || "",
+          agent_email: house.agent_email || "",
           shipper_name: house.shipper_name,
           shipper_address: house.shipper_address || "",
           shipper_email: house.shipper_email || "",
-          consignee_code: house.consignee_code || "",
           consignee_name: house.consignee_name,
           consignee_address: house.consignee_address || "",
           consignee_email: house.consignee_email || "",
@@ -2654,15 +2641,12 @@ function ExportJobCreate() {
                     label: String(item.customer_name), // Display name to user
                   })}
                   value={mblDetailsForm.values.origin_agent} // Stores customer_code
-                  displayValue={mblDetailsForm.values.origin_agent_name} // Displays customer_name
+                  displayValue={mblDetailsForm.values.agent_name} // Displays customer_name
                   onChange={(value, selectedData, originalData) => {
                     // Store customer_code as value (for API payload)
                     mblDetailsForm.setFieldValue("origin_agent", value || "");
                     // Store customer_name for display
-                    mblDetailsForm.setFieldValue(
-                      "origin_agent_name",
-                      selectedData?.label || "",
-                    );
+                    mblDetailsForm.setFieldValue("agent_name", selectedData?.label || "");
 
                     // Extract address from addresses_data if available
                     if (
@@ -2684,17 +2668,17 @@ function ExportJobCreate() {
                         addressesData[0].address
                       ) {
                         mblDetailsForm.setFieldValue(
-                          "origin_agent_address",
+                          "agent_address",
                           addressesData[0].address,
                         );
                       } else {
                         mblDetailsForm.setFieldValue(
-                          "origin_agent_address",
+                          "agent_address",
                           "",
                         );
                       }
                     } else {
-                      mblDetailsForm.setFieldValue("origin_agent_address", "");
+                      mblDetailsForm.setFieldValue("agent_address", "");
                     }
                   }}
                   returnOriginalData={true}
