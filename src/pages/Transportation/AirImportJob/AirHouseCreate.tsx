@@ -2029,6 +2029,7 @@ function HouseCreate() {
           null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+      consignee_code: v.consignee_code,
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
@@ -3741,19 +3742,22 @@ function HouseCreate() {
                   color="#105476"
                   onClick={() => {
                     const fullDetail = getCurrentHousingDetail();
-                    const prepaidCharges = (fullDetail.charges ?? []).filter(
+                    // For air import customer invoice, only Collect charges (mirrors Ocean Import)
+                    const collectCharges = (fullDetail.charges ?? []).filter(
                       (c: { pp_cc?: string }) =>
-                        String(c.pp_cc ?? "").trim() === "Prepaid",
+                        String(c.pp_cc ?? "").trim() === "Collect",
                     );
                     const detailForInvoice = {
                       ...fullDetail,
-                      charges: prepaidCharges,
+                      charges: collectCharges,
                     };
                     navigate("/air/import-job/invoice", {
                       state: {
                         hawbDetails: [detailForInvoice],
                         housingDetails: [detailForInvoice],
                         is_agent: false,
+                        // Indicate that Bill To / State / Address should come from consignee
+                        billToFrom: "consignee",
                         ...(location.state?.job && { job: location.state.job }),
                         ...(location.state?.mawbDetails && {
                           mawbDetails: location.state.mawbDetails,
@@ -4105,6 +4109,7 @@ function HouseCreate() {
                       placeholder="Amount"
                       min={0}
                       hideControls
+                      decimalScale={2}
                       value={charge.amount || undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(

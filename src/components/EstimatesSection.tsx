@@ -429,6 +429,7 @@ export function EstimatesSection({
               placeholder="Total"
               min={0}
               hideControls
+              decimalScale={2}
               value={row.total_cost ?? undefined}
               onChange={(value) => {
                 const v = typeof value === "number" ? value : toNumberOrNull(value);

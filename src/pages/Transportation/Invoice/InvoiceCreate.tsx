@@ -852,11 +852,30 @@ function InvoiceCreate() {
               );
             }
           } else {
-            // Default customer invoice: Bill To / address from shipper
+            // Default customer invoice: Bill To / address from shipper (export / non-consignee flows)
             if (firstHawb.shipper_address) {
               form.setFieldValue("address", firstHawb.shipper_address);
             }
-            const shipperCode = String(firstHawb.shipper_code || "").trim();
+            // Prefer shipper_code from firstHawb; if missing, fall back to job.housing_details[0].shipper_code
+            let shipperCode = String(
+              (firstHawb as { shipper_code?: string }).shipper_code || "",
+            ).trim();
+            if (
+              !shipperCode &&
+              job &&
+              Array.isArray(
+                (job as { housing_details?: Array<{ shipper_code?: string }> })
+                  .housing_details,
+              )
+            ) {
+              const jobHousing = (job as {
+                housing_details?: Array<{ shipper_code?: string }>;
+              }).housing_details;
+              const fromJob = jobHousing?.[0]?.shipper_code;
+              if (fromJob) {
+                shipperCode = String(fromJob).trim();
+              }
+            }
             if (shipperCode) {
               form.setFieldValue("bill_to", shipperCode);
             }

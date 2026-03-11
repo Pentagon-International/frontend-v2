@@ -1753,6 +1753,7 @@ function HouseCreate() {
       agent_name: v.agent_name,
       agent_address: v.agent_address,
       agent_email: v.agent_email,
+      shipper_code: v.shipper_code,
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
@@ -3740,6 +3741,7 @@ function HouseCreate() {
                       placeholder="Amount"
                       min={0}
                       hideControls
+                      decimalScale={2}
                       value={charge.amount || undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(

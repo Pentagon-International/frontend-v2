@@ -3530,6 +3530,7 @@ function HouseCreate() {
                       placeholder="Amount"
                       min={0}
                       hideControls
+                      decimalScale={2}
                       value={charge.amount || undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
