@@ -709,7 +709,8 @@ function HouseCreate() {
           {
             filters: {
               service_type: "IMPORT",
-              service: "AIR",
+              service:"AIR",
+              status: ["BOOKED", "RECEIVED"],
               houseno: hawbNo.trim(),
               destination_agent_code: agentCode.trim(),
             },

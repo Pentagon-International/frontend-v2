@@ -788,6 +788,7 @@ function HouseCreate() {
             filters: {
               service_type: "IMPORT",
               service: location.state?.mblDetails?.service,
+              status: ["BOOKED", "RECEIVED"],
               houseno: hblNo.trim(),
               destination_agent_code: agentCode.trim(),
             },
