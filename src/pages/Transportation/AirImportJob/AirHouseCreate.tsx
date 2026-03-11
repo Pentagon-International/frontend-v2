@@ -3600,6 +3600,7 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
+                      decimalScale={2}
                       hideControls
                       value={cargo.gross_weight || undefined}
                       onChange={(value) => {
@@ -3629,6 +3630,7 @@ function HouseCreate() {
                       placeholder="Enter Volume Weight"
                       min={0}
                       hideControls
+                      decimalScale={3}
                       value={cargo.volume || undefined}
                       onChange={(value) => {
                         const updated = [...cargoDetails];
@@ -3656,6 +3658,7 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder=""
                       hideControls
+                      decimalScale={2}
                       value={cargo.chargeable_weight || undefined}
                       readOnly
                       disabled

@@ -5355,15 +5355,17 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           value={charge.total_sell || ""}
+                          decimalScale={2}
                           readOnly
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           value={charge.total_cost || ""}
+                          decimalScale={2}
                           readOnly
                           size="xs"
                         />
