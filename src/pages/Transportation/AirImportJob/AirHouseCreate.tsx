@@ -3268,7 +3268,7 @@ function HouseCreate() {
                 <SearchableSelect
                   label="Notify Customer Name"
                   placeholder="Type notify customer name"
-                  apiEndpoint={URL.customer}
+                  apiEndpoint={URL.consignee}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code),

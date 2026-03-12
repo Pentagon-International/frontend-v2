@@ -95,7 +95,7 @@ interface RoutingDetail {
 
 interface CargoDetail {
   // Common fields
-  id?:number;
+  id?: number;
   no_of_packages?: number;
   gross_weight?: number;
   volume_weight?: number;
@@ -327,9 +327,9 @@ const validationSchema = yup.object({
   actual_delivery_date: yup.date().nullable(),
 
   // Events, Documents, Trigger Updates - optional
-  events: yup.array().of(
-    yup.object({ type: yup.string(), date: yup.string() }),
-  ),
+  events: yup
+    .array()
+    .of(yup.object({ type: yup.string(), date: yup.string() })),
   document_ids: yup.array().of(yup.number()),
   trigger_updates: yup.array().of(
     yup.object({
@@ -597,9 +597,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [consigneeOptions, setConsigneeOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
-  const [consigneeHasResults, setConsigneeHasResults] = useState<boolean | null>(
-    null,
-  );
+  const [consigneeHasResults, setConsigneeHasResults] = useState<
+    boolean | null
+  >(null);
   const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
 
   const defaultCurrency = (() => {
@@ -863,14 +863,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       // Check for both _read and regular versions to handle API response format
       shipper_code: String(data.shipper_code_read || data.shipper_code || ""),
       shipper_name: String(data.shipper_name || ""),
-      shipper_address: String(data.shipper_address || data.shipper_address_text || ""),
+      shipper_address: String(
+        data.shipper_address || data.shipper_address_text || "",
+      ),
       shipper_address_id: Number(data.shipper_address_id) || 0,
       shipper_email: String(data.shipper_email || ""),
       consignee_code: String(
         data.consignee_code_read || data.consignee_code || "",
       ),
       consignee_name: String(data.consignee_name || ""),
-      consignee_address: String(data.consignee_address || data.consignee_address_text || ""),
+      consignee_address: String(
+        data.consignee_address || data.consignee_address_text || "",
+      ),
       consignee_address_id: Number(data.consignee_address_id) || 0,
       consignee_email: String(data.consignee_email || ""),
       forwarder_code: String(
@@ -971,18 +975,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
       // Events, Documents, Trigger Updates
       events: Array.isArray(data.events)
-        ? (data.events as Array<{ type?: string; date?: string }>).map(
-            (e) => ({
-              type: String(e.type ?? ""),
-              date: String(e.date ?? ""),
-            }),
-          )
+        ? (data.events as Array<{ type?: string; date?: string }>).map((e) => ({
+            type: String(e.type ?? ""),
+            date: String(e.date ?? ""),
+          }))
         : [],
       document_ids: Array.isArray(data.document_ids)
         ? (data.document_ids as number[]).map((id) => Number(id))
         : Array.isArray(
-              (data as { documents?: Array<Record<string, unknown>> }).documents,
-          )
+              (data as { documents?: Array<Record<string, unknown>> })
+                .documents,
+            )
           ? (
               (data as { documents?: Array<Record<string, unknown>> })
                 .documents as Array<Record<string, unknown>>
@@ -1339,7 +1342,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           | undefined;
 
         let normalized: DocumentItem[] = [];
-        if (raw && Array.isArray((raw as { documents?: DocumentItem[] }).documents)) {
+        if (
+          raw &&
+          Array.isArray((raw as { documents?: DocumentItem[] }).documents)
+        ) {
           normalized = (raw as { documents?: DocumentItem[] }).documents ?? [];
         } else if (Array.isArray(raw)) {
           normalized = raw as DocumentItem[];
@@ -1432,10 +1438,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   const handleSubmitTriggerModal = () => {
     const rows = form.values.trigger_modal_rows;
-    const toAdd: { id?: number; type: string; code: string; description: string }[] = [];
+    const toAdd: {
+      id?: number;
+      type: string;
+      code: string;
+      description: string;
+    }[] = [];
     for (const row of rows) {
       if (row.type && row.code) {
-        const item: { id?: number; type: string; code: string; description: string } = {
+        const item: {
+          id?: number;
+          type: string;
+          code: string;
+          description: string;
+        } = {
           type: row.type,
           code: row.code,
           description: row.description.trim(),
@@ -1618,47 +1634,50 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   }, [isFromQuotationFlow, quotationsData, onQuotationAlreadyBooked]);
 
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
-  const debouncedConsigneeSearch = useDebouncedCallback(async (term: string) => {
-    const query = term.trim();
-    if (!query || query.length < 2) {
-      setConsigneeOptions([]);
-      setConsigneeHasResults(null);
-      consigneeDataRef.current = {};
-      return;
-    }
-    try {
-      const results = await commonSearchAPI({
-        endpoint: URL.shipmentParty,
-        query,
-      });
-      const arr = Array.isArray(results)
-        ? (results as Record<string, unknown>[])
-        : [];
-      if (!arr.length) {
+  const debouncedConsigneeSearch = useDebouncedCallback(
+    async (term: string) => {
+      const query = term.trim();
+      if (!query || query.length < 2) {
         setConsigneeOptions([]);
-        setConsigneeHasResults(false);
+        setConsigneeHasResults(null);
         consigneeDataRef.current = {};
         return;
       }
-      const map: Record<string, Record<string, unknown>> = {};
-      const opts = arr.map((item) => {
-        const id = String(item.id ?? "");
-        map[id] = item;
-        return {
-          value: id,
-          label: String(item.customer_name || ""),
-        };
-      });
-      consigneeDataRef.current = map;
-      setConsigneeOptions(opts);
-      setConsigneeHasResults(true);
-    } catch (error) {
-      console.error("Consignee shipment-party search failed:", error);
-      setConsigneeOptions([]);
-      setConsigneeHasResults(null);
-      consigneeDataRef.current = {};
-    }
-  }, 500);
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.shipmentParty,
+          query,
+        });
+        const arr = Array.isArray(results)
+          ? (results as Record<string, unknown>[])
+          : [];
+        if (!arr.length) {
+          setConsigneeOptions([]);
+          setConsigneeHasResults(false);
+          consigneeDataRef.current = {};
+          return;
+        }
+        const map: Record<string, Record<string, unknown>> = {};
+        const opts = arr.map((item) => {
+          const id = String(item.id ?? "");
+          map[id] = item;
+          return {
+            value: id,
+            label: String(item.customer_name || ""),
+          };
+        });
+        consigneeDataRef.current = map;
+        setConsigneeOptions(opts);
+        setConsigneeHasResults(true);
+      } catch (error) {
+        console.error("Consignee shipment-party search failed:", error);
+        setConsigneeOptions([]);
+        setConsigneeHasResults(null);
+        consigneeDataRef.current = {};
+      }
+    },
+    500,
+  );
 
   const populatedJobIdRef = useRef<number | null>(null);
 
@@ -1737,7 +1756,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       form.setFieldValue("shipper_address", String(jobData.shipper_address));
     }
     if (jobData.consignee_address) {
-      form.setFieldValue("consignee_address", String(jobData.consignee_address));
+      form.setFieldValue(
+        "consignee_address",
+        String(jobData.consignee_address),
+      );
     } else if (jobData.consignee_address_text) {
       form.setFieldValue(
         "consignee_address",
@@ -1799,7 +1821,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const mappedCharges = (
         jobData.rate_details as Array<Record<string, unknown>>
       ).map((charge: Record<string, unknown>) => ({
-        id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+        id:
+          charge.id != null
+            ? typeof charge.id === "number"
+              ? charge.id
+              : Number(charge.id)
+            : undefined,
         charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
         charge_name: String(charge.charge_name ?? ""),
         pp_cc: String(charge.pp_cc ?? "Prepaid"),
@@ -1860,7 +1887,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       setConsigneeSearch(String(initialData.consignee_name));
     }
     if (initialData.consignee_address) {
-      form.setFieldValue("consignee_address", String(initialData.consignee_address));
+      form.setFieldValue(
+        "consignee_address",
+        String(initialData.consignee_address),
+      );
     } else if (initialData.consignee_address_text) {
       form.setFieldValue(
         "consignee_address",
@@ -1956,7 +1986,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       );
     }
 
-
     // Forwarder Address
     if (initialData.forwarder_address_id && initialData.forwarder_address) {
       setForwarderAddressOptions([
@@ -2039,7 +2068,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (chargesData) {
       const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
         (charge: Record<string, unknown>) => ({
-          id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+          id:
+            charge.id != null
+              ? typeof charge.id === "number"
+                ? charge.id
+                : Number(charge.id)
+              : undefined,
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
           pp_cc: String(charge.pp_cc ?? "Prepaid"),
@@ -2081,7 +2115,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (form.values.routed !== "Self") return;
 
     // For create-from-quotation flow, default customer_service_name to logged-in user
-    if (isFromQuotationFlow && user?.full_name && !form.values.customer_service_name) {
+    if (
+      isFromQuotationFlow &&
+      user?.full_name &&
+      !form.values.customer_service_name
+    ) {
       form.setFieldValue("customer_service_name", user.full_name);
       return;
     }
@@ -2099,7 +2137,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routed, form.values.routed_by, form.values.customer_service_name, salespersonsData]);
+  }, [
+    form.values.routed,
+    form.values.routed_by,
+    form.values.customer_service_name,
+    salespersonsData,
+  ]);
 
   // Clear routed_by and customer_service_name when routed changes to "Agent"
   useEffect(() => {
@@ -2316,20 +2359,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         marks_no: form.values.marks_no,
         cargo_details: form.values.cargo_details.map((cargo) => {
           const cargoPayload: Record<string, unknown> = {
-              no_of_packages: cargo.no_of_packages || null,
-              gross_weight: cargo.gross_weight || null,
-              volume_weight: cargo.volume_weight || null,
-              chargeable_weight: cargo.chargeable_weight || null,
-              volume: cargo.volume || null,
-              chargeable_volume: cargo.chargeable_volume || null,
-              container_type_code: cargo.container_type_code || null,
-              no_of_containers: cargo.no_of_containers || null,
-           };
-           if (cargo.id != null && cargo.id !== undefined) {
-              cargoPayload.id =
-                typeof cargo.id === "number" ? cargo.id : Number(cargo.id);
-            }
-            return cargoPayload;
+            no_of_packages: cargo.no_of_packages || null,
+            gross_weight: cargo.gross_weight || null,
+            volume_weight: cargo.volume_weight || null,
+            chargeable_weight: cargo.chargeable_weight || null,
+            volume: cargo.volume || null,
+            chargeable_volume: cargo.chargeable_volume || null,
+            container_type_code: cargo.container_type_code || null,
+            no_of_containers: cargo.no_of_containers || null,
+          };
+          if (cargo.id != null && cargo.id !== undefined) {
+            cargoPayload.id =
+              typeof cargo.id === "number" ? cargo.id : Number(cargo.id);
+          }
+          return cargoPayload;
         }),
 
         pickup_location: form.values.pickup_location,
@@ -2347,7 +2390,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         delivery_from_code: form.values.delivery_from_code,
         delivery_address_id: form.values.delivery_address_id || "0",
         planned_delivery_date: formatDate(form.values.planned_delivery_date),
-        actual_delivery_date: form.values.actual_delivery_date ? formatDate(form.values.actual_delivery_date) : null,
+        actual_delivery_date: form.values.actual_delivery_date
+          ? formatDate(form.values.actual_delivery_date)
+          : null,
 
         routing_details: form.values.routingDetails.map((route) => {
           const routePayload: Record<string, unknown> = {
@@ -2372,7 +2417,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         events: form.values.events,
         trigger_updates: form.values.trigger_updates,
         rate_details: charges.map((charge) => {
-         const chargePayload: Record<string, unknown> = {
+          const chargePayload: Record<string, unknown> = {
             charge_id: charge.charge_id ? Number(charge.charge_id) : null,
             // charge_name: charge.charge_name,
             pp_cc: charge.pp_cc || "",
@@ -2388,7 +2433,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
-            chargePayload.id = typeof charge.id === "number" ? charge.id : Number(charge.id);
+            chargePayload.id =
+              typeof charge.id === "number" ? charge.id : Number(charge.id);
           }
           return chargePayload;
         }),
@@ -2526,7 +2572,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   size="sm"
                 />
               </Grid.Col>
-              <Grid.Col span={2} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+              <Grid.Col
+                span={2}
+                style={{ display: "flex", gap: 4, marginBottom: 4 }}
+              >
                 {form.values.event_modal_rows.length > 1 && (
                   <ActionIcon
                     variant="subtle"
@@ -2553,10 +2602,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             </Grid>
           ))}
           <Group justify="flex-end" mt="md">
-            <Button
-              variant="subtle"
-              onClick={() => setEventsModalOpen(false)}
-            >
+            <Button variant="subtle" onClick={() => setEventsModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmitEventsModal}>Add Events</Button>
@@ -2575,7 +2621,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       >
         <Stack gap="md">
           {form.values.document_modal_rows.length > 0 && (
-            <Grid columns={12} gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+            <Grid
+              columns={12}
+              gutter="sm"
+              style={{ fontWeight: 600, color: "#105476" }}
+            >
               <Grid.Col span={5}>
                 <RequiredLabel label="Document Name" required={false} />
               </Grid.Col>
@@ -2789,7 +2839,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       >
         <Stack gap="md">
           {form.values.trigger_modal_rows.length > 0 && (
-            <Grid columns={12} gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+            <Grid
+              columns={12}
+              gutter="sm"
+              style={{ fontWeight: 600, color: "#105476" }}
+            >
               <Grid.Col span={3}>
                 <RequiredLabel label="Type" required={false} />
               </Grid.Col>
@@ -2835,7 +2889,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
                     if (name) {
                       const match = list.find(
-                        (item) => item.name != null && String(item.name) === name,
+                        (item) =>
+                          item.name != null && String(item.name) === name,
                       );
                       if (match && match.note != null) {
                         updateTriggerRow(
@@ -2905,10 +2960,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             </Button>
           )}
           <Group justify="flex-end" mt="md">
-            <Button
-              variant="subtle"
-              onClick={() => setTriggerModalOpen(false)}
-            >
+            <Button variant="subtle" onClick={() => setTriggerModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmitTriggerModal}>Save</Button>
@@ -2971,18 +3023,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   onClick={() => {
                     const existing = form.values.events;
                     if (existing.length > 0) {
-                      form.setFieldValue(
-                        "event_modal_rows",
-                        [
-                          ...existing.map((e) => ({
-                            eventType: e.type,
-                            eventDate: e.date
-                              ? new Date(e.date)
-                              : null,
-                          })),
-                          { eventType: null, eventDate: null },
-                        ],
-                      );
+                      form.setFieldValue("event_modal_rows", [
+                        ...existing.map((e) => ({
+                          eventType: e.type,
+                          eventDate: e.date ? new Date(e.date) : null,
+                        })),
+                        { eventType: null, eventDate: null },
+                      ]);
                     } else {
                       form.setFieldValue("event_modal_rows", [
                         { eventType: null, eventDate: null },
@@ -3056,7 +3103,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       );
                     } else {
                       form.setFieldValue("trigger_modal_rows", [
-                        { id: undefined, type: null, code: null, description: "" },
+                        {
+                          id: undefined,
+                          type: null,
+                          code: null,
+                          description: "",
+                        },
                       ]);
                     }
                     setTriggerModalOpen(true);
@@ -3137,7 +3189,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Customer Name"
                     required
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     placeholder="Type customer name"
                     searchFields={["customer_code", "customer_name"]}
                     displayFormat={(item: Record<string, unknown>) => ({
@@ -3905,7 +3957,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         "shipper_address_id",
                         value ? parseInt(value) : 0,
                       );
-                      const opt = shipperAddressOptions.find((o) => o.value === value);
+                      const opt = shipperAddressOptions.find(
+                        (o) => o.value === value,
+                      );
                       form.setFieldValue("shipper_address", opt?.label ?? "");
                     }}
                     error={form.errors.shipper_address_id}
@@ -3954,37 +4008,43 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setConsigneeSearch(v);
                         debouncedConsigneeSearch(v);
                       }}
-                    value={form.values.consignee_code || ""}
-                    onChange={(value) => {
-                      if (!value) {
-                        form.setFieldValue("consignee_code", "");
-                        form.setFieldValue("consignee_name", "");
-                        form.setFieldValue("consignee_address", "");
+                      value={form.values.consignee_code || ""}
+                      onChange={(value) => {
+                        if (!value) {
+                          form.setFieldValue("consignee_code", "");
+                          form.setFieldValue("consignee_name", "");
+                          form.setFieldValue("consignee_address", "");
+                          form.setFieldValue("consignee_address_id", 0);
+                          form.setFieldValue("consignee_email", "");
+                          return;
+                        }
+                        const original = consigneeDataRef.current[value] || {};
+                        const name = String(
+                          (original as Record<string, unknown>).customer_name ||
+                            "",
+                        );
+                        const addr = (
+                          ((
+                            (original as Record<string, unknown>)
+                              .addresses_data as
+                              | Array<{ address?: string }>
+                              | undefined
+                          )?.[0]?.address ?? "") as string
+                        ).toString();
+                        const email = String(
+                          (original as Record<string, unknown>)
+                            .customer_email || "",
+                        );
+                        form.setFieldValue("consignee_code", value);
+                        form.setFieldValue("consignee_name", toTitleCase(name));
+                        form.setFieldValue(
+                          "consignee_address",
+                          toTitleCase(addr),
+                        );
                         form.setFieldValue("consignee_address_id", 0);
-                        form.setFieldValue("consignee_email", "");
-                        return;
-                      }
-                      const original = consigneeDataRef.current[value] || {};
-                      const name = String(
-                        (original as Record<string, unknown>).customer_name || "",
-                      );
-                      const addr = (
-                        (
-                          ((original as Record<string, unknown>)
-                            .addresses_data as Array<{ address?: string }> | undefined)?.[0]
-                            ?.address ?? ""
-                        ) as string
-                      ).toString();
-                      const email = String(
-                        (original as Record<string, unknown>).customer_email || "",
-                      );
-                      form.setFieldValue("consignee_code", value);
-                      form.setFieldValue("consignee_name", toTitleCase(name));
-                      form.setFieldValue("consignee_address", toTitleCase(addr));
-                      form.setFieldValue("consignee_address_id", 0);
-                      form.setFieldValue("consignee_email", email);
-                      setConsigneeSearch(name);
-                    }}
+                        form.setFieldValue("consignee_email", email);
+                        setConsigneeSearch(name);
+                      }}
                       comboboxProps={{ zIndex: 10 }}
                       styles={{
                         input: {
@@ -4219,7 +4279,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Billing Customer Name"
                     placeholder="Type billing customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4306,7 +4366,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Notify Customer Name"
                     placeholder="Type notify customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.consignee}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4827,7 +4887,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Pickup Address"
                     placeholder="Type pickup address"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     searchFields={["customer_code", "customer_name"]}
                     displayFormat={(item: Record<string, unknown>) => {
                       // Get the first address from addresses_data
@@ -4899,7 +4959,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Transporter Name"
                     placeholder="Type transporter / customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.transporter}
                     searchFields={["customer_code", "customer_name"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4909,7 +4969,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     displayValue={form.values.transporter_name}
                     onChange={(value, selectedData) => {
                       form.setFieldValue("transporter_code", value || "");
-                      form.setFieldValue("transporter_name", selectedData?.label || "");
+                      form.setFieldValue(
+                        "transporter_name",
+                        selectedData?.label || "",
+                      );
                     }}
                     error={form.errors.transporter_code as string}
                     minSearchLength={2}
@@ -4973,7 +5036,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Delivery Address"
                     placeholder="Type delivery address"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     searchFields={["customer_code", "customer_name"]}
                     displayFormat={(item: Record<string, unknown>) => {
                       // Get the first address from addresses_data
@@ -5080,7 +5143,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             const mappedCharges = selectedQuotation.charges.map(
                               (charge: QuotationCharge) => ({
                                 id: undefined as number | undefined,
-                                charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
+                                charge_id:
+                                  charge.charge_id != null
+                                    ? String(charge.charge_id)
+                                    : "",
                                 charge_name: String(charge.charge_name || ""),
                                 pp_cc: charge.pp_cc
                                   ? String(charge.pp_cc)
@@ -5183,10 +5249,16 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       <RequiredLabel label="Cost Per Unit" required={false} />
                     </Grid.Col>
                     <Grid.Col span={1.05}>
-                      <RequiredLabel label={`Total Sell (${defaultCurrency})`} required={false} />
+                      <RequiredLabel
+                        label={`Total Sell (${defaultCurrency})`}
+                        required={false}
+                      />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <RequiredLabel label={`Total Cost (${defaultCurrency})`} required={false} />
+                      <RequiredLabel
+                        label={`Total Cost (${defaultCurrency})`}
+                        required={false}
+                      />
                     </Grid.Col>
                     <Grid.Col span={1.1}>
                       <RequiredLabel label="Actions" required={false} />
@@ -5217,10 +5289,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                   ? {
                                       ...c,
                                       charge_id: val ?? "",
-                                      charge_name: val ? (selectedItem?.label ?? "") : "",
+                                      charge_name: val
+                                        ? (selectedItem?.label ?? "")
+                                        : "",
                                     }
-                                  : c
-                              )
+                                  : c,
+                              ),
                             );
                           }}
                         />
@@ -5243,7 +5317,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           searchable
                           value={charge.currency_country_code}
                           onChange={(value) =>
-                            updateCharge(index, "currency_country_code", value || "")
+                            updateCharge(
+                              index,
+                              "currency_country_code",
+                              value || "",
+                            )
                           }
                           data={currencyOptions}
                           size="xs"
@@ -5254,7 +5332,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           placeholder="ROE"
                           value={charge.roe}
                           onChange={(event) =>
-                            updateCharge(index, "roe", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "roe",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />
@@ -5276,7 +5358,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           placeholder="0"
                           value={charge.no_of_units}
                           onChange={(event) =>
-                            updateCharge(index, "no_of_units", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "no_of_units",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />
@@ -5286,7 +5372,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.sell_per_unit}
                           onChange={(event) =>
-                            updateCharge(index, "sell_per_unit", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "sell_per_unit",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />
@@ -5296,7 +5386,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.min_sell}
                           onChange={(event) =>
-                            updateCharge(index, "min_sell", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "min_sell",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />
@@ -5306,7 +5400,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.cost_per_unit}
                           onChange={(event) =>
-                            updateCharge(index, "cost_per_unit", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "cost_per_unit",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />

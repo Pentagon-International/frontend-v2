@@ -137,7 +137,7 @@ interface FormValues {
   customer_service_name: string;
   is_direct: boolean;
   is_coload: boolean;
-  houseno:string;
+  houseno: string;
 
   // Ocean Schedule fields
   schedule_id: string;
@@ -334,9 +334,9 @@ const validationSchema = yup.object({
   actual_delivery_date: yup.date().nullable(),
 
   // Events, Documents, Trigger Updates - optional
-  events: yup.array().of(
-    yup.object({ type: yup.string(), date: yup.string() }),
-  ),
+  events: yup
+    .array()
+    .of(yup.object({ type: yup.string(), date: yup.string() })),
   document_ids: yup.array().of(yup.number()),
   trigger_updates: yup.array().of(
     yup.object({
@@ -711,16 +711,16 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   // );
 
   const eventTypeOptions = useMemo(() => {
-      const list = eventMasterData as Array<{ name?: string }>;
-      if (!list?.length) return [];
-      return list.map((item) => {
-        const name = String(item.name ?? "");
-        return {
-          value: name,
-          label: name,
-        };
-      });
-    }, [eventMasterData]);
+    const list = eventMasterData as Array<{ name?: string }>;
+    if (!list?.length) return [];
+    return list.map((item) => {
+      const name = String(item.name ?? "");
+      return {
+        value: name,
+        label: name,
+      };
+    });
+  }, [eventMasterData]);
 
   // Trigger type has no master data – static options
   const triggerTypeOptions = useMemo(
@@ -906,12 +906,16 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       // Party Details fields - map from the provided data structure
       shipper_code: String(data.shipper_code || ""),
       shipper_name: String(data.shipper_name || ""),
-      shipper_address: String(data.shipper_address || data.shipper_address_text || ""),
+      shipper_address: String(
+        data.shipper_address || data.shipper_address_text || "",
+      ),
       shipper_address_id: Number(data.shipper_address_id) || 0,
       shipper_email: String(data.shipper_email || ""),
       consignee_code: String(data.consignee_code || ""),
       consignee_name: String(data.consignee_name || ""),
-      consignee_address: String(data.consignee_address || data.consignee_address_text || ""),
+      consignee_address: String(
+        data.consignee_address || data.consignee_address_text || "",
+      ),
       consignee_address_id: Number(data.consignee_address_id) || 0,
       consignee_email: String(data.consignee_email || ""),
       forwarder_code: String(data.forwarder_code || ""),
@@ -1004,18 +1008,17 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
       // Events, Documents, Trigger Updates
       events: Array.isArray(data.events)
-        ? (data.events as Array<{ type?: string; date?: string }>).map(
-            (e) => ({
-              type: String(e.type ?? ""),
-              date: String(e.date ?? ""),
-            }),
-          )
+        ? (data.events as Array<{ type?: string; date?: string }>).map((e) => ({
+            type: String(e.type ?? ""),
+            date: String(e.date ?? ""),
+          }))
         : [],
       document_ids: Array.isArray(data.document_ids)
         ? (data.document_ids as number[]).map((id) => Number(id))
         : Array.isArray(
-            (data as { documents?: Array<Record<string, unknown>> }).documents,
-          )
+              (data as { documents?: Array<Record<string, unknown>> })
+                .documents,
+            )
           ? (
               (data as { documents?: Array<Record<string, unknown>> })
                 .documents as Array<Record<string, unknown>>
@@ -1106,7 +1109,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       customer_service_name: "",
       is_direct: false,
       is_coload: false,
-      houseno:"",
+      houseno: "",
 
       // Ocean Schedule fields
       schedule_id: "",
@@ -1375,7 +1378,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           | undefined;
 
         let normalized: DocumentItem[] = [];
-        if (raw && Array.isArray((raw as { documents?: DocumentItem[] }).documents)) {
+        if (
+          raw &&
+          Array.isArray((raw as { documents?: DocumentItem[] }).documents)
+        ) {
           normalized = (raw as { documents?: DocumentItem[] }).documents ?? [];
         } else if (Array.isArray(raw)) {
           normalized = raw as DocumentItem[];
@@ -1468,10 +1474,20 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   const handleSubmitTriggerModal = () => {
     const rows = form.values.trigger_modal_rows;
-    const toAdd: { id?: number; type: string; code: string; description: string }[] = [];
+    const toAdd: {
+      id?: number;
+      type: string;
+      code: string;
+      description: string;
+    }[] = [];
     for (const row of rows) {
       if (row.type && row.code) {
-        const item: { id?: number; type: string; code: string; description: string } = {
+        const item: {
+          id?: number;
+          type: string;
+          code: string;
+          description: string;
+        } = {
           type: row.type,
           code: row.code,
           description: row.description.trim(),
@@ -1624,7 +1640,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
           pp_cc: charge.pp_cc ? String(charge.pp_cc) : "Collect",
-          currency_country_code: String(charge.currency || charge.currency_country_code || ""),
+          currency_country_code: String(
+            charge.currency || charge.currency_country_code || "",
+          ),
           roe: charge.roe ? String(charge.roe) : "",
           unit: String(charge.unit || ""),
           no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
@@ -1720,7 +1738,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       form.setFieldValue("consignee_name", String(jobData.consignee_name));
     }
     if (jobData.consignee_address)
-      form.setFieldValue("consignee_address", String(jobData.consignee_address));
+      form.setFieldValue(
+        "consignee_address",
+        String(jobData.consignee_address),
+      );
     if (jobData.forwarder_name)
       setForwarderDisplayName(String(jobData.forwarder_name));
     if (jobData.destination_agent_name)
@@ -1823,7 +1844,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       const mappedCharges = (
         jobData.rate_details as Array<Record<string, unknown>>
       ).map((charge: Record<string, unknown>) => ({
-        id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+        id:
+          charge.id != null
+            ? typeof charge.id === "number"
+              ? charge.id
+              : Number(charge.id)
+            : undefined,
         charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
         charge_name: String(charge.charge_name ?? ""),
         pp_cc: String(charge.pp_cc ?? "Collect"),
@@ -1869,7 +1895,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       setShipperSearch(String(initialData.shipper_name));
     }
     if (initialData.shipper_address) {
-      form.setFieldValue("shipper_address", String(initialData.shipper_address));
+      form.setFieldValue(
+        "shipper_address",
+        String(initialData.shipper_address),
+      );
     } else if (initialData.shipper_address_text) {
       form.setFieldValue(
         "shipper_address",
@@ -1881,7 +1910,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       form.setFieldValue("consignee_name", String(initialData.consignee_name));
     }
     if (initialData.consignee_address) {
-      form.setFieldValue("consignee_address", String(initialData.consignee_address));
+      form.setFieldValue(
+        "consignee_address",
+        String(initialData.consignee_address),
+      );
     }
     if (initialData.forwarder_name) {
       setForwarderDisplayName(String(initialData.forwarder_name));
@@ -1960,7 +1992,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     // Populate address options from response data for Party Details
     // Consignee Address (from quotation list address string or with id)
     if (initialData.consignee_address) {
-      form.setFieldValue("consignee_address", String(initialData.consignee_address));
+      form.setFieldValue(
+        "consignee_address",
+        String(initialData.consignee_address),
+      );
       setConsigneeAddressOptions([
         {
           value: String(initialData.consignee_address_id || 0),
@@ -2063,7 +2098,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     if (chargesData) {
       const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
         (charge: Record<string, unknown>) => ({
-          id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+          id:
+            charge.id != null
+              ? typeof charge.id === "number"
+                ? charge.id
+                : Number(charge.id)
+              : undefined,
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
           charge_name: String(charge.charge_name || ""),
           pp_cc: String(charge.pp_cc ?? "Collect"),
@@ -2122,7 +2162,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     if (form.values.routed !== "Self") return;
 
     // For create-from-quotation flow, default customer_service_name to logged-in user
-    if (isFromQuotationFlow && user?.full_name && !form.values.customer_service_name) {
+    if (
+      isFromQuotationFlow &&
+      user?.full_name &&
+      !form.values.customer_service_name
+    ) {
       form.setFieldValue("customer_service_name", user.full_name);
       return;
     }
@@ -2140,7 +2184,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routed, form.values.routed_by, form.values.customer_service_name, salespersonsData]);
+  }, [
+    form.values.routed,
+    form.values.routed_by,
+    form.values.customer_service_name,
+    salespersonsData,
+  ]);
 
   // Clear routed_by and customer_service_name when routed changes to "Agent"
   useEffect(() => {
@@ -2437,7 +2486,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
-            chargePayload.id = typeof charge.id === "number" ? charge.id : Number(charge.id);
+            chargePayload.id =
+              typeof charge.id === "number" ? charge.id : Number(charge.id);
           }
           return chargePayload;
         }),
@@ -2625,10 +2675,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             </Grid>
           ))}
           <Group justify="flex-end" mt="md">
-            <Button
-              variant="subtle"
-              onClick={() => setEventsModalOpen(false)}
-            >
+            <Button variant="subtle" onClick={() => setEventsModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmitEventsModal}>Add Events</Button>
@@ -2647,7 +2694,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       >
         <Stack gap="md">
           {form.values.document_modal_rows.length > 0 && (
-            <Grid columns={12} gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+            <Grid
+              columns={12}
+              gutter="sm"
+              style={{ fontWeight: 600, color: "#105476" }}
+            >
               <Grid.Col span={5}>
                 <RequiredLabel label="Document Name" required={false} />
               </Grid.Col>
@@ -2861,7 +2912,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       >
         <Stack gap="md">
           {form.values.trigger_modal_rows.length > 0 && (
-            <Grid columns={12} gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+            <Grid
+              columns={12}
+              gutter="sm"
+              style={{ fontWeight: 600, color: "#105476" }}
+            >
               <Grid.Col span={3}>
                 <RequiredLabel label="Type" required={false} />
               </Grid.Col>
@@ -2907,7 +2962,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
                     if (name) {
                       const match = list.find(
-                        (item) => item.name != null && String(item.name) === name,
+                        (item) =>
+                          item.name != null && String(item.name) === name,
                       );
                       if (match && match.note != null) {
                         updateTriggerRow(
@@ -2977,10 +3033,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             </Button>
           )}
           <Group justify="flex-end" mt="md">
-            <Button
-              variant="subtle"
-              onClick={() => setTriggerModalOpen(false)}
-            >
+            <Button variant="subtle" onClick={() => setTriggerModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmitTriggerModal}>Save</Button>
@@ -3044,18 +3097,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   onClick={() => {
                     const existing = form.values.events;
                     if (existing.length > 0) {
-                      form.setFieldValue(
-                        "event_modal_rows",
-                        [
-                          ...existing.map((e) => ({
-                            eventType: e.type,
-                            eventDate: e.date
-                              ? new Date(e.date)
-                              : null,
-                          })),
-                          { eventType: null, eventDate: null },
-                        ],
-                      );
+                      form.setFieldValue("event_modal_rows", [
+                        ...existing.map((e) => ({
+                          eventType: e.type,
+                          eventDate: e.date ? new Date(e.date) : null,
+                        })),
+                        { eventType: null, eventDate: null },
+                      ]);
                     } else {
                       form.setFieldValue("event_modal_rows", [
                         { eventType: null, eventDate: null },
@@ -3158,7 +3206,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Customer Name"
                     required
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     placeholder="Type customer name"
                     searchFields={["customer_code", "customer_name"]}
                     displayFormat={(item: Record<string, unknown>) => ({
@@ -3520,7 +3568,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
               </Grid>
-              
+
               <Divider my="lg" />
 
               <Text size="md" fw={600} mb="md" c="#105476">
@@ -3922,21 +3970,27 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         }
                         const original = shipperDataRef.current[value] || {};
                         const name = String(
-                          (original as Record<string, unknown>).customer_name || "",
+                          (original as Record<string, unknown>).customer_name ||
+                            "",
                         );
                         const addr = (
-                          (
-                            ((original as Record<string, unknown>)
-                              .addresses_data as Array<{ address?: string }> | undefined)?.[0]
-                              ?.address ?? ""
-                          ) as string
+                          ((
+                            (original as Record<string, unknown>)
+                              .addresses_data as
+                              | Array<{ address?: string }>
+                              | undefined
+                          )?.[0]?.address ?? "") as string
                         ).toString();
                         const email = String(
-                          (original as Record<string, unknown>).customer_email || "",
+                          (original as Record<string, unknown>)
+                            .customer_email || "",
                         );
                         form.setFieldValue("shipper_code", value);
                         form.setFieldValue("shipper_name", toTitleCase(name));
-                        form.setFieldValue("shipper_address", toTitleCase(addr));
+                        form.setFieldValue(
+                          "shipper_address",
+                          toTitleCase(addr),
+                        );
                         form.setFieldValue("shipper_address_id", 0);
                         form.setFieldValue("shipper_email", email);
                         setShipperSearch(name);
@@ -4004,7 +4058,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       form.setFieldValue("consignee_code", value || "");
                       if (value && selectedData) {
                         setConsigneeDisplayName(selectedData.label);
-                        form.setFieldValue("consignee_name", selectedData.label);
+                        form.setFieldValue(
+                          "consignee_name",
+                          selectedData.label,
+                        );
                       } else {
                         setConsigneeDisplayName(null);
                         form.setFieldValue("consignee_name", "");
@@ -4059,7 +4116,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         "consignee_address_id",
                         value ? parseInt(value) : 0,
                       );
-                      const opt = consigneeAddressOptions.find((o) => o.value === value);
+                      const opt = consigneeAddressOptions.find(
+                        (o) => o.value === value,
+                      );
                       form.setFieldValue("consignee_address", opt?.label ?? "");
                     }}
                     error={form.errors.consignee_address_id}
@@ -4160,17 +4219,17 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
               </Grid>
 
-          <Divider my="md" />
+              <Divider my="md" />
 
-          {/* Origin Agent Details */}
-          <Text size="sm" fw={500} mb="sm" c="#105476">
-            Origin Agent Details
-          </Text>
+              {/* Origin Agent Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Origin Agent Details
+              </Text>
               <Grid mb="md">
                 <Grid.Col span={5}>
                   <SearchableSelect
-                label="Origin Agent Name"
-                placeholder="Type origin agent name"
+                    label="Origin Agent Name"
+                    placeholder="Type origin agent name"
                     apiEndpoint={URL.agent}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
@@ -4217,10 +4276,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     minSearchLength={3}
                   />
                 </Grid.Col>
-            <Grid.Col span={7}>
-              <Dropdown
-                label="Origin Agent Address"
-                placeholder="Select destination agent address"
+                <Grid.Col span={7}>
+                  <Dropdown
+                    label="Origin Agent Address"
+                    placeholder="Select destination agent address"
                     // withAsterisk
                     searchable
                     data={agentAddressOptions}
@@ -4239,10 +4298,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     disabled={agentAddressOptions.length === 0}
                   />
                 </Grid.Col>
-            <Grid.Col span={5}>
-              <FormTextInput
-                label="Origin Agent Email Id"
-                placeholder="Enter email address"
+                <Grid.Col span={5}>
+                  <FormTextInput
+                    label="Origin Agent Email Id"
+                    placeholder="Enter email address"
                     {...form.getInputProps("destination_agent_email")}
                   />
                 </Grid.Col>
@@ -4259,7 +4318,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Billing Customer Name"
                     placeholder="Type billing customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4340,7 +4399,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Notify Customer Name"
                     placeholder="Type notify customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.consignee}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4885,7 +4944,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Pickup Address"
                     placeholder="Type customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     searchFields={["customer_code", "customer_name"]}
                     displayFormat={(item: Record<string, unknown>) => {
                       // Get the first address from addresses_data
@@ -4937,10 +4996,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     placeholder="YYYY-MM-DD"
                     value={form.values.actual_pickup_date}
                     onChange={(date) => {
-                      form.setFieldValue(
-                        "actual_pickup_date",
-                        date,
-                      );
+                      form.setFieldValue("actual_pickup_date", date);
                     }}
                     error={form.errors.actual_pickup_date}
                   />
@@ -4949,7 +5005,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Transporter Name"
                     placeholder="Type transporter / customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.transporter}
                     searchFields={["customer_code", "customer_name"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4959,7 +5015,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     displayValue={form.values.transporter_name}
                     onChange={(value, selectedData) => {
                       form.setFieldValue("transporter_code", value || "");
-                      form.setFieldValue("transporter_name", selectedData?.label || "");
+                      form.setFieldValue(
+                        "transporter_name",
+                        selectedData?.label || "",
+                      );
                     }}
                     error={form.errors.transporter_code as string}
                     minSearchLength={2}
@@ -4976,7 +5035,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               </Grid>
 
               <Divider my="md" />
-              
+
               {/* Delivery Details Section */}
               <Text size="sm" fw={500} mb="sm" mt="lg" c="#105476">
                 Delivery Details
@@ -5022,7 +5081,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Delivery Address"
                     placeholder="Type delivery address"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     searchFields={["customer_code", "customer_name"]}
                     displayFormat={(item: Record<string, unknown>) => {
                       // Get the first address from addresses_data
@@ -5076,10 +5135,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     placeholder="YYYY-MM-DD"
                     value={form.values.actual_delivery_date}
                     onChange={(date) => {
-                      form.setFieldValue(
-                        "actual_delivery_date",
-                        date,
-                      );
+                      form.setFieldValue("actual_delivery_date", date);
                     }}
                     error={form.errors.actual_delivery_date}
                   />
@@ -5123,13 +5179,18 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                             const mappedCharges = selectedQuotation.charges.map(
                               (charge: QuotationCharge) => ({
                                 id: undefined as number | undefined,
-                                charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
+                                charge_id:
+                                  charge.charge_id != null
+                                    ? String(charge.charge_id)
+                                    : "",
                                 charge_name: String(charge.charge_name || ""),
                                 pp_cc: charge.pp_cc
                                   ? String(charge.pp_cc)
                                   : "Collect",
                                 currency_country_code: String(
-                                  charge.currency || charge.currency_country_code || "",
+                                  charge.currency ||
+                                    charge.currency_country_code ||
+                                    "",
                                 ),
                                 roe: charge.roe ? String(charge.roe) : "",
                                 unit: String(charge.unit || ""),
@@ -5226,10 +5287,16 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       <RequiredLabel label="Cost Per Unit" required={false} />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <RequiredLabel label={`Total Sell (${defaultCurrency})`} required={false} />
+                      <RequiredLabel
+                        label={`Total Sell (${defaultCurrency})`}
+                        required={false}
+                      />
                     </Grid.Col>
                     <Grid.Col span={1.05}>
-                      <RequiredLabel label={`Total Cost (${defaultCurrency})`} required={false} />
+                      <RequiredLabel
+                        label={`Total Cost (${defaultCurrency})`}
+                        required={false}
+                      />
                     </Grid.Col>
                     <Grid.Col span={1.1}>
                       <RequiredLabel label="Actions" required={false} />
@@ -5260,10 +5327,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                   ? {
                                       ...c,
                                       charge_id: val ?? "",
-                                      charge_name: val ? (selectedItem?.label ?? "") : "",
+                                      charge_name: val
+                                        ? (selectedItem?.label ?? "")
+                                        : "",
                                     }
-                                  : c
-                              )
+                                  : c,
+                              ),
                             );
                           }}
                         />
@@ -5286,7 +5355,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           searchable
                           value={charge.currency_country_code}
                           onChange={(value) =>
-                            updateCharge(index, "currency_country_code", value || "")
+                            updateCharge(
+                              index,
+                              "currency_country_code",
+                              value || "",
+                            )
                           }
                           data={currencyOptions}
                           size="xs"
@@ -5297,7 +5370,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="ROE"
                           value={charge.roe}
                           onChange={(event) =>
-                            updateCharge(index, "roe", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "roe",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />
@@ -5319,7 +5396,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0"
                           value={charge.no_of_units}
                           onChange={(event) =>
-                            updateCharge(index, "no_of_units", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "no_of_units",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />
@@ -5329,7 +5410,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.sell_per_unit}
                           onChange={(event) =>
-                            updateCharge(index, "sell_per_unit", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "sell_per_unit",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />
@@ -5339,7 +5424,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.min_sell}
                           onChange={(event) =>
-                            updateCharge(index, "min_sell", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "min_sell",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />
@@ -5349,7 +5438,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="0.00"
                           value={charge.cost_per_unit}
                           onChange={(event) =>
-                            updateCharge(index, "cost_per_unit", event.currentTarget.value)
+                            updateCharge(
+                              index,
+                              "cost_per_unit",
+                              event.currentTarget.value,
+                            )
                           }
                           size="xs"
                         />

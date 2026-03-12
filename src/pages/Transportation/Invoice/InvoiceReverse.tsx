@@ -15,12 +15,21 @@ import {
   Table,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { IconArrowLeft, IconChevronRight, IconTrash } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconChevronRight,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
-import { ToastNotification, SingleDateInput, Dropdown, SearchableSelect } from "../../../components";
+import {
+  ToastNotification,
+  SingleDateInput,
+  Dropdown,
+  SearchableSelect,
+} from "../../../components";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
@@ -62,7 +71,11 @@ const fetchDaybookCRN = async () => {
 const fetchUnitMaster = async () => {
   try {
     const payload = { filters: { service_type: "AIR" } };
-    const response = await postAPICall(URL.unitMasterFilter, payload, API_HEADER);
+    const response = await postAPICall(
+      URL.unitMasterFilter,
+      payload,
+      API_HEADER,
+    );
     return (response as { data?: unknown[] })?.data ?? [];
   } catch (error) {
     console.error("Error fetching unit master:", error);
@@ -101,13 +114,15 @@ const fetchGetEffectiveSac = async (
       API_HEADER,
     );
     return (
-      (response as {
-        data?: Array<{
-          charge_id: number;
-          service_id: number;
-          sac_code?: string | null;
-        }>;
-      })?.data ?? []
+      (
+        response as {
+          data?: Array<{
+            charge_id: number;
+            service_id: number;
+            sac_code?: string | null;
+          }>;
+        }
+      )?.data ?? []
     );
   } catch (error) {
     console.error("Error fetching get-effective-sac:", error);
@@ -138,13 +153,17 @@ const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
       total?: string;
     };
   } catch (error) {
-    console.error("Error fetching calculate-gst-breakup for reverse invoice:", error);
+    console.error(
+      "Error fetching calculate-gst-breakup for reverse invoice:",
+      error,
+    );
     throw error;
   }
 };
 
 function clampAmount(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value)) return value === undefined ? null : value;
+  if (value == null || !Number.isFinite(value))
+    return value === undefined ? null : value;
   const rounded = Math.round(value * 100) / 100;
   const maxVal = 99999999.99;
   if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
@@ -197,7 +216,13 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
     const day = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10) - 1;
     const year = parseInt(parts[2], 10);
-    if (Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year) && month >= 0 && month <= 11) {
+    if (
+      Number.isFinite(day) &&
+      Number.isFinite(month) &&
+      Number.isFinite(year) &&
+      month >= 0 &&
+      month <= 11
+    ) {
       const parsed = new Date(year, month, day);
       if (!isNaN(parsed.getTime())) return parsed;
     }
@@ -258,7 +283,11 @@ function InvoiceReverse() {
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const defaultBranchCurrency =
-    (user?.branches?.find((b: { is_default?: boolean }) => b.is_default === true) as { currency?: { currency_code?: string } } | undefined)?.currency?.currency_code ?? "";
+    (
+      user?.branches?.find(
+        (b: { is_default?: boolean }) => b.is_default === true,
+      ) as { currency?: { currency_code?: string } } | undefined
+    )?.currency?.currency_code ?? "";
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -285,7 +314,9 @@ function InvoiceReverse() {
     total?: string;
   } | null>(null);
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
-  const [chargeErrors, setChargeErrors] = useState<Record<number, Record<string, string>>>({});
+  const [chargeErrors, setChargeErrors] = useState<
+    Record<number, Record<string, string>>
+  >({});
   const [billToDisplayName, setBillToDisplayName] = useState<string | null>(
     null,
   );
@@ -304,9 +335,15 @@ function InvoiceReverse() {
   const lastGstRatesFetchKeyRef = useRef<string>("");
 
   const jobServiceId =
-    (location.state as { job?: { service_id?: number } })?.job?.service_id ?? null;
-  const job = (location.state as { job?: { job_id?: number; id?: number } } | null)?.job;
-  const jobId = job && (job.job_id != null || job.id != null) ? (job.job_id ?? job.id) : undefined;
+    (location.state as { job?: { service_id?: number } })?.job?.service_id ??
+    null;
+  const job = (
+    location.state as { job?: { job_id?: number; id?: number } } | null
+  )?.job;
+  const jobId =
+    job && (job.job_id != null || job.id != null)
+      ? (job.job_id ?? job.id)
+      : undefined;
 
   const isReadOnly = invoiceIsPosted;
 
@@ -370,7 +407,11 @@ function InvoiceReverse() {
   }, [currencyData]);
 
   const stateOptions = useMemo(() => {
-    const data = stateData as { id?: number; state_name?: string; name?: string }[];
+    const data = stateData as {
+      id?: number;
+      state_name?: string;
+      name?: string;
+    }[];
     if (!Array.isArray(data)) return [];
     return data.map((item) => ({
       value: String(item.id ?? ""),
@@ -388,7 +429,13 @@ function InvoiceReverse() {
   }, [daybookData]);
 
   const unitOptions = useMemo(() => {
-    const data = unitData as { unit_code?: string; code?: string; id?: number; unit_name?: string; name?: string }[];
+    const data = unitData as {
+      unit_code?: string;
+      code?: string;
+      id?: number;
+      unit_name?: string;
+      name?: string;
+    }[];
     if (!Array.isArray(data)) return [];
     return data.map((item) => ({
       value: String(item.unit_code || item.code || item.id || ""),
@@ -434,17 +481,25 @@ function InvoiceReverse() {
   }, [chargeCurrencies, getRoeValue]);
 
   // Auto-calculate amount (currency amount) when no_of_unit, amount_per_unit, or roe changes: amount = no_of_unit * roe * amount_per_unit
-  const chargeAmountPerUnits = form.values.charges.map((c) => c.amount_per_unit).join(",");
-  const chargeNoOfUnits = form.values.charges.map((c) => c.no_of_unit).join(",");
+  const chargeAmountPerUnits = form.values.charges
+    .map((c) => c.amount_per_unit)
+    .join(",");
+  const chargeNoOfUnits = form.values.charges
+    .map((c) => c.no_of_unit)
+    .join(",");
   const chargeRoes = form.values.charges.map((c) => c.roe).join(",");
   useEffect(() => {
     const updatedCharges = form.values.charges.map((charge) => {
       if (
-        charge.amount_per_unit != null && charge.amount_per_unit > 0 &&
-        charge.no_of_unit != null && charge.no_of_unit > 0 &&
-        charge.roe != null && charge.roe > 0
+        charge.amount_per_unit != null &&
+        charge.amount_per_unit > 0 &&
+        charge.no_of_unit != null &&
+        charge.no_of_unit > 0 &&
+        charge.roe != null &&
+        charge.roe > 0
       ) {
-        const calculatedAmount = charge.no_of_unit * charge.roe * charge.amount_per_unit;
+        const calculatedAmount =
+          charge.no_of_unit * charge.roe * charge.amount_per_unit;
         const clamped = clampAmount(calculatedAmount);
         if (clamped != null && clamped > 0 && clamped !== charge.amount) {
           return { ...charge, amount: clamped };
@@ -465,19 +520,26 @@ function InvoiceReverse() {
   useEffect(() => {
     const updatedCharges = form.values.charges.map((charge) => {
       if (
-        charge.amount != null && charge.amount > 0 &&
-        charge.roe != null && charge.roe > 0
+        charge.amount != null &&
+        charge.amount > 0 &&
+        charge.roe != null &&
+        charge.roe > 0
       ) {
         const calculatedLocalAmount = charge.amount * charge.roe;
         const clamped = clampAmount(calculatedLocalAmount);
-        if (clamped != null && clamped > 0 && clamped !== charge.amount_in_local) {
+        if (
+          clamped != null &&
+          clamped > 0 &&
+          clamped !== charge.amount_in_local
+        ) {
           return { ...charge, amount_in_local: clamped };
         }
       }
       return charge;
     });
     const hasChanges = updatedCharges.some(
-      (charge, index) => charge.amount_in_local !== form.values.charges[index]?.amount_in_local,
+      (charge, index) =>
+        charge.amount_in_local !== form.values.charges[index]?.amount_in_local,
     );
     if (hasChanges) form.setFieldValue("charges", updatedCharges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -526,7 +588,9 @@ function InvoiceReverse() {
     if (indicesToFetch.length > 0) {
       setGstRatesLoadingByIndex((prev) => {
         const next = { ...prev };
-        indicesToFetch.forEach((idx) => { next[idx] = true; });
+        indicesToFetch.forEach((idx) => {
+          next[idx] = true;
+        });
         return next;
       });
     }
@@ -567,58 +631,88 @@ function InvoiceReverse() {
       if (cancelled) return;
       setGstRatesByChargeIndex((prev) => {
         const next = { ...prev };
-        results.forEach(({ idx, rates }) => { next[idx] = rates; });
+        results.forEach(({ idx, rates }) => {
+          next[idx] = rates;
+        });
         return next;
       });
-      const indicesToClear = results.filter((r) => !r.fromCache).map((r) => r.idx);
+      const indicesToClear = results
+        .filter((r) => !r.fromCache)
+        .map((r) => r.idx);
       if (indicesToClear.length > 0) {
         setGstRatesLoadingByIndex((prev) => {
           const next = { ...prev };
-          indicesToClear.forEach((idx) => { next[idx] = false; });
+          indicesToClear.forEach((idx) => {
+            next[idx] = false;
+          });
           return next;
         });
       }
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.state, form.values.charges]);
 
   // Auto-calculate header_amount: same currency → header_amount = amount_in_local; different → amount_in_local / header ROE
   const headerBillingCurrency = form.values.currency;
   const headerRoe = form.values.roe;
-  const chargeLocalAmounts = form.values.charges.map((c) => c.amount_in_local).join(",");
-  const chargeCurrenciesForHeader = form.values.charges.map((c) => c.currency).join(",");
+  const chargeLocalAmounts = form.values.charges
+    .map((c) => c.amount_in_local)
+    .join(",");
+  const chargeCurrenciesForHeader = form.values.charges
+    .map((c) => c.currency)
+    .join(",");
   useEffect(() => {
     const updatedCharges = form.values.charges.map((charge) => {
       if (
-        charge.amount_in_local != null && charge.amount_in_local > 0 &&
-        headerBillingCurrency && charge.currency
+        charge.amount_in_local != null &&
+        charge.amount_in_local > 0 &&
+        headerBillingCurrency &&
+        charge.currency
       ) {
         let newHeaderAmount: number | null = null;
-        if (headerBillingCurrency.toUpperCase() === String(charge.currency).toUpperCase()) {
+        if (
+          headerBillingCurrency.toUpperCase() ===
+          String(charge.currency).toUpperCase()
+        ) {
           newHeaderAmount = charge.amount_in_local;
         } else if (headerRoe != null && headerRoe > 0) {
           newHeaderAmount = charge.amount_in_local / headerRoe;
         }
         const clampedHeader = clampAmount(newHeaderAmount);
-        if (clampedHeader != null && clampedHeader > 0 && clampedHeader !== charge.header_amount) {
+        if (
+          clampedHeader != null &&
+          clampedHeader > 0 &&
+          clampedHeader !== charge.header_amount
+        ) {
           return { ...charge, header_amount: clampedHeader };
         }
       }
       return charge;
     });
     const hasChanges = updatedCharges.some(
-      (charge, index) => charge.header_amount !== form.values.charges[index]?.header_amount,
+      (charge, index) =>
+        charge.header_amount !== form.values.charges[index]?.header_amount,
     );
     if (hasChanges) form.setFieldValue("charges", updatedCharges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [headerBillingCurrency, headerRoe, chargeLocalAmounts, chargeCurrenciesForHeader]);
+  }, [
+    headerBillingCurrency,
+    headerRoe,
+    chargeLocalAmounts,
+    chargeCurrenciesForHeader,
+  ]);
 
   useEffect(() => {
-    const docNo = (location.state as { document_no?: string } | null)?.document_no;
+    const docNo = (location.state as { document_no?: string } | null)
+      ?.document_no;
     if (!docNo?.trim()) {
-      setLoadError("Document number is required. Please go back and use Invoice Reverse from the Accounts table.");
+      setLoadError(
+        "Document number is required. Please go back and use Invoice Reverse from the Accounts table.",
+      );
       setLoading(false);
       return;
     }
@@ -629,7 +723,8 @@ function InvoiceReverse() {
     postAPICall(URL.invoiceReversableData, { document_no: docNo }, API_HEADER)
       .then((res) => {
         if (cancelled) return;
-        const data = ((res as { data?: ReversableDataResponse })?.data ?? res) as ReversableDataResponse;
+        const data = ((res as { data?: ReversableDataResponse })?.data ??
+          res) as ReversableDataResponse;
         setIsAgentInvoice(data.is_agent === true);
         const roeNum =
           data.roe != null
@@ -699,12 +794,18 @@ function InvoiceReverse() {
                     no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
                     currency: c.currency_code ?? "",
                     roe: Number.isFinite(roe) ? roe : null,
-                    amount_per_unit: Number.isFinite(amountPerUnit) ? amountPerUnit : null,
+                    amount_per_unit: Number.isFinite(amountPerUnit)
+                      ? amountPerUnit
+                      : null,
                     amount: Number.isFinite(amount) ? amount : null,
-                    header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
-                    amount_in_local: Number.isFinite(amountInLocal) ? amountInLocal : null,
+                    header_amount: Number.isFinite(headerAmount)
+                      ? headerAmount
+                      : null,
+                    amount_in_local: Number.isFinite(amountInLocal)
+                      ? amountInLocal
+                      : null,
                     tax_code: c.tax_code ?? "",
-                    dr_cr: (c.Dr_Cr === "Dr" ? "Dr" : "Cr"),
+                    dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
                   };
                 })
               : [],
@@ -712,7 +813,9 @@ function InvoiceReverse() {
       })
       .catch((err) => {
         if (!cancelled) {
-          setLoadError(err?.message || "Failed to load reversable invoice data.");
+          setLoadError(
+            err?.message || "Failed to load reversable invoice data.",
+          );
           ToastNotification({
             message: err?.message || "Failed to load reversable invoice data.",
             type: "error",
@@ -733,9 +836,7 @@ function InvoiceReverse() {
     //   !saveResponse?.id ||
     //   saveResponse?.customer_id == null
     // ) {
-      if (
-        chargesTabActive !== "tax" ||
-        !saveResponse?.id       ) {
+    if (chargesTabActive !== "tax" || !saveResponse?.id) {
       return;
     }
     let cancelled = false;
@@ -760,9 +861,10 @@ function InvoiceReverse() {
 
   const handlePostInvoiceReverse = async () => {
     // if (!saveResponse?.id || saveResponse?.customer_id == null) {
-      if (!saveResponse?.id) {
+    if (!saveResponse?.id) {
       ToastNotification({
-        message: "Save the reverse invoice first and ensure customer_id is available.",
+        message:
+          "Save the reverse invoice first and ensure customer_id is available.",
         type: "error",
       });
       return;
@@ -771,18 +873,30 @@ function InvoiceReverse() {
     try {
       const values = form.values;
       const stateId = Number(values.state);
-      const currencyItem = (currencyData as { id?: number; code?: string; currency_code?: string }[])?.find(
+      const currencyItem = (
+        currencyData as { id?: number; code?: string; currency_code?: string }[]
+      )?.find(
         (c) => (c.code || c.currency_code || "").toString() === values.currency,
       );
-      const currencyId = currencyItem?.id != null ? Number(currencyItem.id) : null;
+      const currencyId =
+        currencyItem?.id != null ? Number(currencyItem.id) : null;
       if (!stateId || stateId <= 0 || currencyId == null || currencyId <= 0) {
-        ToastNotification({ message: "Please ensure State and Currency are valid.", type: "error" });
+        ToastNotification({
+          message: "Please ensure State and Currency are valid.",
+          type: "error",
+        });
         setIsPosting(false);
         return;
       }
-      const total = values.charges.reduce((sum, c) => sum + (c.header_amount ?? 0), 0);
+      const total = values.charges.reduce(
+        (sum, c) => sum + (c.header_amount ?? 0),
+        0,
+      );
       const header_total = total;
-      const local_total = values.charges.reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0);
+      const local_total = values.charges.reduce(
+        (sum, c) => sum + (c.amount_in_local ?? 0),
+        0,
+      );
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -791,12 +905,13 @@ function InvoiceReverse() {
       };
       let breakupData = gstBreakup;
       if (!breakupData?.sac_wise_totals?.length) {
-        breakupData = await fetchReverseInvoiceCalculateGstBreakup({
+        breakupData = (await fetchReverseInvoiceCalculateGstBreakup({
           reverse_invoice_id: saveResponse.id,
-        }) as typeof gstBreakup;
+        })) as typeof gstBreakup;
       }
       const sacWiseTotals = breakupData?.sac_wise_totals ?? [];
-      const topRoe = values.roe != null && values.roe > 0 ? Number(values.roe) : 1;
+      const topRoe =
+        values.roe != null && values.roe > 0 ? Number(values.roe) : 1;
       const taxes = sacWiseTotals.map((row) => ({
         tax_code: row.sac_code ?? "",
         rate: row.rate ?? 0,
@@ -810,13 +925,25 @@ function InvoiceReverse() {
           const sacCode = (charge.tax_code ?? "").trim();
           if (!sacCode || stateId <= 0) return null;
           try {
-            const res = (await fetchGstRatesByStateSac({ state_id: stateId, sac_code: sacCode })) as any;
+            const res = (await fetchGstRatesByStateSac({
+              state_id: stateId,
+              sac_code: sacCode,
+            })) as any;
             const pl = res?.data?.data ?? res?.data ?? res;
             const gstData = pl as GstRatesBySacResponse | null | undefined;
             return {
-              igst: gstData?.igst_percent == null || gstData.igst_percent === "" ? null : Number(gstData.igst_percent),
-              cgst: gstData?.cgst_percent == null || gstData.cgst_percent === "" ? null : Number(gstData.cgst_percent),
-              sgst: gstData?.sgst_percent == null || gstData.sgst_percent === "" ? null : Number(gstData.sgst_percent),
+              igst:
+                gstData?.igst_percent == null || gstData.igst_percent === ""
+                  ? null
+                  : Number(gstData.igst_percent),
+              cgst:
+                gstData?.cgst_percent == null || gstData.cgst_percent === ""
+                  ? null
+                  : Number(gstData.cgst_percent),
+              sgst:
+                gstData?.sgst_percent == null || gstData.sgst_percent === ""
+                  ? null
+                  : Number(gstData.sgst_percent),
               same_state: gstData?.same_state ?? false,
             };
           } catch {
@@ -826,11 +953,21 @@ function InvoiceReverse() {
       );
 
       const chargesPayload = values.charges.map((charge, idx) => {
-        const chargeCurrencyItem = (currencyData as { id?: number; code?: string; currency_code?: string }[])?.find(
-          (c) => (c.code || c.currency_code || "").toString() === charge.currency,
+        const chargeCurrencyItem = (
+          currencyData as {
+            id?: number;
+            code?: string;
+            currency_code?: string;
+          }[]
+        )?.find(
+          (c) =>
+            (c.code || c.currency_code || "").toString() === charge.currency,
         );
-        const chargeCurrencyId = chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        const unitItem = (unitData as { id?: number; unit_code?: string; code?: string }[])?.find(
+        const chargeCurrencyId =
+          chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
+        const unitItem = (
+          unitData as { id?: number; unit_code?: string; code?: string }[]
+        )?.find(
           (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
         );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
@@ -840,16 +977,26 @@ function InvoiceReverse() {
         const cgstRate = rates?.cgst ?? 0;
         const sgstRate = rates?.sgst ?? 0;
         const sameState = rates?.same_state ?? false;
-        const igstAmt = !sameState && igstRate > 0 ? clampAmount(headerAmount * (igstRate / 100)) : 0;
-        const cgstAmt = sameState && cgstRate > 0 ? clampAmount(headerAmount * (cgstRate / 100)) : 0;
-        const sgstAmt = sameState && sgstRate > 0 ? clampAmount(headerAmount * (sgstRate / 100)) : 0;
+        const igstAmt =
+          !sameState && igstRate > 0
+            ? clampAmount(headerAmount * (igstRate / 100))
+            : 0;
+        const cgstAmt =
+          sameState && cgstRate > 0
+            ? clampAmount(headerAmount * (cgstRate / 100))
+            : 0;
+        const sgstAmt =
+          sameState && sgstRate > 0
+            ? clampAmount(headerAmount * (sgstRate / 100))
+            : 0;
         return {
           ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
           shipment_no:
-            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+            charge.shipment_id != null &&
+            String(charge.shipment_id).trim() !== ""
               ? String(charge.shipment_id)
               : null,
-              // : values.shipment_no,
+          // : values.shipment_no,
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
           no_of_unit: charge.no_of_unit ?? 0,
@@ -899,8 +1046,12 @@ function InvoiceReverse() {
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
         document_no: documentNo,
-        document_date: values.document_date ? formatDateDDMMYYYY(new Date(values.document_date)) : null,
-        due_date: values.due_date ? formatDateDDMMYYYY(new Date(values.due_date)) : null,
+        document_date: values.document_date
+          ? formatDateDDMMYYYY(new Date(values.document_date))
+          : null,
+        due_date: values.due_date
+          ? formatDateDDMMYYYY(new Date(values.due_date))
+          : null,
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
@@ -913,13 +1064,31 @@ function InvoiceReverse() {
         charges: allChargesPayload,
         taxes,
       };
-      const response = (await putAPICall(URL.reverseInvoice, payload, API_HEADER)) as
-        | { id?: number; customer_id?: number; document_no?: string; status?: string; charges?: Array<{
-            charge_id?: number; charge_name?: string; unit_code?: string; currency_code?: string;
-            no_of_unit?: string | number; roe?: string | number; amount_per_unit?: string | number;
-            amount?: string | number; amount_in_local?: string | number; amount_in_header?: string | number;
-            tax_code?: string; Dr_Cr?: string;
-          }> }
+      const response = (await putAPICall(
+        URL.reverseInvoice,
+        payload,
+        API_HEADER,
+      )) as
+        | {
+            id?: number;
+            customer_id?: number;
+            document_no?: string;
+            status?: string;
+            charges?: Array<{
+              charge_id?: number;
+              charge_name?: string;
+              unit_code?: string;
+              currency_code?: string;
+              no_of_unit?: string | number;
+              roe?: string | number;
+              amount_per_unit?: string | number;
+              amount?: string | number;
+              amount_in_local?: string | number;
+              amount_in_header?: string | number;
+              tax_code?: string;
+              Dr_Cr?: string;
+            }>;
+          }
         | undefined;
       if (response) {
         const resWithAgent = response as { is_agent?: boolean };
@@ -934,36 +1103,82 @@ function InvoiceReverse() {
         setInvoiceIsPosted(true);
         if (response.charges && Array.isArray(response.charges)) {
           const mappedCharges: ChargeItem[] = response.charges.map((c) => {
-            const noOfUnit = c.no_of_unit != null ? (typeof c.no_of_unit === "string" ? parseFloat(c.no_of_unit) : c.no_of_unit) : null;
-            const roe = c.roe != null ? (typeof c.roe === "string" ? parseFloat(c.roe) : c.roe) : null;
-            const amountPerUnit = c.amount_per_unit != null ? (typeof c.amount_per_unit === "string" ? parseFloat(c.amount_per_unit) : c.amount_per_unit) : null;
-            const amount = c.amount != null ? (typeof c.amount === "string" ? parseFloat(c.amount) : c.amount) : null;
-            const amountInLocal = c.amount_in_local != null ? (typeof c.amount_in_local === "string" ? parseFloat(c.amount_in_local) : c.amount_in_local) : null;
-            const headerAmount = c.amount_in_header != null ? (typeof c.amount_in_header === "string" ? parseFloat(c.amount_in_header) : c.amount_in_header) : null;
+            const noOfUnit =
+              c.no_of_unit != null
+                ? typeof c.no_of_unit === "string"
+                  ? parseFloat(c.no_of_unit)
+                  : c.no_of_unit
+                : null;
+            const roe =
+              c.roe != null
+                ? typeof c.roe === "string"
+                  ? parseFloat(c.roe)
+                  : c.roe
+                : null;
+            const amountPerUnit =
+              c.amount_per_unit != null
+                ? typeof c.amount_per_unit === "string"
+                  ? parseFloat(c.amount_per_unit)
+                  : c.amount_per_unit
+                : null;
+            const amount =
+              c.amount != null
+                ? typeof c.amount === "string"
+                  ? parseFloat(c.amount)
+                  : c.amount
+                : null;
+            const amountInLocal =
+              c.amount_in_local != null
+                ? typeof c.amount_in_local === "string"
+                  ? parseFloat(c.amount_in_local)
+                  : c.amount_in_local
+                : null;
+            const headerAmount =
+              c.amount_in_header != null
+                ? typeof c.amount_in_header === "string"
+                  ? parseFloat(c.amount_in_header)
+                  : c.amount_in_header
+                : null;
             return {
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
-              shipment_id: (c as { shipment_id?: string; shipment_no?: string }).shipment_id ?? (c as { shipment_id?: string; shipment_no?: string }).shipment_no ?? "",
+              shipment_id:
+                (c as { shipment_id?: string; shipment_no?: string })
+                  .shipment_id ??
+                (c as { shipment_id?: string; shipment_no?: string })
+                  .shipment_no ??
+                "",
               unit_code: c.unit_code ?? "",
               no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
               currency: c.currency_code ?? "",
               roe: Number.isFinite(roe) ? roe : null,
-              amount_per_unit: Number.isFinite(amountPerUnit) ? amountPerUnit : null,
+              amount_per_unit: Number.isFinite(amountPerUnit)
+                ? amountPerUnit
+                : null,
               amount: Number.isFinite(amount) ? amount : null,
-              header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
-              amount_in_local: Number.isFinite(amountInLocal) ? amountInLocal : null,
+              header_amount: Number.isFinite(headerAmount)
+                ? headerAmount
+                : null,
+              amount_in_local: Number.isFinite(amountInLocal)
+                ? amountInLocal
+                : null,
               tax_code: c.tax_code ?? "",
               dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
             };
           });
           form.setFieldValue("charges", mappedCharges);
         }
-        ToastNotification({ message: "Reverse invoice posted successfully", type: "success" });
+        ToastNotification({
+          message: "Reverse invoice posted successfully",
+          type: "success",
+        });
       }
     } catch (error: unknown) {
       console.error("Error posting reverse invoice:", error);
       ToastNotification({
-        message: (error as { message?: string })?.message ?? "Failed to post reverse invoice",
+        message:
+          (error as { message?: string })?.message ??
+          "Failed to post reverse invoice",
         type: "error",
       });
     } finally {
@@ -1022,18 +1237,28 @@ function InvoiceReverse() {
 
   const handleSubmit = async (values: InvoiceFormData) => {
     if (!documentNo?.trim()) {
-      ToastNotification({ message: "Document number is missing.", type: "error" });
+      ToastNotification({
+        message: "Document number is missing.",
+        type: "error",
+      });
       return;
     }
     // Validate charges: charge, currency, roe, amount, amount_in_local, tax_code
     const chargeErrs: Record<number, Record<string, string>> = {};
     const invalidCharges = values.charges.some((charge, index) => {
       const err: Record<string, string> = {};
-      if (!charge.charge_name && charge.charge_id == null) err.charge_name = "Charge is required";
+      if (!charge.charge_name && charge.charge_id == null)
+        err.charge_name = "Charge is required";
       if (!charge.currency) err.currency = "Currency is required";
-      if (charge.roe === null || charge.roe === undefined) err.roe = "ROE is required";
-      if (charge.amount === null || charge.amount === undefined) err.amount = "Currency Amount is required";
-      if (charge.amount_in_local === null || charge.amount_in_local === undefined) err.amount_in_local = "Local Amount is required";
+      if (charge.roe === null || charge.roe === undefined)
+        err.roe = "ROE is required";
+      if (charge.amount === null || charge.amount === undefined)
+        err.amount = "Currency Amount is required";
+      if (
+        charge.amount_in_local === null ||
+        charge.amount_in_local === undefined
+      )
+        err.amount_in_local = "Local Amount is required";
       if (!charge.tax_code?.trim()) err.tax_code = "SAC Code is required";
       if (Object.keys(err).length > 0) {
         chargeErrs[index] = err;
@@ -1044,7 +1269,8 @@ function InvoiceReverse() {
     if (invalidCharges) {
       setChargeErrors(chargeErrs);
       ToastNotification({
-        message: "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount, SAC Code).",
+        message:
+          "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount, SAC Code).",
         type: "error",
       });
       return;
@@ -1053,18 +1279,30 @@ function InvoiceReverse() {
     setIsSubmitting(true);
     try {
       const stateId = Number(values.state);
-      const currencyItem = (currencyData as { id?: number; code?: string; currency_code?: string }[])?.find(
+      const currencyItem = (
+        currencyData as { id?: number; code?: string; currency_code?: string }[]
+      )?.find(
         (c) => (c.code || c.currency_code || "").toString() === values.currency,
       );
-      const currencyId = currencyItem?.id != null ? Number(currencyItem.id) : null;
+      const currencyId =
+        currencyItem?.id != null ? Number(currencyItem.id) : null;
       if (!stateId || stateId <= 0 || currencyId == null || currencyId <= 0) {
-        ToastNotification({ message: "Please select valid State and Billing Currency.", type: "error" });
+        ToastNotification({
+          message: "Please select valid State and Billing Currency.",
+          type: "error",
+        });
         setIsSubmitting(false);
         return;
       }
-      const total = values.charges.reduce((sum, c) => sum + (c.header_amount ?? 0), 0);
+      const total = values.charges.reduce(
+        (sum, c) => sum + (c.header_amount ?? 0),
+        0,
+      );
       const header_total = total;
-      const local_total = values.charges.reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0);
+      const local_total = values.charges.reduce(
+        (sum, c) => sum + (c.amount_in_local ?? 0),
+        0,
+      );
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -1081,13 +1319,25 @@ function InvoiceReverse() {
           const sacCode = (charge.tax_code ?? "").trim();
           if (!sacCode || stateId <= 0) return null;
           try {
-            const res = (await fetchGstRatesByStateSac({ state_id: stateId, sac_code: sacCode })) as any;
+            const res = (await fetchGstRatesByStateSac({
+              state_id: stateId,
+              sac_code: sacCode,
+            })) as any;
             const pl = res?.data?.data ?? res?.data ?? res;
             const gstData = pl as GstRatesBySacResponse | null | undefined;
             return {
-              igst: gstData?.igst_percent == null || gstData.igst_percent === "" ? null : Number(gstData.igst_percent),
-              cgst: gstData?.cgst_percent == null || gstData.cgst_percent === "" ? null : Number(gstData.cgst_percent),
-              sgst: gstData?.sgst_percent == null || gstData.sgst_percent === "" ? null : Number(gstData.sgst_percent),
+              igst:
+                gstData?.igst_percent == null || gstData.igst_percent === ""
+                  ? null
+                  : Number(gstData.igst_percent),
+              cgst:
+                gstData?.cgst_percent == null || gstData.cgst_percent === ""
+                  ? null
+                  : Number(gstData.cgst_percent),
+              sgst:
+                gstData?.sgst_percent == null || gstData.sgst_percent === ""
+                  ? null
+                  : Number(gstData.sgst_percent),
               same_state: gstData?.same_state ?? false,
             };
           } catch {
@@ -1097,11 +1347,21 @@ function InvoiceReverse() {
       );
 
       const chargesPayload = values.charges.map((charge, idx) => {
-        const chargeCurrencyItem = (currencyData as { id?: number; code?: string; currency_code?: string }[])?.find(
-          (c) => (c.code || c.currency_code || "").toString() === charge.currency,
+        const chargeCurrencyItem = (
+          currencyData as {
+            id?: number;
+            code?: string;
+            currency_code?: string;
+          }[]
+        )?.find(
+          (c) =>
+            (c.code || c.currency_code || "").toString() === charge.currency,
         );
-        const chargeCurrencyId = chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        const unitItem = (unitData as { id?: number; unit_code?: string; code?: string }[])?.find(
+        const chargeCurrencyId =
+          chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
+        const unitItem = (
+          unitData as { id?: number; unit_code?: string; code?: string }[]
+        )?.find(
           (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
         );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
@@ -1111,16 +1371,28 @@ function InvoiceReverse() {
         const cgstRate = rates?.cgst ?? 0;
         const sgstRate = rates?.sgst ?? 0;
         const sameState = rates?.same_state ?? false;
-        const igstAmt = !sameState && igstRate > 0 ? clampAmount(headerAmount * (igstRate / 100)) : 0;
-        const cgstAmt = sameState && cgstRate > 0 ? clampAmount(headerAmount * (cgstRate / 100)) : 0;
-        const sgstAmt = sameState && sgstRate > 0 ? clampAmount(headerAmount * (sgstRate / 100)) : 0;
+        const igstAmt =
+          !sameState && igstRate > 0
+            ? clampAmount(headerAmount * (igstRate / 100))
+            : 0;
+        const cgstAmt =
+          sameState && cgstRate > 0
+            ? clampAmount(headerAmount * (cgstRate / 100))
+            : 0;
+        const sgstAmt =
+          sameState && sgstRate > 0
+            ? clampAmount(headerAmount * (sgstRate / 100))
+            : 0;
         return {
-          ...(isUpdate && charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
+          ...(isUpdate && charge.id != null && charge.id > 0
+            ? { id: charge.id }
+            : {}),
           shipment_no:
-            charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
+            charge.shipment_id != null &&
+            String(charge.shipment_id).trim() !== ""
               ? String(charge.shipment_id)
               : null,
-              // : values.shipment_no,
+          // : values.shipment_no,
           charge_id: charge.charge_id ?? null,
           unit_id: unitId,
           no_of_unit: charge.no_of_unit ?? 0,
@@ -1144,15 +1416,19 @@ function InvoiceReverse() {
         ...(isUpdate ? { id: saveResponse.id } : {}),
         ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
-                is_agent: isAgentInvoice,
+        is_agent: isAgentInvoice,
         address: values.address,
         state_id: stateId,
         gstn: values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
         document_no: documentNo,
-        document_date: values.document_date ? formatDateDDMMYYYY(new Date(values.document_date)) : null,
-        due_date: values.due_date ? formatDateDDMMYYYY(new Date(values.due_date)) : null,
+        document_date: values.document_date
+          ? formatDateDDMMYYYY(new Date(values.document_date))
+          : null,
+        due_date: values.due_date
+          ? formatDateDDMMYYYY(new Date(values.due_date))
+          : null,
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
@@ -1165,7 +1441,11 @@ function InvoiceReverse() {
         charges: chargesPayload,
       };
       if (isUpdate) {
-        const response = (await putAPICall(URL.reverseInvoice, payload, API_HEADER)) as
+        const response = (await putAPICall(
+          URL.reverseInvoice,
+          payload,
+          API_HEADER,
+        )) as
           | { id?: number; document_no?: string; status?: string }
           | undefined;
         if (response) {
@@ -1193,10 +1473,17 @@ function InvoiceReverse() {
             }));
             form.setFieldValue("charges", updatedCharges);
           }
-          ToastNotification({ message: "Reverse invoice updated successfully", type: "success" });
+          ToastNotification({
+            message: "Reverse invoice updated successfully",
+            type: "success",
+          });
         }
       } else {
-        const response = (await postAPICall(URL.reverseInvoice, payload, API_HEADER)) as
+        const response = (await postAPICall(
+          URL.reverseInvoice,
+          payload,
+          API_HEADER,
+        )) as
           | { id?: number; document_no?: string; status?: string }
           | undefined;
         if (response) {
@@ -1225,13 +1512,18 @@ function InvoiceReverse() {
           }
           const statusUpper = (res.status ?? "").toUpperCase();
           setInvoiceIsPosted(statusUpper === "POSTED");
-          ToastNotification({ message: "Reverse invoice saved successfully", type: "success" });
+          ToastNotification({
+            message: "Reverse invoice saved successfully",
+            type: "success",
+          });
         }
       }
     } catch (error: unknown) {
       console.error("Error saving reverse invoice:", error);
       ToastNotification({
-        message: (error as { message?: string })?.message ?? "Failed to save reverse invoice",
+        message:
+          (error as { message?: string })?.message ??
+          "Failed to save reverse invoice",
         type: "error",
       });
     } finally {
@@ -1264,7 +1556,12 @@ function InvoiceReverse() {
             <Text size="xl" fw={600} c="#105476">
               Invoice Reverse
             </Text>
-            <Button variant="outline" color="#105476" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate(-1)}>
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconArrowLeft size={16} />}
+              onClick={() => navigate(-1)}
+            >
               Back
             </Button>
           </Group>
@@ -1293,7 +1590,11 @@ function InvoiceReverse() {
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
-              {isPosting ? "Posting..." : saveResponse?.id ? "Updating..." : "Saving..."}
+              {isPosting
+                ? "Posting..."
+                : saveResponse?.id
+                  ? "Updating..."
+                  : "Saving..."}
             </Text>
           </Stack>
         </Box>
@@ -1308,14 +1609,23 @@ function InvoiceReverse() {
               <Group gap="sm" wrap="nowrap">
                 <Group gap="xs" wrap="nowrap">
                   <Text size="sm" fw={500} c="dimmed">
-                    {saveResponse.status?.toUpperCase() === "POSTED" ? "Reverse Invoice Number" : "Draft Reverse Invoice Number"}
+                    {saveResponse.status?.toUpperCase() === "POSTED"
+                      ? "Reverse Invoice Number"
+                      : "Draft Reverse Invoice Number"}
                   </Text>
-                  <Badge size="sm" variant="light" color="#105476" styles={{ root: { textTransform: "none" } }}>
+                  <Badge
+                    size="sm"
+                    variant="light"
+                    color="#105476"
+                    styles={{ root: { textTransform: "none" } }}
+                  >
                     {saveResponse.document_no || documentNo || "—"}
                   </Badge>
                 </Group>
                 <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">Status:</Text>
+                  <Text size="sm" fw={500} c="dimmed">
+                    Status:
+                  </Text>
                   <Badge
                     size="sm"
                     variant="light"
@@ -1341,7 +1651,12 @@ function InvoiceReverse() {
                 </Badge>
               </Group>
             )} */}
-            <Button variant="outline" color="#105476" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate(-1)}>
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconArrowLeft size={16} />}
+              onClick={() => navigate(-1)}
+            >
               Back
             </Button>
           </Group>
@@ -1349,10 +1664,17 @@ function InvoiceReverse() {
 
         <Box
           component="form"
-          onSubmit={isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)}
+          onSubmit={
+            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+          }
           style={
             isReadOnly
-              ? { opacity: 0.92, backgroundColor: "#f5f5f5", borderRadius: 8, padding: 16 }
+              ? {
+                  opacity: 0.92,
+                  backgroundColor: "#f5f5f5",
+                  borderRadius: 8,
+                  padding: 16,
+                }
               : undefined
           }
         >
@@ -1361,7 +1683,7 @@ function InvoiceReverse() {
               <SearchableSelect
                 label="Bill To"
                 placeholder="Type customer name"
-                apiEndpoint={URL.customer}
+                apiEndpoint={URL.allCustomers}
                 searchFields={["customer_name", "customer_code"]}
                 displayFormat={(item: Record<string, unknown>) => ({
                   value: String(item.customer_code),
@@ -1423,7 +1745,9 @@ function InvoiceReverse() {
                 label={isAgentInvoice ? "Job id" : "Shipment No"}
                 placeholder={isAgentInvoice ? "Job id" : "Shipment No"}
                 value={form.values.shipment_no}
-                onChange={(e) => form.setFieldValue("shipment_no", e.target.value)}
+                onChange={(e) =>
+                  form.setFieldValue("shipment_no", e.target.value)
+                }
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 withAsterisk
@@ -1437,7 +1761,9 @@ function InvoiceReverse() {
                 placeholder="Select daybook"
                 data={daybookOptions}
                 value={form.values.daybook_id || null}
-                onChange={(value) => form.setFieldValue("daybook_id", value ?? "")}
+                onChange={(value) =>
+                  form.setFieldValue("daybook_id", value ?? "")
+                }
                 searchable
                 withAsterisk
                 // disabled={isReadOnly}
@@ -1488,7 +1814,9 @@ function InvoiceReverse() {
                 placeholder="Select currency"
                 data={currencyOptions}
                 value={form.values.currency || null}
-                onChange={(value) => form.setFieldValue("currency", value ?? "")}
+                onChange={(value) =>
+                  form.setFieldValue("currency", value ?? "")
+                }
                 searchable
                 withAsterisk
                 // disabled={isReadOnly}
@@ -1502,7 +1830,16 @@ function InvoiceReverse() {
                 label="ROE"
                 placeholder="ROE"
                 value={form.values.roe ?? undefined}
-                onChange={(value) => form.setFieldValue("roe", typeof value === "number" ? value : value === "" ? null : parseFloat(String(value)) || null)}
+                onChange={(value) =>
+                  form.setFieldValue(
+                    "roe",
+                    typeof value === "number"
+                      ? value
+                      : value === ""
+                        ? null
+                        : parseFloat(String(value)) || null,
+                  )
+                }
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 withAsterisk
@@ -1549,7 +1886,9 @@ function InvoiceReverse() {
                   label="Address"
                   placeholder="Address"
                   value={form.values.address}
-                  onChange={(e) => form.setFieldValue("address", e.target.value)}
+                  onChange={(e) =>
+                    form.setFieldValue("address", e.target.value)
+                  }
                   readOnly={isReadOnly}
                   withAsterisk
                   error={form.errors.address}
@@ -1562,12 +1901,17 @@ function InvoiceReverse() {
                 label="Narration"
                 placeholder="Narration"
                 value={form.values.narration}
-                onChange={(e) => form.setFieldValue("narration", e.target.value)}
+                onChange={(e) =>
+                  form.setFieldValue("narration", e.target.value)
+                }
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 rows={2}
                 error={form.errors.narration}
-                styles={{ input: { fontSize: "13px", fontFamily: "Inter" }, label: inputStyles.label }}
+                styles={{
+                  input: { fontSize: "13px", fontFamily: "Inter" },
+                  label: inputStyles.label,
+                }}
               />
             </Grid.Col>
           </Grid>
@@ -1602,32 +1946,68 @@ function InvoiceReverse() {
                     }}
                   >
                     {isAgentInvoice && (
-                      <Grid.Col span={1} style={{ fontSize: "13px" }}>Shipment id</Grid.Col>
+                      <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                        Shipment id
+                      </Grid.Col>
                     )}
-                    <Grid.Col span={isAgentInvoice ? 1.3 : 1.5} style={{ fontSize: "13px" }}>Charge</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Unit</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency</Grid.Col>
-                    <Grid.Col span={0.45} style={{ fontSize: "13px" }}>ROE</Grid.Col>
-                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>No of Unit</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Amount per Unit</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>Currency Amount</Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                      Amount in {form.values.currency ? form.values.currency.toUpperCase() : "()"}
+                    <Grid.Col
+                      span={isAgentInvoice ? 1.3 : 1.5}
+                      style={{ fontSize: "13px" }}
+                    >
+                      Charge
                     </Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>Local Amount</Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>SAC Code</Grid.Col>
-                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>Dr/Cr</Grid.Col>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                      Unit
+                    </Grid.Col>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                      Currency
+                    </Grid.Col>
+                    <Grid.Col span={0.45} style={{ fontSize: "13px" }}>
+                      ROE
+                    </Grid.Col>
+                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                      No of Unit
+                    </Grid.Col>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                      Amount per Unit
+                    </Grid.Col>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                      Currency Amount
+                    </Grid.Col>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                      Amount in{" "}
+                      {form.values.currency
+                        ? form.values.currency.toUpperCase()
+                        : "()"}
+                    </Grid.Col>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                      Local Amount
+                    </Grid.Col>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                      SAC Code
+                    </Grid.Col>
+                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                      Dr/Cr
+                    </Grid.Col>
                     {headerSameState === true && (
-                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>CGST</Grid.Col>
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                        CGST
+                      </Grid.Col>
                     )}
                     {headerSameState === true && (
-                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>SGST</Grid.Col>
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                        SGST
+                      </Grid.Col>
                     )}
                     {headerSameState === false && (
-                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>IGST</Grid.Col>
+                      <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                        IGST
+                      </Grid.Col>
                     )}
                     {!isReadOnly && (
-                      <Grid.Col span={0.5} style={{ fontSize: "13px" }}>Actions</Grid.Col>
+                      <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                        Actions
+                      </Grid.Col>
                     )}
                   </Grid>
                   {form.values.charges.map((charge, index) => (
@@ -1640,7 +2020,11 @@ function InvoiceReverse() {
                       {isAgentInvoice && (
                         <Grid.Col span={1}>
                           <TextInput
-                            value={charge.shipment_id ?? form.values.shipment_no ?? ""}
+                            value={
+                              charge.shipment_id ??
+                              form.values.shipment_no ??
+                              ""
+                            }
                             readOnly
                             styles={{
                               input: {
@@ -1662,32 +2046,60 @@ function InvoiceReverse() {
                             value: String(item.id ?? ""),
                             label: String(item.charge_name ?? ""),
                           })}
-                          value={charge.charge_id != null ? String(charge.charge_id) : null}
+                          value={
+                            charge.charge_id != null
+                              ? String(charge.charge_id)
+                              : null
+                          }
                           displayValue={charge.charge_name || undefined}
                           onChange={(value, selectedData) => {
                             const chargeId = value ? Number(value) : null;
                             const chargeName = selectedData?.label ?? "";
-                            form.setFieldValue(`charges.${index}.charge_id`, chargeId);
-                            form.setFieldValue(`charges.${index}.charge_name`, chargeName);
+                            form.setFieldValue(
+                              `charges.${index}.charge_id`,
+                              chargeId,
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.charge_name`,
+                              chargeName,
+                            );
                             form.setFieldValue(`charges.${index}.tax_code`, "");
                             if (chargeErrors[index]?.charge_name) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
                                 delete newErrors[index].charge_name;
-                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                                if (Object.keys(newErrors[index]).length === 0)
+                                  delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
                             if (chargeId != null && jobServiceId != null) {
-                              fetchGetEffectiveSac([{ charge_id: chargeId, service_id: jobServiceId }]).then((data) => {
-                                const item = data.find((x) => x.charge_id === chargeId);
-                                if (item?.sac_code != null && item.sac_code !== "") {
-                                  form.setFieldValue(`charges.${index}.tax_code`, item.sac_code);
+                              fetchGetEffectiveSac([
+                                {
+                                  charge_id: chargeId,
+                                  service_id: jobServiceId,
+                                },
+                              ]).then((data) => {
+                                const item = data.find(
+                                  (x) => x.charge_id === chargeId,
+                                );
+                                if (
+                                  item?.sac_code != null &&
+                                  item.sac_code !== ""
+                                ) {
+                                  form.setFieldValue(
+                                    `charges.${index}.tax_code`,
+                                    item.sac_code,
+                                  );
                                   if (chargeErrors[index]?.tax_code) {
                                     const newErrors = { ...chargeErrors };
                                     if (newErrors[index]) {
                                       delete newErrors[index].tax_code;
-                                      if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                                      if (
+                                        Object.keys(newErrors[index]).length ===
+                                        0
+                                      )
+                                        delete newErrors[index];
                                     }
                                     setChargeErrors(newErrors);
                                   }
@@ -1702,7 +2114,11 @@ function InvoiceReverse() {
                           minSearchLength={2}
                           dropdownZIndex={1000}
                           styles={{
-                            input: { fontSize: "13px", fontFamily: "Inter", height: "36px" },
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
                           }}
                         />
                       </Grid.Col>
@@ -1711,11 +2127,22 @@ function InvoiceReverse() {
                           placeholder="Unit"
                           data={unitOptions}
                           value={charge.unit_code || null}
-                          onChange={(value) => form.setFieldValue(`charges.${index}.unit_code`, value ?? "")}
+                          onChange={(value) =>
+                            form.setFieldValue(
+                              `charges.${index}.unit_code`,
+                              value ?? "",
+                            )
+                          }
                           searchable
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -1724,12 +2151,16 @@ function InvoiceReverse() {
                           data={currencyOptions}
                           value={charge.currency || null}
                           onChange={(value) => {
-                            form.setFieldValue(`charges.${index}.currency`, value ?? "");
+                            form.setFieldValue(
+                              `charges.${index}.currency`,
+                              value ?? "",
+                            );
                             if (chargeErrors[index]?.currency) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
                                 delete newErrors[index].currency;
-                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                                if (Object.keys(newErrors[index]).length === 0)
+                                  delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
@@ -1739,7 +2170,13 @@ function InvoiceReverse() {
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.currency}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.45}>
@@ -1747,12 +2184,20 @@ function InvoiceReverse() {
                           placeholder="ROE"
                           value={charge.roe ?? undefined}
                           onChange={(v) => {
-                            form.setFieldValue(`charges.${index}.roe`, typeof v === "number" ? v : v === "" ? null : parseFloat(String(v)) || null);
+                            form.setFieldValue(
+                              `charges.${index}.roe`,
+                              typeof v === "number"
+                                ? v
+                                : v === ""
+                                  ? null
+                                  : parseFloat(String(v)) || null,
+                            );
                             if (chargeErrors[index]?.roe) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
                                 delete newErrors[index].roe;
-                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                                if (Object.keys(newErrors[index]).length === 0)
+                                  delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
@@ -1762,30 +2207,66 @@ function InvoiceReverse() {
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.roe}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.65}>
                         <NumberInput
                           value={charge.no_of_unit ?? undefined}
-                          onChange={(v) => form.setFieldValue(`charges.${index}.no_of_unit`, typeof v === "number" ? v : v === "" ? null : parseFloat(String(v)) || null)}
+                          onChange={(v) =>
+                            form.setFieldValue(
+                              `charges.${index}.no_of_unit`,
+                              typeof v === "number"
+                                ? v
+                                : v === ""
+                                  ? null
+                                  : parseFloat(String(v)) || null,
+                            )
+                          }
                           min={0}
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <NumberInput
                           value={charge.amount_per_unit ?? undefined}
-                          onChange={(v) => form.setFieldValue(`charges.${index}.amount_per_unit`, typeof v === "number" ? v : v === "" ? null : parseFloat(String(v)) || null)}
+                          onChange={(v) =>
+                            form.setFieldValue(
+                              `charges.${index}.amount_per_unit`,
+                              typeof v === "number"
+                                ? v
+                                : v === ""
+                                  ? null
+                                  : parseFloat(String(v)) || null,
+                            )
+                          }
                           min={0}
                           decimalScale={2}
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -1793,12 +2274,20 @@ function InvoiceReverse() {
                           placeholder="Currency Amount"
                           value={charge.amount ?? undefined}
                           onChange={(v) => {
-                            form.setFieldValue(`charges.${index}.amount`, typeof v === "number" ? v : v === "" ? null : parseFloat(String(v)) || null);
+                            form.setFieldValue(
+                              `charges.${index}.amount`,
+                              typeof v === "number"
+                                ? v
+                                : v === ""
+                                  ? null
+                                  : parseFloat(String(v)) || null,
+                            );
                             if (chargeErrors[index]?.amount) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
                                 delete newErrors[index].amount;
-                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                                if (Object.keys(newErrors[index]).length === 0)
+                                  delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
@@ -1810,19 +2299,40 @@ function InvoiceReverse() {
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.amount}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
                         <NumberInput
                           value={charge.header_amount ?? undefined}
-                          onChange={(v) => form.setFieldValue(`charges.${index}.header_amount`, typeof v === "number" ? v : v === "" ? null : parseFloat(String(v)) || null)}
+                          onChange={(v) =>
+                            form.setFieldValue(
+                              `charges.${index}.header_amount`,
+                              typeof v === "number"
+                                ? v
+                                : v === ""
+                                  ? null
+                                  : parseFloat(String(v)) || null,
+                            )
+                          }
                           min={0}
                           decimalScale={2}
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.8}>
@@ -1830,12 +2340,20 @@ function InvoiceReverse() {
                           placeholder="Local Amount"
                           value={charge.amount_in_local ?? undefined}
                           onChange={(v) => {
-                            form.setFieldValue(`charges.${index}.amount_in_local`, typeof v === "number" ? v : v === "" ? null : parseFloat(String(v)) || null);
+                            form.setFieldValue(
+                              `charges.${index}.amount_in_local`,
+                              typeof v === "number"
+                                ? v
+                                : v === ""
+                                  ? null
+                                  : parseFloat(String(v)) || null,
+                            );
                             if (chargeErrors[index]?.amount_in_local) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
                                 delete newErrors[index].amount_in_local;
-                                if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                                if (Object.keys(newErrors[index]).length === 0)
+                                  delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
@@ -1847,7 +2365,13 @@ function InvoiceReverse() {
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.amount_in_local}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.8}>
@@ -1861,11 +2385,18 @@ function InvoiceReverse() {
                           error={chargeErrors[index]?.tax_code}
                           rightSection={
                             gstRatesLoadingByIndex[index] &&
-                            (!charge.tax_code || charge.tax_code.trim() === "") ? (
+                            (!charge.tax_code ||
+                              charge.tax_code.trim() === "") ? (
                               <Loader size="xs" color="#105476" />
                             ) : null
                           }
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.55}>
@@ -1876,10 +2407,21 @@ function InvoiceReverse() {
                             { value: "Dr", label: "Dr" },
                           ]}
                           value={charge.dr_cr ?? "Cr"}
-                          onChange={(value) => form.setFieldValue(`charges.${index}.dr_cr`, (value === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr")}
+                          onChange={(value) =>
+                            form.setFieldValue(
+                              `charges.${index}.dr_cr`,
+                              (value === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
+                            )
+                          }
                           // disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
                         />
                       </Grid.Col>
                       {headerSameState === true && (
@@ -1889,8 +2431,11 @@ function InvoiceReverse() {
                             value={(() => {
                               const rate = gstRatesByChargeIndex[index]?.cgst;
                               const localAmount = charge.amount_in_local;
-                              if (rate == null || localAmount == null) return "";
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return "";
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return amount != null ? String(amount) : "";
                             })()}
                             readOnly
@@ -1901,14 +2446,20 @@ function InvoiceReverse() {
                                 rate == null || localAmount == null
                                   ? null
                                   : clampAmount((localAmount * rate) / 100);
-                              const display = amount != null ? String(amount) : "";
-                              return gstRatesLoadingByIndex[index] && display === "" ? (
+                              const display =
+                                amount != null ? String(amount) : "";
+                              return gstRatesLoadingByIndex[index] &&
+                                display === "" ? (
                                 <Loader size="xs" color="#105476" />
                               ) : null;
                             })()}
                             styles={{
                               root: { flex: "0 0 88px" },
-                              input: { fontSize: "11px", fontFamily: "Inter", height: "28px" },
+                              input: {
+                                fontSize: "11px",
+                                fontFamily: "Inter",
+                                height: "28px",
+                              },
                             }}
                           />
                         </Grid.Col>
@@ -1920,8 +2471,11 @@ function InvoiceReverse() {
                             value={(() => {
                               const rate = gstRatesByChargeIndex[index]?.sgst;
                               const localAmount = charge.amount_in_local;
-                              if (rate == null || localAmount == null) return "";
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return "";
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return amount != null ? String(amount) : "";
                             })()}
                             readOnly
@@ -1932,14 +2486,20 @@ function InvoiceReverse() {
                                 rate == null || localAmount == null
                                   ? null
                                   : clampAmount((localAmount * rate) / 100);
-                              const display = amount != null ? String(amount) : "";
-                              return gstRatesLoadingByIndex[index] && display === "" ? (
+                              const display =
+                                amount != null ? String(amount) : "";
+                              return gstRatesLoadingByIndex[index] &&
+                                display === "" ? (
                                 <Loader size="xs" color="#105476" />
                               ) : null;
                             })()}
                             styles={{
                               root: { flex: "0 0 88px" },
-                              input: { fontSize: "11px", fontFamily: "Inter", height: "28px" },
+                              input: {
+                                fontSize: "11px",
+                                fontFamily: "Inter",
+                                height: "28px",
+                              },
                             }}
                           />
                         </Grid.Col>
@@ -1951,8 +2511,11 @@ function InvoiceReverse() {
                             value={(() => {
                               const rate = gstRatesByChargeIndex[index]?.igst;
                               const localAmount = charge.amount_in_local;
-                              if (rate == null || localAmount == null) return "";
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return "";
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return amount != null ? String(amount) : "";
                             })()}
                             readOnly
@@ -1963,14 +2526,20 @@ function InvoiceReverse() {
                                 rate == null || localAmount == null
                                   ? null
                                   : clampAmount((localAmount * rate) / 100);
-                              const display = amount != null ? String(amount) : "";
-                              return gstRatesLoadingByIndex[index] && display === "" ? (
+                              const display =
+                                amount != null ? String(amount) : "";
+                              return gstRatesLoadingByIndex[index] &&
+                                display === "" ? (
                                 <Loader size="xs" color="#105476" />
                               ) : null;
                             })()}
                             styles={{
                               root: { flex: "0 0 88px" },
-                              input: { fontSize: "11px", fontFamily: "Inter", height: "28px" },
+                              input: {
+                                fontSize: "11px",
+                                fontFamily: "Inter",
+                                height: "28px",
+                              },
                             }}
                           />
                         </Grid.Col>
@@ -1986,21 +2555,32 @@ function InvoiceReverse() {
                                 px={12}
                                 onClick={() => {
                                   setGstRatesByChargeIndex((prev) => {
-                                    const next: Record<number, GstRates | null> = {};
-                                    Object.entries(prev).forEach(([key, value]) => {
-                                      const idx = Number(key);
-                                      if (Number.isNaN(idx) || idx === index) return;
-                                      next[idx > index ? idx - 1 : idx] = value;
-                                    });
+                                    const next: Record<
+                                      number,
+                                      GstRates | null
+                                    > = {};
+                                    Object.entries(prev).forEach(
+                                      ([key, value]) => {
+                                        const idx = Number(key);
+                                        if (Number.isNaN(idx) || idx === index)
+                                          return;
+                                        next[idx > index ? idx - 1 : idx] =
+                                          value;
+                                      },
+                                    );
                                     return next;
                                   });
                                   setGstRatesLoadingByIndex((prev) => {
                                     const next: Record<number, boolean> = {};
-                                    Object.entries(prev).forEach(([key, value]) => {
-                                      const idx = Number(key);
-                                      if (Number.isNaN(idx) || idx === index) return;
-                                      next[idx > index ? idx - 1 : idx] = value;
-                                    });
+                                    Object.entries(prev).forEach(
+                                      ([key, value]) => {
+                                        const idx = Number(key);
+                                        if (Number.isNaN(idx) || idx === index)
+                                          return;
+                                        next[idx > index ? idx - 1 : idx] =
+                                          value;
+                                      },
+                                    );
                                     return next;
                                   });
                                   form.removeListItem("charges", index);
@@ -2057,24 +2637,34 @@ function InvoiceReverse() {
                   <Grid gutter="md">
                     <Grid.Col span={3}>
                       <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>Local Amount Total</Text>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          Local Amount Total
+                        </Text>
                         <Text size="lg" fw={600} c="#105476">
                           {form.values.charges
-                            .reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0)
+                            .reduce(
+                              (sum, c) => sum + (c.amount_in_local ?? 0),
+                              0,
+                            )
                             .toFixed(2)}
                         </Text>
                       </Box>
                     </Grid.Col>
                     <Grid.Col span={3}>
                       <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>IGST Total</Text>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          IGST Total
+                        </Text>
                         <Text size="lg" fw={600} c="#105476">
                           {form.values.charges
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.igst;
                               const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null) return sum;
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return sum;
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return sum + (amount ?? 0);
                             }, 0)
                             .toFixed(2)}
@@ -2083,14 +2673,19 @@ function InvoiceReverse() {
                     </Grid.Col>
                     <Grid.Col span={3}>
                       <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>CGST Total</Text>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          CGST Total
+                        </Text>
                         <Text size="lg" fw={600} c="#105476">
                           {form.values.charges
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.cgst;
                               const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null) return sum;
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return sum;
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return sum + (amount ?? 0);
                             }, 0)
                             .toFixed(2)}
@@ -2099,14 +2694,19 @@ function InvoiceReverse() {
                     </Grid.Col>
                     <Grid.Col span={3}>
                       <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>SGST Total</Text>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          SGST Total
+                        </Text>
                         <Text size="lg" fw={600} c="#105476">
                           {form.values.charges
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.sgst;
                               const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null) return sum;
-                              const amount = clampAmount((localAmount * rate) / 100);
+                              if (rate == null || localAmount == null)
+                                return sum;
+                              const amount = clampAmount(
+                                (localAmount * rate) / 100,
+                              );
                               return sum + (amount ?? 0);
                             }, 0)
                             .toFixed(2)}
@@ -2148,36 +2748,72 @@ function InvoiceReverse() {
                         >
                           <Table.Thead>
                             <Table.Tr>
-                              <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>SAC</Table.Th>
-                              <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Charge Name</Table.Th>
-                              <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Rate</Table.Th>
-                              <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Amount</Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                SAC
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Charge Name
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Rate
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Amount
+                              </Table.Th>
                             </Table.Tr>
                           </Table.Thead>
                           <Table.Tbody>
-                            {(gstBreakup.sac_wise_totals ?? []).map((row, idx) => (
-                              <Table.Tr key={idx}>
-                                <Table.Td style={{ fontSize: "13px" }}>{row.sac_code ?? "—"}</Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>{row.charge_name ?? "—"}</Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.rate != null && row.rate_type != null
-                                    ? `${row.rate}${row.rate_type}`
-                                    : "—"}
-                                </Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.total_amount != null ? Number(row.total_amount) : "—"}
-                                </Table.Td>
-                              </Table.Tr>
-                            ))}
+                            {(gstBreakup.sac_wise_totals ?? []).map(
+                              (row, idx) => (
+                                <Table.Tr key={idx}>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.sac_code ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.charge_name ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.rate != null && row.rate_type != null
+                                      ? `${row.rate}${row.rate_type}`
+                                      : "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.total_amount != null
+                                      ? Number(row.total_amount)
+                                      : "—"}
+                                  </Table.Td>
+                                </Table.Tr>
+                              ),
+                            )}
                           </Table.Tbody>
                           <Table.Tfoot>
                             <Table.Tr>
                               <Table.Td style={{ fontSize: "13px" }} />
                               <Table.Td style={{ fontSize: "13px" }} />
-                              <Table.Td style={{ fontSize: "13px", fontWeight: 600, color: "#105476" }}>
+                              <Table.Td
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "#105476",
+                                }}
+                              >
                                 Total:
                               </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", fontWeight: 600, color: "#105476" }}>
+                              <Table.Td
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "#105476",
+                                }}
+                              >
                                 {gstBreakup.total ?? "0.00"}
                               </Table.Td>
                             </Table.Tr>
@@ -2193,9 +2829,9 @@ function InvoiceReverse() {
                         Save the reverse invoice to load GST breakup (customer_id from response is required).
                       </Text>
                     )} */}
-                                      {chargesTabActive === "tax" &&
+                  {chargesTabActive === "tax" &&
                     saveResponse &&
-                    (!saveResponse.id ) && (
+                    !saveResponse.id && (
                       <Text size="sm" c="dimmed" py="md">
                         Save the reverse invoice to load GST breakup.
                       </Text>
@@ -2206,7 +2842,11 @@ function InvoiceReverse() {
           </Box>
 
           <Group justify="flex-end" mt="xl">
-            <Button variant="outline" color="#105476" onClick={() => navigate(-1)}>
+            <Button
+              variant="outline"
+              color="#105476"
+              onClick={() => navigate(-1)}
+            >
               Cancel
             </Button>
             {!isReadOnly && (
@@ -2217,7 +2857,9 @@ function InvoiceReverse() {
                   rightSection={<IconChevronRight size={16} />}
                   loading={isSubmitting}
                 >
-                  {saveResponse?.id ? "Update Invoice Reverse" : "Save Invoice Reverse"}
+                  {saveResponse?.id
+                    ? "Update Invoice Reverse"
+                    : "Save Invoice Reverse"}
                 </Button>
                 {saveResponse &&
                   saveResponse.status?.toUpperCase() === "UNPOSTED" &&
