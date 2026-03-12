@@ -114,6 +114,10 @@ export default function MastersPage() {
             icon: <IconTruckDelivery size={28} color="#105476" />,
             label: "Service",
           },
+          {
+            icon: <IconBuildingEstate size={28} color="#105476" />,
+            label: "CFS Master",
+          },
         ],
       },
       {

@@ -120,6 +120,8 @@ type ContainerDetail = {
   customs_seal_no: string;
   loading_date: Date | null;
   unloading_date: Date | null;
+  cfs_id?: number | string | null;
+  cfs_name?: string;
 };
 
 // Reverse invoice item (from API reverse_invoices)
@@ -190,6 +192,7 @@ const containerDetailSchema = yup.object({
   customs_seal_no: yup.string().nullable(),
   loading_date: yup.date().nullable(),
   unloading_date: yup.date().nullable(),
+  cfs_id: yup.mixed().nullable(),
 });
 
 const containerDetailsFormSchema = yup.object({
@@ -470,6 +473,8 @@ function ImportJobCreate() {
           customs_seal_no: "",
           loading_date: null,
           unloading_date: null,
+          cfs_id: null,
+          cfs_name: "",
         },
       ],
     },
@@ -1036,6 +1041,17 @@ function ImportJobCreate() {
                   dayjs(unloadingDate as string | Date).isValid()
                     ? dayjs(unloadingDate as string | Date).toDate()
                     : null,
+                cfs_id:
+                  container.cfs_id != null
+                    ? typeof container.cfs_id === "number"
+                      ? container.cfs_id
+                      : Number(container.cfs_id)
+                    : null,
+                cfs_name:
+                  typeof (container as { cfs_name?: string }).cfs_name ===
+                  "string"
+                    ? (container as { cfs_name: string }).cfs_name
+                    : "",
               };
             },
           );
@@ -1301,6 +1317,8 @@ function ImportJobCreate() {
       customs_seal_no: "",
       loading_date: null,
       unloading_date: null,
+      cfs_id: null,
+      cfs_name: "",
     });
   };
 
@@ -2181,6 +2199,13 @@ function ImportJobCreate() {
               uploading_date: container.unloading_date
                 ? dayjs(container.unloading_date).format("YYYY-MM-DD")
                 : null,
+              ...(container.cfs_id != null &&
+                container.cfs_id !== "" && {
+                  cfs_id:
+                    typeof container.cfs_id === "number"
+                      ? container.cfs_id
+                      : Number(container.cfs_id),
+                }),
             };
           },
         ),
@@ -3554,23 +3579,26 @@ function ImportJobCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2.2}>
+                <Grid.Col span={2}>
                   <RequiredLabel label="Container Type" required={false} />
                 </Grid.Col>
                 <Grid.Col span={2.2}>
                   <RequiredLabel label="Container No" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.8}>
+                <Grid.Col span={1.5}>
                   <RequiredLabel label="Actual Seal No" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.8}>
+                <Grid.Col span={1.5}>
                   <RequiredLabel label="Customs Seal No" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.7}>
+                <Grid.Col span={1.5}>
                   <RequiredLabel label="Loading Date" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.7}>
+                <Grid.Col span={1.5}>
                   <RequiredLabel label="Unloading Date" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.2}>
+                  <RequiredLabel label="CFS Name" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.6}>
                   {containerDetailsForm.values.containers.length > 1 && (
@@ -3584,7 +3612,7 @@ function ImportJobCreate() {
             {containerDetailsForm.values.containers.map((_container, index) => (
               <Box key={index}>
                 <Grid gutter="sm">
-                  <Grid.Col span={2.2}>
+                  <Grid.Col span={2}>
                     <Dropdown
                       required
                       placeholder="Container Type"
@@ -3649,7 +3677,7 @@ function ImportJobCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
+                  <Grid.Col span={1.5}>
                     <FormTextInput
                       placeholder="Actual seal number"
                       {...containerDetailsForm.getInputProps(
@@ -3658,7 +3686,7 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
+                  <Grid.Col span={1.5}>
                     <FormTextInput
                       placeholder="Customs seal number"
                       {...containerDetailsForm.getInputProps(
@@ -3667,7 +3695,7 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.7}>
+                  <Grid.Col span={1.5}>
                     <SingleDateInput
                       placeholder="YYYY-MM-DD"
                       value={
@@ -3688,7 +3716,7 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.7}>
+                  <Grid.Col span={1.5}>
                     <SingleDateInput
                       placeholder="YYYY-MM-DD"
                       value={
@@ -3706,6 +3734,46 @@ function ImportJobCreate() {
                           `containers.${index}.unloading_date`
                         ] as string
                       }
+                      disabled={isReadOnly}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={1.2}>
+                    <SearchableSelect
+                      placeholder="Type CFS name"
+                      apiEndpoint={URL.cfsMaster}
+                      value={
+                        containerDetailsForm.values.containers[index]?.cfs_id !=
+                        null
+                          ? String(
+                              containerDetailsForm.values.containers[index]
+                                ?.cfs_id ?? "",
+                            )
+                          : null
+                      }
+                      displayValue={
+                        containerDetailsForm.values.containers[index]
+                          ?.cfs_name || undefined
+                      }
+                      onChange={(val, selectedData) => {
+                        containerDetailsForm.setFieldValue(
+                          `containers.${index}.cfs_id`,
+                          val != null && val !== "" ? val : null,
+                        );
+                        containerDetailsForm.setFieldValue(
+                          `containers.${index}.cfs_name`,
+                          selectedData?.label ?? "",
+                        );
+                      }}
+                      dropdownZIndex={1000}
+                      minSearchLength={1}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String((item as { id?: number }).id ?? ""),
+                        label: String(
+                          (item as { cfs_name?: string }).cfs_name ?? "",
+                        ),
+                      })}
+                      searchFields={["cfs_name"]}
+                      size="sm"
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
