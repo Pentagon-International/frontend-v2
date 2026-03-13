@@ -2287,6 +2287,7 @@ function AirExportJobCreate() {
 
                       navigate("/air/export-job/invoice", {
                         state: {
+                          serviceType: "AIR",
                           hawbDetails: housingDetailsForInvoice,
                           housingDetails: housingDetailsForInvoice,
                           is_agent: true,
@@ -2308,7 +2309,7 @@ function AirExportJobCreate() {
                     Create Invoice
                   </Menu.Item>
 
-                  <Menu.Item
+                  {/* <Menu.Item
                     leftSection={
                       <Box
                         style={{
@@ -2345,6 +2346,7 @@ function AirExportJobCreate() {
                     onClick={() => {
                       navigate("/payment-request/create", {
                         state: {
+                          serviceType: "AIR",
                           job_reference_1: jobData?.job_id || jobData?.id || "",
                           job_reference_2: "",
                           ...(jobData && { job: jobData }),
@@ -2356,7 +2358,7 @@ function AirExportJobCreate() {
                     }}
                   >
                     Payment Request
-                  </Menu.Item>
+                  </Menu.Item> */}
 
                 </Menu.Dropdown>
               </Menu>
@@ -3290,6 +3292,7 @@ function AirExportJobCreate() {
                     }));
                   navigate("/payment-request/create", {
                     state: {
+                      serviceType: "AIR",
                       chargesFromEstimates:
                         chargesFromEstimates.length > 0
                           ? chargesFromEstimates

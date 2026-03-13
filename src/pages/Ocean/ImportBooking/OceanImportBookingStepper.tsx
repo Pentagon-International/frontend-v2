@@ -372,7 +372,7 @@ const fetchUnitMaster = async () => {
   try {
     const response = (await postAPICall(
       URL.unitMasterFilter,
-      {},
+      { filters: { service_type: ["FCL", "LCL"] } },
       API_HEADER,
     )) as { data?: unknown[] };
     return response?.data || [];

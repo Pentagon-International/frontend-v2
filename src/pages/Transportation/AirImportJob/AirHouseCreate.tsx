@@ -3756,6 +3756,7 @@ function HouseCreate() {
                     };
                     navigate("/air/import-job/invoice", {
                       state: {
+                        serviceType: "AIR",
                         hawbDetails: [detailForInvoice],
                         housingDetails: [detailForInvoice],
                         is_agent: false,

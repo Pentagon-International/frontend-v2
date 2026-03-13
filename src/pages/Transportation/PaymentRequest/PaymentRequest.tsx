@@ -89,11 +89,11 @@ const fetchCurrencyMaster = async () => {
   }
 };
 
-const fetchUnitMaster = async () => {
+const fetchUnitMaster = async (serviceType: string) => {
   try {
     const response = await postAPICall(
       URL.unitMasterFilter,
-      { filters: { service_type: "AIR" } },
+      { filters: { service_type: serviceType } },
       API_HEADER,
     );
     return (response as any)?.data || [];
@@ -367,7 +367,7 @@ const textareaStyles = {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-function PaymentRequest() {
+function PaymentRequest( serviceType: string  ) {
   const navigate = useNavigate();
   const location = useLocation();
   const { id: requestId } = useParams<{ id: string }>();
@@ -436,7 +436,7 @@ function PaymentRequest() {
 
   const { data: unitData = [] } = useQuery({
     queryKey: ["unitMaster", "AIR"],
-    queryFn: fetchUnitMaster,
+    queryFn: fetchUnitMaster(location.state?.serviceType),
     staleTime: Infinity,
   });
 

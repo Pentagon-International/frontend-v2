@@ -2490,6 +2490,7 @@ function ImportJobCreate() {
                         ];
                         navigate("/SeaExport/import-job/invoice", {
                           state: {
+                            serviceType: ["FCL", "LCL"],
                             hawbDetails: housingDetailsForInvoice,
                             housingDetails: housingDetailsForInvoice,
                             is_agent: true,

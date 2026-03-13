@@ -2504,6 +2504,7 @@ function AirImportJobCreate() {
 
                         navigate("/air/import-job/invoice", {
                           state: {
+                            serviceType: "AIR",
                             hawbDetails: housingDetailsForInvoice,
                             housingDetails: housingDetailsForInvoice,
                             is_agent: true,

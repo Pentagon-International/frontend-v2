@@ -202,7 +202,7 @@ const fetchUnitMaster = async () => {
   try {
     const payload = {
       filters: {
-        service_type: "FCL,LCL",
+        service_type: ["FCL","LCL"],
       },
     };
     const response = (await postAPICall(
@@ -466,7 +466,7 @@ function HouseCreate() {
 
   // Unit and currency masters - fetch early for charge loading when in edit mode
   const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster", "SEA"],
+    queryKey: ["unitMaster", ["FCL", "LCL"]],
     queryFn: fetchUnitMaster,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -3509,6 +3509,7 @@ function HouseCreate() {
                   };
                   navigate("/SeaExport/import-job/invoice", {
                     state: {
+                      serviceType: location.state?.mblDetails?.service || "FCL",
                       hawbDetails: [detailForInvoice],
                       housingDetails: [detailForInvoice],
                       is_agent: false,

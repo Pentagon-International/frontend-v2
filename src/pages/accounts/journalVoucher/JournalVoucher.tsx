@@ -1,0 +1,1436 @@
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Divider,
+  Grid,
+  Group,
+  Loader,
+  NumberInput,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import {
+  IconArrowLeft,
+  IconChevronRight,
+  IconDownload,
+  IconFileUpload,
+  IconFileText,
+  IconSend,
+  IconPlus,
+  IconTrash,
+} from "@tabler/icons-react";
+import { useCallback, useMemo, useState } from "react";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { URL } from "../../../api/serverUrls";
+import {
+  Dropdown,
+  SearchableSelect,
+  SingleDateInput,
+  ToastNotification,
+} from "../../../components";
+import { getAPICall } from "../../../service/getApiCall";
+import { postAPICall } from "../../../service/postApiCall";
+import { putAPICall } from "../../../service/putApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
+import useAuthStore from "../../../store/authStore";
+
+// ─── API Fetchers ────────────────────────────────────────────────────────────
+
+const fetchDaybookJV = async (): Promise<unknown[]> => {
+  try {
+    const response = await postAPICall(
+      URL.daybook,
+      { filters: { document_type: "JV" } },
+      API_HEADER,
+    );
+    return (response as { data?: unknown[] })?.data ?? [];
+  } catch {
+    return [];
+  }
+};
+
+const fetchCurrencyMaster = async () => {
+  try {
+    return await getAPICall(`${URL.currencyMaster}`, API_HEADER);
+  } catch {
+    return [];
+  }
+};
+
+const fetchChartOfAccounts = async () => {
+  try {
+    const response = await postAPICall(
+      (URL as any).chartOfAccountsFilter,
+      { filters: {} },
+      API_HEADER,
+    );
+    return (response as { data?: unknown[] })?.data ?? [];
+  } catch {
+    return [];
+  }
+};
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type JVChargeRow = {
+  id?: number | null;
+  segment: string;
+  job_no: string;
+  sub_job: string;
+  booking_no: string;
+  cn_r: string;
+  charge_id: number | null;
+  charge_name: string;
+  account_code: string;
+  account_name: string;
+  subledger_code: string;
+  code: string;
+  key: string;
+  currency_id: string;
+  currency_code: string;
+  roe: number | null;
+  amount: number | null;
+  local_amount: number | null;
+  dr_cr: string;
+  narration: string;
+};
+
+type JVFormValues = {
+  document_id: string;
+  journal_no: string;
+  day_book_id: string;
+  note: string;
+  journal_date: Date | null;
+  status: string;
+  file_name: string;
+  reversal_daybook_id: string;
+  reversal_journal_no: string;
+  charges: JVChargeRow[];
+};
+
+type SaveResponse = { id?: number; journal_no?: string; status?: string };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const emptyRow = (): JVChargeRow => ({
+  segment: "",
+  job_no: "",
+  sub_job: "",
+  booking_no: "",
+  cn_r: "",
+  charge_id: null,
+  charge_name: "",
+  account_code: "",
+  account_name: "",
+  subledger_code: "",
+  code: "",
+  key: "",
+  currency_id: "",
+  currency_code: "",
+  roe: null,
+  amount: null,
+  local_amount: null,
+  dr_cr: "Dr",
+  narration: "",
+});
+
+function clampAmt(v: number | null | undefined): number | null {
+  if (v == null || !Number.isFinite(v)) return null;
+  const r = Math.round(v * 100) / 100;
+  const MAX = 99999999.99;
+  return Math.abs(r) > MAX ? (r > 0 ? MAX : -MAX) : r;
+}
+
+const STATUS_OPTIONS = [
+  { value: "UNPOSTED", label: "Unposted" },
+  { value: "POSTED", label: "Posted" },
+];
+
+const DR_CR_OPTIONS = [
+  { value: "Dr", label: "Dr" },
+  { value: "Cr", label: "Cr" },
+];
+
+const CN_R_OPTIONS = [
+  { value: "C", label: "C" },
+  { value: "N", label: "N" },
+  { value: "R", label: "R" },
+];
+
+const inputStyles = {
+  input: { fontSize: "13px", fontFamily: "Inter", height: "36px" },
+  label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
+};
+
+const textareaStyles = {
+  input: { fontSize: "13px", fontFamily: "Inter" },
+  label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
+};
+
+const cellStyle: React.CSSProperties = { padding: "3px 3px 3px 0", verticalAlign: "middle" };
+const inputCell = { input: { fontSize: "12px", fontFamily: "Inter", height: "34px" } };
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+function JournalVoucher() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { id: recordId } = useParams<{ id: string }>();
+  const user = useAuthStore((s) => s.user);
+
+  const isViewMode = location.pathname.includes("/view/");
+  const isReadOnly = isViewMode;
+
+  const defaultBranch = user?.branches?.find(
+    (b: { is_default?: boolean }) => b.is_default === true,
+  ) as { currency?: { currency_id?: number; currency_code?: string } } | undefined;
+  const defaultCurrencyCode = defaultBranch?.currency?.currency_code ?? "";
+  const defaultCurrencyId =
+    defaultBranch?.currency?.currency_id != null
+      ? String(defaultBranch.currency.currency_id)
+      : "";
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number>(0);
+
+  const isUpdate =
+    (saveResponse?.id != null && saveResponse.id > 0) || Boolean(recordId);
+
+  // ─── Queries ─────────────────────────────────────────────────────────────
+
+  const { data: daybookData = [], isLoading: isDaybookLoading } = useQuery({
+    queryKey: ["daybook-jv"],
+    queryFn: fetchDaybookJV,
+    staleTime: Infinity,
+  });
+
+  const { data: currencyData = [] } = useQuery({
+    queryKey: ["currencyMaster"],
+    queryFn: fetchCurrencyMaster,
+    staleTime: Infinity,
+  });
+
+  const { data: coaData = [] } = useQuery({
+    queryKey: ["chartOfAccounts"],
+    queryFn: fetchChartOfAccounts,
+    staleTime: Infinity,
+  });
+
+  // ─── Derived options ─────────────────────────────────────────────────────
+
+  const daybookOptions = useMemo(() => {
+    const data = daybookData as { id?: number; name?: string }[];
+    if (!Array.isArray(data)) return [];
+    return data.map((item) => ({
+      value: String(item.id ?? ""),
+      label: item.name ?? "",
+    }));
+  }, [daybookData]);
+
+  const currencyOptions = useMemo(() => {
+    const data = currencyData as any[];
+    if (!Array.isArray(data)) return [];
+    return data.map((item: any) => ({
+      value: String(item.id ?? ""),
+      label: (item.currency_code ?? item.code ?? "").toString().trim(),
+    }));
+  }, [currencyData]);
+
+  const coaOptions = useMemo(() => {
+    const data = coaData as {
+      gl_account_code?: string;
+      account_name?: string;
+      sl_code?: string;
+    }[];
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((item) => ({
+        value: String(item.gl_account_code ?? ""),
+        label: item.account_name ?? item.gl_account_code ?? "",
+        sl_code: item.sl_code ?? "",
+        account_name: item.account_name ?? "",
+      }))
+      .filter((o) => o.value);
+  }, [coaData]);
+
+  const getRoe = useCallback(
+    (currencyCode: string): number => {
+      const cc = user?.country?.country_code;
+      const cu = currencyCode?.toUpperCase();
+      if (cc === "IN") {
+        if (cu === "INR") return 1;
+        if (cu === "USD") return 88.75;
+      } else if (cc === "AE") {
+        if (cu === "AED") return 1;
+        if (cu === "USD") return 3.67;
+      }
+      return 1;
+    },
+    [user?.country?.country_code],
+  );
+
+  // ─── Form ─────────────────────────────────────────────────────────────────
+
+  const form = useForm<JVFormValues>({
+    initialValues: {
+      document_id: "",
+      journal_no: "",
+      day_book_id: "",
+      note: "",
+      journal_date: new Date(),
+      status: "UNPOSTED",
+      file_name: "",
+      reversal_daybook_id: "",
+      reversal_journal_no: "",
+      charges: [emptyRow()],
+    },
+    validate: {
+      day_book_id: (v) => (!v ? "Day book is required" : null),
+      journal_date: (v) => (!v ? "Journal date is required" : null),
+    },
+  });
+
+  // ─── Totals ───────────────────────────────────────────────────────────────
+
+  const totals = useMemo(() => {
+    let debit = 0;
+    let credit = 0;
+    for (const row of form.values.charges) {
+      const amt = row.local_amount ?? 0;
+      if (row.dr_cr === "Dr") debit += amt;
+      else credit += amt;
+    }
+    return {
+      debit: Math.round(debit * 100) / 100,
+      credit: Math.round(credit * 100) / 100,
+      difference: Math.round((debit - credit) * 100) / 100,
+    };
+  }, [form.values.charges]);
+
+  // ─── Selected row account info ────────────────────────────────────────────
+
+  const selectedRow = form.values.charges[selectedRowIndex];
+  const selectedAccountName = selectedRow?.account_name || "";
+  const selectedNarration = selectedRow?.narration || "";
+
+  // ─── Submit ───────────────────────────────────────────────────────────────
+
+  const buildPayload = (values: JVFormValues, overrideStatus?: string) => {
+    const formatDate = (d: Date | null) =>
+      d ? d.toISOString().split("T")[0] : null;
+    return {
+      ...(isUpdate ? { id: saveResponse?.id ?? Number(recordId) } : {}),
+      day_book_id: values.day_book_id ? Number(values.day_book_id) : null,
+      note: values.note ?? "",
+      journal_date: formatDate(values.journal_date),
+      status: overrideStatus ?? values.status ?? "UNPOSTED",
+      charges_data: values.charges.map((c) => ({
+        ...(c.id != null ? { id: c.id } : {}),
+        segment: c.segment ?? "",
+        job_no: c.job_no ?? "",
+        sub_job: c.sub_job ?? "",
+        booking_no: c.booking_no ?? "",
+        cn_r: c.cn_r ?? "",
+        charge_id: c.charge_id ?? null,
+        account_code: c.account_code ?? "",
+        subledger_code: c.subledger_code ?? "",
+        code: c.code ?? "",
+        key: c.key ?? "",
+        currency_id: c.currency_id ? Number(c.currency_id) : null,
+        roe: c.roe ?? null,
+        amount: c.amount ?? null,
+        local_amount: c.local_amount ?? null,
+        dr_cr: c.dr_cr ?? "Dr",
+        narration: c.narration ?? "",
+      })),
+    };
+  };
+
+  const handleSubmit = async (values: JVFormValues) => {
+    setIsSubmitting(true);
+    try {
+      const payload = buildPayload(values);
+      if (isUpdate) {
+        const res = (await putAPICall(
+          `${(URL as any).journalVoucher}`,
+          payload,
+          API_HEADER,
+        )) as any;
+        if (res) {
+          const d = res?.data?.data ?? res?.data ?? res;
+          setSaveResponse((prev) => ({
+            ...prev,
+            id: d?.id ?? prev?.id,
+            journal_no: d?.journal_no ?? prev?.journal_no,
+            status: d?.status ?? prev?.status,
+          }));
+          ToastNotification({ message: "Journal voucher updated successfully", type: "success" });
+        }
+      } else {
+        const res = (await postAPICall(
+          (URL as any).journalVoucher,
+          payload,
+          API_HEADER,
+        )) as any;
+        if (res) {
+          const d = res?.data?.data ?? res?.data ?? res;
+          if (d?.id) {
+            setSaveResponse({ id: d.id, journal_no: d.journal_no ?? "", status: d.status });
+            form.setFieldValue("document_id", String(d.id));
+            form.setFieldValue("journal_no", d.journal_no ?? "");
+          }
+          ToastNotification({ message: "Journal voucher saved successfully", type: "success" });
+        }
+      }
+    } catch (err: unknown) {
+      ToastNotification({
+        message: (err as { message?: string })?.message ?? "Failed to save journal voucher",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePost = async () => {
+    const errors = form.validate();
+    if (errors.hasErrors) return;
+    setIsSubmitting(true);
+    try {
+      const payload = buildPayload(form.values, "POSTED");
+      if (isUpdate) {
+        const res = (await putAPICall(
+          `${(URL as any).journalVoucher}`,
+          payload,
+          API_HEADER,
+        )) as any;
+        if (res) {
+          const d = res?.data?.data ?? res?.data ?? res;
+          setSaveResponse((prev) => ({
+            ...prev,
+            id: d?.id ?? prev?.id,
+            journal_no: d?.journal_no ?? prev?.journal_no,
+            status: "POSTED",
+          }));
+          form.setFieldValue("status", "POSTED");
+          ToastNotification({ message: "Journal voucher posted successfully", type: "success" });
+        }
+      } else {
+        const res = (await postAPICall(
+          (URL as any).journalVoucher,
+          payload,
+          API_HEADER,
+        )) as any;
+        if (res) {
+          const d = res?.data?.data ?? res?.data ?? res;
+          if (d?.id) {
+            setSaveResponse({ id: d.id, journal_no: d.journal_no ?? "", status: "POSTED" });
+            form.setFieldValue("document_id", String(d.id));
+            form.setFieldValue("journal_no", d.journal_no ?? "");
+            form.setFieldValue("status", "POSTED");
+          }
+          ToastNotification({ message: "Journal voucher posted successfully", type: "success" });
+        }
+      }
+    } catch (err: unknown) {
+      ToastNotification({
+        message: (err as { message?: string })?.message ?? "Failed to post journal voucher",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  const tableHeaders = [
+    { label: "SNo", width: "40px" },
+    // { label: "Seg", width: "68px" },
+    { label: "Job", width: "88px" },
+    // { label: "Sub Job", width: "80px" },
+    { label: "Booking No.", width: "108px" },
+    { label: "C/R/N", width: "62px" },
+    { label: "Charge", width: "148px" },
+    { label: "*Account Name", width: "168px" },
+    { label: "Subledger", width: "102px" },
+    { label: "Code", width: "76px" },
+    { label: "Key", width: "76px" },
+    { label: "*Curr", width: "88px" },
+    { label: "*ROE", width: "76px" },
+    { label: "*Amount", width: "108px" },
+    { label: "*Local Amount", width: "116px" },
+    { label: "Dr/Cr", width: "70px" },
+    { label: "Narration", width: "148px" },
+  ];
+
+  return (
+    <Box p="md" style={{ position: "relative" }}>
+      {/* Loading overlay */}
+      {isSubmitting && (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(255,255,255,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="#105476" fw={500}>
+              Saving journal voucher...
+            </Text>
+          </Stack>
+        </Box>
+      )}
+
+      <Stack gap="md">
+        {/* ── Page header ── */}
+        <Group justify="space-between" mb="xs" wrap="nowrap">
+          <Group gap="sm" align="center" wrap="nowrap">
+            <Text size="xl" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
+              Journal Voucher
+            </Text>
+            {saveResponse?.journal_no && (
+              <Badge
+                size="sm"
+                variant="light"
+                color="#105476"
+                styles={{ root: { textTransform: "none" } }}
+              >
+                {saveResponse.journal_no}
+              </Badge>
+            )}
+            {saveResponse?.status && (
+              <Badge
+                size="sm"
+                variant="light"
+                color={saveResponse.status === "POSTED" ? "green" : "orange"}
+                styles={{ root: { textTransform: "none" } }}
+              >
+                {saveResponse.status}
+              </Badge>
+            )}
+          </Group>
+          <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconArrowLeft size={16} />}
+            onClick={() => navigate(-1)}
+            styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+          >
+            Back
+          </Button>
+        </Group>
+
+        {/* ── Form ── */}
+        <Box
+          component="form"
+          onSubmit={isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)}
+          style={
+            isReadOnly
+              ? { opacity: 0.92, backgroundColor: "#f5f5f5", borderRadius: 8, padding: 16 }
+              : undefined
+          }
+        >
+          {/* ── Header Panel ── */}
+          <Box
+            mb="lg"
+            style={{
+              borderRadius: 8,
+              border: "1px solid #cce4f0",
+              overflow: "hidden",
+            }}
+          >
+            {/* Panel title bar */}
+            <Box
+              px="md"
+              py="xs"
+              style={{
+                backgroundColor: "#105476",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <Text
+                size="xs"
+                fw={600}
+                c="white"
+                style={{ fontFamily: "Inter", letterSpacing: "0.8px", textTransform: "uppercase" }}
+              >
+                Journal Voucher Details
+              </Text>
+              <Group gap="xs">
+                <Button
+                  size="xs"
+                  variant="white"
+                  color="#105476"
+                  leftSection={<IconFileText size={13} />}
+                  disabled={isReadOnly || !saveResponse?.id}
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "12px",
+                      height: "26px",
+                      paddingLeft: 10,
+                      paddingRight: 10,
+                    },
+                  }}
+                >
+                  Document
+                </Button>
+                <Button
+                  size="xs"
+                  variant="filled"
+                  color="green"
+                  leftSection={<IconSend size={13} />}
+                  disabled={isReadOnly || saveResponse?.status === "POSTED"}
+                  loading={isSubmitting}
+                  onClick={handlePost}
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "12px",
+                      height: "26px",
+                      paddingLeft: 10,
+                      paddingRight: 10,
+                    },
+                  }}
+                >
+                  Post
+                </Button>
+              </Group>
+            </Box>
+
+            <Box p="md" style={{ backgroundColor: "#f8fcff" }}>
+              {/* ── Row 1: Document ID | Journal No | Daybook | Note | JV Reversal ── */}
+              <Grid columns={12} gutter="md">
+                {/* Document ID */}
+                <Grid.Col span={2}>
+                  <TextInput
+                    label="Document ID"
+                    placeholder="Auto generated"
+                    value={form.values.document_id}
+                    readOnly
+                    styles={{
+                      ...inputStyles,
+                      input: { ...inputStyles.input, backgroundColor: "var(--mantine-color-gray-0)" },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Journal No */}
+                <Grid.Col span={2}>
+                  <TextInput
+                    label="Journal No"
+                    placeholder="Auto generated"
+                    value={form.values.journal_no}
+                    readOnly
+                    styles={{
+                      ...inputStyles,
+                      input: { ...inputStyles.input, backgroundColor: "var(--mantine-color-gray-0)" },
+                    }}
+                  />
+                </Grid.Col>
+
+                {/* Daybook */}
+                <Grid.Col span={2}>
+                  <Dropdown
+                    label="Day Book"
+                    placeholder={isDaybookLoading ? "Loading..." : "Select day book"}
+                    data={daybookOptions}
+                    value={form.values.day_book_id || null}
+                    onChange={(v) => form.setFieldValue("day_book_id", v ?? "")}
+                    searchable
+                    withAsterisk
+                    disabled={isDaybookLoading || isReadOnly}
+                    error={form.errors.day_book_id}
+                    styles={inputStyles}
+                  />
+                </Grid.Col>
+
+                {/* Note */}
+                <Grid.Col span={3}>
+                  <Textarea
+                    label="Note"
+                    placeholder="Enter note"
+                    value={form.values.note}
+                    onChange={(e) => form.setFieldValue("note", e.target.value)}
+                    readOnly={isReadOnly}
+                    rows={3}
+                    styles={textareaStyles}
+                  />
+                </Grid.Col>
+
+                {/* JV Reversal box */}
+                <Grid.Col span={3}>
+                  <Box
+                    p="sm"
+                    style={{
+                      border: "1px solid #cce4f0",
+                      borderRadius: 6,
+                      backgroundColor: "white",
+                      height: "100%",
+                    }}
+                  >
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c="#105476"
+                      mb="xs"
+                      style={{
+                        fontFamily: "Inter",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.6px",
+                        fontSize: "11px",
+                        borderBottom: "1px solid #e3f2fc",
+                        paddingBottom: 4,
+                      }}
+                    >
+                      JV Reversal
+                    </Text>
+                    <Grid columns={12} gutter="xs">
+                      <Grid.Col span={5}>
+                        <Dropdown
+                          label="Daybook"
+                          placeholder="Select"
+                          data={daybookOptions}
+                          value={form.values.reversal_daybook_id || null}
+                          onChange={(v) => form.setFieldValue("reversal_daybook_id", v ?? "")}
+                          searchable
+                          disabled={isReadOnly}
+                          styles={{
+                            input: { fontSize: "12px", fontFamily: "Inter", height: "32px" },
+                            label: { fontSize: "12px", fontFamily: "Inter", marginBottom: "3px" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={7}>
+                        <TextInput
+                          label="Journal No"
+                          placeholder="Enter"
+                          value={form.values.reversal_journal_no}
+                          onChange={(e) =>
+                            form.setFieldValue("reversal_journal_no", e.target.value)
+                          }
+                          readOnly={isReadOnly}
+                          styles={{
+                            input: { fontSize: "12px", fontFamily: "Inter", height: "32px" },
+                            label: { fontSize: "12px", fontFamily: "Inter", marginBottom: "3px" },
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={12}>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          color="#105476"
+                          disabled={isReadOnly || !form.values.reversal_journal_no}
+                          styles={{
+                            root: { fontFamily: "Inter", fontSize: "12px", height: "28px" },
+                          }}
+                        >
+                          Get
+                        </Button>
+                      </Grid.Col>
+                    </Grid>
+                  </Box>
+                </Grid.Col>
+              </Grid>
+
+              {/* ── Row 2: Journal Date | Status | File Name | Upload | Download ── */}
+              <Grid columns={12} gutter="md" mt="md">
+                {/* Journal Date */}
+                <Grid.Col span={2}>
+                  <SingleDateInput
+                    label="Journal Date"
+                    placeholder="Select date"
+                    value={form.values.journal_date}
+                    onChange={(d) => form.setFieldValue("journal_date", d)}
+                    withAsterisk
+                    readOnly={isReadOnly}
+                    error={
+                      form.errors.journal_date
+                        ? String(form.errors.journal_date)
+                        : undefined
+                    }
+                  />
+                </Grid.Col>
+
+                {/* Status */}
+                <Grid.Col span={2}>
+                  <Dropdown
+                    label="Status"
+                    placeholder="Select status"
+                    data={STATUS_OPTIONS}
+                    value={form.values.status || null}
+                    onChange={(v) => form.setFieldValue("status", v ?? "UNPOSTED")}
+                    disabled={isReadOnly}
+                    styles={inputStyles}
+                  />
+                </Grid.Col>
+
+                {/* File Name */}
+                <Grid.Col span={3}>
+                  <TextInput
+                    label="File Name"
+                    placeholder="Select file"
+                    value={form.values.file_name}
+                    onChange={(e) => form.setFieldValue("file_name", e.target.value)}
+                    readOnly={isReadOnly}
+                    styles={inputStyles}
+                  />
+                </Grid.Col>
+
+                {/* Upload / Download */}
+                <Grid.Col span={2}>
+                  <Box style={{ display: "flex", alignItems: "flex-end", height: "100%", gap: 8 }}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      color="#105476"
+                      leftSection={<IconFileUpload size={14} />}
+                      disabled={isReadOnly}
+                      styles={{ root: { fontFamily: "Inter", fontSize: "13px", flex: 1 } }}
+                    >
+                      Upload
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      color="#105476"
+                      leftSection={<IconDownload size={14} />}
+                      disabled={!form.values.file_name}
+                      styles={{ root: { fontFamily: "Inter", fontSize: "13px", flex: 1 } }}
+                    >
+                      Download
+                    </Button>
+                  </Box>
+                </Grid.Col>
+              </Grid>
+            </Box>
+          </Box>
+
+          {/* ── Cost Center / Charges Section ── */}
+          <Box
+            style={{
+              borderRadius: 8,
+              border: "1px solid #cce4f0",
+              overflow: "hidden",
+            }}
+          >
+            {/* Section title */}
+            {/* <Box
+              px="md"
+              py="xs"
+              style={{
+                backgroundColor: "#105476",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <Text
+                size="xs"
+                fw={600}
+                c="white"
+                style={{ fontFamily: "Inter", letterSpacing: "0.8px", textTransform: "uppercase" }}
+              >
+                Cost Center
+              </Text>
+              {!isReadOnly && (
+                <ActionIcon
+                  variant="white"
+                  color="#105476"
+                  size="sm"
+                  radius="sm"
+                  onClick={() =>
+                    form.insertListItem("charges", {
+                      ...emptyRow(),
+                      currency_id: defaultCurrencyId,
+                      currency_code: defaultCurrencyCode,
+                      roe: defaultCurrencyCode ? getRoe(defaultCurrencyCode) : null,
+                    })
+                  }
+                  title="Add row"
+                >
+                  <IconPlus size={14} />
+                </ActionIcon>
+              )}
+            </Box> */}
+
+            <Box p="md" style={{ overflowX: "auto", overflowY: "visible" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "separate",
+                  borderSpacing: "0 3px",
+                  tableLayout: "fixed",
+                  minWidth: 1580,
+                }}
+              >
+                <colgroup>
+                  {tableHeaders.map((h) => (
+                    <col key={h.label} style={{ width: h.width }} />
+                  ))}
+                  {!isReadOnly && <col style={{ width: "52px" }} />}
+                </colgroup>
+
+                {/* ── Header ── */}
+                <thead>
+                  <tr>
+                    {tableHeaders.map((h) => (
+                      <th
+                        key={h.label}
+                        style={{
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 2,
+                          padding: "8px 4px 8px 0",
+                          textAlign: "left",
+                          fontSize: "12px",
+                          fontFamily: "Inter",
+                          fontWeight: 700,
+                          color: "#105476",
+                          whiteSpace: "nowrap",
+                          borderBottom: "2px solid #e3f2fc",
+                          backgroundColor: "white",
+                        }}
+                      >
+                        {h.label}
+                      </th>
+                    ))}
+                    {!isReadOnly && (
+                      <th
+                        style={{
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 2,
+                          padding: "8px 4px 8px 0",
+                          textAlign: "left",
+                          fontSize: "12px",
+                          fontFamily: "Inter",
+                          fontWeight: 700,
+                          color: "#105476",
+                          borderBottom: "2px solid #e3f2fc",
+                          backgroundColor: "white",
+                        }}
+                      >
+                        Act
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+
+                {/* ── Body ── */}
+                <tbody>
+                  {form.values.charges.map((row, index) => {
+                    const isSelected = selectedRowIndex === index;
+                    return (
+                      <tr
+                        key={index}
+                        onClick={() => setSelectedRowIndex(index)}
+                        style={{
+                          backgroundColor: isSelected ? "#eef6fb" : "transparent",
+                          cursor: "pointer",
+                          transition: "background 0.15s",
+                        }}
+                      >
+                        {/* SNo */}
+                        <td style={cellStyle}>
+                          <TextInput
+                            value={String(index + 1)}
+                            readOnly
+                            styles={{
+                              input: {
+                                ...inputCell.input,
+                                backgroundColor: "var(--mantine-color-gray-0)",
+                                textAlign: "center",
+                                paddingLeft: 2,
+                                paddingRight: 2,
+                              },
+                            }}
+                          />
+                        </td>
+
+                        {/* Segment */}
+                        {/* <td style={cellStyle}>
+                          <TextInput
+                            placeholder="Seg"
+                            value={row.segment}
+                            onChange={(e) =>
+                              form.setFieldValue(`charges.${index}.segment`, e.target.value)
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td> */}
+
+                        {/* Job */}
+                        <td style={cellStyle}>
+                          <TextInput
+                            placeholder="Job"
+                            value={row.job_no}
+                            onChange={(e) =>
+                              form.setFieldValue(`charges.${index}.job_no`, e.target.value)
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Sub Job */}
+                        {/* <td style={cellStyle}>
+                          <TextInput
+                            placeholder="Sub Job"
+                            value={row.sub_job}
+                            onChange={(e) =>
+                              form.setFieldValue(`charges.${index}.sub_job`, e.target.value)
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td> */}
+
+                        {/* Booking No */}
+                        <td style={cellStyle}>
+                          <TextInput
+                            placeholder="Booking No."
+                            value={row.booking_no}
+                            onChange={(e) =>
+                              form.setFieldValue(`charges.${index}.booking_no`, e.target.value)
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* C/R/N */}
+                        <td style={cellStyle}>
+                          <Dropdown
+                            placeholder="C/R/N"
+                            data={CN_R_OPTIONS}
+                            value={row.cn_r || null}
+                            onChange={(v) =>
+                              form.setFieldValue(`charges.${index}.cn_r`, v ?? "")
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Charge */}
+                        <td style={cellStyle}>
+                          <SearchableSelect
+                            placeholder="Charge name"
+                            apiEndpoint={(URL as any).chargeMaster}
+                            searchFields={["charge_name", "charge_code"]}
+                            displayFormat={(item: Record<string, unknown>) => ({
+                              value: String(item.id ?? ""),
+                              label: String(item.charge_name ?? ""),
+                            })}
+                            value={row.charge_id != null ? String(row.charge_id) : null}
+                            displayValue={row.charge_name || undefined}
+                            onChange={(value, selectedData) => {
+                              form.setFieldValue(
+                                `charges.${index}.charge_id`,
+                                value ? Number(value) : null,
+                              );
+                              form.setFieldValue(
+                                `charges.${index}.charge_name`,
+                                selectedData?.label ?? "",
+                              );
+                            }}
+                            readOnly={isReadOnly}
+                            minSearchLength={2}
+                            dropdownZIndex={1000}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Account Code */}
+                        <td style={cellStyle}>
+                          <Dropdown
+                            placeholder="Account"
+                            data={coaOptions}
+                            value={row.account_code || null}
+                            onChange={(v) => {
+                              const code = v ?? "";
+                              form.setFieldValue(`charges.${index}.account_code`, code);
+                              const opt = coaOptions.find((o) => o.value === code) as
+                                | { sl_code?: string; account_name?: string }
+                                | undefined;
+                              form.setFieldValue(
+                                `charges.${index}.subledger_code`,
+                                opt?.sl_code ?? "",
+                              );
+                              form.setFieldValue(
+                                `charges.${index}.account_name`,
+                                opt?.account_name ?? "",
+                              );
+                            }}
+                            searchable
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Subledger */}
+                        <td style={cellStyle}>
+                          <TextInput
+                            placeholder="Subledger"
+                            value={row.subledger_code}
+                            readOnly
+                            styles={{
+                              input: {
+                                ...inputCell.input,
+                                backgroundColor: "var(--mantine-color-gray-0)",
+                              },
+                            }}
+                          />
+                        </td>
+
+                        {/* Code */}
+                        <td style={cellStyle}>
+                          <TextInput
+                            placeholder="Code"
+                            value={row.code}
+                            onChange={(e) =>
+                              form.setFieldValue(`charges.${index}.code`, e.target.value)
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Key */}
+                        <td style={cellStyle}>
+                          <TextInput
+                            placeholder="Key"
+                            value={row.key}
+                            onChange={(e) =>
+                              form.setFieldValue(`charges.${index}.key`, e.target.value)
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Currency */}
+                        <td style={cellStyle}>
+                          <Dropdown
+                            placeholder="Curr"
+                            searchable
+                            data={currencyOptions}
+                            value={row.currency_id || null}
+                            readOnly={isReadOnly}
+                            onChange={(v) => {
+                              const val = v ?? "";
+                              form.setFieldValue(`charges.${index}.currency_id`, val);
+                              const opt = currencyOptions.find((o) => o.value === val);
+                              const code = opt?.label ?? val;
+                              form.setFieldValue(`charges.${index}.currency_code`, code);
+                              const roe = code ? getRoe(code) : null;
+                              if (roe != null) {
+                                form.setFieldValue(`charges.${index}.roe`, roe);
+                                const amt = form.values.charges[index].amount;
+                                if (amt != null && amt > 0) {
+                                  form.setFieldValue(
+                                    `charges.${index}.local_amount`,
+                                    clampAmt(amt * roe),
+                                  );
+                                }
+                              }
+                            }}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* ROE */}
+                        <td style={cellStyle}>
+                          <NumberInput
+                            placeholder="ROE"
+                            min={0}
+                            hideControls
+                            readOnly={isReadOnly}
+                            value={row.roe ?? undefined}
+                            onChange={(v) => {
+                              const roe = v as number | null;
+                              form.setFieldValue(`charges.${index}.roe`, roe);
+                              const amt = form.values.charges[index].amount;
+                              if (amt != null && amt > 0 && roe != null && roe > 0) {
+                                form.setFieldValue(
+                                  `charges.${index}.local_amount`,
+                                  clampAmt(amt * roe),
+                                );
+                              }
+                            }}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Amount */}
+                        <td style={cellStyle}>
+                          <NumberInput
+                            placeholder="Amount"
+                            min={0}
+                            hideControls
+                            readOnly={isReadOnly}
+                            value={row.amount ?? undefined}
+                            onChange={(v) => {
+                              const amt = v as number | null;
+                              form.setFieldValue(`charges.${index}.amount`, amt);
+                              const roe = form.values.charges[index].roe;
+                              if (amt != null && roe != null && roe > 0) {
+                                form.setFieldValue(
+                                  `charges.${index}.local_amount`,
+                                  clampAmt(amt * roe),
+                                );
+                              }
+                            }}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Local Amount */}
+                        <td style={cellStyle}>
+                          <NumberInput
+                            placeholder="Local Amt"
+                            hideControls
+                            readOnly
+                            value={row.local_amount ?? undefined}
+                            styles={{
+                              input: {
+                                ...inputCell.input,
+                                backgroundColor: "var(--mantine-color-gray-0)",
+                              },
+                            }}
+                          />
+                        </td>
+
+                        {/* Dr/Cr */}
+                        <td style={cellStyle}>
+                          <Dropdown
+                            placeholder="Dr/Cr"
+                            data={DR_CR_OPTIONS}
+                            value={row.dr_cr || "Dr"}
+                            onChange={(v) =>
+                              form.setFieldValue(`charges.${index}.dr_cr`, v ?? "Dr")
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Narration */}
+                        <td style={cellStyle}>
+                          <TextInput
+                            placeholder="Narration"
+                            value={row.narration}
+                            onChange={(e) =>
+                              form.setFieldValue(`charges.${index}.narration`, e.target.value)
+                            }
+                            readOnly={isReadOnly}
+                            styles={inputCell}
+                          />
+                        </td>
+
+                        {/* Actions */}
+                        {!isReadOnly && (
+                          <td style={{ ...cellStyle, paddingLeft: 4 }}>
+                            <Group gap={2} wrap="nowrap">
+                              {form.values.charges.length > 1 && (
+                                <ActionIcon
+                                  variant="light"
+                                  color="red"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    form.removeListItem("charges", index);
+                                    if (selectedRowIndex >= form.values.charges.length - 1) {
+                                      setSelectedRowIndex(Math.max(0, form.values.charges.length - 2));
+                                    }
+                                  }}
+                                >
+                                  <IconTrash size={12} />
+                                </ActionIcon>
+                              )}
+                              {form.values.charges.length - 1 === index && (
+                                <ActionIcon
+                                  variant="light"
+                                  color="#105476"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    form.insertListItem("charges", {
+                                      ...emptyRow(),
+                                      currency_id: defaultCurrencyId,
+                                      currency_code: defaultCurrencyCode,
+                                      roe: defaultCurrencyCode ? getRoe(defaultCurrencyCode) : null,
+                                    });
+                                  }}
+                                >
+                                  <IconPlus size={12} />
+                                </ActionIcon>
+                              )}
+                            </Group>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* ── Totals row ── */}
+              <Divider mt="md" mb="md" color="#dee2e6" size="sm" />
+              <Grid columns={12} gutter="md">
+                <Grid.Col span={4}>
+                  <Box
+                    p="sm"
+                    style={{
+                      border: "1px solid #e3f2fc",
+                      borderRadius: 6,
+                      backgroundColor: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <Text size="xs" fw={600} c="dimmed" style={{ fontFamily: "Inter", minWidth: 70 }}>
+                      Debit Total
+                    </Text>
+                    <Text size="sm" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
+                      {totals.debit.toFixed(2)}
+                    </Text>
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <Box
+                    p="sm"
+                    style={{
+                      border: "1px solid #e3f2fc",
+                      borderRadius: 6,
+                      backgroundColor: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <Text size="xs" fw={600} c="dimmed" style={{ fontFamily: "Inter", minWidth: 75 }}>
+                      Credit Total
+                    </Text>
+                    <Text size="sm" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
+                      {totals.credit.toFixed(2)}
+                    </Text>
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <Box
+                    p="sm"
+                    style={{
+                      border: `1px solid ${Math.abs(totals.difference) > 0.005 ? "#ffe3e3" : "#e3f2fc"}`,
+                      borderRadius: 6,
+                      backgroundColor: Math.abs(totals.difference) > 0.005 ? "#fff5f5" : "white",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <Text size="xs" fw={600} c="dimmed" style={{ fontFamily: "Inter", minWidth: 70 }}>
+                      Difference
+                    </Text>
+                    <Text
+                      size="sm"
+                      fw={700}
+                      c={Math.abs(totals.difference) > 0.005 ? "red" : "#105476"}
+                      style={{ fontFamily: "Inter" }}
+                    >
+                      {totals.difference.toFixed(2)}
+                    </Text>
+                  </Box>
+                </Grid.Col>
+              </Grid>
+
+              {/* ── Account Name & Narration (selected row display) ── */}
+              <Divider mt="md" mb="md" color="#dee2e6" size="sm" />
+              <Grid columns={12} gutter="md">
+                <Grid.Col span={5}>
+                  <TextInput
+                    label="Account Name"
+                    value={selectedAccountName}
+                    readOnly
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                        backgroundColor: "var(--mantine-color-gray-0)",
+                        color: "#105476",
+                        fontWeight: 500,
+                      },
+                      label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={7}>
+                  <TextInput
+                    label="Narration"
+                    value={selectedNarration}
+                    readOnly
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                        height: "36px",
+                        backgroundColor: "var(--mantine-color-gray-0)",
+                      },
+                      label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
+                    }}
+                  />
+                </Grid.Col>
+              </Grid>
+            </Box>
+          </Box>
+
+          {/* ── Form actions ── */}
+          <Group justify="flex-end" mt="xl" gap="sm">
+            <Button
+              variant="outline"
+              color="#105476"
+              onClick={() => navigate(-1)}
+              styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+            >
+              Cancel
+            </Button>
+            {!isReadOnly && (
+              <Button
+                type="submit"
+                color="#105476"
+                rightSection={<IconChevronRight size={16} />}
+                loading={isSubmitting}
+                styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+              >
+                {isUpdate ? "Update Journal Voucher" : "Save Journal Voucher"}
+              </Button>
+            )}
+          </Group>
+        </Box>
+      </Stack>
+    </Box>
+  );
+}
+
+export default JournalVoucher;

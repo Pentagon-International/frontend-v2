@@ -2540,6 +2540,7 @@ function ExportJobCreate() {
 
                         navigate("/SeaExport/export-job/invoice", {
                           state: {
+                            serviceType: ["FCL", "LCL"],
                             hawbDetails: housingDetailsForInvoice,
                             housingDetails: housingDetailsForInvoice,
                             is_agent: true,
@@ -3788,6 +3789,7 @@ function ExportJobCreate() {
                     }));
                   navigate("/payment-request/create", {
                     state: {
+                      serviceType: ["FCL", "LCL"],
                       chargesFromEstimates:
                         chargesFromEstimates.length > 0
                           ? chargesFromEstimates
@@ -3806,7 +3808,7 @@ function ExportJobCreate() {
                 Create PRQ
               </Button>
             </Group>
-            <EstimatesSection serviceType="SEA" form={estimatesForm} readOnly={isReadOnly} />
+            <EstimatesSection serviceType={["FCL", "LCL"]} form={estimatesForm} readOnly={isReadOnly} />
           </Box>
         </Tabs.Panel>
 
