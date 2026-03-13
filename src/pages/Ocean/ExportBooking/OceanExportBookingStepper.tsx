@@ -1476,7 +1476,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   // Salespersons data query - must be after form initialization
   const { data: rawSalespersonsData = [] } = useQuery({
     queryKey: ["salespersons", form.values.customer_code || ""],
-    queryFn: () => fetchSalespersons(form.values.customer_code || ""),
+    queryFn: () => fetchSalespersons(""),
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -1679,6 +1679,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     }
   }, 500);
 
+  const prevRoutedRef = useRef<string | null>(null);
+  const customerServiceNameInitializedRef = useRef(false);
+  const routedByInitializedRef = useRef(false);
+  const prevCustomerCodeRef = useRef<string>("");
   const populatedJobIdRef = useRef<number | null>(null);
 
   // Effect to load edit data when jobData is available (runs ONCE per job)
@@ -2098,58 +2102,66 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     }
   }, [isEditMode, initialData, jobData]);
 
-  // Auto-set routed_by when routed is "self" and user data is available
+  // Set customer_service_name to logged-in user once in create mode (never when routed_by is selected)
   useEffect(() => {
-    if (
-      form.values.routed === "Self" &&
-      user?.full_name &&
-      !form.values.routed_by
-    ) {
-      form.setFieldValue("routed_by", user.full_name);
-    }
+    if (isEditMode || !user?.full_name || customerServiceNameInitializedRef.current) return;
+    if (form.values.customer_service_name !== "") return;
+    form.setFieldValue("customer_service_name", user.full_name);
+    customerServiceNameInitializedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routed, user?.full_name]);
+  }, [isEditMode, user?.full_name, form.values.customer_service_name]);
 
-  // Auto-set customer_service_name in self mode
+  // Reset routedBy initial flag when routed or customer changes so we can set default again (dropdown stays changeable)
   useEffect(() => {
-    if (form.values.routed !== "Self") return;
-
-    // For create-from-quotation flow, default customer_service_name to logged-in user
-    if (
-      isFromQuotationFlow &&
-      user?.full_name &&
-      !form.values.customer_service_name
-    ) {
-      form.setFieldValue("customer_service_name", user.full_name);
+    if (form.values.routed !== "Self") {
+      routedByInitializedRef.current = false;
       return;
     }
+    if (prevCustomerCodeRef.current !== form.values.customer_code) {
+      prevCustomerCodeRef.current = form.values.customer_code;
+      routedByInitializedRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.routed, form.values.customer_code]);
 
-    // Fallback: derive customer_service_name from selected salesperson
-    if (form.values.routed_by && salespersonsData.length > 0) {
-      const selectedSalesperson = salespersonsData.find(
-        (person) => person.value === form.values.routed_by,
-      );
-      if (selectedSalesperson?.customer_service) {
-        form.setFieldValue(
-          "customer_service_name",
-          selectedSalesperson.customer_service,
-        );
+  // Set routed_by initial only when needed: customer selected → customer's salesperson (first); else → logged-in user. Never overwrite user's selection.
+  useEffect(() => {
+    if (isEditMode || form.values.routed !== "Self") return;
+    if (routedByInitializedRef.current) return;
+
+    if (salespersonsData.length > 0) {
+      const current = form.values.routed_by;
+      const inList = salespersonsData.some((o) => o.value === current);
+      if (!current || !inList) {
+        form.setFieldValue("routed_by", user?.full_name || salespersonsData[0].value);
       }
+      routedByInitializedRef.current = true; // mark initialized so dropdown stays changeable
+    } else {
+      if (user?.full_name && !form.values.routed_by) {
+        form.setFieldValue("routed_by", user.full_name);
+      }
+      routedByInitializedRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     form.values.routed,
     form.values.routed_by,
-    form.values.customer_service_name,
+    form.values.customer_code,
     salespersonsData,
+    user?.full_name,
   ]);
 
-  // Clear routed_by and customer_service_name when routed changes to "Agent"
+  // Clear routed_by and customer_service_name when routed changes to "Agent" (but not on initial load)
   useEffect(() => {
-    if (form.values.routed === "Agent") {
+    if (
+      prevRoutedRef.current !== null &&
+      prevRoutedRef.current !== form.values.routed &&
+      form.values.routed === "Agent"
+    ) {
       form.setFieldValue("routed_by", "");
-      form.setFieldValue("customer_service_name", "");
+      routedByInitializedRef.current = false;
     }
+    prevRoutedRef.current = form.values.routed;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.routed]);
 
@@ -2560,6 +2572,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     updateEventRow(index, "eventType", value ?? null)
                   }
                   clearable
+                  searchable
                 />
               </Grid.Col>
               <Grid.Col span={5}>
@@ -2834,8 +2847,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         onClose={() => setTriggerModalOpen(false)}
         title="Trigger Update"
         centered
-        size="xl"
-        styles={{ content: { maxWidth: 640 } }}
+        size="70vw"
+        // styles={{ content: { maxWidth: 640 } }}
       >
         <Stack gap="md">
           {form.values.trigger_modal_rows.length > 0 && (
@@ -2850,10 +2863,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Grid.Col span={3}>
                 <RequiredLabel label="Code" required={false} />
               </Grid.Col>
-              <Grid.Col span={4}>
+              <Grid.Col span={5}>
                 <RequiredLabel label="Description" required={false} />
               </Grid.Col>
-              <Grid.Col span={2}>
+              <Grid.Col span={1}>
                 <RequiredLabel label="Actions" required={false} />
               </Grid.Col>
             </Grid>
@@ -2910,7 +2923,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   clearable
                 />
               </Grid.Col>
-              <Grid.Col span={4}>
+              <Grid.Col span={5}>
                 <FormTextInput
                   placeholder="Enter description"
                   value={row.description}
@@ -2920,7 +2933,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 />
               </Grid.Col>
               <Grid.Col
-                span={2}
+                span={1}
                 style={{ display: "flex", gap: 4, marginBottom: 4 }}
               >
                 {form.values.trigger_modal_rows.length > 1 && (
@@ -3328,18 +3341,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         value={form.values.routed_by}
                         onChange={(value) => {
                           form.setFieldValue("routed_by", value || "");
-                          // Auto-set customer_service_name when salesperson is selected
-                          if (value) {
-                            const selectedSalesperson = salespersonsData.find(
-                              (person) => person.value === value,
-                            );
-                            if (selectedSalesperson?.customer_service) {
-                              form.setFieldValue(
-                                "customer_service_name",
-                                selectedSalesperson.customer_service,
-                              );
-                            }
-                          }
                         }}
                         error={form.errors.routed_by}
                       />
