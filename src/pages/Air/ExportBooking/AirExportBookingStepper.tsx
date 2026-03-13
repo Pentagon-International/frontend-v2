@@ -3966,6 +3966,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Shipper E-mail ID"
                     placeholder="Enter email address"
+                    format = "normal"
                     {...form.getInputProps("shipper_email")}
                   />
                 </Grid.Col>
@@ -4090,6 +4091,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Consignee Email Id"
                     placeholder="Enter email address"
+                    format = "normal"
                     {...form.getInputProps("consignee_email")}
                   />
                 </Grid.Col>
@@ -4185,6 +4187,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Forwarder Email Id"
                     placeholder="Enter email address"
+                    format = "normal"
                     {...form.getInputProps("forwarder_email")}
                   />
                 </Grid.Col>
@@ -4300,6 +4303,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Destination Agent Email Id"
                     placeholder="Enter email address"
+                    format = "normal"
                     {...form.getInputProps("destination_agent_email")}
                   />
                 </Grid.Col>
@@ -4509,6 +4513,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Notify Customer Email Id"
                     placeholder="Enter email address"
+                    format = "normal"
                     {...form.getInputProps("notify_customer_email")}
                   />
                 </Grid.Col>
@@ -5044,6 +5049,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Transporter Email Id"
                     placeholder="Enter transporter email"
                     type="email"
+                    format = "normal"
                     {...form.getInputProps("transporter_email")}
                   />
                 </Grid.Col>
