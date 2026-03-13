@@ -1757,6 +1757,14 @@ function HouseCreate() {
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
+      shipper_gst_id:
+        (v as { shipper_gst_id?: string }).shipper_gst_id ??
+        (
+          location.state?.job as {
+            housing_details?: Array<{ shipper_gst_id?: string | null }>;
+          }
+        )?.housing_details?.[editIndex ?? 0]?.shipper_gst_id ??
+        null,
       shipper_state_id: v.shipper_state_id
         ? Number(v.shipper_state_id)
         : ((editData as { shipper_state_id?: number } | undefined)
@@ -1770,6 +1778,14 @@ function HouseCreate() {
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: v.consignee_name,
+      consignee_gst_id:
+        (v as { consignee_gst_id?: string }).consignee_gst_id ??
+        (
+          location.state?.job as {
+            housing_details?: Array<{ consignee_gst_id?: string | null }>;
+          }
+        )?.housing_details?.[editIndex ?? 0]?.consignee_gst_id ??
+        null,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
       notify_customer1_name: v.notify_customer1_name,

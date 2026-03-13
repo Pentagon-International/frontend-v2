@@ -2017,6 +2017,15 @@ function HouseCreate() {
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
+      // GST: prefer form value if present, else fall back to job.housing_details[editIndex]
+      shipper_gst_id:
+        (v as { shipper_gst_id?: string }).shipper_gst_id ??
+        (
+          location.state?.job as {
+            housing_details?: Array<{ shipper_gst_id?: string | null }>;
+          }
+        )?.housing_details?.[editIndex ?? 0]?.shipper_gst_id ??
+        null,
       shipper_state_id: v.shipper_state_id
         ? Number(v.shipper_state_id)
         : ((editData as { shipper_state_id?: number } | undefined)
@@ -2033,6 +2042,14 @@ function HouseCreate() {
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
+      consignee_gst_id:
+        (v as { consignee_gst_id?: string }).consignee_gst_id ??
+        (
+          location.state?.job as {
+            housing_details?: Array<{ consignee_gst_id?: string | null }>;
+          }
+        )?.housing_details?.[editIndex ?? 0]?.consignee_gst_id ??
+        null,
       notify_customer1_name: v.notify_customer1_name,
       notify_customer1_address: v.notify_customer1_address,
       notify_customer1_email: v.notify_customer1_email,

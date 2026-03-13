@@ -811,10 +811,22 @@ function InvoiceCreate() {
             let consigneeCode = String(
               (firstHawb as { consignee_code?: string }).consignee_code || "",
             ).trim();
-            if (!consigneeCode && job && Array.isArray((job as { housing_details?: Array<{ consignee_code?: string }> }).housing_details)) {
-              const jobHousing = (job as {
-                housing_details?: Array<{ consignee_code?: string }>;
-              }).housing_details;
+            if (
+              !consigneeCode &&
+              job &&
+              Array.isArray(
+                (
+                  job as {
+                    housing_details?: Array<{ consignee_code?: string }>;
+                  }
+                ).housing_details,
+              )
+            ) {
+              const jobHousing = (
+                job as {
+                  housing_details?: Array<{ consignee_code?: string }>;
+                }
+              ).housing_details;
               const fromJob = jobHousing?.[0]?.consignee_code;
               if (fromJob) {
                 consigneeCode = String(fromJob).trim();
@@ -851,6 +863,35 @@ function InvoiceCreate() {
                 "[InvoiceCreate] Consignee mapping - set billToDisplayName",
               );
             }
+
+            // Populate GSTN from consignee GST, if available
+            const consigneeGstRaw = (
+              firstHawb as { consignee_gst_id?: string | null }
+            ).consignee_gst_id;
+            if (consigneeGstRaw) {
+              form.setFieldValue("gstn", String(consigneeGstRaw));
+            } else if (
+              job &&
+              Array.isArray(
+                (
+                  job as {
+                    housing_details?: Array<{
+                      consignee_gst_id?: string | null;
+                    }>;
+                  }
+                ).housing_details,
+              )
+            ) {
+              const jobHousing = (
+                job as {
+                  housing_details?: Array<{ consignee_gst_id?: string | null }>;
+                }
+              ).housing_details;
+              const fromJobGst = jobHousing?.[0]?.consignee_gst_id;
+              if (fromJobGst) {
+                form.setFieldValue("gstn", String(fromJobGst));
+              }
+            }
           } else {
             // Default customer invoice: Bill To / address from shipper (export / non-consignee flows)
             if (firstHawb.shipper_address) {
@@ -886,6 +927,33 @@ function InvoiceCreate() {
                     (firstHawb as { bill_to_name?: string }).bill_to_name,
                 ),
               );
+            }
+
+            // Populate GSTN from shipper GST, if available
+            const shipperGstRaw = (
+              firstHawb as { shipper_gst_id?: string | null }
+            ).shipper_gst_id;
+            if (shipperGstRaw) {
+              form.setFieldValue("gstn", String(shipperGstRaw));
+            } else if (
+              job &&
+              Array.isArray(
+                (
+                  job as {
+                    housing_details?: Array<{ shipper_gst_id?: string | null }>;
+                  }
+                ).housing_details,
+              )
+            ) {
+              const jobHousing = (
+                job as {
+                  housing_details?: Array<{ shipper_gst_id?: string | null }>;
+                }
+              ).housing_details;
+              const fromJobGst = jobHousing?.[0]?.shipper_gst_id;
+              if (fromJobGst) {
+                form.setFieldValue("gstn", String(fromJobGst));
+              }
             }
           }
         }
@@ -1654,17 +1722,18 @@ function InvoiceCreate() {
     form.setFieldValue("bill_to", value ?? "");
     setBillToDisplayName(selectedData?.label ?? null);
 
-    // When Bill To is removed/cleared, clear state and address-related fields and stop
+    // When Bill To is removed/cleared, clear state, address and GSTN and stop
     const isCleared =
       value == null || (typeof value === "string" && value.trim() === "");
     if (isCleared) {
       setAddressOptions([]);
       form.setFieldValue("address", "");
       form.setFieldValue("state", "");
+      form.setFieldValue("gstn", "");
       return;
     }
 
-    // Customer selected from search: populate address options and state from customer response (addresses_data)
+    // Customer selected from search: populate address options, state and GSTN from customer response (addresses_data)
     if (
       originalData &&
       (originalData as Record<string, unknown>).addresses_data
@@ -1674,28 +1743,43 @@ function InvoiceCreate() {
         id: number;
         address: string;
         state_id?: number;
+        address_type?: string | null;
+        gst_id?: string | null;
       }>;
-      const addressOptions = (addressesData || []).map(
-        (addr: { id: number; address: string }) => ({
-          value: String(addr.id),
-          label: addr.address,
-        }),
-      );
+      const addressOptions = (addressesData || []).map((addr) => ({
+        value: String(addr.id),
+        label: addr.address,
+      }));
 
       setAddressOptions(addressOptions);
       form.setFieldValue("address", "");
 
-      // Set state_id from first address that has state_id (e.g. primary) in customer response
-      const addrWithState = (addressesData || []).find(
-        (a: { state_id?: number }) => a.state_id != null,
+      // Prefer PRIMARY address for state and GSTN; if none, fall back to first address that has each field
+      const primaryAddress = (addressesData || []).find(
+        (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
       );
-      if (addrWithState?.state_id != null) {
-        form.setFieldValue("state", String(addrWithState.state_id));
+
+      const addrForState =
+        primaryAddress ||
+        (addressesData || []).find((a) => a.state_id != null);
+      if (addrForState?.state_id != null) {
+        form.setFieldValue("state", String(addrForState.state_id));
+      }
+
+      const addrForGst =
+        primaryAddress ||
+        (addressesData || []).find(
+          (a) => (a as { gst_id?: string | null }).gst_id != null,
+        );
+      const gstFromAddress =
+        (addrForGst as { gst_id?: string | null } | undefined)?.gst_id;
+      if (gstFromAddress) {
+        form.setFieldValue("gstn", String(gstFromAddress));
       }
     } else {
       setAddressOptions([]);
       form.setFieldValue("address", "");
-      // Do not clear state here — value is set (e.g. from house) but we may not have originalData
+      // Do not clear state or GSTN here — they may have been set from house data
     }
   };
 
