@@ -102,6 +102,15 @@ const fetchUnitMaster = async () => {
   }
 };
 
+const fetchStateMaster = async () => {
+  try {
+    const response = await getAPICall(`${URL.state}`, API_HEADER);
+    return (response as { data?: unknown[] })?.data ?? response ?? [];
+  } catch {
+    return [];
+  }
+};
+
 const fetchChartOfAccounts = async () => {
   try {
     const response = await postAPICall(
@@ -436,6 +445,21 @@ function PaymentRequest() {
     queryFn: fetchChartOfAccounts,
     staleTime: Infinity,
   });
+
+  const { data: stateData = [], isLoading: isStateLoading } = useQuery({
+    queryKey: ["stateMaster"],
+    queryFn: fetchStateMaster,
+    staleTime: Infinity,
+  });
+
+  const stateOptions = useMemo(() => {
+    const data = stateData as { id?: number; state_name?: string; name?: string }[];
+    if (!Array.isArray(data)) return [];
+    return data.map((item) => ({
+      value: String(item.id ?? ""),
+      label: item.state_name ?? item.name ?? "",
+    }));
+  }, [stateData]);
 
   // Fetch payment request data when opening edit/view URL (/edit/:id or /view/:id)
   const { data: requestFetchRes, isFetching: requestFetchLoading } = useQuery({
@@ -1466,29 +1490,18 @@ function PaymentRequest() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <Box
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "flex-end",
-                  height: "100%",
-                  paddingBottom: "6px",
-                }}
-              >
-                <Checkbox
-                  label="CINV"
-                  checked={form.values.cinv}
-                  onChange={(e) =>
-                    form.setFieldValue("cinv", e.currentTarget.checked)
-                  }
-                  disabled={isReadOnly}
-                  color="#105476"
-                  styles={{
-                    label: { fontSize: "13px", fontFamily: "Inter" },
-                  }}
-                />
-              </Box>
+              <TextInput
+                label="Actual Invoice No."
+                placeholder="Enter actual invoice no"
+                value={form.values.actual_invoice_no}
+                onChange={(e) =>
+                  form.setFieldValue("actual_invoice_no", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
             </Grid.Col>
+
 
             {/* ── Row 2 (6+6): Proforma Invoice No | Actual Invoice No ── */}
             {/* <Grid.Col span={6}>
@@ -1504,18 +1517,7 @@ function PaymentRequest() {
               />
             </Grid.Col> */}
 
-            <Grid.Col span={6}>
-              <TextInput
-                label="Actual Invoice No."
-                placeholder="Enter actual invoice no"
-                value={form.values.actual_invoice_no}
-                onChange={(e) =>
-                  form.setFieldValue("actual_invoice_no", e.target.value)
-                }
-                readOnly={isReadOnly}
-                styles={inputStyles}
-              />
-            </Grid.Col>
+
 
             {/* ── Row 3 (2+2+2+2+4): Account Code | Subledger Code | Currency | Amount | CRJ Date ── */}
             <Grid.Col span={2}>
@@ -1587,7 +1589,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={4}>
+            <Grid.Col span={2}>
               <SingleDateInput
                 label="CRJ Date"
                 placeholder="Select CRJ date"
@@ -1596,6 +1598,34 @@ function PaymentRequest() {
                 readOnly={isReadOnly}
               />
             </Grid.Col>
+
+            <Grid.Col span={2}>
+              <Box
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "flex-end",
+                  height: "100%",
+                  paddingBottom: "6px",
+                  alignItems: "center",
+                }}
+              >
+                <Checkbox
+                  label="CINV"
+                  checked={form.values.cinv}
+                  onChange={(e) =>
+                    form.setFieldValue("cinv", e.currentTarget.checked)
+                  }
+                  disabled={isReadOnly}
+                  color="#105476"
+                  styles={{
+                    label: { fontSize: "13px", fontFamily: "Inter" },
+                  }}
+                />
+              </Box>
+            </Grid.Col>
+
+
 
             {/* ── Row 4 (2+4+2+2+2): Paid To Type | Paid To | Not Over | Approved | (spacer) ── */}
             <Grid.Col span={2}>
@@ -1612,7 +1642,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={4}>
+            <Grid.Col span={3}>
               <Autocomplete
                 label="Paid To"
                 placeholder="Type vendor / supplier name"
@@ -1696,23 +1726,21 @@ function PaymentRequest() {
               />
             </Grid.Col> */}
 
-            <Grid.Col span={2} />
-
             {/* ── Row 5 (6+6): State Code | TDS Section Code ── */}
-            <Grid.Col span={6}>
-              <TextInput
-                label="State Code"
-                placeholder="Enter state code"
-                value={form.values.state_code_1}
-                onChange={(e) =>
-                  form.setFieldValue("state_code_1", e.target.value)
-                }
-                readOnly={isReadOnly}
+            <Grid.Col span={2}>
+              <Dropdown
+                label="State"
+                placeholder={isStateLoading ? "Loading..." : "Select state"}
+                data={stateOptions}
+                value={form.values.state_code_1 || null}
+                onChange={(v) => form.setFieldValue("state_code_1", v ?? "")}
+                searchable
+                disabled={isStateLoading || isReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
 
-            <Grid.Col span={6}>
+            <Grid.Col span={3}>
               <TextInput
                 label="TDS Section Code"
                 placeholder="Enter TDS section code"
