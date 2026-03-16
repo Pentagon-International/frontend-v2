@@ -2990,7 +2990,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         }}
       >
         <Box style={{ padding: "24px 24px 32px" }}>
-          <Group justify="flex-end" mb="md">
+          <Group justify="space-between" mb="md">
+            <Text size="md" fw={600} c="#105476">
+              {active === 0 ? "Export Booking" : active === 1 ? "Party Details" : active === 2 ? "Cargo Details" : active === 3 ? "Pickup & Delivery Details" : "Charges & Summary"}
+            </Text>
             <Menu shadow="md" width={220} position="bottom-end">
               <Menu.Target>
                 <ActionIcon
@@ -3194,9 +3197,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {active === 0 && (
             <Box>
               {/* Export Shipment Section */}
-              <Text size="md" fw={600} mb="lg" c="#105476">
-                Export Booking
-              </Text>
               <Grid mb="lg">
                 <Grid.Col span={4}>
                   <SearchableSelect
@@ -3875,10 +3875,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {/* Step 2: Party Details */}
           {active === 1 && (
             <Box>
-              <Text size="md" fw={600} mb="lg" c="#105476">
-                Party Details
-              </Text>
-
               {/* Shipper Details */}
               <Text size="sm" fw={500} mb="sm" c="#105476">
                 Shipper Details
@@ -4634,10 +4630,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {/* Step 3: Cargo Details */}
           {active === 2 && (
             <Box>
-              <Text size="md" fw={600} mb="lg" c="#105476">
-                Cargo Details
-              </Text>
-
               {/* Common Fields */}
               <Grid mb="xl">
                 <Grid.Col span={12}>
@@ -4935,9 +4927,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {/* Step 4: Pickup/Delivery */}
           {active === 3 && (
             <Box>
-              <Text size="md" fw={600} mb="lg" c="#105476">
-                Pickup/Delivery Details
-              </Text>
               <Text size="sm" fw={500} mb="sm" c="#105476">
                 Pickup Details
               </Text>
@@ -5210,10 +5199,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {/* Step 5: Rate Details */}
           {active === 4 && (
             <Box>
-              <Text size="md" fw={600} mb="md" c="#105476">
-                Rate Details
-              </Text>
-
               {/* Quotation/Contract No - Separate common field */}
               <Grid mb="md">
                 <Grid.Col span={4}>

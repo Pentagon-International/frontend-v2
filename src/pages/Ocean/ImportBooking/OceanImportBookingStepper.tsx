@@ -19,6 +19,7 @@ import {
   Modal,
   Select,
   ActionIcon,
+  Center,
 } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import { useForm } from "@mantine/form";
@@ -34,6 +35,8 @@ import {
   IconCalendarEvent,
   IconFileDescription,
   IconBellRinging,
+  IconCertificate2,
+  IconPrinter,
 } from "@tabler/icons-react";
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
@@ -1095,7 +1098,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       // Import Shipment fields
       customer_code: "",
       customer_name: "",
-      service: "",
+      service: "FCL",
       date: new Date(),
       origin_code: "",
       origin_name: "",
@@ -1224,6 +1227,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
+  const [freightCertificatePreviewOpen, setFreightCertificatePreviewOpen] =
+    useState(false);
+  const [freightCertificatePdfBlob, setFreightCertificatePdfBlob] = useState<
+    string | null
+  >(null);
 
   const addEventRow = () => {
     form.insertListItem("event_modal_rows", {
@@ -1507,6 +1515,66 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
     form.setFieldValue("trigger_updates", toAdd);
     setTriggerModalOpen(false);
+  };
+
+  // Freight Certificate PDF (edit mode only)
+  const handleFreightCertificatePreview = async () => {
+    const id =
+      jobData?.id != null
+        ? typeof jobData.id === "number"
+          ? jobData.id
+          : Number(jobData.id)
+        : null;
+    if (!id) return;
+    setFreightCertificatePreviewOpen(true);
+    setFreightCertificatePdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}${URL.customerServiceShipment}${id}/freight-certificate-pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setFreightCertificatePdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching freight certificate PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load freight certificate PDF",
+      });
+      setFreightCertificatePreviewOpen(false);
+    }
+  };
+
+  const handleFreightCertificateClosePreview = () => {
+    setFreightCertificatePreviewOpen(false);
+    if (freightCertificatePdfBlob) {
+      window.URL.revokeObjectURL(freightCertificatePdfBlob);
+    }
+    setFreightCertificatePdfBlob(null);
+  };
+
+  const handleFreightCertificateDownloadPDF = () => {
+    if (freightCertificatePdfBlob) {
+      const link = document.createElement("a");
+      link.href = freightCertificatePdfBlob;
+      link.download = `FreightCertificate-${jobData?.id ?? "shipment"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleFreightCertificatePrint = () => {
+    if (freightCertificatePdfBlob) {
+      const win = window.open(freightCertificatePdfBlob, "_blank");
+      if (win) win.print();
+    }
   };
 
   // Salespersons data query - must be after form initialization
@@ -3057,6 +3125,80 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         </Stack>
       </Modal>
 
+      {/* Freight Certificate PDF Preview Modal (edit mode only) */}
+      <Modal
+        opened={freightCertificatePreviewOpen}
+        onClose={handleFreightCertificateClosePreview}
+        title="Freight Certificate"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {freightCertificatePdfBlob ? (
+            <>
+              <iframe
+                src={freightCertificatePdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Freight Certificate Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleFreightCertificateClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleFreightCertificatePrint}
+                  leftSection={<IconPrinter size={16} />}
+                >
+                  Print
+                </Button>
+                <Button
+                  onClick={handleFreightCertificateDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
+
       <Box
         style={{
           flex: 1,
@@ -3067,7 +3209,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       >
         <Box style={{ padding: "24px 24px 32px" }}>
           {/* Action menu - available on all steps */}
-          <Group justify="flex-end" mb="md">
+          <Group justify="space-between" mb="md">
+            <Text size="md" fw={600} c="#105476">
+              {active === 0 ? "Import Booking" : active === 1 ? "Party Details" : active === 2 ? "Cargo Details" : active === 3 ? "Pickup & Delivery Details" : "Charges & Summary"}
+            </Text>
             <Menu shadow="md" width={220} position="bottom-end">
               <Menu.Target>
                 <ActionIcon
@@ -3206,17 +3351,31 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 >
                   Trigger Update
                 </Menu.Item>
+                {isEditMode && jobData?.id != null && (
+                  <Menu.Item
+                    leftSection={<IconCertificate2 size={16} />}
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": { backgroundColor: "#F8F9FA" },
+                      },
+                    }}
+                    onClick={handleFreightCertificatePreview}
+                  >
+                    Freight Certificate
+                  </Menu.Item>
+                )}
               </Menu.Dropdown>
             </Menu>
           </Group>
           {/* Step 1: Import Booking */}
           {active === 0 && (
             <Box>
-              <Group justify="space-between" mb="lg">
-                <Text size="md" fw={600} c="#105476">
-                  Import Booking
-                </Text>
-              </Group>
               <Grid mb="lg">
                 <Grid.Col span={4}>
                   <SearchableSelect
@@ -3928,9 +4087,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           {/* Step 2: Party Details */}
           {active === 1 && (
             <Box>
-              <Text size="md" fw={600} mb="lg" c="#105476">
-                Party Details
-              </Text>
               {/* Shipper Details */}
               <Text size="sm" fw={500} mb="sm" c="#105476">
                 Shipper Details
@@ -4686,10 +4842,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           {/* Step 3: Cargo Details */}
           {active === 2 && (
             <Box>
-              <Text size="md" fw={600} mb="lg" c="#105476">
-                Cargo Details
-              </Text>
-
               {/* Common Fields */}
               <Grid mb="xl">
                 <Grid.Col span={12}>
@@ -5027,9 +5179,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           {active === 3 && (
             <Box>
               {/* Pickup Details Section */}
-              <Text size="md" fw={600} mb="lg" c="#105476">
-                Pickup/Delivery Details
-              </Text>
               <Text size="sm" fw={500} mb="sm" c="#105476">
                 Pickup Details
               </Text>
@@ -5278,10 +5427,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           {/* Step 5: Rate Details */}
           {active === 4 && (
             <Box>
-              <Text size="md" fw={600} mb="md" c="#105476">
-                Rate Details
-              </Text>
-
               {/* Quotation/Contract No - Separate common field */}
               <Grid mb="md">
                 <Grid.Col span={4}>
