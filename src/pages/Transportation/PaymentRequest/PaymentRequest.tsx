@@ -9,6 +9,7 @@ import {
   Group,
   Loader,
   Menu,
+  Modal,
   NumberInput,
   Stack,
   Text,
@@ -16,6 +17,8 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { useDisclosure } from "@mantine/hooks";
+import { Dropzone } from "@mantine/dropzone";
 import {
   IconArrowLeft,
   IconCheck,
@@ -23,9 +26,12 @@ import {
   IconChevronRight,
   IconChevronUp,
   IconDotsVertical,
+  IconDownload,
   IconFileInvoice,
   IconPlus,
   IconTrash,
+  IconUpload,
+  IconX,
 } from "@tabler/icons-react";
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
@@ -387,6 +393,30 @@ function PaymentRequest( serviceType: string  ) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sacCodeLoadingByIndex, setSacCodeLoadingByIndex] = useState<Record<number, boolean>>({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+  const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
+  const [documentsModalOpened, { open: openDocumentsModal, close: closeDocumentsModal }] =
+    useDisclosure(false);
+  const [supportingDocuments, setSupportingDocuments] = useState<
+    Array<{
+      name: string;
+      file: File | null;
+      document_url?: string;
+      document_id?: number;
+      original_document_name?: string;
+    }>
+  >([]);
+
+  const downloadFile = (url: string, fileName: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   const [paymentRequestDataFromApi, setPaymentRequestDataFromApi] =
     useState<PaymentRequestFromApi | null>(null);
   const [chargeErrors, setChargeErrors] = useState<
@@ -2459,7 +2489,7 @@ function PaymentRequest( serviceType: string  ) {
           </Box>
 
           {/* ── Form action buttons ── */}
-          <Group justify="flex-end" mt="xl">
+          <Group justify="space-between" mt="xl">
             <Button
               variant="outline"
               color="#105476"
@@ -2467,33 +2497,294 @@ function PaymentRequest( serviceType: string  ) {
             >
               Cancel
             </Button>
-            {!isReadOnly && (
-              <>
-                {isEditMode && (
-                  <Button
-                    color="green"
-                    leftSection={<IconCheck size={16} />}
-                    loading={isSubmitting}
-                    onClick={handleApprove}
-                  >
-                    Approve
-                  </Button>
-                )}
+            <Group gap="sm">
+              {!isReadOnly && (
                 <Button
-                  type="submit"
+                  variant="outline"
                   color="#105476"
-                  rightSection={<IconChevronRight size={16} />}
-                  loading={isSubmitting}
+                  onClick={() => {
+                    if (supportingDocuments.length === 0) {
+                      setSupportingDocuments([{ name: "", file: null }]);
+                    }
+                    const newErrors: { [key: number]: string } = {};
+                    supportingDocuments.forEach((doc, idx) => {
+                      if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                        newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                      }
+                    });
+                    setFileErrors(newErrors);
+                    openDocumentsModal();
+                  }}
+                  disabled={isSubmitting}
                 >
-                  {saveResponse?.id
-                    ? "Update Payment Request"
-                    : "Save Payment Request"}
+                  Attach Supporting Documents
                 </Button>
-              </>
-            )}
+              )}
+              {!isReadOnly && (
+                <>
+                  {isEditMode && (
+                    <Button
+                      color="green"
+                      leftSection={<IconCheck size={16} />}
+                      loading={isSubmitting}
+                      onClick={handleApprove}
+                    >
+                      Approve
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    color="#105476"
+                    rightSection={<IconChevronRight size={16} />}
+                    loading={isSubmitting}
+                  >
+                    {saveResponse?.id
+                      ? "Update Payment Request"
+                      : "Save Payment Request"}
+                  </Button>
+                </>
+              )}
+            </Group>
           </Group>
         </Box>
       </Stack>
+
+      {/* ── Supporting Documents Modal ── */}
+      <Modal
+        opened={documentsModalOpened}
+        onClose={closeDocumentsModal}
+        title="Attach Supporting Documents"
+        size="xl"
+        centered
+        style={{ fontFamily: "Inter" }}
+      >
+        <Stack gap="xs">
+          {supportingDocuments.map((doc, index) => (
+            <Grid key={index} columns={12} gutter="sm" align="flex-end">
+              <Grid.Col span={5.5}>
+                <TextInput
+                  label="Document Name"
+                  placeholder="Enter document name"
+                  value={doc.name}
+                  onChange={(e) => {
+                    const updated = [...supportingDocuments];
+                    updated[index] = { ...updated[index], name: e.target.value };
+                    setSupportingDocuments(updated);
+                  }}
+                />
+              </Grid.Col>
+              <Grid.Col span={5.5}>
+                <Box>
+                  <Text size="sm" fw={500} mb={4}>
+                    File
+                  </Text>
+                  <Dropzone
+                    onDrop={(files: File[]) => {
+                      if (files.length === 0) return;
+                      const file = files[0];
+                      if (fileErrors[index]) {
+                        const newErrors = { ...fileErrors };
+                        delete newErrors[index];
+                        setFileErrors(newErrors);
+                      }
+                      if (file.size > MAX_FILE_SIZE) {
+                        const newErrors = { ...fileErrors };
+                        newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        setFileErrors(newErrors);
+                        ToastNotification({
+                          type: "error",
+                          message: `File "${file.name}" exceeds 5MB limit`,
+                        });
+                        return;
+                      }
+                      const updated = [...supportingDocuments];
+                      updated[index] = {
+                        ...updated[index],
+                        file,
+                        document_url: undefined,
+                        document_id: undefined,
+                      };
+                      setSupportingDocuments(updated);
+                    }}
+                    onReject={(files: any[]) => {
+                      const rejection = files[0];
+                      if (rejection?.errors?.some((e: any) => e.code === "file-too-large")) {
+                        const newErrors = { ...fileErrors };
+                        newErrors[index] = "File size exceeds 5MB limit";
+                        setFileErrors(newErrors);
+                      }
+                    }}
+                    maxSize={MAX_FILE_SIZE}
+                    accept={undefined}
+                    multiple={false}
+                    disabled={false}
+                    styles={{
+                      root: {
+                        border: "1px solid var(--mantine-color-gray-4)",
+                        borderRadius: "var(--mantine-radius-sm)",
+                        backgroundColor: "var(--mantine-color-white)",
+                        minHeight: "36px",
+                        padding: "0",
+                      },
+                      inner: {
+                        padding: "0",
+                        minHeight: "36px",
+                      },
+                    }}
+                  >
+                    <Group
+                      justify="space-between"
+                      gap="xs"
+                      px="sm"
+                      style={{ minHeight: "36px", pointerEvents: "none", cursor: "pointer" }}
+                    >
+                      <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                        {doc.file ? (
+                          <>
+                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
+                            <Text
+                              size="sm"
+                              truncate
+                              style={{ flex: 1, color: "var(--mantine-color-dark)" }}
+                            >
+                              {doc.file.name}
+                            </Text>
+                          </>
+                        ) : doc.document_url ? (
+                          <>
+                            <IconDownload size={16} color="var(--mantine-color-blue-6)" />
+                            <Text
+                              size="sm"
+                              truncate
+                              style={{
+                                flex: 1,
+                                color: "var(--mantine-color-blue-6)",
+                                cursor: "pointer",
+                                textDecoration: "underline",
+                                pointerEvents: "auto",
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (doc.document_url && doc.original_document_name) {
+                                  downloadFile(doc.document_url, doc.original_document_name);
+                                }
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                            >
+                              {doc.original_document_name || "Download file"}
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
+                            <Text size="sm" c="dimmed" truncate style={{ flex: 1 }}>
+                              Drag and drop or click to select file
+                            </Text>
+                          </>
+                        )}
+                      </Group>
+                      {(doc.file || doc.document_url) && (
+                        <Button
+                          variant="subtle"
+                          color="red"
+                          size="xs"
+                          p={4}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (fileErrors[index]) {
+                              const newErrors = { ...fileErrors };
+                              delete newErrors[index];
+                              setFileErrors(newErrors);
+                            }
+                            const updated = [...supportingDocuments];
+                            updated[index] = {
+                              ...updated[index],
+                              file: null,
+                              document_url: undefined,
+                              document_id: undefined,
+                            };
+                            setSupportingDocuments(updated);
+                          }}
+                          style={{ pointerEvents: "auto" }}
+                        >
+                          <IconX size={14} />
+                        </Button>
+                      )}
+                    </Group>
+                  </Dropzone>
+                  {fileErrors[index] && (
+                    <Text size="xs" c="red" mt={4}>
+                      {fileErrors[index]}
+                    </Text>
+                  )}
+                </Box>
+              </Grid.Col>
+              <Grid.Col span={1}>
+                <Button
+                  variant="light"
+                  color="red"
+                  onClick={() => {
+                    if (fileErrors[index]) {
+                      const newErrors = { ...fileErrors };
+                      delete newErrors[index];
+                      setFileErrors(newErrors);
+                    }
+                    if (supportingDocuments.length === 1) {
+                      setSupportingDocuments([{ name: "", file: null }]);
+                    } else {
+                      const updated = supportingDocuments.filter((_, i) => i !== index);
+                      setSupportingDocuments(updated);
+                      const newErrors: { [key: number]: string } = {};
+                      Object.keys(fileErrors).forEach((key) => {
+                        const keyNum = parseInt(key);
+                        if (keyNum < index) newErrors[keyNum] = fileErrors[keyNum];
+                        else if (keyNum > index) newErrors[keyNum - 1] = fileErrors[keyNum];
+                      });
+                      setFileErrors(newErrors);
+                    }
+                  }}
+                >
+                  <IconTrash size={16} />
+                </Button>
+              </Grid.Col>
+              <Grid.Col span={1} offset={11}>
+                {index === supportingDocuments.length - 1 && (
+                  <Button
+                    variant="light"
+                    color="#105476"
+                    onClick={() => {
+                      setSupportingDocuments([...supportingDocuments, { name: "", file: null }]);
+                    }}
+                  >
+                    <IconPlus size={16} />
+                  </Button>
+                )}
+              </Grid.Col>
+            </Grid>
+          ))}
+
+          {supportingDocuments.length === 0 && (
+            <Button
+              variant="light"
+              color="#105476"
+              leftSection={<IconPlus size={16} />}
+              onClick={() => {
+                setSupportingDocuments([{ name: "", file: null }]);
+              }}
+              fullWidth
+            >
+              Add Document
+            </Button>
+          )}
+
+          <Group justify="flex-end" mt="md">
+            <Button variant="outline" onClick={closeDocumentsModal}>
+              Close
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Box>
   );
 }

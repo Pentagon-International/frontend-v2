@@ -7,22 +7,28 @@ import {
   Grid,
   Group,
   Loader,
+  Menu,
+  Modal,
   NumberInput,
   Stack,
   Text,
   Textarea,
   TextInput,
 } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { Dropzone } from "@mantine/dropzone";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
   IconChevronRight,
+  IconDotsVertical,
   IconDownload,
-  IconFileUpload,
   IconFileText,
   IconSend,
   IconPlus,
   IconTrash,
+  IconUpload,
+  IconX,
 } from "@tabler/icons-react";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
@@ -199,6 +205,30 @@ function JournalVoucher() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
   const [selectedRowIndex, setSelectedRowIndex] = useState<number>(0);
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+  const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
+  const [documentsModalOpened, { open: openDocumentsModal, close: closeDocumentsModal }] =
+    useDisclosure(false);
+  const [supportingDocuments, setSupportingDocuments] = useState<
+    Array<{
+      name: string;
+      file: File | null;
+      document_url?: string;
+      document_id?: number;
+      original_document_name?: string;
+    }>
+  >([]);
+
+  const downloadFile = (url: string, fileName: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const isUpdate =
     (saveResponse?.id != null && saveResponse.id > 0) || Boolean(recordId);
@@ -498,40 +528,91 @@ function JournalVoucher() {
       <Stack gap="md">
         {/* ── Page header ── */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Group gap="sm" align="center" wrap="nowrap">
-            <Text size="xl" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
-              Journal Voucher
-            </Text>
-            {saveResponse?.journal_no && (
-              <Badge
-                size="sm"
-                variant="light"
-                color="#105476"
-                styles={{ root: { textTransform: "none" } }}
-              >
-                {saveResponse.journal_no}
-              </Badge>
+          <Text size="xl" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
+            Journal Voucher
+          </Text>
+          <Group gap="md" wrap="nowrap">
+            {saveResponse && (
+              <Group gap="sm" wrap="nowrap">
+                {(saveResponse.id || form.values.document_id) && (
+                  <Group gap="xs" wrap="nowrap" align="center">
+                    <Text size="sm" fw={500} c="dimmed" style={{ fontFamily: "Inter" }}>
+                      Document ID
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color="#105476"
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {form.values.document_id || String(saveResponse.id) || "—"}
+                    </Badge>
+                  </Group>
+                )}
+                {saveResponse.journal_no && (
+                  <Group gap="xs" wrap="nowrap" align="center">
+                    <Text size="sm" fw={500} c="dimmed" style={{ fontFamily: "Inter" }}>
+                      Journal No
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color="#105476"
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {saveResponse.journal_no}
+                    </Badge>
+                  </Group>
+                )}
+                {saveResponse.status && (
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm" fw={500} c="dimmed" style={{ fontFamily: "Inter" }}>
+                      Status:
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color={saveResponse.status === "POSTED" ? "green" : "orange"}
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {saveResponse.status}
+                    </Badge>
+                  </Group>
+                )}
+              </Group>
             )}
-            {saveResponse?.status && (
-              <Badge
-                size="sm"
-                variant="light"
-                color={saveResponse.status === "POSTED" ? "green" : "orange"}
-                styles={{ root: { textTransform: "none" } }}
-              >
-                {saveResponse.status}
-              </Badge>
-            )}
+            <Menu shadow="md" width={180} position="bottom-end" withArrow>
+              <Menu.Target>
+                <ActionIcon
+                  variant="default"
+                  size="lg"
+                  radius="sm"
+                  aria-label="More options"
+                  style={{ border: "1px solid #cce4f0" }}
+                >
+                  <IconDotsVertical size={16} color="#105476" />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconFileText size={14} />}
+                  disabled={!saveResponse?.id}
+                  styles={{ item: { fontFamily: "Inter", fontSize: "13px" } }}
+                >
+                  Document
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconArrowLeft size={16} />}
+              onClick={() => navigate(-1)}
+              styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+            >
+              Back
+            </Button>
           </Group>
-          <Button
-            variant="outline"
-            color="#105476"
-            leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate(-1)}
-            styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
-          >
-            Back
-          </Button>
         </Group>
 
         {/* ── Form ── */}
@@ -572,7 +653,7 @@ function JournalVoucher() {
               >
                 Journal Voucher Details
               </Text>
-              <Group gap="xs">
+              {/* <Group gap="xs">
                 <Button
                   size="xs"
                   variant="white"
@@ -611,42 +692,14 @@ function JournalVoucher() {
                 >
                   Post
                 </Button>
-              </Group>
+              </Group> */}
             </Box>
 
             <Box p="md" style={{ backgroundColor: "#f8fcff" }}>
-              {/* ── Row 1: Document ID | Journal No | Daybook | Note | JV Reversal ── */}
-              <Grid columns={12} gutter="md">
-                {/* Document ID */}
-                <Grid.Col span={2}>
-                  <TextInput
-                    label="Document ID"
-                    placeholder="Auto generated"
-                    value={form.values.document_id}
-                    readOnly
-                    styles={{
-                      ...inputStyles,
-                      input: { ...inputStyles.input, backgroundColor: "var(--mantine-color-gray-0)" },
-                    }}
-                  />
-                </Grid.Col>
-
-                {/* Journal No */}
-                <Grid.Col span={2}>
-                  <TextInput
-                    label="Journal No"
-                    placeholder="Auto generated"
-                    value={form.values.journal_no}
-                    readOnly
-                    styles={{
-                      ...inputStyles,
-                      input: { ...inputStyles.input, backgroundColor: "var(--mantine-color-gray-0)" },
-                    }}
-                  />
-                </Grid.Col>
-
+              {/* ── Row 1: Daybook | Note | JV Reversal ── */}
+              {/* <Grid columns={12} gutter="md"> */}
                 {/* Daybook */}
-                <Grid.Col span={2}>
+                {/* <Grid.Col span={2}>
                   <Dropdown
                     label="Day Book"
                     placeholder={isDaybookLoading ? "Loading..." : "Select day book"}
@@ -659,23 +712,12 @@ function JournalVoucher() {
                     error={form.errors.day_book_id}
                     styles={inputStyles}
                   />
-                </Grid.Col>
+                </Grid.Col> */}
 
-                {/* Note */}
-                <Grid.Col span={3}>
-                  <Textarea
-                    label="Note"
-                    placeholder="Enter note"
-                    value={form.values.note}
-                    onChange={(e) => form.setFieldValue("note", e.target.value)}
-                    readOnly={isReadOnly}
-                    rows={3}
-                    styles={textareaStyles}
-                  />
-                </Grid.Col>
+
 
                 {/* JV Reversal box */}
-                <Grid.Col span={3}>
+                {/* <Grid.Col span={3}>
                   <Box
                     p="sm"
                     style={{
@@ -683,6 +725,7 @@ function JournalVoucher() {
                       borderRadius: 6,
                       backgroundColor: "white",
                       height: "100%",
+                      width: "100%",
                     }}
                   >
                     <Text
@@ -701,7 +744,7 @@ function JournalVoucher() {
                     >
                       JV Reversal
                     </Text>
-                    <Grid columns={12} gutter="xs">
+                    <Grid columns={12} gutter="xs" align= "flex-end">
                       <Grid.Col span={5}>
                         <Dropdown
                           label="Daybook"
@@ -717,7 +760,7 @@ function JournalVoucher() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={7}>
+                      <Grid.Col span={5}>
                         <TextInput
                           label="Journal No"
                           placeholder="Enter"
@@ -732,14 +775,14 @@ function JournalVoucher() {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={12}>
+                      <Grid.Col span={1} style={{ marginBottom: "5px" }} >
                         <Button
                           size="xs"
                           variant="outline"
                           color="#105476"
                           disabled={isReadOnly || !form.values.reversal_journal_no}
                           styles={{
-                            root: { fontFamily: "Inter", fontSize: "12px", height: "28px" },
+                            root: { fontFamily: "Inter", fontSize: "12px", height: "28px" , },
                           }}
                         >
                           Get
@@ -747,11 +790,26 @@ function JournalVoucher() {
                       </Grid.Col>
                     </Grid>
                   </Box>
-                </Grid.Col>
-              </Grid>
+                </Grid.Col> */}
+              {/* </Grid> */}
 
               {/* ── Row 2: Journal Date | Status | File Name | Upload | Download ── */}
-              <Grid columns={12} gutter="md" mt="md">
+              <Grid columns={12}  >
+                                {/* Daybook */}
+                                <Grid.Col span={2}>
+                  <Dropdown
+                    label="Day Book"
+                    placeholder={isDaybookLoading ? "Loading..." : "Select day book"}
+                    data={daybookOptions}
+                    value={form.values.day_book_id || null}
+                    onChange={(v) => form.setFieldValue("day_book_id", v ?? "")}
+                    searchable
+                    withAsterisk
+                    disabled={isDaybookLoading || isReadOnly}
+                    error={form.errors.day_book_id}
+                    styles={inputStyles}
+                  />
+                </Grid.Col>
                 {/* Journal Date */}
                 <Grid.Col span={2}>
                   <SingleDateInput
@@ -782,8 +840,21 @@ function JournalVoucher() {
                   />
                 </Grid.Col>
 
+                                {/* Note */}
+                                <Grid.Col span={4}>
+                  <Textarea
+                    label="Note"
+                    placeholder="Enter note"
+                    value={form.values.note}
+                    onChange={(e) => form.setFieldValue("note", e.target.value)}
+                    readOnly={isReadOnly}
+                    rows={2}
+                    styles={textareaStyles}
+                  />
+                </Grid.Col>
+
                 {/* File Name */}
-                <Grid.Col span={3}>
+                {/* <Grid.Col span={3}>
                   <TextInput
                     label="File Name"
                     placeholder="Select file"
@@ -792,10 +863,10 @@ function JournalVoucher() {
                     readOnly={isReadOnly}
                     styles={inputStyles}
                   />
-                </Grid.Col>
+                </Grid.Col> */}
 
                 {/* Upload / Download */}
-                <Grid.Col span={2}>
+                {/* <Grid.Col span={2}>
                   <Box style={{ display: "flex", alignItems: "flex-end", height: "100%", gap: 8 }}>
                     <Button
                       size="sm"
@@ -818,7 +889,7 @@ function JournalVoucher() {
                       Download
                     </Button>
                   </Box>
-                </Grid.Col>
+                </Grid.Col> */}
               </Grid>
             </Box>
           </Box>
@@ -1367,7 +1438,7 @@ function JournalVoucher() {
               {/* ── Account Name & Narration (selected row display) ── */}
               <Divider mt="md" mb="md" color="#dee2e6" size="sm" />
               <Grid columns={12} gutter="md">
-                <Grid.Col span={5}>
+                <Grid.Col span={3}>
                   <TextInput
                     label="Account Name"
                     value={selectedAccountName}
@@ -1385,7 +1456,7 @@ function JournalVoucher() {
                     }}
                   />
                 </Grid.Col>
-                <Grid.Col span={7}>
+                <Grid.Col span={3}>
                   <TextInput
                     label="Narration"
                     value={selectedNarration}
@@ -1406,7 +1477,7 @@ function JournalVoucher() {
           </Box>
 
           {/* ── Form actions ── */}
-          <Group justify="flex-end" mt="xl" gap="sm">
+          <Group justify="space-between" mt="xl" gap="sm">
             <Button
               variant="outline"
               color="#105476"
@@ -1415,20 +1486,266 @@ function JournalVoucher() {
             >
               Cancel
             </Button>
-            {!isReadOnly && (
+            <Group gap="sm">
               <Button
-                type="submit"
+                variant="outline"
                 color="#105476"
-                rightSection={<IconChevronRight size={16} />}
-                loading={isSubmitting}
+                onClick={() => {
+                  if (supportingDocuments.length === 0) {
+                    setSupportingDocuments([{ name: "", file: null }]);
+                  }
+                  const newErrors: { [key: number]: string } = {};
+                  supportingDocuments.forEach((doc, idx) => {
+                    if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                      newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                    }
+                  });
+                  setFileErrors(newErrors);
+                  openDocumentsModal();
+                }}
+                disabled={isSubmitting}
                 styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
               >
-                {isUpdate ? "Update Journal Voucher" : "Save Journal Voucher"}
+                Attach Supporting Documents
               </Button>
-            )}
+              {!isReadOnly && (
+                <Button
+                  type="submit"
+                  color="#105476"
+                  rightSection={<IconChevronRight size={16} />}
+                  loading={isSubmitting}
+                  styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+                >
+                  {isUpdate ? "Update Journal Voucher" : "Save Journal Voucher"}
+                </Button>
+              )}
+            </Group>
           </Group>
         </Box>
       </Stack>
+
+      {/* ── Supporting Documents Modal ── */}
+      <Modal
+        opened={documentsModalOpened}
+        onClose={closeDocumentsModal}
+        title="Attach Supporting Documents"
+        size="xl"
+        centered
+        style={{ fontFamily: "Inter" }}
+      >
+        <Stack gap="xs">
+          {supportingDocuments.map((doc, index) => (
+            <Grid key={index} columns={12} gutter="sm" align="flex-end">
+              <Grid.Col span={5.5}>
+                <TextInput
+                  label="Document Name"
+                  placeholder="Enter document name"
+                  value={doc.name}
+                  onChange={(e) => {
+                    const updated = [...supportingDocuments];
+                    updated[index] = { ...updated[index], name: e.target.value };
+                    setSupportingDocuments(updated);
+                  }}
+                  styles={inputStyles}
+                />
+              </Grid.Col>
+              <Grid.Col span={5.5}>
+                <Box>
+                  <Text size="sm" fw={500} mb={4} style={{ fontFamily: "Inter", fontSize: "13px" }}>
+                    File
+                  </Text>
+                  <Dropzone
+                    onDrop={(files: File[]) => {
+                      if (files.length === 0) return;
+                      const file = files[0];
+                      if (fileErrors[index]) {
+                        const newErrors = { ...fileErrors };
+                        delete newErrors[index];
+                        setFileErrors(newErrors);
+                      }
+                      if (file.size > MAX_FILE_SIZE) {
+                        const newErrors = { ...fileErrors };
+                        newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        setFileErrors(newErrors);
+                        ToastNotification({ type: "error", message: `File "${file.name}" exceeds 5MB limit` });
+                        return;
+                      }
+                      const updated = [...supportingDocuments];
+                      updated[index] = {
+                        ...updated[index],
+                        file,
+                        document_url: undefined,
+                        document_id: undefined,
+                      };
+                      setSupportingDocuments(updated);
+                    }}
+                    onReject={(files: any[]) => {
+                      const rejection = files[0];
+                      if (rejection?.errors?.some((e: any) => e.code === "file-too-large")) {
+                        const newErrors = { ...fileErrors };
+                        newErrors[index] = "File size exceeds 5MB limit";
+                        setFileErrors(newErrors);
+                      }
+                    }}
+                    maxSize={MAX_FILE_SIZE}
+                    accept={undefined}
+                    multiple={false}
+                    styles={{
+                      root: {
+                        border: "1px solid var(--mantine-color-gray-4)",
+                        borderRadius: "var(--mantine-radius-sm)",
+                        backgroundColor: "var(--mantine-color-white)",
+                        minHeight: "36px",
+                        padding: "0",
+                      },
+                      inner: { padding: "0", minHeight: "36px" },
+                    }}
+                  >
+                    <Group
+                      justify="space-between"
+                      gap="xs"
+                      px="sm"
+                      style={{ minHeight: "36px", pointerEvents: "none", cursor: "pointer" }}
+                    >
+                      <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                        {doc.file ? (
+                          <>
+                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
+                            <Text size="sm" truncate style={{ flex: 1, color: "var(--mantine-color-dark)" }}>
+                              {doc.file.name}
+                            </Text>
+                          </>
+                        ) : doc.document_url ? (
+                          <>
+                            <IconDownload size={16} color="var(--mantine-color-blue-6)" />
+                            <Text
+                              size="sm"
+                              truncate
+                              style={{
+                                flex: 1,
+                                color: "var(--mantine-color-blue-6)",
+                                cursor: "pointer",
+                                textDecoration: "underline",
+                                pointerEvents: "auto",
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (doc.document_url && doc.original_document_name) {
+                                  downloadFile(doc.document_url, doc.original_document_name);
+                                }
+                              }}
+                            >
+                              {doc.original_document_name || "Download file"}
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
+                            <Text size="sm" c="dimmed" truncate style={{ flex: 1 }}>
+                              Drag and drop or click to select file
+                            </Text>
+                          </>
+                        )}
+                      </Group>
+                      {(doc.file || doc.document_url) && (
+                        <Button
+                          variant="subtle"
+                          color="red"
+                          size="xs"
+                          p={4}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (fileErrors[index]) {
+                              const newErrors = { ...fileErrors };
+                              delete newErrors[index];
+                              setFileErrors(newErrors);
+                            }
+                            const updated = [...supportingDocuments];
+                            updated[index] = {
+                              ...updated[index],
+                              file: null,
+                              document_url: undefined,
+                              document_id: undefined,
+                            };
+                            setSupportingDocuments(updated);
+                          }}
+                          style={{ pointerEvents: "auto" }}
+                        >
+                          <IconX size={14} />
+                        </Button>
+                      )}
+                    </Group>
+                  </Dropzone>
+                  {fileErrors[index] && (
+                    <Text size="xs" c="red" mt={4}>
+                      {fileErrors[index]}
+                    </Text>
+                  )}
+                </Box>
+              </Grid.Col>
+              <Grid.Col span={1}>
+                <Button
+                  variant="light"
+                  color="red"
+                  onClick={() => {
+                    if (fileErrors[index]) {
+                      const newErrors = { ...fileErrors };
+                      delete newErrors[index];
+                      setFileErrors(newErrors);
+                    }
+                    if (supportingDocuments.length === 1) {
+                      setSupportingDocuments([{ name: "", file: null }]);
+                    } else {
+                      const updated = supportingDocuments.filter((_, i) => i !== index);
+                      setSupportingDocuments(updated);
+                      const newErrors: { [key: number]: string } = {};
+                      Object.keys(fileErrors).forEach((key) => {
+                        const keyNum = parseInt(key);
+                        if (keyNum < index) newErrors[keyNum] = fileErrors[keyNum];
+                        else if (keyNum > index) newErrors[keyNum - 1] = fileErrors[keyNum];
+                      });
+                      setFileErrors(newErrors);
+                    }
+                  }}
+                >
+                  <IconTrash size={16} />
+                </Button>
+              </Grid.Col>
+              <Grid.Col span={1} offset={11}>
+                {index === supportingDocuments.length - 1 && (
+                  <Button
+                    variant="light"
+                    color="#105476"
+                    onClick={() => {
+                      setSupportingDocuments([...supportingDocuments, { name: "", file: null }]);
+                    }}
+                  >
+                    <IconPlus size={16} />
+                  </Button>
+                )}
+              </Grid.Col>
+            </Grid>
+          ))}
+
+          {supportingDocuments.length === 0 && (
+            <Button
+              variant="light"
+              color="#105476"
+              leftSection={<IconPlus size={16} />}
+              onClick={() => setSupportingDocuments([{ name: "", file: null }])}
+              fullWidth
+            >
+              Add Document
+            </Button>
+          )}
+
+          <Group justify="flex-end" mt="md">
+            <Button variant="outline" onClick={closeDocumentsModal}>
+              Close
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Box>
   );
 }
