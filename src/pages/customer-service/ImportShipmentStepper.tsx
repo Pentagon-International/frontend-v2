@@ -191,7 +191,7 @@ const validationSchema = yup.object({
       carrier_code: yup.string(),
       flight_no: yup.string().nullable(),
       status: yup.string(),
-    })
+    }),
   ),
 
   // Party Details fields - All optional
@@ -229,7 +229,7 @@ const validationSchema = yup.object({
       chargeable_volume: yup.number().nullable(),
       container_type_code: yup.string().nullable(),
       no_of_containers: yup.number().nullable(),
-    })
+    }),
   ),
 
   // Pickup Details - All optional
@@ -395,7 +395,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
             const roe = parseFloat(updatedCharge.roe) || 1;
 
             updatedCharge.total_sell = (noOfUnits * sellPerUnit * roe).toFixed(
-              2
+              2,
             );
           }
 
@@ -409,7 +409,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
           return updatedCharge;
         }
         return charge;
-      })
+      }),
     );
   };
 
@@ -438,7 +438,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
 
   // Function to map initial data to form values
   const mapInitialDataToFormValues = (
-    data: Record<string, unknown>
+    data: Record<string, unknown>,
   ): Partial<FormValues> => {
     if (!data) return {};
 
@@ -486,7 +486,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
               carrier_code: "",
               flight_no: route.flight_no ? String(route.flight_no) : null,
               status: String(route.status || ""),
-            })
+            }),
           )
         : [],
 
@@ -551,7 +551,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
               no_of_containers: cargo.no_of_containers
                 ? Number(cargo.no_of_containers)
                 : undefined,
-            })
+            }),
           )
         : [
             {
@@ -591,7 +591,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
   };
   const form = useForm<FormValues>({
     validate: yupResolver(validationSchema) as unknown as (
-      values: FormValues
+      values: FormValues,
     ) => Record<string, string>,
     initialValues: {
       // Import Shipment fields
@@ -757,7 +757,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
             id: index + 1,
             charge_name: String(charge.charge_name || ""),
             currency_country_code: String(
-              charge.currency_country_code || charge.currency || ""
+              charge.currency_country_code || charge.currency || "",
             ),
             roe: charge.roe ? String(charge.roe) : "",
             unit: String(charge.unit || ""),
@@ -771,7 +771,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
               : "",
             total_cost: charge.total_cost ? String(charge.total_cost) : "",
             total_sell: charge.total_sell ? String(charge.total_sell) : "",
-          })
+          }),
         );
         setCharges(mappedCharges);
       }
@@ -798,12 +798,12 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
       salespersonsData.length > 0
     ) {
       const selectedSalesperson = salespersonsData.find(
-        (person) => person.value === form.values.routed_by
+        (person) => person.value === form.values.routed_by,
       );
       if (selectedSalesperson?.customer_service) {
         form.setFieldValue(
           "customer_service_name",
-          selectedSalesperson.customer_service
+          selectedSalesperson.customer_service,
         );
       }
     }
@@ -827,7 +827,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
       const volumeInCbm = volume || 0;
       return Math.max(grossWeightInCbm, volumeInCbm);
     },
-    []
+    [],
   );
 
   // Calculate chargeable weight for AIR service (max of gross weight and volume weight)
@@ -838,7 +838,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
       const volume = volumeWeight || 0;
       return Math.max(gross, volume);
     },
-    []
+    [],
   );
 
   // Debounced function to update chargeable volume and chargeable weight
@@ -855,7 +855,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
         if (cargo.chargeable_volume !== chargeableVolume) {
           form.setFieldValue(
             "cargo_details.0.chargeable_volume",
-            chargeableVolume
+            chargeableVolume,
           );
         }
       } else {
@@ -874,12 +874,12 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
       if (grossWeight || volumeWeight) {
         const chargeableWeight = calculateChargeableWeight(
           grossWeight,
-          volumeWeight
+          volumeWeight,
         );
         if (cargo.chargeable_weight !== chargeableWeight) {
           form.setFieldValue(
             "cargo_details.0.chargeable_weight",
-            chargeableWeight
+            chargeableWeight,
           );
         }
       } else {
@@ -945,13 +945,13 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
 
       // Check if any required fields have errors
       const hasRequiredFieldErrors = requiredFields.some(
-        (field) => validation.errors[field]
+        (field) => validation.errors[field],
       );
 
       if (hasRequiredFieldErrors) {
         console.log(
           "Required fields have validation errors:",
-          validation.errors
+          validation.errors,
         );
         ToastNotification({
           type: "error",
@@ -1093,7 +1093,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
         response = await putAPICall(
           "customer-service-shipment/",
           payload,
-          API_HEADER
+          API_HEADER,
         );
         console.log("Edit Response:", response);
       } else {
@@ -1101,7 +1101,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
         response = await postAPICall(
           "customer-service-shipment/",
           payload,
-          API_HEADER
+          API_HEADER,
         );
         console.log("Create Response:", response);
       }
@@ -1206,7 +1206,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                 <SearchableSelect
                   label="Customer Name"
                   required
-                  apiEndpoint={URL.customer}
+                  apiEndpoint={URL.allCustomers}
                   placeholder="Type customer name"
                   searchFields={["customer_code", "customer_name"]}
                   displayFormat={(item: Record<string, unknown>) => ({
@@ -1227,7 +1227,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                       "customer_name",
                       selectedData?.label
                         ? selectedData.label.split(" (")[0]
-                        : ""
+                        : "",
                     );
                   }}
                   error={form.errors.customer_code as string}
@@ -1313,7 +1313,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                       "origin_name",
                       selectedData?.label
                         ? selectedData.label.split(" (")[0]
-                        : ""
+                        : "",
                     );
                   }}
                   error={form.errors.origin_code as string}
@@ -1345,7 +1345,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                       "destination_name",
                       selectedData?.label
                         ? selectedData.label.split(" (")[0]
-                        : ""
+                        : "",
                     );
                   }}
                   error={form.errors.destination_code as string}
@@ -1364,12 +1364,12 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("shipment_terms_code", value || "");
                     // Also update the shipment_terms_name based on selected option
                     const selectedOption = shipmentOptions.find(
-                      (option) => option.value === value
+                      (option) => option.value === value,
                     );
                     if (selectedOption) {
                       form.setFieldValue(
                         "shipment_terms_name",
-                        selectedOption.label.split(" (")[0]
+                        selectedOption.label.split(" (")[0],
                       );
                     }
                   }}
@@ -1410,12 +1410,12 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                       // Auto-set customer_service_name when salesperson is selected
                       if (value) {
                         const selectedSalesperson = salespersonsData.find(
-                          (person) => person.value === value
+                          (person) => person.value === value,
                         );
                         if (selectedSalesperson?.customer_service) {
                           form.setFieldValue(
                             "customer_service_name",
-                            selectedSalesperson.customer_service
+                            selectedSalesperson.customer_service,
                           );
                         }
                       }
@@ -1530,7 +1530,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("carrier_code", value || "");
                     form.setFieldValue(
                       "carrier_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
                   }}
                   error={form.errors.carrier_code as string}
@@ -1716,7 +1716,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         // withAsterisk
                         searchable
                         {...form.getInputProps(
-                          `routingDetails.${index}.move_type`
+                          `routingDetails.${index}.move_type`,
                         )}
                       />
                     </Grid.Col>
@@ -1738,7 +1738,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         onChange={(value, selectedData) => {
                           form.setFieldValue(
                             `routingDetails.${index}.from_location_code`,
-                            value || ""
+                            value || "",
                           );
                           if (value && selectedData) {
                             setRoutingDisplayNames((prev) => {
@@ -1786,7 +1786,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         onChange={(value, selectedData) => {
                           form.setFieldValue(
                             `routingDetails.${index}.to_location_code`,
-                            value || ""
+                            value || "",
                           );
                           if (value && selectedData) {
                             setRoutingDisplayNames((prev) => {
@@ -1823,7 +1823,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         onChange={(date) => {
                           form.setFieldValue(
                             `routingDetails.${index}.etd`,
-                            date || new Date()
+                            date || new Date(),
                           );
                         }}
                         valueFormat="YYYY-MM-DD"
@@ -1870,7 +1870,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         onChange={(date) => {
                           form.setFieldValue(
                             `routingDetails.${index}.eta`,
-                            date || new Date()
+                            date || new Date(),
                           );
                         }}
                         valueFormat="YYYY-MM-DD"
@@ -1925,7 +1925,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         onChange={(value, selectedData) => {
                           form.setFieldValue(
                             `routingDetails.${index}.carrier_code`,
-                            value || ""
+                            value || "",
                           );
                           if (value && selectedData) {
                             setRoutingDisplayNames((prev) => {
@@ -1959,23 +1959,18 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                       <TextInput
                         placeholder="Enter flight number"
                         {...form.getInputProps(
-                          `routingDetails.${index}.flight_no`
+                          `routingDetails.${index}.flight_no`,
                         )}
                       />
                     </Grid.Col>
                     <Grid.Col span={1.25}>
                       <Dropdown
-                        data={[
-                          "Active",
-                          "Inactive",
-                          "Pending",
-                          "Completed",
-                        ]}
+                        data={["Active", "Inactive", "Pending", "Completed"]}
                         placeholder="Select status"
                         // withAsterisk
                         searchable
                         {...form.getInputProps(
-                          `routingDetails.${index}.status`
+                          `routingDetails.${index}.status`,
                         )}
                       />
                     </Grid.Col>
@@ -2052,7 +2047,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("shipper_code", value || "");
                     form.setFieldValue(
                       "shipper_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options
@@ -2102,7 +2097,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value) => {
                     form.setFieldValue(
                       "shipper_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                   }}
                   error={form.errors.shipper_address_id}
@@ -2140,7 +2135,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("consignee_code", value || "");
                     form.setFieldValue(
                       "consignee_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options
@@ -2190,7 +2185,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value) => {
                     form.setFieldValue(
                       "consignee_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                   }}
                   error={form.errors.consignee_address_id}
@@ -2228,7 +2223,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("forwarder_code", value || "");
                     form.setFieldValue(
                       "forwarder_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options
@@ -2277,7 +2272,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value) => {
                     form.setFieldValue(
                       "forwarder_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                   }}
                   error={form.errors.forwarder_address_id}
@@ -2315,7 +2310,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("destination_agent_code", value || "");
                     form.setFieldValue(
                       "destination_agent_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options
@@ -2365,7 +2360,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value) => {
                     form.setFieldValue(
                       "destination_agent_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                   }}
                   error={form.errors.destination_agent_address_id}
@@ -2391,7 +2386,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                 <SearchableSelect
                   label="Billing Customer Name"
                   placeholder="Type billing customer name"
-                  apiEndpoint={URL.customer}
+                  apiEndpoint={URL.allCustomers}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code),
@@ -2403,7 +2398,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("billing_customer_code", value || "");
                     form.setFieldValue(
                       "billing_customer_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options
@@ -2453,7 +2448,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value) => {
                     form.setFieldValue(
                       "billing_customer_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                   }}
                   error={form.errors.billing_customer_address_id}
@@ -2472,7 +2467,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                 <SearchableSelect
                   label="Notify Customer Name"
                   placeholder="Type notify customer name"
-                  apiEndpoint={URL.customer}
+                  apiEndpoint={URL.consignee}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code),
@@ -2484,7 +2479,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("notify_customer_code", value || "");
                     form.setFieldValue(
                       "notify_customer_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Use originalData to populate address options
@@ -2533,7 +2528,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value) => {
                     form.setFieldValue(
                       "notify_customer_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                   }}
                   error={form.errors.notify_customer_address_id}
@@ -2617,7 +2612,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value) => {
                     form.setFieldValue(
                       "cha_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                   }}
                   error={form.errors.cha_address_id}
@@ -2699,7 +2694,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         placeholder="Enter number of packages"
                         min={1}
                         {...form.getInputProps(
-                          "cargo_details.0.no_of_packages"
+                          "cargo_details.0.no_of_packages",
                         )}
                       />
                     </Grid.Col>
@@ -2729,7 +2724,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         decimalScale={2}
                         readOnly
                         {...form.getInputProps(
-                          "cargo_details.0.chargeable_weight"
+                          "cargo_details.0.chargeable_weight",
                         )}
                         styles={{
                           input: {
@@ -2751,7 +2746,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         placeholder="Enter number of packages"
                         min={1}
                         {...form.getInputProps(
-                          "cargo_details.0.no_of_packages"
+                          "cargo_details.0.no_of_packages",
                         )}
                       />
                     </Grid.Col>
@@ -2781,7 +2776,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                         decimalScale={2}
                         readOnly
                         {...form.getInputProps(
-                          "cargo_details.0.chargeable_volume"
+                          "cargo_details.0.chargeable_volume",
                         )}
                         styles={{
                           input: {
@@ -2808,7 +2803,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                               data={containerTypeOptions}
                               nothingFoundMessage="No container types found"
                               {...form.getInputProps(
-                                `cargo_details.${cargoIndex}.container_type_code`
+                                `cargo_details.${cargoIndex}.container_type_code`,
                               )}
                             />
                           </Grid.Col>
@@ -2818,7 +2813,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                               placeholder="Enter number of containers"
                               min={1}
                               {...form.getInputProps(
-                                `cargo_details.${cargoIndex}.no_of_containers`
+                                `cargo_details.${cargoIndex}.no_of_containers`,
                               )}
                             />
                           </Grid.Col>
@@ -2829,7 +2824,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                               min={0}
                               decimalScale={2}
                               {...form.getInputProps(
-                                `cargo_details.${cargoIndex}.gross_weight`
+                                `cargo_details.${cargoIndex}.gross_weight`,
                               )}
                             />
                           </Grid.Col>
@@ -2873,7 +2868,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                                 onClick={() =>
                                   form.removeListItem(
                                     "cargo_details",
-                                    cargoIndex
+                                    cargoIndex,
                                   )
                                 }
                               >
@@ -2950,7 +2945,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("pickup_from_code", value || "");
                     form.setFieldValue(
                       "pickup_from_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
                   }}
                   error={form.errors.pickup_from_code as string}
@@ -2963,7 +2958,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                 <SearchableSelect
                   label="Pickup Address"
                   placeholder="Type customer name"
-                  apiEndpoint={URL.customer}
+                  apiEndpoint={URL.allCustomers}
                   searchFields={["customer_code", "customer_name"]}
                   displayFormat={(item: Record<string, unknown>) => {
                     // Get the first address from addresses_data
@@ -2991,11 +2986,11 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value, selectedData) => {
                     form.setFieldValue(
                       "pickup_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                     form.setFieldValue(
                       "pickup_address_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
                   }}
                   error={form.errors.pickup_address_id as string}
@@ -3010,7 +3005,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(date) => {
                     form.setFieldValue(
                       "planned_pickup_date",
-                      date || new Date()
+                      date || new Date(),
                     );
                   }}
                   error={form.errors.planned_pickup_date}
@@ -3177,7 +3172,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                     form.setFieldValue("delivery_from_code", value || "");
                     form.setFieldValue(
                       "delivery_from_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
                   }}
                   error={form.errors.delivery_from_code as string}
@@ -3190,7 +3185,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                 <SearchableSelect
                   label="Delivery Address"
                   placeholder="Type delivery address"
-                  apiEndpoint={URL.customer}
+                  apiEndpoint={URL.allCustomers}
                   searchFields={["customer_code", "customer_name"]}
                   displayFormat={(item: Record<string, unknown>) => {
                     // Get the first address from addresses_data
@@ -3218,11 +3213,11 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(value, selectedData) => {
                     form.setFieldValue(
                       "delivery_address_id",
-                      value ? parseInt(value) : 0
+                      value ? parseInt(value) : 0,
                     );
                     form.setFieldValue(
                       "delivery_address_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
                   }}
                   error={form.errors.delivery_address_id as string}
@@ -3239,7 +3234,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   onChange={(date) => {
                     form.setFieldValue(
                       "planned_delivery_date",
-                      date || new Date()
+                      date || new Date(),
                     );
                   }}
                   error={form.errors.planned_delivery_date}
@@ -3406,7 +3401,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                           updateCharge(
                             charge.id,
                             "charge_name",
-                            event.currentTarget.value
+                            event.currentTarget.value,
                           )
                         }
                         size="xs"
@@ -3421,7 +3416,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                           updateCharge(
                             charge.id,
                             "currency_country_code",
-                            value || ""
+                            value || "",
                           )
                         }
                         data={[
@@ -3447,7 +3442,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                           updateCharge(
                             charge.id,
                             "roe",
-                            event.currentTarget.value
+                            event.currentTarget.value,
                           )
                         }
                         size="xs"
@@ -3478,7 +3473,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                           updateCharge(
                             charge.id,
                             "no_of_units",
-                            event.currentTarget.value
+                            event.currentTarget.value,
                           )
                         }
                         size="xs"
@@ -3492,7 +3487,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                           updateCharge(
                             charge.id,
                             "sell_per_unit",
-                            event.currentTarget.value
+                            event.currentTarget.value,
                           )
                         }
                         size="xs"
@@ -3506,7 +3501,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                           updateCharge(
                             charge.id,
                             "min_sell",
-                            event.currentTarget.value
+                            event.currentTarget.value,
                           )
                         }
                         size="xs"
@@ -3520,7 +3515,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                           updateCharge(
                             charge.id,
                             "cost_per_unit",
-                            event.currentTarget.value
+                            event.currentTarget.value,
                           )
                         }
                         size="xs"

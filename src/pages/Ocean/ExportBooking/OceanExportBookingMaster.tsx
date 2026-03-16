@@ -84,10 +84,10 @@ function OceanExportBookingMaster() {
 
   // Display name states for filter fields
   const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
-    null
+    null,
   );
   const [originDisplayName, setOriginDisplayName] = useState<string | null>(
-    null
+    null,
   );
   const [destinationDisplayName, setDestinationDisplayName] = useState<
     string | null
@@ -106,7 +106,8 @@ function OceanExportBookingMaster() {
     return { label, color } as const;
   };
 
-  const [cancelConfirmRow, setCancelConfirmRow] = useState<ExportShipmentData | null>(null);
+  const [cancelConfirmRow, setCancelConfirmRow] =
+    useState<ExportShipmentData | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
   // State to store the actual applied filter values
@@ -198,7 +199,7 @@ function OceanExportBookingMaster() {
             "Length:",
             data.length,
             "Total:",
-            response.total
+            response.total,
           );
 
           return {
@@ -311,7 +312,7 @@ function OceanExportBookingMaster() {
           "Length:",
           data.length,
           "Total:",
-          response.total
+          response.total,
         );
 
         return {
@@ -451,7 +452,7 @@ function OceanExportBookingMaster() {
       const refreshData = async () => {
         try {
           console.log(
-            "🔄 Starting aggressive data refresh for ocean export booking..."
+            "🔄 Starting aggressive data refresh for ocean export booking...",
           );
 
           // Remove all cached data first
@@ -479,7 +480,7 @@ function OceanExportBookingMaster() {
               type: "active",
             });
             console.log(
-              "✅ Ocean export booking data refresh completed with additional refetch"
+              "✅ Ocean export booking data refresh completed with additional refetch",
             );
           }, 200);
 
@@ -512,12 +513,12 @@ function OceanExportBookingMaster() {
           type: "active",
         });
         console.log(
-          "🔄 Ocean export booking data refreshed on component mount"
+          "🔄 Ocean export booking data refreshed on component mount",
         );
       } catch (error) {
         console.error(
           "Error refreshing ocean export booking data on mount:",
-          error
+          error,
         );
       }
     };
@@ -631,10 +632,17 @@ function OceanExportBookingMaster() {
     try {
       const payload = { ...cancelConfirmRow, status: "CANCEL" };
       await putAPICall(URL.customerServiceShipment, payload, API_HEADER);
-      ToastNotification({ type: "success", message: "Booking cancelled successfully" });
+      ToastNotification({
+        type: "success",
+        message: "Booking cancelled successfully",
+      });
       setCancelConfirmRow(null);
-      queryClient.invalidateQueries({ queryKey: ["ocean-export-booking/filter/"] });
-      queryClient.invalidateQueries({ queryKey: ["filteredOceanExportBooking"] });
+      queryClient.invalidateQueries({
+        queryKey: ["ocean-export-booking/filter/"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["filteredOceanExportBooking"],
+      });
       if (filtersApplied) refetchFilteredExportShipments();
       else refetchExportShipments();
     } catch (err: any) {
@@ -804,7 +812,7 @@ function OceanExportBookingMaster() {
         },
       },
     ],
-    [navigate]
+    [navigate],
   );
 
   const table = useMantineReactTable({
@@ -1039,7 +1047,7 @@ function OceanExportBookingMaster() {
                     size="xs"
                     label="Customer Name"
                     placeholder="Type customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -1266,13 +1274,22 @@ function OceanExportBookingMaster() {
         centered
       >
         <Text size="sm" c="dimmed" mb="md">
-          Are you sure you want to cancel this booking? This action cannot be undone.
+          Are you sure you want to cancel this booking? This action cannot be
+          undone.
         </Text>
         <Group justify="flex-end" gap="xs">
-          <Button variant="subtle" onClick={() => setCancelConfirmRow(null)} disabled={isCancelling}>
+          <Button
+            variant="subtle"
+            onClick={() => setCancelConfirmRow(null)}
+            disabled={isCancelling}
+          >
             No
           </Button>
-          <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
+          <Button
+            color="red"
+            onClick={handleConfirmCancel}
+            loading={isCancelling}
+          >
             Yes, cancel
           </Button>
         </Group>

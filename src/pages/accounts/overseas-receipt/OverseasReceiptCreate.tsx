@@ -1996,7 +1996,7 @@ import {
                             <SearchableSelect
                               key={partyKey}
                               placeholder="Account Name"
-                              apiEndpoint={URL.customer}
+                              apiEndpoint={URL.allCustomers}
                               value={row?.customer_code || null}
                               displayValue={row?.customer_display || null}
                               disabled={

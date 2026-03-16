@@ -1003,7 +1003,7 @@ function AirExportBookingMaster() {
                     size="xs"
                     label="Customer Name"
                     placeholder="Type customer name"
-                    apiEndpoint={URL.customer}
+                    apiEndpoint={URL.allCustomers}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),

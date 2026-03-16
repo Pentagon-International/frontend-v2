@@ -154,6 +154,8 @@ import GSTSACCreate from "./masters/gst-sac/GSTSACCreate";
 import GSTRateMaster from "./masters/gst-rate/GSTRateMaster";
 import GSTChargeMappingMaster from "./masters/gst-charge-mapping/GSTChargeMappingMaster";
 import GSTChargeMappingCreate from "./masters/gst-charge-mapping/GSTChargeMappingCreate";
+import CFSMaster from "./masters/cfs/CFSMaster";
+import CFSCreate from "./masters/cfs/CFSCreate";
 
 import Freight from "./call-entry/tariff/FreightMaster";
 import DestinationMaster from "./call-entry/tariff/DestinationMaster";
@@ -238,6 +240,8 @@ export {
   GSTRateMaster,
   GSTChargeMappingMaster,
   GSTChargeMappingCreate,
+  CFSMaster,
+  CFSCreate,
   QuotationCreate,
   QuotationApprovalPublic,
   GetRate,

@@ -104,12 +104,22 @@ function CustomerRelationshipMappingMaster() {
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
   // Store the applied filter payload separately to prevent query key changes when editing fields
-  const [appliedFilterPayload, setAppliedFilterPayload] = useState<Record<string, string>>({});
+  const [appliedFilterPayload, setAppliedFilterPayload] = useState<
+    Record<string, string>
+  >({});
   // Display values for filter searchable selects
-  const [customerDisplayValue, setCustomerDisplayValue] = useState<string | null>(null);
-  const [salespersonDisplayValue, setSalespersonDisplayValue] = useState<string | null>(null);
-  const [branchDisplayValue, setBranchDisplayValue] = useState<string | null>(null);
-  const [serviceDisplayValue, setServiceDisplayValue] = useState<string | null>(null);
+  const [customerDisplayValue, setCustomerDisplayValue] = useState<
+    string | null
+  >(null);
+  const [salespersonDisplayValue, setSalespersonDisplayValue] = useState<
+    string | null
+  >(null);
+  const [branchDisplayValue, setBranchDisplayValue] = useState<string | null>(
+    null,
+  );
+  const [serviceDisplayValue, setServiceDisplayValue] = useState<string | null>(
+    null,
+  );
 
   // Filter form
   const filterForm = useForm<FilterState>({
@@ -155,10 +165,11 @@ function CustomerRelationshipMappingMaster() {
         const offset = pageIndex * pageSize;
         const response = await apiCallProtected.post(
           `filter/${URL.customerRelationshipMapping}?limit=${pageSize}&offset=${offset}`,
-          { filters: {} }
+          { filters: {} },
         );
 
-        const data = response as unknown as CustomerRelationshipMappingApiResponse;
+        const data =
+          response as unknown as CustomerRelationshipMappingApiResponse;
         if (data && data.results && Array.isArray(data.results)) {
           const count = data.total || 0;
           setTotalCount(count);
@@ -166,15 +177,21 @@ function CustomerRelationshipMappingMaster() {
           const totalPages = Math.ceil(count / pageSize);
           setPaginationTotal(totalPages);
           // Store metadata in cache
-          queryClient.setQueryData(["relationshipMetadata", pageIndex, pageSize], {
-            total: count,
-            pagination_total: totalPages,
-          });
+          queryClient.setQueryData(
+            ["relationshipMetadata", pageIndex, pageSize],
+            {
+              total: count,
+              pagination_total: totalPages,
+            },
+          );
           return data.results;
         }
         return [];
       } catch (error) {
-        console.error("Error fetching customer relationship mapping data:", error);
+        console.error(
+          "Error fetching customer relationship mapping data:",
+          error,
+        );
         ToastNotification({
           type: "error",
           message: "Failed to fetch customer relationship mapping data",
@@ -193,7 +210,12 @@ function CustomerRelationshipMappingMaster() {
     isLoading: filteredRelationshipLoading,
     refetch: refetchFilteredRelationships,
   } = useQuery({
-    queryKey: ["filteredCustomerRelationshipMapping", pageIndex, pageSize, appliedFilterPayload],
+    queryKey: [
+      "filteredCustomerRelationshipMapping",
+      pageIndex,
+      pageSize,
+      appliedFilterPayload,
+    ],
     queryFn: async () => {
       try {
         // Use appliedFilterPayload instead of building from form values
@@ -204,28 +226,36 @@ function CustomerRelationshipMappingMaster() {
           `filter/${URL.customerRelationshipMapping}?limit=${pageSize}&offset=${offset}`,
           {
             filters: appliedFilterPayload,
-          }
+          },
         );
 
-        const data = response as unknown as CustomerRelationshipMappingApiResponse;
+        const data =
+          response as unknown as CustomerRelationshipMappingApiResponse;
         if (data && data.results && Array.isArray(data.results)) {
           const count = data.total || 0;
           setTotalCount(count);
           const totalPages = Math.ceil(count / pageSize);
           setPaginationTotal(totalPages);
           // Store metadata in cache
-          queryClient.setQueryData(["relationshipMetadata", pageIndex, pageSize], {
-            total: count,
-            pagination_total: totalPages,
-          });
+          queryClient.setQueryData(
+            ["relationshipMetadata", pageIndex, pageSize],
+            {
+              total: count,
+              pagination_total: totalPages,
+            },
+          );
           return data.results;
         }
         return [];
       } catch (error) {
-        console.error("Error fetching filtered customer relationship mapping data:", error);
+        console.error(
+          "Error fetching filtered customer relationship mapping data:",
+          error,
+        );
         ToastNotification({
           type: "error",
-          message: "Failed to fetch filtered customer relationship mapping data",
+          message:
+            "Failed to fetch filtered customer relationship mapping data",
         });
         return [];
       }
@@ -246,7 +276,13 @@ function CustomerRelationshipMappingMaster() {
       setTotalCount(metadata.total || 0);
       setPaginationTotal(metadata.pagination_total || 0);
     }
-  }, [queryClient, pageIndex, pageSize, relationshipData, filteredRelationshipData]);
+  }, [
+    queryClient,
+    pageIndex,
+    pageSize,
+    relationshipData,
+    filteredRelationshipData,
+  ]);
 
   // Determine which data to display
   const displayData = useMemo(() => {
@@ -257,7 +293,10 @@ function CustomerRelationshipMappingMaster() {
   }, [relationshipData, filteredRelationshipData, filtersApplied]);
 
   // Loading state - only show loader when actively fetching
-  const isLoading = relationshipLoading || (filtersApplied && filteredRelationshipLoading) || isRefreshing;
+  const isLoading =
+    relationshipLoading ||
+    (filtersApplied && filteredRelationshipLoading) ||
+    isRefreshing;
 
   // Handle edit
   const handleEdit = useCallback(
@@ -276,7 +315,7 @@ function CustomerRelationshipMappingMaster() {
         });
       }
     },
-    [navigate]
+    [navigate],
   );
 
   const columns = useMemo<MRT_ColumnDef<CustomerRelationshipMappingData>[]>(
@@ -291,7 +330,11 @@ function CustomerRelationshipMappingMaster() {
         enableSorting: false,
         Cell: ({ row }) => {
           // Use sno from API response, fallback to calculated if not present
-          return <Text size="sm">{row.original.sno || (pageIndex * pageSize + row.index + 1)}</Text>;
+          return (
+            <Text size="sm">
+              {row.original.sno || pageIndex * pageSize + row.index + 1}
+            </Text>
+          );
         },
       },
       {
@@ -377,7 +420,7 @@ function CustomerRelationshipMappingMaster() {
         },
       },
     ],
-    [handleEdit, pageIndex, pageSize]
+    [handleEdit, pageIndex, pageSize],
   );
 
   const table = useMantineReactTable<CustomerRelationshipMappingData>({
@@ -459,11 +502,13 @@ function CustomerRelationshipMappingMaster() {
         setAppliedFilterPayload({});
         setPageIndex(0);
         setShowFilters(false);
-        
+
         // Invalidate and refetch default data
-        await queryClient.invalidateQueries({ queryKey: ["customerRelationshipMapping"] });
+        await queryClient.invalidateQueries({
+          queryKey: ["customerRelationshipMapping"],
+        });
         await refetchRelationships();
-        
+
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
@@ -504,8 +549,12 @@ function CustomerRelationshipMappingMaster() {
     setShowFilters(false);
 
     // Invalidate queries and refetch default data
-    await queryClient.invalidateQueries({ queryKey: ["customerRelationshipMapping"] });
-    await queryClient.invalidateQueries({ queryKey: ["filteredCustomerRelationshipMapping"] });
+    await queryClient.invalidateQueries({
+      queryKey: ["customerRelationshipMapping"],
+    });
+    await queryClient.invalidateQueries({
+      queryKey: ["filteredCustomerRelationshipMapping"],
+    });
     await refetchRelationships();
 
     ToastNotification({
@@ -531,7 +580,13 @@ function CustomerRelationshipMappingMaster() {
         });
       }
     }
-  }, [location.state, refetchRelationships, refetchFilteredRelationships, filtersApplied, appliedFilterPayload]);
+  }, [
+    location.state,
+    refetchRelationships,
+    refetchFilteredRelationships,
+    filtersApplied,
+    appliedFilterPayload,
+  ]);
 
   const { pathname } = useLocation();
   const isBasePath = pathname === "/master/customer-relationship-mapping";
@@ -600,7 +655,7 @@ function CustomerRelationshipMappingMaster() {
                   size="xs"
                   label="Customer Name"
                   placeholder="Type customer name"
-                  apiEndpoint={URL.customer}
+                  apiEndpoint={URL.allCustomers}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code || ""),
@@ -710,7 +765,10 @@ function CustomerRelationshipMappingMaster() {
                   placeholder="Enter relationship type"
                   value={filterForm.values.relationship_type || ""}
                   onChange={(e) =>
-                    filterForm.setFieldValue("relationship_type", e.target.value || null)
+                    filterForm.setFieldValue(
+                      "relationship_type",
+                      e.target.value || null,
+                    )
                   }
                 />
               </Grid.Col>
@@ -747,7 +805,9 @@ function CustomerRelationshipMappingMaster() {
           <Center py="xl">
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading customer relationship mapping data...</Text>
+              <Text c="dimmed">
+                Loading customer relationship mapping data...
+              </Text>
             </Stack>
           </Center>
         ) : (
@@ -785,7 +845,10 @@ function CustomerRelationshipMappingMaster() {
                   {(() => {
                     if (totalCount === 0) return "0–0 of 0";
                     const start = pageIndex * pageSize + 1;
-                    const end = Math.min((pageIndex + 1) * pageSize, totalCount);
+                    const end = Math.min(
+                      (pageIndex + 1) * pageSize,
+                      totalCount,
+                    );
                     return `${start}–${end} of ${totalCount}`;
                   })()}
                 </Text>
@@ -796,7 +859,9 @@ function CustomerRelationshipMappingMaster() {
                 <ActionIcon
                   variant="default"
                   size="sm"
-                  onClick={() => handlePageIndexChange(Math.max(0, pageIndex - 1))}
+                  onClick={() =>
+                    handlePageIndexChange(Math.max(0, pageIndex - 1))
+                  }
                   disabled={pageIndex === 0}
                 >
                   <IconChevronLeft size={16} />
@@ -812,7 +877,9 @@ function CustomerRelationshipMappingMaster() {
                   size="sm"
                   onClick={() => {
                     const totalPages = Math.max(1, paginationTotal);
-                    handlePageIndexChange(Math.min(totalPages - 1, pageIndex + 1));
+                    handlePageIndexChange(
+                      Math.min(totalPages - 1, pageIndex + 1),
+                    );
                   }}
                   disabled={pageIndex >= paginationTotal - 1}
                 >
@@ -828,4 +895,3 @@ function CustomerRelationshipMappingMaster() {
 }
 
 export default CustomerRelationshipMappingMaster;
-

@@ -81,6 +81,8 @@ import {
   GSTRateMaster,
   GSTChargeMappingMaster,
   GSTChargeMappingCreate,
+  CFSMaster,
+  CFSCreate,
   ExportShipmentMaster,
   ExportShipmentCreate,
   ExportShipmentEdit,
@@ -483,6 +485,12 @@ const NavigationRoutes = () => {
           <Route path="port-new" element={<NewPortMaster />} />
           <Route path="/master/port-edit" element={<PortMasterEdit />} />
           <Route path="/master/port-view" element={<PortMasterView />} />
+
+          <Route path="cfs-master">
+            <Route index element={<CFSMaster />} />
+            <Route path="create" element={<CFSCreate />} />
+            <Route path="edit" element={<CFSCreate />} />
+          </Route>
 
           <Route path="charge">
             <Route index element={<ChargeMaster />} />

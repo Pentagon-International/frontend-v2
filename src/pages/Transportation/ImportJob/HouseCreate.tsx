@@ -2843,6 +2843,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Shipper Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Shipper Email"
                   {...form.getInputProps("shipper_email")}
                   error={form.errors.shipper_email}
@@ -2944,6 +2945,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Consignee Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Consignee Email"
                   {...form.getInputProps("consignee_email")}
                   error={form.errors.consignee_email}
@@ -2987,7 +2989,7 @@ function HouseCreate() {
                 <SearchableSelect
                   label="Notify Customer Name"
                   placeholder="Type notify customer name"
-                  apiEndpoint={URL.customer}
+                  apiEndpoint={URL.consignee}
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
@@ -3047,6 +3049,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Notify Customer Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Notify Customer Email"
                   {...form.getInputProps("notify_customer1_email")}
                   error={form.errors.notify_customer1_email}
@@ -3155,6 +3158,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Origin Agent Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Origin Agent Email"
                   {...form.getInputProps("agent_email")}
                   error={form.errors.agent_email}
