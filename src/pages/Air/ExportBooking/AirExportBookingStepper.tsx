@@ -149,9 +149,12 @@ interface FormValues {
   destination_agent_email: string;
   billing_customer_code: string;
   billing_customer_address_id: number;
-  notify_customer_code: string;
-  notify_customer_address_id: number;
-  notify_customer_email: string;
+  notify1_customer_name: string;
+  notify1_customer_address: string;
+  notify1_customer_email: string;
+  notify2_customer_name: string;
+  notify2_customer_address: string;
+  notify2_customer_email: string;
   cha_code: string;
   cha_address_id: number;
 
@@ -269,22 +272,32 @@ const validationSchema = yup.object({
                   .email("Invalid email format")
                   .nullable()
                   .notRequired(),
-  destination_agent_code: yup.string(),
-  destination_agent_address_id: yup.number(),
+  destination_agent_code: yup.string().required("Destination agent is required"),
+  destination_agent_address_id: yup
+  .number()
+  .typeError("Destination agent address is required")
+  .required("Destination agent address is required")
+  .moreThan(0, "Destination agent address is required"),
   destination_agent_email: yup
                           .string()
                           .email("Invalid email format")
-                          .nullable()
-                          .notRequired(),
+                          .required("Destination agent email is required"),
   billing_customer_code: yup.string(),
   billing_customer_address_id: yup.number(),
-  notify_customer_code: yup.string(),
-  notify_customer_address_id: yup.number(),
-  notify_customer_email: yup
-                        .string()
-                        .email("Invalid email format")
-                        .nullable()
-                        .notRequired(),
+  notify1_customer_name: yup.string(),
+  notify1_customer_address: yup.string(),
+  notify1_customer_email: yup
+    .string()
+    .email("Invalid email format")
+    .nullable()
+    .notRequired(),
+  notify2_customer_name: yup.string(),
+  notify2_customer_address: yup.string(),
+  notify2_customer_email: yup
+    .string()
+    .email("Invalid email format")
+    .nullable()
+    .notRequired(),
   cha_code: yup.string(),
   cha_address_id: yup.number(),
 
@@ -604,6 +617,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [notifyCustomerDisplayName, setNotifyCustomerDisplayName] = useState<
     string | null
   >(null);
+  const [notify2CustomerDisplayName, setNotify2CustomerDisplayName] = useState<
+    string | null
+  >(null);
   const [chaDisplayName, setChaDisplayName] = useState<string | null>(null);
   const [pickupAddressDisplayName, setPickupAddressDisplayName] = useState<
     string | null
@@ -629,6 +645,32 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     useState<Array<{ value: string; label: string }>>([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
+  const [notify2CustomerAddressOptions, setNotify2CustomerAddressOptions] =
+    useState<Array<{ value: string; label: string }>>([]);
+
+  // Notify Customer 1 (shipment-party) - same pattern as Consignee
+  const [notifyCustomerSearch, setNotifyCustomerSearch] = useState("");
+  const [notifyCustomerOptions, setNotifyCustomerOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [notifyCustomerHasResults, setNotifyCustomerHasResults] = useState<
+    boolean | null
+  >(null);
+  const [notifyCustomerSelectedId, setNotifyCustomerSelectedId] = useState("");
+  const notifyCustomerDataRef =
+    useRef<Record<string, Record<string, unknown>>>({});
+
+  // Notify Customer 2 (shipment-party) - same pattern as Consignee
+  const [notify2CustomerSearch, setNotify2CustomerSearch] = useState("");
+  const [notify2CustomerOptions, setNotify2CustomerOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [notify2CustomerHasResults, setNotify2CustomerHasResults] = useState<
+    boolean | null
+  >(null);
+  const [notify2CustomerSelectedId, setNotify2CustomerSelectedId] = useState("");
+  const notify2CustomerDataRef =
+    useRef<Record<string, Record<string, unknown>>>({});
 
   // Consignee (shipment-party) lookup: mirror city field behavior
   // - When API returns options, show searchable dropdown
@@ -961,11 +1003,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       ),
       billing_customer_address_id:
         Number(data.billing_customer_address_id) || 0,
-      notify_customer_code: String(
-        data.notify_customer_code_read || data.notify_customer_code || "",
+      notify1_customer_name: String(
+        data.notify1_customer_name ?? data.notify_customer_name ?? "",
       ),
-      notify_customer_address_id: Number(data.notify_customer_address_id) || 0,
-      notify_customer_email: String(data.notify_customer_email || ""),
+      notify1_customer_address: String(
+        data.notify1_customer_address ?? data.notify_customer_address ?? "",
+      ),
+      notify1_customer_email: String(
+        data.notify1_customer_email ?? data.notify_customer_email ?? "",
+      ),
+      notify2_customer_name: String(data.notify2_customer_name ?? ""),
+      notify2_customer_address: String(data.notify2_customer_address ?? ""),
+      notify2_customer_email: String(data.notify2_customer_email ?? ""),
       cha_code: String(data.cha_code_read || data.cha_code || ""),
       cha_address_id: Number(data.cha_address_id) || 0,
 
@@ -1188,9 +1237,12 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       destination_agent_email: "",
       billing_customer_code: "",
       billing_customer_address_id: 0,
-      notify_customer_code: "",
-      notify_customer_address_id: 0,
-      notify_customer_email: "",
+      notify1_customer_name: "",
+      notify1_customer_address: "",
+      notify1_customer_email: "",
+      notify2_customer_name: "",
+      notify2_customer_address: "",
+      notify2_customer_email: "",
       cha_code: "",
       cha_address_id: 0,
 
@@ -1755,6 +1807,102 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     500,
   );
 
+  // Debounced notify customer 1 search - same API as consignee
+  const debouncedNotifyCustomerSearch = useDebouncedCallback(
+    async (term: string) => {
+      const query = term.trim();
+      if (!query || query.length < 2) {
+        setNotifyCustomerOptions([]);
+        setNotifyCustomerHasResults(null);
+        setNotifyCustomerAddressOptions([]);
+        notifyCustomerDataRef.current = {};
+        return;
+      }
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.shipmentParty,
+          query,
+        });
+        const arr = Array.isArray(results)
+          ? (results as Record<string, unknown>[])
+          : [];
+        if (!arr.length) {
+          setNotifyCustomerOptions([]);
+          setNotifyCustomerHasResults(false);
+          setNotifyCustomerAddressOptions([]);
+          form.setFieldValue("notify1_customer_name", query);
+          form.setFieldValue("notify1_customer_address", "");
+          form.setFieldValue("notify1_customer_email", "");
+          notifyCustomerDataRef.current = {};
+          return;
+        }
+        const map: Record<string, Record<string, unknown>> = {};
+        const opts = arr.map((item) => {
+          const id = String(item.id ?? "");
+          map[id] = item;
+          return { value: id, label: String(item.customer_name || "") };
+        });
+        notifyCustomerDataRef.current = map;
+        setNotifyCustomerOptions(opts);
+        setNotifyCustomerHasResults(true);
+      } catch (error) {
+        console.error("Notify customer 1 shipment-party search failed:", error);
+        setNotifyCustomerOptions([]);
+        setNotifyCustomerHasResults(null);
+        notifyCustomerDataRef.current = {};
+      }
+    },
+    500,
+  );
+
+  // Debounced notify customer 2 search - same API as consignee
+  const debouncedNotify2CustomerSearch = useDebouncedCallback(
+    async (term: string) => {
+      const query = term.trim();
+      if (!query || query.length < 2) {
+        setNotify2CustomerOptions([]);
+        setNotify2CustomerHasResults(null);
+        setNotify2CustomerAddressOptions([]);
+        notify2CustomerDataRef.current = {};
+        return;
+      }
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.shipmentParty,
+          query,
+        });
+        const arr = Array.isArray(results)
+          ? (results as Record<string, unknown>[])
+          : [];
+        if (!arr.length) {
+          setNotify2CustomerOptions([]);
+          setNotify2CustomerHasResults(false);
+          setNotify2CustomerAddressOptions([]);
+          form.setFieldValue("notify2_customer_name", query);
+          form.setFieldValue("notify2_customer_address", "");
+          form.setFieldValue("notify2_customer_email", "");
+          notify2CustomerDataRef.current = {};
+          return;
+        }
+        const map: Record<string, Record<string, unknown>> = {};
+        const opts = arr.map((item) => {
+          const id = String(item.id ?? "");
+          map[id] = item;
+          return { value: id, label: String(item.customer_name || "") };
+        });
+        notify2CustomerDataRef.current = map;
+        setNotify2CustomerOptions(opts);
+        setNotify2CustomerHasResults(true);
+      } catch (error) {
+        console.error("Notify customer 2 shipment-party search failed:", error);
+        setNotify2CustomerOptions([]);
+        setNotify2CustomerHasResults(null);
+        notify2CustomerDataRef.current = {};
+      }
+    },
+    500,
+  );
+
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
   const populatedJobIdRef = useRef<number | null>(null);
 
@@ -1799,10 +1947,33 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       setBillingCustomerDisplayName(String(jobData.billing_customer_name));
     else if (jobData.billing_customer)
       setBillingCustomerDisplayName(String(jobData.billing_customer));
-    if (jobData.notify_customer_name)
-      setNotifyCustomerDisplayName(String(jobData.notify_customer_name));
-    else if (jobData.notify_customer)
+    if (jobData.notify1_customer_name) {
+      const name = String(jobData.notify1_customer_name);
+      setNotifyCustomerDisplayName(name);
+      setNotifyCustomerSearch(name);
+      setNotifyCustomerAddressOptions(
+        jobData.notify1_customer_address
+          ? [{ value: String(jobData.notify1_customer_address), label: String(jobData.notify1_customer_address) }]
+          : [],
+      );
+    } else if (jobData.notify_customer_name) {
+      const name = String(jobData.notify_customer_name);
+      setNotifyCustomerDisplayName(name);
+      setNotifyCustomerSearch(name);
+    } else if (jobData.notify_customer) {
       setNotifyCustomerDisplayName(String(jobData.notify_customer));
+      setNotifyCustomerSearch(String(jobData.notify_customer));
+    }
+    if (jobData.notify2_customer_name) {
+      const name = String(jobData.notify2_customer_name);
+      setNotify2CustomerDisplayName(name);
+      setNotify2CustomerSearch(name);
+      setNotify2CustomerAddressOptions(
+        jobData.notify2_customer_address
+          ? [{ value: String(jobData.notify2_customer_address), label: String(jobData.notify2_customer_address) }]
+          : [],
+      );
+    }
     if (jobData.cha_name) setChaDisplayName(String(jobData.cha_name));
     else if (jobData.cha) setChaDisplayName(String(jobData.cha));
     if (jobData.pickup_from)
@@ -1828,16 +1999,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
     if (jobData.shipper_address) {
       const addrId = jobData.shipper_address_id;
-      if (addrId != null && addrId !== 0) {
-        setShipperAddressOptions([
-          { value: String(addrId), label: String(jobData.shipper_address) },
-        ]);
-      } else {
-        setShipperAddressOptions([
-          { value: "0", label: String(jobData.shipper_address) },
-        ]);
-        form.setFieldValue("shipper_address_id", 0);
-      }
+      const hasRealId = addrId != null && Number(addrId) !== 0;
+      const resolvedId = hasRealId ? Number(addrId) : -1;
+
+      setShipperAddressOptions([
+        { value: String(resolvedId), label: String(jobData.shipper_address) },
+      ]);
+      form.setFieldValue("shipper_address_id", resolvedId);
       form.setFieldValue("shipper_address", String(jobData.shipper_address));
     }
     // Consignee address is handled as text for shipment-party flow
@@ -1872,13 +2040,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       ]);
     }
     if (
-      jobData.notify_customer_address_id != null &&
-      jobData.notify_customer_address
+      jobData.notify1_customer_address &&
+      notifyCustomerAddressOptions.length === 0 &&
+      !jobData.notify1_customer_name
     ) {
       setNotifyCustomerAddressOptions([
         {
-          value: String(jobData.notify_customer_address_id),
-          label: String(jobData.notify_customer_address),
+          value: String(jobData.notify1_customer_address),
+          label: String(jobData.notify1_customer_address),
         },
       ]);
     }
@@ -1972,11 +2141,40 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     } else if (initialData.billing_customer) {
       setBillingCustomerDisplayName(String(initialData.billing_customer));
     }
-    // Notify Customer - check for both notify_customer_name and notify_customer
-    if (initialData.notify_customer_name) {
-      setNotifyCustomerDisplayName(String(initialData.notify_customer_name));
+    // Notify Customer 1
+    if (initialData.notify1_customer_name) {
+      const name = String(initialData.notify1_customer_name);
+      setNotifyCustomerDisplayName(name);
+      setNotifyCustomerSearch(name);
+      if (initialData.notify1_customer_address) {
+        setNotifyCustomerAddressOptions([
+          {
+            value: String(initialData.notify1_customer_address),
+            label: String(initialData.notify1_customer_address),
+          },
+        ]);
+      }
+    } else if (initialData.notify_customer_name) {
+      const name = String(initialData.notify_customer_name);
+      setNotifyCustomerDisplayName(name);
+      setNotifyCustomerSearch(name);
     } else if (initialData.notify_customer) {
       setNotifyCustomerDisplayName(String(initialData.notify_customer));
+      setNotifyCustomerSearch(String(initialData.notify_customer));
+    }
+    // Notify Customer 2
+    if (initialData.notify2_customer_name) {
+      const name = String(initialData.notify2_customer_name);
+      setNotify2CustomerDisplayName(name);
+      setNotify2CustomerSearch(name);
+      if (initialData.notify2_customer_address) {
+        setNotify2CustomerAddressOptions([
+          {
+            value: String(initialData.notify2_customer_address),
+            label: String(initialData.notify2_customer_address),
+          },
+        ]);
+      }
     }
     // CHA - check for both cha_name and cha
     if (initialData.cha_name) {
@@ -2086,15 +2284,27 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       ]);
     }
 
-    // Notify Customer Address
+    // Notify Customer 1 address options when we have address but didn't set from name (e.g. legacy)
     if (
-      initialData.notify_customer_address_id &&
-      initialData.notify_customer_address
+      initialData.notify1_customer_address &&
+      !initialData.notify1_customer_name
     ) {
       setNotifyCustomerAddressOptions([
         {
-          value: String(initialData.notify_customer_address_id),
-          label: String(initialData.notify_customer_address),
+          value: String(initialData.notify1_customer_address),
+          label: String(initialData.notify1_customer_address),
+        },
+      ]);
+    }
+    // Notify Customer 2 address options when we have address but didn't set from name
+    if (
+      initialData.notify2_customer_address &&
+      !initialData.notify2_customer_name
+    ) {
+      setNotify2CustomerAddressOptions([
+        {
+          value: String(initialData.notify2_customer_address),
+          label: String(initialData.notify2_customer_address),
         },
       ]);
     }
@@ -2370,6 +2580,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
+        "destination_agent_code",
+        "destination_agent_address_id",
+        "destination_agent_address",
+        "destination_agent_email",
       ];
 
       const validation = form.validate();
@@ -2457,13 +2671,12 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             ? Number(form.values.billing_customer_address_id)
             : null,
 
-        notify_customer_code: form.values.notify_customer_code,
-        notify_customer_address_id:
-          form.values.notify_customer_address_id &&
-          form.values.notify_customer_address_id > 0
-            ? Number(form.values.notify_customer_address_id)
-            : null,
-        notify_customer_email: form.values.notify_customer_email,
+        notify1_customer_name: form.values.notify1_customer_name || null,
+        notify1_customer_address: form.values.notify1_customer_address || null,
+        notify1_customer_email: form.values.notify1_customer_email || null,
+        notify2_customer_name: form.values.notify2_customer_name || null,
+        notify2_customer_address: form.values.notify2_customer_address || null,
+        notify2_customer_email: form.values.notify2_customer_email || null,
 
         cha_code: form.values.cha_code,
         cha_address_id:
@@ -3963,19 +4176,16 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Shipper Address"
                     placeholder="Select shipper address"
                     searchable
+                    clearable
                     data={shipperAddressOptions}
                     value={
-                      form.values.shipper_address_id && form.values.shipper_address_id !== 0
+                      shipperAddressOptions.length > 0 && form.values.shipper_address_id !== 0
                         ? String(form.values.shipper_address_id)
                         : ""
                     }
-                    key={
-                      form.values.shipper_address_id && form.values.shipper_address_id !== 0
-                        ? String(form.values.shipper_address_id)
-                        : "empty"
-                    }
+                    key={`shipper-${form.values.shipper_address_id}`}
                     onChange={(value) => {
-                      form.setFieldValue("shipper_address_id", value ? parseInt(value) : 0);
+                      form.setFieldValue("shipper_address_id", value ? parseInt(value) || 0 : 0);
                       const opt = shipperAddressOptions.find((o) => o.value === value);
                       form.setFieldValue("shipper_address", opt?.label ?? "");
                     }}
@@ -4184,6 +4394,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Forwarder Address"
                     placeholder="Select forwarder address"
                     searchable
+                    clearable
                     data={forwarderAddressOptions}
                     key={
                       form.values.forwarder_address_id && form.values.forwarder_address_id !== 0
@@ -4216,6 +4427,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Destination Agent Name"
                     placeholder="Type destination agent name"
                     apiEndpoint={URL.agent}
+                    withAsterisk
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4289,6 +4501,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={6}>
                   <FormTextInput
+                    withAsterisk
                     label="Destination Agent Email Id"
                     placeholder="Enter email address"
                     format = "normal"
@@ -4300,6 +4513,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Destination Agent Address"
                     placeholder="Select agent address"
                     searchable
+                    clearable
+                    withAsterisk
                     data={agentAddressOptions}
                     key={
                       form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0
@@ -4399,6 +4614,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Billing Customer Address"
                     placeholder="Select billing address"
                     searchable
+                    clearable
                     data={billingCustomerAddressOptions}
                     key={
                       form.values.billing_customer_address_id && form.values.billing_customer_address_id !== 0
@@ -4420,115 +4636,211 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Grid>
               <Divider my="md" />
 
-              {/* Notify Customer Details */}
+              {/* Notify Customer 1 Details */}
               <Text size="sm" fw={500} mb="sm" c="#105476">
-                Notify Customer Details
+                Notify Customer 1 Details
               </Text>
               <Grid mb="md">
                 <Grid.Col span={6}>
-                  <SearchableSelect
-                    label="Notify Customer Name"
-                    placeholder="Type notify customer name"
-                    apiEndpoint={URL.consignee}
-                    searchFields={["customer_name", "customer_code"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
-                    value={form.values.notify_customer_code}
-                    displayValue={notifyCustomerDisplayName}
-                    onChange={(value, selectedData, originalData) => {
-                      const newValue = value || "";
-                      form.setFieldValue("notify_customer_code", newValue);
-
-                      if (!newValue) {
-                        setNotifyCustomerDisplayName(null);
+                  {notifyCustomerHasResults === false &&
+                  notifyCustomerSearch.trim().length >= 2 ? (
+                    <FormTextInput
+                      label="Notify Customer 1 Name"
+                      placeholder="Enter notify customer name"
+                      value={notifyCustomerSearch || notifyCustomerDisplayName || ""}
+                      onChange={(e) => {
+                        const v = toTitleCase(e.currentTarget.value);
+                        setNotifyCustomerSearch(v);
+                        form.setFieldValue("notify1_customer_name", v);
                         setNotifyCustomerAddressOptions([]);
-                        form.setFieldValue("notify_customer_address_id", 0);
-                        form.setFieldValue("notify_customer_email", "");
-                        return;
-                      }
-
-                      if (selectedData) {
-                        setNotifyCustomerDisplayName(selectedData.label);
-                      }
-
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
-                        const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
-                        const addressOptions = addressesData.map((addr) => ({
-                          value: String(addr.id),
-                          label: addr.address,
-                        }));
-                        setNotifyCustomerAddressOptions(addressOptions);
-
-                        const primary = addressesData?.find(
-                          (a) =>
-                            String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
-                        );
-                        if (primary) {
-                          form.setFieldValue(
-                            "notify_customer_address_id",
-                            primary.id
-                          );
-                          form.setFieldValue(
-                            "notify_customer_email",
-                            primary.email ?? ""
-                          );
-                        } else {
-                          form.setFieldValue(
-                            "notify_customer_address_id",
-                            0
-                          );
-                          form.setFieldValue("notify_customer_email", "");
+                        form.setFieldValue("notify1_customer_address", "");
+                        form.setFieldValue("notify1_customer_email", "");
+                      }}
+                    />
+                  ) : (
+                    <Select
+                      label="Notify Customer 1 Name"
+                      placeholder="Select or search notify customer"
+                      searchable
+                      clearable
+                      data={notifyCustomerOptions}
+                      comboboxProps={{ zIndex: 10 }}
+                      styles={{
+                        input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                        label: { fontSize: "13px", fontWeight: 500, color: "#424242", marginBottom: "4px", fontFamily: "Inter", fontStyle: "medium" },
+                      }}
+                      searchValue={notifyCustomerSearch}
+                      onSearchChange={(value) => {
+                        const v = toTitleCase(value);
+                        setNotifyCustomerSearch(v);
+                        debouncedNotifyCustomerSearch(v);
+                      }}
+                      value={notifyCustomerSelectedId || ""}
+                      onChange={(value) => {
+                        if (!value) {
+                          setNotifyCustomerSelectedId("");
+                          form.setFieldValue("notify1_customer_name", "");
+                          form.setFieldValue("notify1_customer_address", "");
+                          form.setFieldValue("notify1_customer_email", "");
+                          setNotifyCustomerAddressOptions([]);
+                          return;
                         }
-                      }
-                    }}
-                    returnOriginalData={true}
-                    error={form.errors.notify_customer_code as string}
-                    minSearchLength={2}
-                  />
+                        const original = notifyCustomerDataRef.current[value] || {};
+                        const name = String((original as any).customer_name || "");
+                        const customerEmail = String((original as any).customer_email || "");
+                        const addressesDataRaw = (original as any).addresses_data;
+                        const addressesData = Array.isArray(addressesDataRaw)
+                          ? (addressesDataRaw as Array<{ address: string; email?: string; address_type?: string }>)
+                          : [];
+                        const addressOptions = addressesData.map((a) => ({
+                          value: a.address || "",
+                          label: a.address || "",
+                        })).filter((a) => a.value);
+                        setNotifyCustomerAddressOptions(addressOptions);
+                        const primary = addressesData.find((a) => String(a.address_type || "").toUpperCase() === "PRIMARY");
+                        const firstAddr = addressesData[0];
+                        form.setFieldValue("notify1_customer_name", toTitleCase(name));
+                        form.setFieldValue("notify1_customer_email", primary?.email ?? firstAddr?.email ?? customerEmail);
+                        form.setFieldValue("notify1_customer_address", primary?.address ?? firstAddr?.address ?? "");
+                        setNotifyCustomerSearch(name);
+                        setNotifyCustomerSelectedId(value);
+                      }}
+                      nothingFoundMessage="No notify customer found - type to enter new"
+                    />
+                  )}
                 </Grid.Col>
                 <Grid.Col span={6}>
                   <FormTextInput
-                    label="Notify Customer Email Id"
+                    label="Notify Customer 1 Email Id"
                     placeholder="Enter email address"
-                    format = "normal"
-                    {...form.getInputProps("notify_customer_email")}
+                    format="normal"
+                    {...form.getInputProps("notify1_customer_email")}
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  <Dropdown
-                    label="Notify Customer Address"
-                    placeholder="Select notify address"
-                    searchable
-                    data={notifyCustomerAddressOptions}
-                    key={
-                      form.values.notify_customer_address_id && form.values.notify_customer_address_id !== 0
-                        ? String(form.values.notify_customer_address_id)
-                        : "notify-empty"
-                    }
-                    value={
-                      form.values.notify_customer_address_id && form.values.notify_customer_address_id !== 0
-                        ? String(form.values.notify_customer_address_id)
-                        : ""
-                    }
-                    onChange={(value) => {
-                      form.setFieldValue("notify_customer_address_id", value ? parseInt(value) : 0);
-                    }}
-                    error={form.errors.notify_customer_address_id}
-                    disabled={notifyCustomerAddressOptions.length === 0}
+                  {notifyCustomerAddressOptions.length > 0 ? (
+                    <Dropdown
+                      label="Notify Customer 1 Address"
+                      placeholder="Select notify address"
+                      searchable
+                      clearable
+                      data={notifyCustomerAddressOptions}
+                      value={form.values.notify1_customer_address || ""}
+                      onChange={(value) => form.setFieldValue("notify1_customer_address", value ? toTitleCase(value) : "")}
+                    />
+                  ) : (
+                    <FormTextInput
+                      label="Notify Customer 1 Address"
+                      placeholder="Enter notify address"
+                      value={form.values.notify1_customer_address}
+                      onChange={(e) => form.setFieldValue("notify1_customer_address", toTitleCase(e.currentTarget.value))}
+                    />
+                  )}
+                </Grid.Col>
+              </Grid>
+              <Divider my="md" />
+
+              {/* Notify Customer 2 Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Notify Customer 2 Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={6}>
+                  {notify2CustomerHasResults === false &&
+                  notify2CustomerSearch.trim().length >= 2 ? (
+                    <FormTextInput
+                      label="Notify Customer 2 Name"
+                      placeholder="Enter notify customer name"
+                      value={notify2CustomerSearch || notify2CustomerDisplayName || ""}
+                      onChange={(e) => {
+                        const v = toTitleCase(e.currentTarget.value);
+                        setNotify2CustomerSearch(v);
+                        form.setFieldValue("notify2_customer_name", v);
+                        setNotify2CustomerAddressOptions([]);
+                        form.setFieldValue("notify2_customer_address", "");
+                        form.setFieldValue("notify2_customer_email", "");
+                      }}
+                    />
+                  ) : (
+                    <Select
+                      label="Notify Customer 2 Name"
+                      placeholder="Select or search notify customer"
+                      searchable
+                      clearable
+                      data={notify2CustomerOptions}
+                      comboboxProps={{ zIndex: 10 }}
+                      styles={{
+                        input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
+                        label: { fontSize: "13px", fontWeight: 500, color: "#424242", marginBottom: "4px", fontFamily: "Inter", fontStyle: "medium" },
+                      }}
+                      searchValue={notify2CustomerSearch}
+                      onSearchChange={(value) => {
+                        const v = toTitleCase(value);
+                        setNotify2CustomerSearch(v);
+                        debouncedNotify2CustomerSearch(v);
+                      }}
+                      value={notify2CustomerSelectedId || ""}
+                      onChange={(value) => {
+                        if (!value) {
+                          setNotify2CustomerSelectedId("");
+                          form.setFieldValue("notify2_customer_name", "");
+                          form.setFieldValue("notify2_customer_address", "");
+                          form.setFieldValue("notify2_customer_email", "");
+                          setNotify2CustomerAddressOptions([]);
+                          return;
+                        }
+                        const original = notify2CustomerDataRef.current[value] || {};
+                        const name = String((original as any).customer_name || "");
+                        const customerEmail = String((original as any).customer_email || "");
+                        const addressesDataRaw = (original as any).addresses_data;
+                        const addressesData = Array.isArray(addressesDataRaw)
+                          ? (addressesDataRaw as Array<{ address: string; email?: string; address_type?: string }>)
+                          : [];
+                        const addressOptions = addressesData.map((a) => ({
+                          value: a.address || "",
+                          label: a.address || "",
+                        })).filter((a) => a.value);
+                        setNotify2CustomerAddressOptions(addressOptions);
+                        const primary = addressesData.find((a) => String(a.address_type || "").toUpperCase() === "PRIMARY");
+                        const firstAddr = addressesData[0];
+                        form.setFieldValue("notify2_customer_name", toTitleCase(name));
+                        form.setFieldValue("notify2_customer_email", primary?.email ?? firstAddr?.email ?? customerEmail);
+                        form.setFieldValue("notify2_customer_address", primary?.address ?? firstAddr?.address ?? "");
+                        setNotify2CustomerSearch(name);
+                        setNotify2CustomerSelectedId(value);
+                      }}
+                      nothingFoundMessage="No notify customer found - type to enter new"
+                    />
+                  )}
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <FormTextInput
+                    label="Notify Customer 2 Email Id"
+                    placeholder="Enter email address"
+                    format="normal"
+                    {...form.getInputProps("notify2_customer_email")}
                   />
                 </Grid.Col>
-                
+                <Grid.Col span={12}>
+                  {notify2CustomerAddressOptions.length > 0 ? (
+                    <Dropdown
+                      label="Notify Customer 2 Address"
+                      placeholder="Select notify address"
+                      searchable
+                      clearable
+                      data={notify2CustomerAddressOptions}
+                      value={form.values.notify2_customer_address || ""}
+                      onChange={(value) => form.setFieldValue("notify2_customer_address", value ? toTitleCase(value) : "")}
+                    />
+                  ) : (
+                    <FormTextInput
+                      label="Notify Customer 2 Address"
+                      placeholder="Enter notify address"
+                      value={form.values.notify2_customer_address}
+                      onChange={(e) => form.setFieldValue("notify2_customer_address", toTitleCase(e.currentTarget.value))}
+                    />
+                  )}
+                </Grid.Col>
               </Grid>
               <Divider my="md" />
 
@@ -4602,6 +4914,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="CHA Address"
                     placeholder="Select CHA address"
                     searchable
+                    clearable
                     data={chaAddressOptions}
                     key={
                       form.values.cha_address_id && form.values.cha_address_id !== 0
