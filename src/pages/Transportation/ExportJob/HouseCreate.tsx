@@ -946,7 +946,7 @@ function HouseCreate() {
         const amountPerUnit = charge.amount_per_unit;
 
         // Calculate: amount = roe * no_of_unit * amount_per_unit
-        const calculatedAmount = roe * noOfUnit * amountPerUnit;
+        const calculatedAmount = parseFloat((roe * noOfUnit * amountPerUnit).toFixed(2));
 
         // Only update if the calculated value is different from current amount
         // This allows user to manually edit the amount after calculation
@@ -3600,8 +3600,9 @@ function HouseCreate() {
                           value
                         ) {
                           const roe = currentCharge.roe ?? 0;
-                          const calculatedAmount =
-                            roe * Number(value) * currentCharge.amount_per_unit;
+                          const calculatedAmount = parseFloat(
+                            (roe * Number(value) * currentCharge.amount_per_unit).toFixed(2)
+                          );
 
                           chargesForm.setFieldValue(
                             `charges.${index}.amount`,
@@ -3681,8 +3682,9 @@ function HouseCreate() {
                               ? currentCharge.no_of_unit
                               : 0;
                           const amountPerUnit = currentCharge.amount_per_unit;
-                          const calculatedAmount =
-                            roe * noOfUnit * amountPerUnit;
+                          const calculatedAmount = parseFloat(
+                            (roe * noOfUnit * amountPerUnit).toFixed(2)
+                          );
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
@@ -3736,8 +3738,9 @@ function HouseCreate() {
                               : 0;
                           const amountPerUnit =
                             typeof value === "number" ? value : Number(value);
-                          const calculatedAmount =
-                            roe * noOfUnit * amountPerUnit;
+                          const calculatedAmount = parseFloat(
+                            (roe * noOfUnit * amountPerUnit).toFixed(2)
+                          );
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
