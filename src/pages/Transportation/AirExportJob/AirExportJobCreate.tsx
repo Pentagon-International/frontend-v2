@@ -161,6 +161,12 @@ type HAWBDetail = {
     roe: number | null;
     amount_per_unit: number | null;
     amount: number | null;
+    local_amount?: number | null;
+    sell_local_amount?: number | null;
+    cost_per_unit?: number | null;
+    unit_cost?: number | null;
+    total_cost?: number | null;
+    cost_local_amount?: number | null;
   }>;
   mawb_charges?: Array<Record<string, unknown>>;
 };
@@ -2017,8 +2023,6 @@ function AirExportJobCreate() {
                 charge_name: charge.charge_name || "",
                 pp_cc: charge.pp_cc || "",
                 unit_id: charge.unit_id ? String(charge.unit_id) : "",
-                // unit_input: charge.unit_code || "",
-                // currency: charge.currency || "",
                 no_of_unit: charge.no_of_unit || null,
                 currency_id: charge.currency_id
                   ? String(charge.currency_id)
@@ -2026,6 +2030,10 @@ function AirExportJobCreate() {
                 roe: charge.roe || null,
                 amount_per_unit: charge.amount_per_unit || null,
                 amount: charge.amount || null,
+                sell_local_amount: charge.sell_local_amount ?? charge.local_amount ?? null,
+                unit_cost: charge.unit_cost ?? charge.cost_per_unit ?? null,
+                total_cost: charge.total_cost ?? null,
+                cost_local_amount: charge.cost_local_amount ?? null,
               }))
             : [],
         })),
