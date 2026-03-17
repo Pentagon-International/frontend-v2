@@ -29,6 +29,7 @@ export default function Dropdown({
   const [search, setSearch] = useState("");
   const [isSearchMode, setIsSearchMode] = useState(false);
   const searchRef = useRef<string>("");
+  const prevValueRef = useRef<string | null | undefined>(undefined);
 
   const normalizedData = useMemo<NormalizedItem[]>(() => {
     if (!Array.isArray(data)) return [];
@@ -62,6 +63,10 @@ export default function Dropdown({
   const displayData = searchable ? filteredData : normalizedData;
 
   useEffect(() => {
+    const prevValue = prevValueRef.current;
+    const valueChanged = prevValue !== value;
+    prevValueRef.current = value;
+
     if (value && normalizedData.length > 0) {
       const foundItem = normalizedData.find((item) => item.value === value);
       if (foundItem) {
@@ -71,7 +76,10 @@ export default function Dropdown({
         );
         setActiveIndex(currentIndex >= 0 ? currentIndex + 1 : 0);
 
-        if (!isSearchMode) {
+        // If value changes externally (e.g. programmatic setFieldValue), force-sync the displayed text.
+        // Otherwise, if user is actively typing (search mode) keep their input intact.
+        if (!isSearchMode || valueChanged) {
+          setIsSearchMode(false);
           setSearch(foundItem.label);
           searchRef.current = foundItem.label;
         }
@@ -82,7 +90,8 @@ export default function Dropdown({
     } else {
       setSelectedItem(null);
       setActiveIndex(-1);
-      if (!isSearchMode) {
+      if (!isSearchMode || valueChanged) {
+        setIsSearchMode(false);
         setSearch("");
         searchRef.current = "";
       }

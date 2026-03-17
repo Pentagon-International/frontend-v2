@@ -725,14 +725,26 @@ function AirExportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
-              notify_customer1_name: house.notify_customer1_name
-                ? String(house.notify_customer1_name)
+              notify_customer1_name: (house.notify1_customer_name ??
+                house.notify_customer1_name)
+                ? String(house.notify1_customer_name ?? house.notify_customer1_name)
                 : "",
-              notify_customer1_address: house.notify_customer1_address
-                ? String(house.notify_customer1_address)
+              notify_customer1_address: (house.notify1_customer_address ??
+                house.notify_customer1_address)
+                ? String(house.notify1_customer_address ?? house.notify_customer1_address)
                 : "",
-              notify_customer1_email: house.notify_customer1_email
-                ? String(house.notify_customer1_email)
+              notify_customer1_email: (house.notify1_customer_email ??
+                house.notify_customer1_email)
+                ? String(house.notify1_customer_email ?? house.notify_customer1_email)
+                : "",
+              notify2_customer_name: house.notify2_customer_name
+                ? String(house.notify2_customer_name)
+                : "",
+              notify2_customer_address: house.notify2_customer_address
+                ? String(house.notify2_customer_address)
+                : "",
+              notify2_customer_email: house.notify2_customer_email
+                ? String(house.notify2_customer_email)
                 : "",
               commodity_description: house.commodity_description
                 ? String(house.commodity_description)
@@ -1984,9 +1996,15 @@ function AirExportJobCreate() {
           consignee_name: hawb.consignee_name,
           consignee_address: hawb.consignee_address || "",
           consignee_email: hawb.consignee_email || "",
-          notify_customer1_name: hawb.notify_customer1_name || "",
-          notify_customer1_address: hawb.notify_customer1_address || "",
-          notify_customer1_email: hawb.notify_customer1_email || "",
+          notify1_customer_name:
+            hawb.notify1_customer_name ?? hawb.notify_customer1_name ?? "",
+          notify1_customer_address:
+            hawb.notify1_customer_address ?? hawb.notify_customer1_address ?? "",
+          notify1_customer_email:
+            hawb.notify1_customer_email ?? hawb.notify_customer1_email ?? "",
+          notify2_customer_name: hawb.notify2_customer_name ?? "",
+          notify2_customer_address: hawb.notify2_customer_address ?? "",
+          notify2_customer_email: hawb.notify2_customer_email ?? "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
           item_no: (hawb as { item_no?: string }).item_no ?? "",

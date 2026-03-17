@@ -638,15 +638,18 @@ function ImportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
-              notify_customer1_name: house.notify_customer1_name
-                ? String(house.notify_customer1_name)
+              notify_customer1_name: (house.notify1_customer_name ??
+                house.notify_customer1_name)
+                ? String(house.notify1_customer_name ?? house.notify_customer1_name)
                 : "",
-              notify_customer1_address: house.notify_customer1_address
-                ? String(house.notify_customer1_address)
+              notify_customer1_address: (house.notify1_customer_address ??
+                house.notify_customer1_address)
+                ? String(house.notify1_customer_address ?? house.notify_customer1_address)
                 : "",
-          notify_customer1_email: house.notify_customer1_email
-            ? String(house.notify_customer1_email)
-            : "",
+              notify_customer1_email: (house.notify1_customer_email ??
+                house.notify_customer1_email)
+                ? String(house.notify1_customer_email ?? house.notify_customer1_email)
+                : "",
           commodity_description: house.commodity_description
             ? String(house.commodity_description)
             : "",
@@ -2129,9 +2132,12 @@ function ImportJobCreate() {
           consignee_name: house.consignee_name,
           consignee_address: house.consignee_address || "",
           consignee_email: house.consignee_email || "",
-          notify_customer1_name: house.notify_customer1_name || "",
-          notify_customer1_address: house.notify_customer1_address || "",
-          notify_customer1_email: house.notify_customer1_email || "",
+          notify1_customer_name:
+            house.notify1_customer_name ?? house.notify_customer1_name ?? "",
+          notify1_customer_address:
+            house.notify1_customer_address ?? house.notify_customer1_address ?? "",
+          notify1_customer_email:
+            house.notify1_customer_email ?? house.notify_customer1_email ?? "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
           item_no: house.item_no || "",
@@ -4862,12 +4868,12 @@ function ImportJobCreate() {
                       Name
                     </Text>
                     <Text size="sm" mb="xs">
-                      {house.notify_customer1_name || "-"}
+                      {house.notify1_customer_name ?? house.notify_customer1_name ?? "-"}
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
                       Email
                     </Text>
-                    <Text size="sm">{house.notify_customer1_email || "-"}</Text>
+                    <Text size="sm">{house.notify1_customer_email ?? house.notify_customer1_email ?? "-"}</Text>
                   </Grid.Col> */}
                 </Grid>
               </Card>

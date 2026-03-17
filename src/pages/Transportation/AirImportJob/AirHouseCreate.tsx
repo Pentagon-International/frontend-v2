@@ -87,9 +87,9 @@ type HAWBDetailsForm = {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
-  notify_customer1_name: string;
-  notify_customer1_address: string;
-  notify_customer1_email: string;
+  notify1_customer_name: string;
+  notify1_customer_address: string;
+  notify1_customer_email: string;
   commodity_description: string;
   marks_no: string;
   item_no: string;
@@ -536,9 +536,21 @@ function HouseCreate() {
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
-      notify_customer1_name: editData?.notify_customer1_name || "",
-      notify_customer1_address: editData?.notify_customer1_address || "",
-      notify_customer1_email: editData?.notify_customer1_email || "",
+      notify1_customer_name:
+        (editData as { notify1_customer_name?: string })
+          ?.notify1_customer_name ??
+        editData?.notify_customer1_name ??
+        "",
+      notify1_customer_address:
+        (editData as { notify1_customer_address?: string })
+          ?.notify1_customer_address ??
+        editData?.notify_customer1_address ??
+        "",
+      notify1_customer_email:
+        (editData as { notify1_customer_email?: string })
+          ?.notify1_customer_email ??
+        editData?.notify_customer1_email ??
+        "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
@@ -709,7 +721,7 @@ function HouseCreate() {
           {
             filters: {
               service_type: "IMPORT",
-              service:"AIR",
+              service: "AIR",
               status: ["BOOKED", "RECEIVED"],
               houseno: hawbNo.trim(),
               destination_agent_code: agentCode.trim(),
@@ -791,19 +803,19 @@ function HouseCreate() {
       form.setFieldValue("routed_by", String(rb.routed_by));
     }
 
-    // Notify customer name / address / email
+    // Notify customer name / address / email (payload keys: notify1_customer_*)
     if (rb.notify_customer) {
-      form.setFieldValue("notify_customer1_name", String(rb.notify_customer));
+      form.setFieldValue("notify1_customer_name", String(rb.notify_customer));
     }
     if (rb.notify_customer_address) {
       form.setFieldValue(
-        "notify_customer1_address",
+        "notify1_customer_address",
         String(rb.notify_customer_address),
       );
     }
     if (rb.notify_customer_email) {
       form.setFieldValue(
-        "notify_customer1_email",
+        "notify1_customer_email",
         String(rb.notify_customer_email),
       );
     }
@@ -1054,9 +1066,21 @@ function HouseCreate() {
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
         consignee_email: editData.consignee_email || "",
-        notify_customer1_name: editData.notify_customer1_name || "",
-        notify_customer1_address: editData.notify_customer1_address || "",
-        notify_customer1_email: editData.notify_customer1_email || "",
+        notify1_customer_name:
+          (editData as { notify1_customer_name?: string })
+            .notify1_customer_name ??
+          editData.notify_customer1_name ??
+          "",
+        notify1_customer_address:
+          (editData as { notify1_customer_address?: string })
+            .notify1_customer_address ??
+          editData.notify_customer1_address ??
+          "",
+        notify1_customer_email:
+          (editData as { notify1_customer_email?: string })
+            .notify1_customer_email ??
+          editData.notify_customer1_email ??
+          "",
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
       });
@@ -1862,10 +1886,10 @@ function HouseCreate() {
       errors.origin_agent_email = "Invalid email format";
     }
     if (
-      form.values.notify_customer1_email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.notify_customer1_email)
+      form.values.notify1_customer_email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.notify1_customer_email)
     ) {
-      errors.notify_customer1_email = "Invalid email format";
+      errors.notify1_customer_email = "Invalid email format";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -2050,9 +2074,9 @@ function HouseCreate() {
           }
         )?.housing_details?.[editIndex ?? 0]?.consignee_gst_id ??
         null,
-      notify_customer1_name: v.notify_customer1_name,
-      notify_customer1_address: v.notify_customer1_address,
-      notify_customer1_email: v.notify_customer1_email,
+      notify1_customer_name: v.notify1_customer_name,
+      notify1_customer_address: v.notify1_customer_address,
+      notify1_customer_email: v.notify1_customer_email,
       commodity_description: v.commodity_description,
       marks_no: v.marks_no,
       item_no: v.item_no,
@@ -2121,9 +2145,9 @@ function HouseCreate() {
       consignee_name: currentFormValues.consignee_name,
       consignee_address: currentFormValues.consignee_address,
       consignee_email: currentFormValues.consignee_email,
-      notify_customer1_name: currentFormValues.notify_customer1_name,
-      notify_customer1_address: currentFormValues.notify_customer1_address,
-      notify_customer1_email: currentFormValues.notify_customer1_email,
+      notify1_customer_name: currentFormValues.notify1_customer_name,
+      notify1_customer_address: currentFormValues.notify1_customer_address,
+      notify1_customer_email: currentFormValues.notify1_customer_email,
       commodity_description: currentFormValues.commodity_description,
       marks_no: currentFormValues.marks_no,
       item_no: currentFormValues.item_no,
@@ -2210,9 +2234,9 @@ function HouseCreate() {
         consignee_name: form.values.consignee_name,
         consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,
-        notify_customer1_name: form.values.notify_customer1_name,
-        notify_customer1_address: form.values.notify_customer1_address,
-        notify_customer1_email: form.values.notify_customer1_email,
+        notify1_customer_name: form.values.notify1_customer_name,
+        notify1_customer_address: form.values.notify1_customer_address,
+        notify1_customer_email: form.values.notify1_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
         cargo_details: cargoDetails.map((cargo) => ({
@@ -3140,7 +3164,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Shipper Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Shipper Email"
                   {...form.getInputProps("shipper_email")}
                   error={form.errors.shipper_email}
@@ -3243,7 +3267,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Consignee Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Consignee Email"
                   {...form.getInputProps("consignee_email")}
                   error={form.errors.consignee_email}
@@ -3278,14 +3302,14 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
 
-            {/* Notify Customer Section */}
+            {/* Notify Customer 1 Details - same payload/response keys as Import booking steppers */}
             <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
-              Notify Customer
+              Notify Customer 1 Details
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
                 <SearchableSelect
-                  label="Notify Customer Name"
+                  label="Notify Customer 1 Name"
                   placeholder="Type notify customer name"
                   apiEndpoint={URL.consignee}
                   searchFields={["customer_name", "customer_code"]}
@@ -3294,24 +3318,22 @@ function HouseCreate() {
                     label: String(item.customer_name),
                   })}
                   value={
-                    form.values.notify_customer1_name
-                      ? String(form.values.notify_customer1_name)
+                    form.values.notify1_customer_name
+                      ? String(form.values.notify1_customer_name)
                       : ""
                   }
-                  displayValue={form.values.notify_customer1_name}
+                  displayValue={form.values.notify1_customer_name}
                   onChange={(value, selectedData, originalData) => {
-                    const previousValue = form.values.notify_customer1_name;
                     const newValue = selectedData?.label || value || "";
 
-                    form.setFieldValue("notify_customer1_name", newValue);
+                    form.setFieldValue("notify1_customer_name", newValue);
 
-                    // Use originalData to populate address options
+                    // Use originalData to populate address options (same pattern as consignee/reference)
                     if (
                       newValue &&
                       originalData &&
                       (originalData as Record<string, unknown>).addresses_data
                     ) {
-                      // Create address options from addresses_data
                       const addressOptions = (
                         (originalData as Record<string, unknown>)
                           .addresses_data as Array<{
@@ -3325,70 +3347,68 @@ function HouseCreate() {
 
                       setNotifyCustomerAddressOptions(addressOptions);
 
-                      // Auto-select the first address if available
                       if (
                         addressOptions.length > 0 &&
                         addressOptions[0].address
                       ) {
                         form.setFieldValue(
-                          "notify_customer1_address",
+                          "notify1_customer_address",
                           addressOptions[0].address,
                         );
                       } else {
-                        form.setFieldValue("notify_customer1_address", "");
+                        form.setFieldValue("notify1_customer_address", "");
                       }
                     } else {
                       setNotifyCustomerAddressOptions([]);
-                      form.setFieldValue("notify_customer1_address", "");
+                      form.setFieldValue("notify1_customer_address", "");
                     }
                   }}
                   returnOriginalData={true}
-                  error={form.errors.notify_customer1_name as string}
+                  error={form.errors.notify1_customer_name as string}
                   minSearchLength={2}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
-                  label="Notify Customer Email"
+                  label="Notify Customer 1 Email"
                   type="email"
-                  format = "normal"
-                  placeholder="Enter Notify Customer Email"
-                  {...form.getInputProps("notify_customer1_email")}
-                  error={form.errors.notify_customer1_email}
+                  format="normal"
+                  placeholder="Enter Notify Customer 1 Email"
+                  {...form.getInputProps("notify1_customer_email")}
+                  error={form.errors.notify1_customer_email}
                 />
               </Grid.Col>
-
               <Grid.Col span={4}>
                 {notifyCustomerAddressOptions.length > 0 ? (
                   <Dropdown
-                    label="Notify Customer Address"
-                    placeholder="Select notify customer address"
+                    label="Notify Customer 1 Address"
+                    placeholder="Select notify address"
                     searchable
                     data={notifyCustomerAddressOptions}
-                    value={form.values.notify_customer1_address || ""}
+                    value={form.values.notify1_customer_address || ""}
                     onChange={(value) => {
                       const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
-                        "notify_customer1_address",
+                        "notify1_customer_address",
                         formattedValue,
                       );
                     }}
-                    error={form.errors.notify_customer1_address}
+                    error={form.errors.notify1_customer_address}
                   />
                 ) : (
                   <FormTextInput
-                    label="Notify Customer Address"
-                    placeholder="Enter Notify Customer Address"
+                    label="Notify Customer 1 Address"
+                    placeholder="Enter Notify Customer 1 Address"
                     minRows={2}
-                    value={form.values.notify_customer1_address}
+                    value={form.values.notify1_customer_address}
                     onChange={(e) => {
                       const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
-                        "notify_customer1_address",
+                        "notify1_customer_address",
                         formattedValue,
                       );
                     }}
-                    error={form.errors.notify_customer1_address}
+                    error={form.errors.notify1_customer_address}
                   />
                 )}
               </Grid.Col>
@@ -3472,7 +3492,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Origin Agent Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Origin Agent Email"
                   {...form.getInputProps("origin_agent_email")}
                   error={form.errors.origin_agent_email}
