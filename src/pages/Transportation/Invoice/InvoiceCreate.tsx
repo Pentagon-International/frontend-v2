@@ -125,22 +125,7 @@ const fetchChargeMaster = async () => {
 };
 
 // Fetch unit master
-const fetchUnitMaster = async () => {
-  try {
-    const payload = {
-      filters: {},
-    };
-    const response = await postAPICall(
-      URL.unitMasterFilter,
-      payload,
-      API_HEADER,
-    );
-    return (response as any)?.data || [];
-  } catch (error) {
-    console.error("Error fetching unit master:", error);
-    return [];
-  }
-};
+
 
 // Fetch effective SAC (tax code) for charge + service: POST body { items: [{ charge_id, service_id }] }
 const fetchGetEffectiveSac = async (
@@ -339,7 +324,6 @@ function InvoiceCreate() {
   const location = useLocation();
   const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
-
   const isViewMode = location.pathname.includes("/view/");
   const isEditMode = location.pathname.includes("/edit/");
   const isEditOrViewMode = Boolean(
@@ -441,6 +425,23 @@ function InvoiceCreate() {
     location.state?.invoiceData,
     invoiceDataFromApi,
   ]);
+
+  const fetchUnitMaster = async () => {
+    try {
+      const payload = {
+        filters: { service_type: location.state?.serviceType },
+      };
+      const response = await postAPICall(
+        URL.unitMasterFilter,
+        payload,
+        API_HEADER,
+      );
+      return (response as any)?.data || [];
+    } catch (error) {
+      console.error("Error fetching unit master:", error);
+      return [];
+    }
+  };
 
   useEffect(() => {
     isAgentInvoiceRef.current = isAgentInvoice;
@@ -553,7 +554,7 @@ function InvoiceCreate() {
 
   // Fetch unit master data
   const { data: unitData = [], isLoading: isUnitLoading } = useQuery({
-    queryKey: ["unitMaster", ""],
+    queryKey: ["unitMaster", location.state?.serviceType ?? ""],
     queryFn: fetchUnitMaster,
     staleTime: Infinity,
   });

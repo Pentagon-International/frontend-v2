@@ -2693,6 +2693,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Consignee Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Consignee Email"
                   {...form.getInputProps("consignee_email")}
                   error={form.errors.consignee_email}
@@ -2797,6 +2798,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Notify Customer Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Notify Customer Email"
                   {...form.getInputProps("notify_customer1_email")}
                   error={form.errors.notify_customer1_email}
@@ -2902,6 +2904,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Destination Agent Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Destination Agent Email"
                   {...form.getInputProps("agent_email")}
                   error={form.errors.agent_email}
@@ -3202,6 +3205,7 @@ function HouseCreate() {
                     };
                     navigate("/air/export-job/invoice", {
                       state: {
+                        serviceType: "AIR",
                         hawbDetails: [detailForInvoice],
                         housingDetails: [detailForInvoice],
                         is_agent: false,

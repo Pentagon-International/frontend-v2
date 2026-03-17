@@ -202,7 +202,7 @@ const fetchUnitMaster = async () => {
   try {
     const payload = {
       filters: {
-        service_type: "FCL,LCL",
+        service_type: ["FCL","LCL"],
       },
     };
     const response = (await postAPICall(
@@ -466,7 +466,7 @@ function HouseCreate() {
 
   // Unit and currency masters - fetch early for charge loading when in edit mode
   const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster", "SEA"],
+    queryKey: ["unitMaster", ["FCL", "LCL"]],
     queryFn: fetchUnitMaster,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -2859,6 +2859,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Shipper Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Shipper Email"
                   {...form.getInputProps("shipper_email")}
                   error={form.errors.shipper_email}
@@ -2960,6 +2961,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Consignee Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Consignee Email"
                   {...form.getInputProps("consignee_email")}
                   error={form.errors.consignee_email}
@@ -3063,6 +3065,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Notify Customer Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Notify Customer Email"
                   {...form.getInputProps("notify_customer1_email")}
                   error={form.errors.notify_customer1_email}
@@ -3171,6 +3174,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Origin Agent Email"
                   type="email"
+                  format = "normal"
                   placeholder="Enter Origin Agent Email"
                   {...form.getInputProps("agent_email")}
                   error={form.errors.agent_email}
@@ -3525,6 +3529,7 @@ function HouseCreate() {
                   };
                   navigate("/SeaExport/import-job/invoice", {
                     state: {
+                      serviceType: location.state?.mblDetails?.service || "FCL",
                       hawbDetails: [detailForInvoice],
                       housingDetails: [detailForInvoice],
                       is_agent: false,

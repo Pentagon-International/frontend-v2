@@ -142,6 +142,8 @@ export const URL = {
   invoiceCombined: "invoice/combined/",
   paymentRequest: "payment-request/",
   paymentRequestFilter: "filter/payment-request/",
+  journalVoucher: "journal-voucher/",
+  journalVoucherFilter: "filter/journal-voucher/",
 
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",

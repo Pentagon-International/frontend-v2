@@ -149,6 +149,7 @@ import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierIn
 import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
 import SupplierInvoiceReversalMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceReversalMaster";
+import JournalVoucher from "../pages/accounts/journalVoucher/JournalVoucher";
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
@@ -331,6 +332,10 @@ const NavigationRoutes = () => {
         <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
+        <Route path="/journal-voucher" element={<JournalVoucher />} />
+        <Route path="/journal-voucher/create" element={<JournalVoucher />} />
+        <Route path="/journal-voucher/edit/:id" element={<JournalVoucher />} />
+        <Route path="/journal-voucher/view/:id" element={<JournalVoucher />} />
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />

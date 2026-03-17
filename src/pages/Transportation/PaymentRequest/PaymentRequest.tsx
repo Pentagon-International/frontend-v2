@@ -9,6 +9,7 @@ import {
   Group,
   Loader,
   Menu,
+  Modal,
   NumberInput,
   Stack,
   Text,
@@ -16,6 +17,8 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { useDisclosure } from "@mantine/hooks";
+import { Dropzone } from "@mantine/dropzone";
 import {
   IconArrowLeft,
   IconCheck,
@@ -23,9 +26,12 @@ import {
   IconChevronRight,
   IconChevronUp,
   IconDotsVertical,
+  IconDownload,
   IconFileInvoice,
   IconPlus,
   IconTrash,
+  IconUpload,
+  IconX,
 } from "@tabler/icons-react";
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
@@ -89,14 +95,23 @@ const fetchCurrencyMaster = async () => {
   }
 };
 
-const fetchUnitMaster = async () => {
+const fetchUnitMaster = async (serviceType: string) => {
   try {
     const response = await postAPICall(
       URL.unitMasterFilter,
-      { filters: { service_type: "AIR" } },
+      { filters: { service_type: serviceType } },
       API_HEADER,
     );
     return (response as any)?.data || [];
+  } catch {
+    return [];
+  }
+};
+
+const fetchStateMaster = async () => {
+  try {
+    const response = await getAPICall(`${URL.state}`, API_HEADER);
+    return (response as { data?: unknown[] })?.data ?? response ?? [];
   } catch {
     return [];
   }
@@ -358,7 +373,7 @@ const textareaStyles = {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-function PaymentRequest() {
+function PaymentRequest( serviceType: string  ) {
   const navigate = useNavigate();
   const location = useLocation();
   const { id: requestId } = useParams<{ id: string }>();
@@ -378,6 +393,30 @@ function PaymentRequest() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sacCodeLoadingByIndex, setSacCodeLoadingByIndex] = useState<Record<number, boolean>>({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+  const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
+  const [documentsModalOpened, { open: openDocumentsModal, close: closeDocumentsModal }] =
+    useDisclosure(false);
+  const [supportingDocuments, setSupportingDocuments] = useState<
+    Array<{
+      name: string;
+      file: File | null;
+      document_url?: string;
+      document_id?: number;
+      original_document_name?: string;
+    }>
+  >([]);
+
+  const downloadFile = (url: string, fileName: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   const [paymentRequestDataFromApi, setPaymentRequestDataFromApi] =
     useState<PaymentRequestFromApi | null>(null);
   const [chargeErrors, setChargeErrors] = useState<
@@ -427,7 +466,7 @@ function PaymentRequest() {
 
   const { data: unitData = [] } = useQuery({
     queryKey: ["unitMaster", "AIR"],
-    queryFn: fetchUnitMaster,
+    queryFn: fetchUnitMaster(location.state?.serviceType),
     staleTime: Infinity,
   });
 
@@ -436,6 +475,21 @@ function PaymentRequest() {
     queryFn: fetchChartOfAccounts,
     staleTime: Infinity,
   });
+
+  const { data: stateData = [], isLoading: isStateLoading } = useQuery({
+    queryKey: ["stateMaster"],
+    queryFn: fetchStateMaster,
+    staleTime: Infinity,
+  });
+
+  const stateOptions = useMemo(() => {
+    const data = stateData as { id?: number; state_name?: string; name?: string }[];
+    if (!Array.isArray(data)) return [];
+    return data.map((item) => ({
+      value: String(item.id ?? ""),
+      label: item.state_name ?? item.name ?? "",
+    }));
+  }, [stateData]);
 
   // Fetch payment request data when opening edit/view URL (/edit/:id or /view/:id)
   const { data: requestFetchRes, isFetching: requestFetchLoading } = useQuery({
@@ -1466,29 +1520,18 @@ function PaymentRequest() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <Box
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "flex-end",
-                  height: "100%",
-                  paddingBottom: "6px",
-                }}
-              >
-                <Checkbox
-                  label="CINV"
-                  checked={form.values.cinv}
-                  onChange={(e) =>
-                    form.setFieldValue("cinv", e.currentTarget.checked)
-                  }
-                  disabled={isReadOnly}
-                  color="#105476"
-                  styles={{
-                    label: { fontSize: "13px", fontFamily: "Inter" },
-                  }}
-                />
-              </Box>
+              <TextInput
+                label="Actual Invoice No."
+                placeholder="Enter actual invoice no"
+                value={form.values.actual_invoice_no}
+                onChange={(e) =>
+                  form.setFieldValue("actual_invoice_no", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
             </Grid.Col>
+
 
             {/* ── Row 2 (6+6): Proforma Invoice No | Actual Invoice No ── */}
             {/* <Grid.Col span={6}>
@@ -1504,18 +1547,7 @@ function PaymentRequest() {
               />
             </Grid.Col> */}
 
-            <Grid.Col span={6}>
-              <TextInput
-                label="Actual Invoice No."
-                placeholder="Enter actual invoice no"
-                value={form.values.actual_invoice_no}
-                onChange={(e) =>
-                  form.setFieldValue("actual_invoice_no", e.target.value)
-                }
-                readOnly={isReadOnly}
-                styles={inputStyles}
-              />
-            </Grid.Col>
+
 
             {/* ── Row 3 (2+2+2+2+4): Account Code | Subledger Code | Currency | Amount | CRJ Date ── */}
             <Grid.Col span={2}>
@@ -1587,7 +1619,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={4}>
+            <Grid.Col span={2}>
               <SingleDateInput
                 label="CRJ Date"
                 placeholder="Select CRJ date"
@@ -1596,6 +1628,34 @@ function PaymentRequest() {
                 readOnly={isReadOnly}
               />
             </Grid.Col>
+
+            <Grid.Col span={2}>
+              <Box
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "flex-end",
+                  height: "100%",
+                  paddingBottom: "6px",
+                  alignItems: "center",
+                }}
+              >
+                <Checkbox
+                  label="CINV"
+                  checked={form.values.cinv}
+                  onChange={(e) =>
+                    form.setFieldValue("cinv", e.currentTarget.checked)
+                  }
+                  disabled={isReadOnly}
+                  color="#105476"
+                  styles={{
+                    label: { fontSize: "13px", fontFamily: "Inter" },
+                  }}
+                />
+              </Box>
+            </Grid.Col>
+
+
 
             {/* ── Row 4 (2+4+2+2+2): Paid To Type | Paid To | Not Over | Approved | (spacer) ── */}
             <Grid.Col span={2}>
@@ -1612,7 +1672,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={4}>
+            <Grid.Col span={3}>
               <Autocomplete
                 label="Paid To"
                 placeholder="Type vendor / supplier name"
@@ -1696,23 +1756,21 @@ function PaymentRequest() {
               />
             </Grid.Col> */}
 
-            <Grid.Col span={2} />
-
             {/* ── Row 5 (6+6): State Code | TDS Section Code ── */}
-            <Grid.Col span={6}>
-              <TextInput
-                label="State Code"
-                placeholder="Enter state code"
-                value={form.values.state_code_1}
-                onChange={(e) =>
-                  form.setFieldValue("state_code_1", e.target.value)
-                }
-                readOnly={isReadOnly}
+            <Grid.Col span={2}>
+              <Dropdown
+                label="State"
+                placeholder={isStateLoading ? "Loading..." : "Select state"}
+                data={stateOptions}
+                value={form.values.state_code_1 || null}
+                onChange={(v) => form.setFieldValue("state_code_1", v ?? "")}
+                searchable
+                disabled={isStateLoading || isReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
 
-            <Grid.Col span={6}>
+            <Grid.Col span={3}>
               <TextInput
                 label="TDS Section Code"
                 placeholder="Enter TDS section code"
@@ -2431,7 +2489,7 @@ function PaymentRequest() {
           </Box>
 
           {/* ── Form action buttons ── */}
-          <Group justify="flex-end" mt="xl">
+          <Group justify="space-between" mt="xl">
             <Button
               variant="outline"
               color="#105476"
@@ -2439,33 +2497,294 @@ function PaymentRequest() {
             >
               Cancel
             </Button>
-            {!isReadOnly && (
-              <>
-                {isEditMode && (
-                  <Button
-                    color="green"
-                    leftSection={<IconCheck size={16} />}
-                    loading={isSubmitting}
-                    onClick={handleApprove}
-                  >
-                    Approve
-                  </Button>
-                )}
+            <Group gap="sm">
+              {!isReadOnly && (
                 <Button
-                  type="submit"
+                  variant="outline"
                   color="#105476"
-                  rightSection={<IconChevronRight size={16} />}
-                  loading={isSubmitting}
+                  onClick={() => {
+                    if (supportingDocuments.length === 0) {
+                      setSupportingDocuments([{ name: "", file: null }]);
+                    }
+                    const newErrors: { [key: number]: string } = {};
+                    supportingDocuments.forEach((doc, idx) => {
+                      if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                        newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                      }
+                    });
+                    setFileErrors(newErrors);
+                    openDocumentsModal();
+                  }}
+                  disabled={isSubmitting}
                 >
-                  {saveResponse?.id
-                    ? "Update Payment Request"
-                    : "Save Payment Request"}
+                  Attach Supporting Documents
                 </Button>
-              </>
-            )}
+              )}
+              {!isReadOnly && (
+                <>
+                  {isEditMode && (
+                    <Button
+                      color="green"
+                      leftSection={<IconCheck size={16} />}
+                      loading={isSubmitting}
+                      onClick={handleApprove}
+                    >
+                      Approve
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    color="#105476"
+                    rightSection={<IconChevronRight size={16} />}
+                    loading={isSubmitting}
+                  >
+                    {saveResponse?.id
+                      ? "Update Payment Request"
+                      : "Save Payment Request"}
+                  </Button>
+                </>
+              )}
+            </Group>
           </Group>
         </Box>
       </Stack>
+
+      {/* ── Supporting Documents Modal ── */}
+      <Modal
+        opened={documentsModalOpened}
+        onClose={closeDocumentsModal}
+        title="Attach Supporting Documents"
+        size="xl"
+        centered
+        style={{ fontFamily: "Inter" }}
+      >
+        <Stack gap="xs">
+          {supportingDocuments.map((doc, index) => (
+            <Grid key={index} columns={12} gutter="sm" align="flex-end">
+              <Grid.Col span={5.5}>
+                <TextInput
+                  label="Document Name"
+                  placeholder="Enter document name"
+                  value={doc.name}
+                  onChange={(e) => {
+                    const updated = [...supportingDocuments];
+                    updated[index] = { ...updated[index], name: e.target.value };
+                    setSupportingDocuments(updated);
+                  }}
+                />
+              </Grid.Col>
+              <Grid.Col span={5.5}>
+                <Box>
+                  <Text size="sm" fw={500} mb={4}>
+                    File
+                  </Text>
+                  <Dropzone
+                    onDrop={(files: File[]) => {
+                      if (files.length === 0) return;
+                      const file = files[0];
+                      if (fileErrors[index]) {
+                        const newErrors = { ...fileErrors };
+                        delete newErrors[index];
+                        setFileErrors(newErrors);
+                      }
+                      if (file.size > MAX_FILE_SIZE) {
+                        const newErrors = { ...fileErrors };
+                        newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        setFileErrors(newErrors);
+                        ToastNotification({
+                          type: "error",
+                          message: `File "${file.name}" exceeds 5MB limit`,
+                        });
+                        return;
+                      }
+                      const updated = [...supportingDocuments];
+                      updated[index] = {
+                        ...updated[index],
+                        file,
+                        document_url: undefined,
+                        document_id: undefined,
+                      };
+                      setSupportingDocuments(updated);
+                    }}
+                    onReject={(files: any[]) => {
+                      const rejection = files[0];
+                      if (rejection?.errors?.some((e: any) => e.code === "file-too-large")) {
+                        const newErrors = { ...fileErrors };
+                        newErrors[index] = "File size exceeds 5MB limit";
+                        setFileErrors(newErrors);
+                      }
+                    }}
+                    maxSize={MAX_FILE_SIZE}
+                    accept={undefined}
+                    multiple={false}
+                    disabled={false}
+                    styles={{
+                      root: {
+                        border: "1px solid var(--mantine-color-gray-4)",
+                        borderRadius: "var(--mantine-radius-sm)",
+                        backgroundColor: "var(--mantine-color-white)",
+                        minHeight: "36px",
+                        padding: "0",
+                      },
+                      inner: {
+                        padding: "0",
+                        minHeight: "36px",
+                      },
+                    }}
+                  >
+                    <Group
+                      justify="space-between"
+                      gap="xs"
+                      px="sm"
+                      style={{ minHeight: "36px", pointerEvents: "none", cursor: "pointer" }}
+                    >
+                      <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                        {doc.file ? (
+                          <>
+                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
+                            <Text
+                              size="sm"
+                              truncate
+                              style={{ flex: 1, color: "var(--mantine-color-dark)" }}
+                            >
+                              {doc.file.name}
+                            </Text>
+                          </>
+                        ) : doc.document_url ? (
+                          <>
+                            <IconDownload size={16} color="var(--mantine-color-blue-6)" />
+                            <Text
+                              size="sm"
+                              truncate
+                              style={{
+                                flex: 1,
+                                color: "var(--mantine-color-blue-6)",
+                                cursor: "pointer",
+                                textDecoration: "underline",
+                                pointerEvents: "auto",
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (doc.document_url && doc.original_document_name) {
+                                  downloadFile(doc.document_url, doc.original_document_name);
+                                }
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                            >
+                              {doc.original_document_name || "Download file"}
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
+                            <Text size="sm" c="dimmed" truncate style={{ flex: 1 }}>
+                              Drag and drop or click to select file
+                            </Text>
+                          </>
+                        )}
+                      </Group>
+                      {(doc.file || doc.document_url) && (
+                        <Button
+                          variant="subtle"
+                          color="red"
+                          size="xs"
+                          p={4}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (fileErrors[index]) {
+                              const newErrors = { ...fileErrors };
+                              delete newErrors[index];
+                              setFileErrors(newErrors);
+                            }
+                            const updated = [...supportingDocuments];
+                            updated[index] = {
+                              ...updated[index],
+                              file: null,
+                              document_url: undefined,
+                              document_id: undefined,
+                            };
+                            setSupportingDocuments(updated);
+                          }}
+                          style={{ pointerEvents: "auto" }}
+                        >
+                          <IconX size={14} />
+                        </Button>
+                      )}
+                    </Group>
+                  </Dropzone>
+                  {fileErrors[index] && (
+                    <Text size="xs" c="red" mt={4}>
+                      {fileErrors[index]}
+                    </Text>
+                  )}
+                </Box>
+              </Grid.Col>
+              <Grid.Col span={1}>
+                <Button
+                  variant="light"
+                  color="red"
+                  onClick={() => {
+                    if (fileErrors[index]) {
+                      const newErrors = { ...fileErrors };
+                      delete newErrors[index];
+                      setFileErrors(newErrors);
+                    }
+                    if (supportingDocuments.length === 1) {
+                      setSupportingDocuments([{ name: "", file: null }]);
+                    } else {
+                      const updated = supportingDocuments.filter((_, i) => i !== index);
+                      setSupportingDocuments(updated);
+                      const newErrors: { [key: number]: string } = {};
+                      Object.keys(fileErrors).forEach((key) => {
+                        const keyNum = parseInt(key);
+                        if (keyNum < index) newErrors[keyNum] = fileErrors[keyNum];
+                        else if (keyNum > index) newErrors[keyNum - 1] = fileErrors[keyNum];
+                      });
+                      setFileErrors(newErrors);
+                    }
+                  }}
+                >
+                  <IconTrash size={16} />
+                </Button>
+              </Grid.Col>
+              <Grid.Col span={1} offset={11}>
+                {index === supportingDocuments.length - 1 && (
+                  <Button
+                    variant="light"
+                    color="#105476"
+                    onClick={() => {
+                      setSupportingDocuments([...supportingDocuments, { name: "", file: null }]);
+                    }}
+                  >
+                    <IconPlus size={16} />
+                  </Button>
+                )}
+              </Grid.Col>
+            </Grid>
+          ))}
+
+          {supportingDocuments.length === 0 && (
+            <Button
+              variant="light"
+              color="#105476"
+              leftSection={<IconPlus size={16} />}
+              onClick={() => {
+                setSupportingDocuments([{ name: "", file: null }]);
+              }}
+              fullWidth
+            >
+              Add Document
+            </Button>
+          )}
+
+          <Group justify="flex-end" mt="md">
+            <Button variant="outline" onClick={closeDocumentsModal}>
+              Close
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Box>
   );
 }

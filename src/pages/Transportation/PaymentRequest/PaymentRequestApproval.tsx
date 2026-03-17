@@ -28,6 +28,7 @@ import {
   IconEye,
   IconChevronLeft,
   IconChevronRight,
+  IconFileInvoice,
   IconFilter,
   IconFilterOff,
   IconX,
@@ -52,6 +53,7 @@ type PaymentRequestCharge = {
   charge_code?: string;
   charge_name?: string;
   currency_code?: string;
+  currency_id?: number;
   roe?: string;
   unit_code?: string;
   no_of_unit?: number;
@@ -73,6 +75,13 @@ type PaymentRequestRecord = {
   paid_to?: string;
   not_over?: string;
   state_code?: string;
+  state_id?: number;
+  tds_section_code?: string;
+  account_code?: string;
+  subledger_code?: string;
+  currency_id?: number;
+  location_gst_no?: string;
+  customer_gst_no?: string;
   note?: string;
   account_note?: string;
   status?: string;
@@ -455,14 +464,16 @@ function PaymentRequestApproval() {
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton onClick={() => navigate(`/payment-request/edit/${row.original.id}`)}>
-                  <Group gap="sm">
-                    <IconEdit size={16} style={{ color: "#105476" }} />
-                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>Edit</Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
+              {row.original.status?.trim().toLowerCase() !== "approved" && (
+                <Box px={10} py={5}>
+                  <UnstyledButton onClick={() => navigate(`/payment-request/edit/${row.original.id}`)}>
+                    <Group gap="sm">
+                      <IconEdit size={16} style={{ color: "#105476" }} />
+                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>Edit</Text>
+                    </Group>
+                  </UnstyledButton>
+                </Box>
+              )}
               <Box px={10} py={5}>
                 <UnstyledButton onClick={() => navigate(`/payment-request/view/${row.original.id}`)}>
                   <Group gap="sm">
@@ -471,6 +482,24 @@ function PaymentRequestApproval() {
                   </Group>
                 </UnstyledButton>
               </Box>
+              {row.original.status?.trim().toLowerCase() === "approved" && (
+                <Box px={10} py={5}>
+                  <UnstyledButton
+                    onClick={() =>
+                      navigate("/supplier-invoice/create", {
+                        state: { paymentRequestData: row.original },
+                      })
+                    }
+                  >
+                    <Group gap="sm">
+                      <IconFileInvoice size={16} style={{ color: "#105476" }} />
+                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                        Create Supplier Invoice
+                      </Text>
+                    </Group>
+                  </UnstyledButton>
+                </Box>
+              )}
             </Menu.Dropdown>
           </Menu>
         ),

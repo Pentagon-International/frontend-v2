@@ -71,7 +71,7 @@ const Navbar = ({
 
   // Keep Accounts expanded when on receipt, payment, overseas-receipt or supplier-invoice routes
   useEffect(() => {
-    if (location.pathname.startsWith("/receipt") || location.pathname.startsWith("/payment") || location.pathname.startsWith("/supplier-invoice") || location.pathname.startsWith("/overseas-receipt")) {
+    if (location.pathname.startsWith("/receipt") || location.pathname.startsWith("/payment") || location.pathname.startsWith("/supplier-invoice") || location.pathname.startsWith("/overseas-receipt") || location.pathname.startsWith("/journal-voucher")) {
       setIsAccountsOpen(true);
     }
   }, [location.pathname]);
@@ -696,6 +696,19 @@ const Navbar = ({
                     label="Supplier Invoice Reversal"
                     icon={IconReceiptTax}
                     path="/supplier-invoice/reversal"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Accounts"
+                    label="Journal Voucher"
+                    icon={IconReceiptTax}
+                    path="/journal-voucher"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,

@@ -760,6 +760,89 @@ export default function SupplierInvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceFromState?.id, isViewMode, isEditMode, isReversalCreate, isReversal]);
 
+  // Auto-select "LOCAL CRJ" daybook when coming from Payment Request → Create Supplier Invoice
+  useEffect(() => {
+    const prData = (location.state as any)?.paymentRequestData;
+    if (!prData || isViewMode || isEditMode || isReversal) return;
+    if (!daybookOptions.length) return;
+    if (form.values.day_book_id) return; // already set — don't overwrite
+    const localCrj = daybookOptions.find((o) =>
+      o.label.trim().toUpperCase() === "LOCAL CRJ",
+    );
+    if (localCrj) {
+      form.setFieldValue("day_book_id", localCrj.value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daybookOptions]);
+
+  // Pre-fill from Payment Request when navigating from PaymentRequestApproval (Create Supplier Invoice)
+  useEffect(() => {
+    const prData = (location.state as any)?.paymentRequestData as Record<string, any> | null | undefined;
+    if (!prData || isViewMode || isEditMode || isReversal) return;
+
+    const prDate = parseDDMMYYYY(String(prData.date ?? "")) ?? null;
+    const amountNum =
+      prData.amount != null && prData.amount !== ""
+        ? parseFloat(String(prData.amount)) || null
+        : null;
+
+    // Header-level account/subledger from PR applied to every charge row
+    const prAccountCode = String(prData.account_code ?? "");
+    const prSubledgerCode = String(prData.subledger_code ?? "");
+
+    const charges = Array.isArray(prData.charges) ? prData.charges : [];
+    const mappedCharges: ChargeRow[] = charges.map((c: Record<string, any>) => ({
+      account_code: prAccountCode,
+      subledger_code: prSubledgerCode,
+      CRN: "Cost",
+      narration: "",
+      shipment_no: String(c.job_id ?? prData.job_reference ?? ""),
+      charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+      currency_id: c.currency_id != null ? Number(c.currency_id) : null,
+      roe: c.roe != null && c.roe !== "" ? parseFloat(String(c.roe)) || null : null,
+      amount: c.amount != null && c.amount !== "" ? parseFloat(String(c.amount)) || null : null,
+      amount_in_local: c.local_amount != null && c.local_amount !== "" ? parseFloat(String(c.local_amount)) || null : null,
+      tax_code: String(c.sac_code ?? ""),
+      Dr_Cr: "Cr" as const,
+    }));
+
+    // Header fields
+    form.setFieldValue("Inv_Crn_no", String(prData.request_no ?? ""));
+    form.setFieldValue("creditor_agent", String(prData.paid_to ?? ""));
+    form.setFieldValue("agent_code", String(prData.paid_to ?? ""));
+    form.setFieldValue("customer_gst_no", String(prData.customer_gst_no ?? ""));
+    form.setFieldValue("location_gst_no", String(prData.location_gst_no ?? ""));
+    form.setFieldValue("tds_section_code", String(prData.tds_section_code ?? ""));
+
+    // State
+    if (prData.state_id != null) {
+      form.setFieldValue("state_id", String(prData.state_id));
+    }
+
+    // Currency (header)
+    if (prData.currency_id != null) {
+      form.setFieldValue("currency_id", String(prData.currency_id));
+    }
+
+    // Date / due date
+    if (prDate) {
+      form.setFieldValue("date", prDate);
+      form.setFieldValue("due_date", prDate);
+    }
+
+    // Invoice amount
+    if (amountNum != null) {
+      form.setFieldValue("Inv_crn_amount", amountNum);
+      form.setFieldValue("approved_amount", amountNum);
+    }
+
+    setAgentDisplayName(String(prData.paid_to ?? "") || null);
+    if (mappedCharges.length > 0) {
+      form.setFieldValue("charges_data", mappedCharges);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const buildPayload = (
     values: SupplierInvoiceFormValues,
     statusOverride?: string,
@@ -1419,18 +1502,7 @@ export default function SupplierInvoiceCreate({
             Agent INV/CRN Detail
           </Text>
           <Grid mb="md">
-            <Grid.Col span={1}>
-              <TextInput
-                label="Inv/Crn Note"
-                placeholder="Inv/Crn Note"
-                value={form.values.Inv_Crn_note}
-                onChange={(e) =>
-                  form.setFieldValue("Inv_Crn_note", e.target.value)
-                }
-                styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
-              />
-            </Grid.Col>
+
             <Grid.Col span={1}>
               <TextInput
                 label="Inv/Crn No"
@@ -1623,6 +1695,18 @@ export default function SupplierInvoiceCreate({
                     : undefined
                 }
                 disabled={isReadOnly || reversalFormDisabled}
+              />
+            </Grid.Col>
+            <Grid.Col span={1}>
+              <TextInput
+                label="Inv/Crn Note"
+                placeholder="Inv/Crn Note"
+                value={form.values.Inv_Crn_note}
+                onChange={(e) =>
+                  form.setFieldValue("Inv_Crn_note", e.target.value)
+                }
+                styles={effectiveInputStyles}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
           </Grid>
