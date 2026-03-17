@@ -176,10 +176,11 @@ interface FormValues {
   billing_customer_code: string;
   billing_customer_name: string;
   billing_customer_address_id: number;
+  notify1_customer_name: string;
+  notify1_customer_address: string;
+  notify1_customer_email: string;
+  /** Used only for SearchableSelect value; not sent in payload */
   notify_customer_code: string;
-  notify_customer_name: string;
-  notify_customer_address_id: number;
-  notify_customer_email: string;
   cha_code: string;
   cha_name: string;
   cha_address_id: number;
@@ -291,14 +292,19 @@ const validationSchema = yup.object({
   forwarder_code: yup.string(),
   forwarder_address_id: yup.number(),
   forwarder_email: yup.string().email("Invalid email format"),
-  destination_agent_code: yup.string(),
-  destination_agent_address_id: yup.number(),
-  destination_agent_email: yup.string().email("Invalid email format"),
+  destination_agent_code: yup.string().required("Destination agent is required"),
+  destination_agent_address_id: yup
+      .number()
+      .typeError("Origin agent address is required")
+      .required("Origin agent address is required")
+      .moreThan(0, "Origin agent address is required"),
+  destination_agent_email: yup.string().email("Invalid email format").required("Destination agent email is required"),
   billing_customer_code: yup.string(),
   billing_customer_address_id: yup.number(),
+  notify1_customer_name: yup.string(),
+  notify1_customer_address: yup.string(),
+  notify1_customer_email: yup.string().email("Invalid email format").nullable().notRequired(),
   notify_customer_code: yup.string(),
-  notify_customer_address_id: yup.number(),
-  notify_customer_email: yup.string().email("Invalid email format"),
   cha_code: yup.string(),
   cha_address_id: yup.number(),
 
@@ -931,9 +937,16 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       billing_customer_code: String(data.billing_customer_code || ""),
       billing_customer_address_id:
         Number(data.billing_customer_address_id) || 0,
+      notify1_customer_name: String(
+        data.notify1_customer_name ?? data.notify_customer_name ?? "",
+      ),
+      notify1_customer_address: String(
+        data.notify1_customer_address ?? data.notify_customer_address ?? "",
+      ),
+      notify1_customer_email: String(
+        data.notify1_customer_email ?? data.notify_customer_email ?? "",
+      ),
       notify_customer_code: String(data.notify_customer_code || ""),
-      notify_customer_address_id: Number(data.notify_customer_address_id) || 0,
-      notify_customer_email: String(data.notify_customer_email || ""),
       cha_code: String(data.cha_code || ""),
       cha_address_id: Number(data.cha_address_id) || 0,
 
@@ -1162,10 +1175,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       billing_customer_code: "",
       billing_customer_name: "",
       billing_customer_address_id: 0,
+      notify1_customer_name: "",
+      notify1_customer_address: "",
+      notify1_customer_email: "",
       notify_customer_code: "",
-      notify_customer_name: "",
-      notify_customer_address_id: 0,
-      notify_customer_email: "",
       cha_code: "",
       cha_name: "",
       cha_address_id: 0,
@@ -1825,10 +1838,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       setBillingCustomerDisplayName(String(jobData.billing_customer_name));
     else if (jobData.billing_customer)
       setBillingCustomerDisplayName(String(jobData.billing_customer));
-    if (jobData.notify_customer_name)
+    if (jobData.notify1_customer_name) {
+      setNotifyCustomerDisplayName(String(jobData.notify1_customer_name));
+    } else if (jobData.notify_customer_name) {
       setNotifyCustomerDisplayName(String(jobData.notify_customer_name));
-    else if (jobData.notify_customer)
+    } else if (jobData.notify_customer) {
       setNotifyCustomerDisplayName(String(jobData.notify_customer));
+    }
     if (jobData.cha_name) setChaDisplayName(String(jobData.cha_name));
     else if (jobData.cha) setChaDisplayName(String(jobData.cha));
     if (jobData.pickup_from)
@@ -1852,17 +1868,16 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         String(jobData.delivery_address_text ?? jobData.delivery_address ?? ""),
       );
 
-    if (jobData.consignee_address || jobData.consignee_address_id != null) {
+    if (jobData.consignee_address) {
+      const addrId = jobData.consignee_address_id;
+      const hasRealId = addrId != null && Number(addrId) !== 0;
+      const resolvedId = hasRealId ? Number(addrId) : -1;
+
       setConsigneeAddressOptions([
-        {
-          value: String(jobData.consignee_address_id ?? 0),
-          label: String(jobData.consignee_address ?? ""),
-        },
+        { value: String(resolvedId), label: String(jobData.consignee_address) },
       ]);
-      form.setFieldValue(
-        "consignee_address_id",
-        Number(jobData.consignee_address_id) || 0,
-      );
+      form.setFieldValue("consignee_address_id", resolvedId);
+      form.setFieldValue("consignee_address", String(jobData.consignee_address));
     }
     if (jobData.forwarder_address_id && jobData.forwarder_address) {
       setForwarderAddressOptions([
@@ -1894,10 +1909,17 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         },
       ]);
     }
-    if (jobData.notify_customer_address_id && jobData.notify_customer_address) {
+    if (jobData.notify1_customer_address) {
       setNotifyCustomerAddressOptions([
         {
-          value: String(jobData.notify_customer_address_id),
+          value: String(jobData.notify1_customer_address),
+          label: String(jobData.notify1_customer_address),
+        },
+      ]);
+    } else if (jobData.notify_customer_address_id && jobData.notify_customer_address) {
+      setNotifyCustomerAddressOptions([
+        {
+          value: String(jobData.notify_customer_address),
           label: String(jobData.notify_customer_address),
         },
       ]);
@@ -2004,8 +2026,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     } else if (initialData.billing_customer) {
       setBillingCustomerDisplayName(String(initialData.billing_customer));
     }
-    // Notify Customer - check for both notify_customer_name and notify_customer
-    if (initialData.notify_customer_name) {
+    // Notify Customer 1 - check notify1_* and legacy notify_customer_*
+    if (initialData.notify1_customer_name) {
+      setNotifyCustomerDisplayName(String(initialData.notify1_customer_name));
+    } else if (initialData.notify_customer_name) {
       setNotifyCustomerDisplayName(String(initialData.notify_customer_name));
     } else if (initialData.notify_customer) {
       setNotifyCustomerDisplayName(String(initialData.notify_customer));
@@ -2119,14 +2143,21 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       ]);
     }
 
-    // Notify Customer Address
-    if (
+    // Notify Customer 1 Address
+    if (initialData.notify1_customer_address) {
+      setNotifyCustomerAddressOptions([
+        {
+          value: String(initialData.notify1_customer_address),
+          label: String(initialData.notify1_customer_address),
+        },
+      ]);
+    } else if (
       initialData.notify_customer_address_id &&
       initialData.notify_customer_address
     ) {
       setNotifyCustomerAddressOptions([
         {
-          value: String(initialData.notify_customer_address_id),
+          value: String(initialData.notify_customer_address),
           label: String(initialData.notify_customer_address),
         },
       ]);
@@ -2395,6 +2426,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
+        "destination_agent_code",
+        "destination_agent_address_id",
+        "destination_agent_address",
+        "destination_agent_email",
       ];
 
       const validation = form.validate();
@@ -2477,10 +2512,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         billing_customer_address_id:
           Number(form.values.billing_customer_address_id) || 0,
 
-        notify_customer_code: form.values.notify_customer_code || "",
-        notify_customer_address_id:
-          Number(form.values.notify_customer_address_id) || 0,
-        notify_customer_email: form.values.notify_customer_email || "",
+        notify1_customer_name: form.values.notify1_customer_name || null,
+        notify1_customer_address: form.values.notify1_customer_address || null,
+        notify1_customer_email: form.values.notify1_customer_email || null,
 
         cha_code: form.values.cha_code || "",
         cha_address_id: Number(form.values.cha_address_id) || 0,
@@ -4294,25 +4328,22 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     label="Consignee Address"
                     placeholder="Select consignee address"
                     searchable
+                    clearable
                     data={consigneeAddressOptions}
                     value={
-                      form.values.consignee_address_id && form.values.consignee_address_id !== 0
+                      consigneeAddressOptions.length > 0 && form.values.consignee_address_id !== 0
                         ? String(form.values.consignee_address_id)
                         : ""
                     }
-                    key={
-                      form.values.consignee_address_id && form.values.consignee_address_id !== 0
-                        ? String(form.values.consignee_address_id)
-                        : "empty"
-                    }
+                    key={`consignee-${form.values.consignee_address_id}`}
                     onChange={(value) => {
-                      form.setFieldValue("consignee_address_id", value ? parseInt(value) : 0);
+                      form.setFieldValue("consignee_address_id", value ? parseInt(value) || 0 : 0);
                       const opt = consigneeAddressOptions.find((o) => o.value === value);
                       form.setFieldValue("consignee_address", opt?.label ?? "");
                     }}
                     error={form.errors.consignee_address_id}
                     disabled={consigneeAddressOptions.length === 0}
-                  />
+                    />
                 </Grid.Col>
               </Grid>
 
@@ -4403,6 +4434,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     label="Forwarder Address"
                     placeholder="Select forwarder address"
                     searchable
+                    clearable
                     data={forwarderAddressOptions}
                     key={
                       form.values.forwarder_address_id && form.values.forwarder_address_id !== 0
@@ -4435,6 +4467,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     label="Origin Agent Name"
                     placeholder="Type origin agent name"
                     apiEndpoint={URL.agent}
+                    withAsterisk
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4504,40 +4537,42 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={6}>
-              <FormTextInput
-                label="Origin Agent Email Id"
-                placeholder="Enter email address"
-                format = "normal"
+                  <FormTextInput
+                    label="Origin Agent Email Id"
+                    placeholder="Enter email address"
+                    format = "normal"
+                    withAsterisk
                     {...form.getInputProps("destination_agent_email")}
                   />
                 </Grid.Col>
-            <Grid.Col span={12}>
-              <Dropdown
-                label="Origin Agent Address"
-                placeholder="Select destination agent address"
-                searchable
-                data={agentAddressOptions}
-                key={
-                  form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0
-                    ? String(form.values.destination_agent_address_id)
-                    : "agent-empty"
-                }
-                value={
-                  form.values.destination_agent_address_id
-                    ? String(form.values.destination_agent_address_id)
-                    : ""
-                }
-                onChange={(value) => {
-                  form.setFieldValue(
-                    "destination_agent_address_id",
-                    value ? parseInt(value) : 0,
-                  );
-                }}
-                error={form.errors.destination_agent_address_id}
-                disabled={agentAddressOptions.length === 0}
-              />
+                <Grid.Col span={12}>
+                  <Dropdown
+                    label="Origin Agent Address"
+                    placeholder="Select destination agent address"
+                    searchable
+                    clearable
+                    withAsterisk
+                    data={agentAddressOptions}
+                    key={
+                      form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0
+                        ? String(form.values.destination_agent_address_id)
+                        : "agent-empty"
+                    }
+                    value={
+                      form.values.destination_agent_address_id
+                        ? String(form.values.destination_agent_address_id)
+                        : ""
+                    }
+                    onChange={(value) => {
+                      form.setFieldValue(
+                        "destination_agent_address_id",
+                        value ? parseInt(value) : 0,
+                      );
+                    }}
+                    error={form.errors.destination_agent_address_id}
+                    disabled={agentAddressOptions.length === 0}
+                  />
                 </Grid.Col>
-            
               </Grid>
 
               <Divider mb="md" />
@@ -4616,6 +4651,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     label="Billing Customer Address"
                     placeholder="Select billing address"
                     searchable
+                    clearable
                     data={billingCustomerAddressOptions}
                     key={
                       form.values.billing_customer_address_id && form.values.billing_customer_address_id !== 0
@@ -4638,7 +4674,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
               <Divider my="md" />
 
-              {/* Notify Customer Details */}
+              {/* Notify Customer 1 Details */}
               <Text size="sm" fw={500} mb="sm" c="#105476">
                 Notify Customer Details
               </Text>
@@ -4654,21 +4690,22 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       label: String(item.customer_name),
                     })}
                     value={form.values.notify_customer_code}
-                    displayValue={notifyCustomerDisplayName}
+                    displayValue={notifyCustomerDisplayName ?? form.values.notify1_customer_name}
                     onChange={(value, selectedData, originalData) => {
                       const newValue = value || "";
                       form.setFieldValue("notify_customer_code", newValue);
-
                       if (!newValue) {
+                        form.setFieldValue("notify1_customer_name", "");
+                        form.setFieldValue("notify1_customer_address", "");
+                        form.setFieldValue("notify1_customer_email", "");
                         setNotifyCustomerDisplayName(null);
                         setNotifyCustomerAddressOptions([]);
-                        form.setFieldValue("notify_customer_address_id", 0);
-                        form.setFieldValue("notify_customer_email", "");
                         return;
                       }
-
-                      setNotifyCustomerDisplayName(selectedData?.label || null);
-
+                      if (selectedData) {
+                        form.setFieldValue("notify1_customer_name", selectedData.label);
+                        setNotifyCustomerDisplayName(selectedData.label);
+                      }
                       if (originalData && (originalData as Record<string, unknown>).addresses_data) {
                         const addressesData = (
                           (originalData as Record<string, unknown>)
@@ -4680,36 +4717,30 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           }>
                         );
                         const addressOptions = addressesData.map((addr) => ({
-                          value: String(addr.id),
-                          label: addr.address,
-                        }));
+                          value: addr.address ?? "",
+                          label: addr.address ?? "",
+                        })).filter((a) => a.value);
                         setNotifyCustomerAddressOptions(addressOptions);
-
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
                             "PRIMARY"
                         );
+                        const firstAddr = addressesData[0];
                         if (primary) {
-                          form.setFieldValue(
-                            "notify_customer_address_id",
-                            primary.id
-                          );
-                          form.setFieldValue(
-                            "notify_customer_email",
-                            primary.email ?? ""
-                          );
+                          form.setFieldValue("notify1_customer_address", primary.address ?? "");
+                          form.setFieldValue("notify1_customer_email", primary.email ?? "");
+                        } else if (firstAddr) {
+                          form.setFieldValue("notify1_customer_address", firstAddr.address ?? "");
+                          form.setFieldValue("notify1_customer_email", firstAddr.email ?? "");
                         } else {
-                          form.setFieldValue(
-                            "notify_customer_address_id",
-                            0
-                          );
-                          form.setFieldValue("notify_customer_email", "");
+                          form.setFieldValue("notify1_customer_address", "");
+                          form.setFieldValue("notify1_customer_email", "");
                         }
                       }
                     }}
                     returnOriginalData={true}
-                    error={form.errors.notify_customer_code as string}
+                    error={form.errors.notify1_customer_name as string}
                     minSearchLength={3}
                   />
                 </Grid.Col>
@@ -4717,34 +4748,34 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Notify Customer Email Id"
                     placeholder="Enter email address"
-                    format = "normal"
-                    {...form.getInputProps("notify_customer_email")}
+                    format="normal"
+                    {...form.getInputProps("notify1_customer_email")}
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  <Dropdown
-                    label="Notify Customer Address"
-                    placeholder="Select notify address"
-                    searchable
-                    data={notifyCustomerAddressOptions}
-                    key={
-                      form.values.notify_customer_address_id && form.values.notify_customer_address_id !== 0
-                        ? String(form.values.notify_customer_address_id)
-                        : "notify-empty"
-                    }
-                    value={
-                      form.values.notify_customer_address_id && form.values.notify_customer_address_id !== 0
-                        ? String(form.values.notify_customer_address_id)
-                        : ""
-                    }
-                    onChange={(value) => {
-                      form.setFieldValue("notify_customer_address_id", value ? parseInt(value) : 0);
-                    }}
-                    error={form.errors.notify_customer_address_id}
-                    disabled={notifyCustomerAddressOptions.length === 0}
-                  />
+                  {notifyCustomerAddressOptions.length > 0 ? (
+                    <Dropdown
+                      label="Notify Customer Address"
+                      placeholder="Select notify address"
+                      searchable
+                      clearable
+                      data={notifyCustomerAddressOptions}
+                      value={form.values.notify1_customer_address || ""}
+                      onChange={(value) =>
+                        form.setFieldValue("notify1_customer_address", value ?? "")
+                      }
+                    />
+                  ) : (
+                    <FormTextInput
+                      label="Notify Customer 1 Address"
+                      placeholder="Enter notify address"
+                      value={form.values.notify1_customer_address}
+                      onChange={(e) =>
+                        form.setFieldValue("notify1_customer_address", e.currentTarget.value)
+                      }
+                    />
+                  )}
                 </Grid.Col>
-                
               </Grid>
 
               <Divider my="md" />
@@ -4817,6 +4848,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     label="CHA Address"
                     placeholder="Select CHA address"
                     searchable
+                    clearable
                     data={chaAddressOptions}
                     key={
                       form.values.cha_address_id && form.values.cha_address_id !== 0

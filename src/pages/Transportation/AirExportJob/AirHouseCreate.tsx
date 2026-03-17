@@ -839,7 +839,7 @@ function HouseCreate() {
         const amountPerUnit = charge.amount_per_unit || 0;
 
         // Calculate: amount = no_of_unit * roe * amount_per_unit
-        const calculatedAmount = noOfUnit * roe * amountPerUnit;
+        const calculatedAmount = parseFloat((noOfUnit * roe * amountPerUnit).toFixed(2));
 
         // Only update if calculated amount is different from current amount
         // This allows user to override the calculated value
@@ -1613,6 +1613,14 @@ function HouseCreate() {
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
+      shipper_gst_id:
+        (v as { shipper_gst_id?: string }).shipper_gst_id ??
+        (
+          location.state?.job as {
+            housing_details?: Array<{ shipper_gst_id?: string | null }>;
+          }
+        )?.housing_details?.[editIndex ?? 0]?.shipper_gst_id ??
+        null,
       shipper_state_id: v.shipper_state_id
         ? Number(v.shipper_state_id)
         : ((editData as { shipper_state_id?: number } | undefined)
@@ -1629,6 +1637,14 @@ function HouseCreate() {
       consignee_code: v.consignee_code,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
+      consignee_gst_id:
+        (v as { consignee_gst_id?: string }).consignee_gst_id ??
+        (
+          location.state?.job as {
+            housing_details?: Array<{ consignee_gst_id?: string | null }>;
+          }
+        )?.housing_details?.[editIndex ?? 0]?.consignee_gst_id ??
+        null,
       notify_customer1_name: v.notify_customer1_name,
       notify_customer1_address: v.notify_customer1_address,
       notify_customer1_email: v.notify_customer1_email,
@@ -3385,10 +3401,9 @@ function HouseCreate() {
                               currentCharge.roe !== undefined &&
                               currentCharge.roe > 0
                             ) {
-                              const calculatedAmount =
-                                noOfUnit *
-                                currentCharge.roe *
-                                currentCharge.amount_per_unit;
+                              const calculatedAmount = parseFloat(
+                                (noOfUnit * currentCharge.roe * currentCharge.amount_per_unit).toFixed(2)
+                              );
                               if (calculatedAmount > 0) {
                                 chargesForm.setFieldValue(
                                   `charges.${index}.amount`,
@@ -3456,10 +3471,9 @@ function HouseCreate() {
                           roe !== null &&
                           roe > 0
                         ) {
-                          const calculatedAmount =
-                            currentCharge.no_of_unit *
-                            roe *
-                            currentCharge.amount_per_unit;
+                          const calculatedAmount = parseFloat(
+                            (currentCharge.no_of_unit * roe * currentCharge.amount_per_unit).toFixed(2)
+                          );
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
@@ -3506,10 +3520,9 @@ function HouseCreate() {
                           currentCharge.roe !== undefined &&
                           currentCharge.roe > 0
                         ) {
-                          const calculatedAmount =
-                            currentCharge.no_of_unit *
-                            currentCharge.roe *
-                            amountPerUnit;
+                          const calculatedAmount = parseFloat(
+                            (currentCharge.no_of_unit * currentCharge.roe * amountPerUnit).toFixed(2)
+                          );
                           if (calculatedAmount > 0) {
                             chargesForm.setFieldValue(
                               `charges.${index}.amount`,
