@@ -88,6 +88,7 @@ interface CargoDetail {
 
   // FCL specific fields
   container_type_code?: string;
+  container_no?: string;
   no_of_containers?: number;
 }
 
@@ -99,6 +100,7 @@ const DEFAULT_CARGO_ROW: CargoDetail = {
   volume: undefined,
   chargeable_volume: undefined,
   container_type_code: undefined,
+  container_no: undefined,
   no_of_containers: undefined,
 };
 
@@ -141,6 +143,7 @@ interface FormValues {
   is_direct: boolean;
   is_coload: boolean;
   houseno: string;
+  master_no: string;
 
   // Ocean Schedule fields
   schedule_id: string;
@@ -179,8 +182,13 @@ interface FormValues {
   notify1_customer_name: string;
   notify1_customer_address: string;
   notify1_customer_email: string;
+  notify2_customer_name: string;
+  notify2_customer_address: string;
+  notify2_customer_email: string;
   /** Used only for SearchableSelect value; not sent in payload */
   notify_customer_code: string;
+  /** Used only for SearchableSelect value; not sent in payload */
+  notify2_customer_code: string;
   cha_code: string;
   cha_name: string;
   cha_address_id: number;
@@ -258,7 +266,8 @@ const validationSchema = yup.object({
     .required("Customer service name is required"),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
-  houseno: yup.string().required("House No is required"),
+  houseno: yup.string().optional(),
+  master_no: yup.string().optional(),
 
   // Ocean Schedule fields - All optional
   schedule_id: yup.string(),
@@ -305,6 +314,10 @@ const validationSchema = yup.object({
   notify1_customer_address: yup.string(),
   notify1_customer_email: yup.string().email("Invalid email format").nullable().notRequired(),
   notify_customer_code: yup.string(),
+  notify2_customer_name: yup.string(),
+  notify2_customer_address: yup.string(),
+  notify2_customer_email: yup.string().email("Invalid email format").nullable().notRequired(),
+  notify2_customer_code: yup.string(),
   cha_code: yup.string(),
   cha_address_id: yup.number(),
 
@@ -321,6 +334,7 @@ const validationSchema = yup.object({
       volume: yup.number().nullable(),
       chargeable_volume: yup.number().nullable(),
       container_type_code: yup.string().nullable(),
+      container_no: yup.string().nullable(),
       no_of_containers: yup.number().nullable(),
     }),
   ),
@@ -575,6 +589,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [notifyCustomerDisplayName, setNotifyCustomerDisplayName] = useState<
     string | null
   >(null);
+  const [notify2CustomerDisplayName, setNotify2CustomerDisplayName] = useState<
+    string | null
+  >(null);
   const [chaDisplayName, setChaDisplayName] = useState<string | null>(null);
   const [pickupAddressDisplayName, setPickupAddressDisplayName] = useState<
     string | null
@@ -596,6 +613,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [billingCustomerAddressOptions, setBillingCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
+    useState<Array<{ value: string; label: string }>>([]);
+  const [notify2CustomerAddressOptions, setNotify2CustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
   const [chaAddressOptions, setChaAddressOptions] = useState<
     Array<{ value: string; label: string }>
@@ -882,6 +901,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
       houseno: String(data.houseno || ""),
+      master_no: String(data.master_no || ""),
 
       // Ocean Schedule fields
       schedule_id: String(data.schedule_id || ""),
@@ -947,6 +967,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         data.notify1_customer_email ?? data.notify_customer_email ?? "",
       ),
       notify_customer_code: String(data.notify_customer_code || ""),
+      notify2_customer_name: String(data.notify2_customer_name ?? ""),
+      notify2_customer_address: String(data.notify2_customer_address ?? ""),
+      notify2_customer_email: String(data.notify2_customer_email ?? ""),
+      notify2_customer_code: String(data.notify2_customer_code || ""),
       cha_code: String(data.cha_code || ""),
       cha_address_id: Number(data.cha_address_id) || 0,
 
@@ -979,6 +1003,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               container_type_code: cargo.container_type_code
                 ? String(cargo.container_type_code)
                 : undefined,
+              container_no: cargo.container_no ? String(cargo.container_no) : undefined,
               no_of_containers: cargo.no_of_containers
                 ? Number(cargo.no_of_containers)
                 : undefined,
@@ -993,6 +1018,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               volume: undefined,
               chargeable_volume: undefined,
               container_type_code: undefined,
+              container_no: undefined,
               no_of_containers: undefined,
             },
           ],
@@ -1126,6 +1152,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       is_direct: false,
       is_coload: false,
       houseno: "",
+      master_no: "",
 
       // Ocean Schedule fields
       schedule_id: "",
@@ -1179,6 +1206,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       notify1_customer_address: "",
       notify1_customer_email: "",
       notify_customer_code: "",
+      notify2_customer_name: "",
+      notify2_customer_address: "",
+      notify2_customer_email: "",
+      notify2_customer_code: "",
       cha_code: "",
       cha_name: "",
       cha_address_id: 0,
@@ -1876,6 +1907,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     } else if (jobData.notify_customer) {
       setNotifyCustomerDisplayName(String(jobData.notify_customer));
     }
+    if (jobData.notify2_customer_name) {
+      setNotify2CustomerDisplayName(String(jobData.notify2_customer_name));
+    }
     if (jobData.cha_name) setChaDisplayName(String(jobData.cha_name));
     else if (jobData.cha) setChaDisplayName(String(jobData.cha));
     if (jobData.pickup_from)
@@ -1952,6 +1986,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         {
           value: String(jobData.notify_customer_address),
           label: String(jobData.notify_customer_address),
+        },
+      ]);
+    }
+    if (jobData.notify2_customer_address) {
+      setNotify2CustomerAddressOptions([
+        {
+          value: String(jobData.notify2_customer_address),
+          label: String(jobData.notify2_customer_address),
         },
       ]);
     }
@@ -2064,6 +2106,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       setNotifyCustomerDisplayName(String(initialData.notify_customer_name));
     } else if (initialData.notify_customer) {
       setNotifyCustomerDisplayName(String(initialData.notify_customer));
+    }
+    // Notify Customer 2
+    if (initialData.notify2_customer_name) {
+      setNotify2CustomerDisplayName(String(initialData.notify2_customer_name));
     }
     // CHA - check for both cha_name and cha
     if (initialData.cha_name) {
@@ -2190,6 +2236,15 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         {
           value: String(initialData.notify_customer_address),
           label: String(initialData.notify_customer_address),
+        },
+      ]);
+    }
+    // Notify Customer 2 Address
+    if (initialData.notify2_customer_address) {
+      setNotify2CustomerAddressOptions([
+        {
+          value: String(initialData.notify2_customer_address),
+          label: String(initialData.notify2_customer_address),
         },
       ]);
     }
@@ -2490,6 +2545,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
         houseno: form.values.houseno,
+        master_no: form.values.master_no,
 
         schedule_id: form.values.schedule_id,
         carrier_code: form.values.carrier_code,
@@ -2523,6 +2579,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         notify1_customer_name: form.values.notify1_customer_name || null,
         notify1_customer_address: form.values.notify1_customer_address || null,
         notify1_customer_email: form.values.notify1_customer_email || null,
+        notify2_customer_name: form.values.notify2_customer_name || null,
+        notify2_customer_address: form.values.notify2_customer_address || null,
+        notify2_customer_email: form.values.notify2_customer_email || null,
 
         cha_code: form.values.cha_code || "",
         cha_address_id: Number(form.values.cha_address_id) || 0,
@@ -2540,6 +2599,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             volume: cargo.volume || null,
             chargeable_volume: cargo.chargeable_volume || null,
             container_type_code: cargo.container_type_code || null,
+            container_no: cargo.container_no || null,
             no_of_containers: cargo.no_of_containers || null,
           };
           if (cargo.id != null && cargo.id !== undefined) {
@@ -3660,14 +3720,24 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={4}>
                   <FormTextInput
-                    label="House Number"
-                    placeholder="Enter House Number"
-                    withAsterisk
+                    label="HBL Number"
+                    placeholder="Enter HBL Number"
                     value={form.values.houseno}
                     onChange={(e) => {
                       form.setFieldValue("houseno", e.target.value);
                     }}
                     error={form.errors.houseno}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="MBL Number"
+                    placeholder="Enter MBL Number"
+                    value={form.values.master_no}
+                    onChange={(e) => {
+                      form.setFieldValue("master_no", e.target.value);
+                    }}
+                    error={form.errors.master_no}
                   />
                 </Grid.Col>
                 {(form.values.service === "AIR" ||
@@ -4707,13 +4777,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
               {/* Notify Customer 1 Details */}
               <Text size="sm" fw={500} mb="sm" c="#105476">
-                Notify Customer Details
+                Notify Customer 1 Details
               </Text>
               <Grid mb="md">
                 <Grid.Col span={6}>
                   <SearchableSelect
-                    label="Notify Customer Name"
-                    placeholder="Type notify customer name"
+                    label="Notify Customer 1 Name"
+                    placeholder="Type notify customer 1 name"
                     apiEndpoint={URL.consignee}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
@@ -4777,7 +4847,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={6}>
                   <FormTextInput
-                    label="Notify Customer Email Id"
+                    label="Notify Customer 1 Email Id"
                     placeholder="Enter email address"
                     format="normal"
                     {...form.getInputProps("notify1_customer_email")}
@@ -4786,7 +4856,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 <Grid.Col span={12}>
                   {notifyCustomerAddressOptions.length > 0 ? (
                     <Dropdown
-                      label="Notify Customer Address"
+                      label="Notify Customer 1 Address"
                       placeholder="Select notify address"
                       searchable
                       clearable
@@ -4803,6 +4873,140 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       value={form.values.notify1_customer_address}
                       onChange={(e) =>
                         form.setFieldValue("notify1_customer_address", e.currentTarget.value)
+                      }
+                    />
+                  )}
+                </Grid.Col>
+              </Grid>
+
+              <Divider my="md" />
+
+              {/* Notify Customer 2 Details */}
+              <Text size="sm" fw={500} mb="sm" c="#105476">
+                Notify Customer 2 Details
+              </Text>
+              <Grid mb="md">
+                <Grid.Col span={6}>
+                  <SearchableSelect
+                    label="Notify Customer 2 Name"
+                    placeholder="Type notify customer 2 name"
+                    apiEndpoint={URL.consignee}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code),
+                      label: String(item.customer_name),
+                    })}
+                    value={form.values.notify2_customer_code}
+                    displayValue={
+                      notify2CustomerDisplayName ?? form.values.notify2_customer_name
+                    }
+                    onChange={(value, selectedData, originalData) => {
+                      const newValue = value || "";
+                      form.setFieldValue("notify2_customer_code", newValue);
+                      if (!newValue) {
+                        form.setFieldValue("notify2_customer_name", "");
+                        form.setFieldValue("notify2_customer_address", "");
+                        form.setFieldValue("notify2_customer_email", "");
+                        setNotify2CustomerDisplayName(null);
+                        setNotify2CustomerAddressOptions([]);
+                        return;
+                      }
+                      if (selectedData) {
+                        form.setFieldValue(
+                          "notify2_customer_name",
+                          selectedData.label,
+                        );
+                        setNotify2CustomerDisplayName(selectedData.label);
+                      }
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
+                        const addressesData = (
+                          (originalData as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            id: number;
+                            address: string;
+                            email?: string;
+                            address_type?: string;
+                          }>
+                        );
+                        const addressOptions = addressesData
+                          .map((addr) => ({
+                            value: addr.address ?? "",
+                            label: addr.address ?? "",
+                          }))
+                          .filter((a) => a.value);
+                        setNotify2CustomerAddressOptions(addressOptions);
+                        const primary = addressesData?.find(
+                          (a) =>
+                            String(a.address_type || "").toUpperCase() ===
+                            "PRIMARY",
+                        );
+                        const firstAddr = addressesData[0];
+                        if (primary) {
+                          form.setFieldValue(
+                            "notify2_customer_address",
+                            primary.address ?? "",
+                          );
+                          form.setFieldValue(
+                            "notify2_customer_email",
+                            primary.email ?? "",
+                          );
+                        } else if (firstAddr) {
+                          form.setFieldValue(
+                            "notify2_customer_address",
+                            firstAddr.address ?? "",
+                          );
+                          form.setFieldValue(
+                            "notify2_customer_email",
+                            firstAddr.email ?? "",
+                          );
+                        } else {
+                          form.setFieldValue("notify2_customer_address", "");
+                          form.setFieldValue("notify2_customer_email", "");
+                        }
+                      }
+                    }}
+                    returnOriginalData={true}
+                    error={form.errors.notify2_customer_name as string}
+                    minSearchLength={3}
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <FormTextInput
+                    label="Notify Customer 2 Email Id"
+                    placeholder="Enter email address"
+                    format="normal"
+                    {...form.getInputProps("notify2_customer_email")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={12}>
+                  {notify2CustomerAddressOptions.length > 0 ? (
+                    <Dropdown
+                      label="Notify Customer 2 Address"
+                      placeholder="Select notify address"
+                      searchable
+                      clearable
+                      data={notify2CustomerAddressOptions}
+                      value={form.values.notify2_customer_address || ""}
+                      onChange={(value) =>
+                        form.setFieldValue(
+                          "notify2_customer_address",
+                          value ?? "",
+                        )
+                      }
+                    />
+                  ) : (
+                    <FormTextInput
+                      label="Notify Customer 2 Address"
+                      placeholder="Enter notify address"
+                      value={form.values.notify2_customer_address}
+                      onChange={(e) =>
+                        form.setFieldValue(
+                          "notify2_customer_address",
+                          e.currentTarget.value,
+                        )
                       }
                     />
                   )}
@@ -5050,6 +5254,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   {form.values.service === "LCL" && (
                     <Grid>
                       <Grid.Col span={3}>
+                        <FormTextInput
+                          label="Container Number"
+                          placeholder="Enter container number"
+                          {...form.getInputProps("cargo_details.0.container_no")}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="No of Packages"
                           placeholder="Enter number of packages"
@@ -5059,7 +5270,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
@@ -5070,7 +5281,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="Volume (cbm)"
                           placeholder="Enter volume"
@@ -5079,7 +5290,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           {...form.getInputProps("cargo_details.0.volume")}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="Chargeable Volume (cbm)"
                           placeholder="Auto-calculated"
@@ -5124,23 +5335,29 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       >
                         <Grid.Col span={3}>
                           <RequiredLabel
-                            label="Container Type"
+                            label="Container Number"
                             required={false}
                           />
                         </Grid.Col>
                         <Grid.Col span={3}>
+                          <RequiredLabel
+                            label="Container Type"
+                            required={false}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={2.5}>
                           <RequiredLabel
                             label="No of Containers"
                             required={false}
                           />
                         </Grid.Col>
-                        <Grid.Col span={3}>
+                        <Grid.Col span={2.5}>
                           <RequiredLabel
                             label="Gross Weight"
                             required={false}
                           />
                         </Grid.Col>
-                        <Grid.Col span={3}>
+                        <Grid.Col span={1}>
                           <RequiredLabel label="Actions" required={false} />
                         </Grid.Col>
                       </Grid>
@@ -5148,6 +5365,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         {form.values.cargo_details.map((_, cargoIndex) => (
                           <Box key={cargoIndex}>
                             <Grid gutter={"sm"}>
+                              <Grid.Col span={3}>
+                                <FormTextInput
+                                  placeholder="Enter container number"
+                                  {...form.getInputProps(
+                                    `cargo_details.${cargoIndex}.container_no`,
+                                  )}
+                                />
+                              </Grid.Col>
                               <Grid.Col span={3}>
                                 <Dropdown
                                   placeholder="Select container type"
@@ -5159,7 +5384,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                   )}
                                 />
                               </Grid.Col>
-                              <Grid.Col span={3}>
+                              <Grid.Col span={2.5}>
                                 <FormNumberInput
                                   placeholder="Enter number of containers"
                                   min={1}
@@ -5168,7 +5393,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                   )}
                                 />
                               </Grid.Col>
-                              <Grid.Col span={3}>
+                              <Grid.Col span={2.5}>
                                 <FormNumberInput
                                   placeholder="Enter gross weight"
                                   min={0}
@@ -5179,46 +5404,49 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                 />
                               </Grid.Col>
                               {/* Add/Remove buttons */}
-                              <Grid.Col span={3}>
-                                {cargoIndex ===
-                                  form.values.cargo_details.length - 1 && (
-                                  <Button
-                                    variant="light"
-                                    color="#105476"
-                                    size="sm"
-                                    px={12}
-                                    onClick={() => {
-                                      form.insertListItem("cargo_details", {
-                                        no_of_packages: undefined,
-                                        gross_weight: undefined,
-                                        volume_weight: undefined,
-                                        chargeable_weight: undefined,
-                                        volume: undefined,
-                                        chargeable_volume: undefined,
-                                        container_type_code: undefined,
-                                        no_of_containers: undefined,
-                                      });
-                                    }}
-                                  >
-                                    <IconPlus size={14} />
-                                  </Button>
-                                )}
-                                {form.values.cargo_details.length > 1 && (
-                                  <Button
-                                    variant="light"
-                                    color="red"
-                                    size="sm"
-                                    px={12}
-                                    onClick={() =>
-                                      form.removeListItem(
-                                        "cargo_details",
-                                        cargoIndex,
-                                      )
-                                    }
-                                  >
-                                    <IconTrash size={14} />
-                                  </Button>
-                                )}
+                              <Grid.Col span={1}>
+                                <Group gap="sm">
+                                  {cargoIndex ===
+                                    form.values.cargo_details.length - 1 && (
+                                    <Button
+                                      variant="light"
+                                      color="#105476"
+                                      size="sm"
+                                      px={12}
+                                      onClick={() => {
+                                        form.insertListItem("cargo_details", {
+                                          no_of_packages: undefined,
+                                          gross_weight: undefined,
+                                          volume_weight: undefined,
+                                          chargeable_weight: undefined,
+                                          volume: undefined,
+                                          chargeable_volume: undefined,
+                                          container_type_code: undefined,
+                                          container_no: undefined,
+                                          no_of_containers: undefined,
+                                        });
+                                      }}
+                                    >
+                                      <IconPlus size={14} />
+                                    </Button>
+                                  )}
+                                  {form.values.cargo_details.length > 1 && (
+                                    <Button
+                                      variant="light"
+                                      color="red"
+                                      size="sm"
+                                      px={12}
+                                      onClick={() =>
+                                        form.removeListItem(
+                                          "cargo_details",
+                                          cargoIndex,
+                                        )
+                                      }
+                                    >
+                                      <IconTrash size={14} />
+                                    </Button>
+                                  )}
+                                </Group>
                               </Grid.Col>
                             </Grid>
                           </Box>

@@ -272,16 +272,14 @@ const validationSchema = yup.object({
                   .email("Invalid email format")
                   .nullable()
                   .notRequired(),
-  destination_agent_code: yup.string().required("Destination agent is required"),
+  destination_agent_code: yup.string().nullable(),
   destination_agent_address_id: yup
-  .number()
-  .typeError("Destination agent address is required")
-  .required("Destination agent address is required")
-  .moreThan(0, "Destination agent address is required"),
+  .number().nullable(),
   destination_agent_email: yup
                           .string()
                           .email("Invalid email format")
-                          .required("Destination agent email is required"),
+                          .nullable()
+                          .notRequired(),
   billing_customer_code: yup.string(),
   billing_customer_address_id: yup.number(),
   notify1_customer_name: yup.string(),
@@ -2586,10 +2584,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
-        "destination_agent_code",
-        "destination_agent_address_id",
-        "destination_agent_address",
-        "destination_agent_email",
       ];
 
       const validation = form.validate();
@@ -4456,7 +4450,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Destination Agent Name"
                     placeholder="Type destination agent name"
                     apiEndpoint={URL.agent}
-                    withAsterisk
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4530,7 +4523,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={6}>
                   <FormTextInput
-                    withAsterisk
                     label="Destination Agent Email Id"
                     placeholder="Enter email address"
                     format = "normal"
@@ -4543,7 +4535,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     placeholder="Select agent address"
                     searchable
                     clearable
-                    withAsterisk
                     data={agentAddressOptions}
                     key={
                       form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0

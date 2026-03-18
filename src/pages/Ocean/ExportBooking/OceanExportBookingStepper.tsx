@@ -105,6 +105,7 @@ interface CargoDetail {
 
   // FCL specific fields
   container_type_code?: string;
+  container_no?: string;
   no_of_containers?: number;
 }
 
@@ -116,6 +117,7 @@ const DEFAULT_CARGO_ROW: CargoDetail = {
   volume: undefined,
   chargeable_volume: undefined,
   container_type_code: undefined,
+  container_no: undefined,
   no_of_containers: undefined,
 };
 
@@ -284,13 +286,11 @@ const validationSchema = yup.object({
   forwarder_code: yup.string(),
   forwarder_address_id: yup.number(),
   forwarder_email: yup.string().email("Invalid email format"),
-  destination_agent_code: yup.string().required("Destination agent is required"),
+  destination_agent_code: yup.string(),
   destination_agent_address_id: yup
       .number()
-      .typeError("Origin agent address is required")
-      .required("Origin agent address is required")
-      .moreThan(0, "Origin agent address is required"),
-  destination_agent_email: yup.string().email("Invalid email format").required("Destination agent email is required"),
+      .nullable(),
+  destination_agent_email: yup.string().email("Invalid email format").nullable().notRequired(),
   billing_customer_code: yup.string(),
   billing_customer_address_id: yup.number(),
   notify1_customer_name: yup.string(),
@@ -315,6 +315,7 @@ const validationSchema = yup.object({
       volume: yup.number().nullable(),
       chargeable_volume: yup.number().nullable(),
       container_type_code: yup.string().nullable(),
+      container_no: yup.string().nullable(),
       no_of_containers: yup.number().nullable(),
     }),
   ),
@@ -976,6 +977,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               container_type_code: cargo.container_type_code
                 ? String(cargo.container_type_code)
                 : undefined,
+              container_no: cargo.container_no ? String(cargo.container_no) : undefined,
               no_of_containers: cargo.no_of_containers
                 ? Number(cargo.no_of_containers)
                 : undefined,
@@ -990,6 +992,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               volume: undefined,
               chargeable_volume: undefined,
               container_type_code: undefined,
+              container_no: undefined,
               no_of_containers: undefined,
             },
           ],
@@ -2492,10 +2495,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
-        "destination_agent_code",
-        "destination_agent_address_id",
-        "destination_agent_address",
-        "destination_agent_email",
       ];
 
       const validation = form.validate();
@@ -2599,6 +2598,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             volume: cargo.volume || null,
             chargeable_volume: cargo.chargeable_volume || null,
             container_type_code: cargo.container_type_code || null,
+            container_no: cargo.container_no || null,
             no_of_containers: cargo.no_of_containers || null,
           };
           if (cargo.id != null && cargo.id !== undefined) {
@@ -4463,7 +4463,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Destination Agent Name"
                     placeholder="Type destination agent name"
                     apiEndpoint={URL.agent}
-                    withAsterisk
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
@@ -4540,7 +4539,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Destination Agent Email Id"
                     placeholder="Enter email address"
                     format = "normal"
-                    withAsterisk
                     {...form.getInputProps("destination_agent_email")}
                   />
                 </Grid.Col>
@@ -4550,7 +4548,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     placeholder="Select agent address"
                     searchable
                     clearable
-                    withAsterisk
                     data={agentAddressOptions}
                     key={
                       form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0
@@ -5097,6 +5094,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {form.values.service === "LCL" && (
                     <Grid>
                       <Grid.Col span={3}>
+                        <FormTextInput
+                          label="Container Number"
+                          placeholder="Enter container number"
+                          {...form.getInputProps("cargo_details.0.container_no")}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="No of Packages"
                           placeholder="Enter number of packages"
@@ -5106,7 +5110,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
@@ -5117,7 +5121,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="Volume (cbm)"
                           placeholder="Enter volume"
@@ -5126,7 +5130,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           {...form.getInputProps("cargo_details.0.volume")}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="Chargeable Volume (cbm)"
                           // placeholder="Auto-calculated"
@@ -5160,23 +5164,29 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       >
                         <Grid.Col span={3}>
                           <RequiredLabel
-                            label="Container Type"
+                            label="Container Number"
                             required={false}
                           />
                         </Grid.Col>
                         <Grid.Col span={3}>
+                          <RequiredLabel
+                            label="Container Type"
+                            required={false}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={2.5}>
                           <RequiredLabel
                             label="No of Containers"
                             required={false}
                           />
                         </Grid.Col>
-                        <Grid.Col span={3}>
+                        <Grid.Col span={2.5}>
                           <RequiredLabel
                             label="Gross Weight"
                             required={false}
                           />
                         </Grid.Col>
-                        <Grid.Col span={3}>
+                        <Grid.Col span={1}>
                           <RequiredLabel label="Actions" required={false} />
                         </Grid.Col>
                       </Grid>
@@ -5184,6 +5194,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         {form.values.cargo_details.map((_, cargoIndex) => (
                           <Box key={cargoIndex}>
                             <Grid gutter={"sm"}>
+                              <Grid.Col span={3}>
+                                <FormTextInput
+                                  placeholder="Enter container number"
+                                  {...form.getInputProps(
+                                    `cargo_details.${cargoIndex}.container_no`,
+                                  )}
+                                />
+                              </Grid.Col>
                               <Grid.Col span={3}>
                                 <Dropdown
                                   placeholder="Select container type"
@@ -5195,7 +5213,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                   )}
                                 />
                               </Grid.Col>
-                              <Grid.Col span={3}>
+                              <Grid.Col span={2.5}>
                                 <FormNumberInput
                                   placeholder="Enter number of containers"
                                   min={1}
@@ -5204,7 +5222,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                   )}
                                 />
                               </Grid.Col>
-                              <Grid.Col span={3}>
+                              <Grid.Col span={2.5}>
                                 <FormNumberInput
                                   placeholder="Enter gross weight"
                                   min={0}
@@ -5215,8 +5233,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                 />
                               </Grid.Col>
                               {/* Add/Remove buttons */}
-                              <Grid.Col span={3}>
-                                <Group gap="xs">
+                              <Grid.Col span={1}>
+                                <Group gap="sm">
                                   {cargoIndex ===
                                     form.values.cargo_details.length - 1 && (
                                     <Button
@@ -5233,6 +5251,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                           volume: undefined,
                                           chargeable_volume: undefined,
                                           container_type_code: undefined,
+                                          container_no: undefined,
                                           no_of_containers: undefined,
                                         });
                                       }}
