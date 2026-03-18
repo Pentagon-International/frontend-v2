@@ -130,6 +130,7 @@ interface FormValues {
   is_direct: boolean;
   is_coload: boolean;
   houseno: string;
+  master_no: string;
 
   // Routing Details
   routingDetails: RoutingDetail[];
@@ -245,6 +246,7 @@ const validationSchema = yup.object({
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
   houseno: yup.string().required("House No is required"),
+  master_no: yup.string().required("Master No is required"),
 
   // Routing Details - All optional
   routingDetails: yup
@@ -963,6 +965,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
       houseno: String(data.houseno || ""),
+      master_no: String(data.master_no || ""),
 
       // Routing Details - map from routing_details array (include from/to/carrier codes and names from API)
       routingDetails: data.routing_details
@@ -1226,6 +1229,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       is_direct: false,
       is_coload: false,
       houseno: "",
+      master_no: "",
 
       // Routing Details - start with one empty row
       routingDetails: [
@@ -2513,6 +2517,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         "routed_by",
         "customer_service_name",
         "houseno",
+        "master_no",
         "destination_agent_code",
         "destination_agent_address_id",
         "destination_agent_address",
@@ -2573,6 +2578,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
         houseno: form.values.houseno,
+        master_no: form.values.master_no,
 
         // Routing Details
         routing_details: form.values.routingDetails.map((route) => {
@@ -3740,6 +3746,18 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       form.setFieldValue("houseno", e.target.value);
                     }}
                     error={form.errors.houseno}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Master Number"
+                    placeholder="Enter Master Number"
+                    withAsterisk
+                    value={form.values.master_no}
+                    onChange={(e) => {
+                      form.setFieldValue("master_no", e.target.value);
+                    }}
+                    error={form.errors.master_no}
                   />
                 </Grid.Col>
                 {(form.values.service === "AIR" ||
