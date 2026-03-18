@@ -41,7 +41,7 @@ import {
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
-import { putAPICall } from "../../../service/putApiCall";
+import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -773,6 +773,25 @@ export default function PaymentCreate({
         status: (paymentFromState.status ?? "UNPOSTED").toString(),
       });
     }
+
+    // Populate supporting documents from API response (edit / view flow)
+    const rawDocs = (paymentFromState as any)?.documents;
+    if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+      const mapped = rawDocs.map((doc: any) => ({
+        name: (doc.document_name ?? doc.file_name ?? "").toString(),
+        file: null as File | null,
+        document_url:
+          doc.document_download_url ?? doc.document_url ?? doc.document ?? "",
+        document_id: doc.id ?? undefined,
+        original_document_name: (
+          doc.document_name ??
+          doc.file_name ??
+          ""
+        ).toString(),
+      }));
+      form.setFieldValue("supporting_documents", mapped);
+    }
+
     // Re-run when state changes (e.g. navigating from list to edit/view with different row)
   }, [
     paymentFromState,
@@ -1180,6 +1199,62 @@ export default function PaymentCreate({
     return base;
   };
 
+  const FORM_DATA_HEADERS = {
+    ...API_HEADER,
+    headers: {
+      ...API_HEADER.headers,
+      "Content-Type": "multipart/form-data",
+    },
+  };
+
+  /**
+   * Builds a multipart/form-data body for payment API calls.
+   * Fields:
+   *   payment           – JSON-stringified payload
+   *   document_names[i] – display name for document i
+   *   document[i]       – File object for document i
+   *   document_id[i]    – server-side ID of an existing document (when replacing)
+   */
+  const buildPaymentFormData = (payload: object): FormData => {
+    const fd = new FormData();
+    fd.append("payment", JSON.stringify(payload));
+    let fileIndex = 0;
+    form.values.supporting_documents.forEach((doc) => {
+      if (doc.file) {
+        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
+        fd.append(`document[${fileIndex}]`, doc.file);
+        if (doc.document_id != null)
+          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
+        fileIndex++;
+      }
+    });
+    return fd;
+  };
+
+  /**
+   * Builds a multipart/form-data body for reverse-payment API calls.
+   * Fields:
+   *   reverse_payment   – JSON-stringified payload
+   *   document_names[i] – display name for document i
+   *   document[i]       – File object for document i
+   *   document_id[i]    – server-side ID of an existing document (when replacing)
+   */
+  const buildReversalFormData = (payload: object): FormData => {
+    const fd = new FormData();
+    fd.append("reverse_payment", JSON.stringify(payload));
+    let fileIndex = 0;
+    form.values.supporting_documents.forEach((doc) => {
+      if (doc.file) {
+        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
+        fd.append(`document[${fileIndex}]`, doc.file);
+        if (doc.document_id != null)
+          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
+        fileIndex++;
+      }
+    });
+    return fd;
+  };
+
   const handleSubmit = async (values: PaymentFormValues) => {
     const partyLocalTotal =
       (values.details ?? []).reduce(
@@ -1226,20 +1301,13 @@ export default function PaymentCreate({
             status: "UNPOSTED",
             detailsOverride: detailsForPayload,
           });
-          const raw = await putAPICall(
-            URL.reversePayment,
-            payload,
-            API_HEADER,
-          );
-          const wrap = raw as {
-            data?: {
-              id?: number;
-              payment_no?: string;
-              reverse_payment_no?: string;
-              status?: string;
-            };
-          };
-          const res = wrap?.data;
+          const fd = buildReversalFormData(payload);
+          const raw = (await apiCallProtected.put(
+            `${URL.reversePayment}${reversePaymentSaveResponse.id}/`,
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const res = raw?.data?.data ?? raw?.data ?? raw;
           if (res?.id != null) {
             setReversePaymentSaveResponse((prev) => ({
               ...prev!,
@@ -1262,22 +1330,13 @@ export default function PaymentCreate({
           const payload = buildReversalPayload(values, {
             detailsOverride: detailsForPayload,
           });
-          const raw = await postAPICall(
+          const fd = buildReversalFormData(payload);
+          const raw = (await apiCallProtected.post(
             URL.reversePayment,
-            payload,
-            API_HEADER,
-          );
-          const wrap = raw as {
-            data?: {
-              id?: number;
-              payment_no?: string;
-              reverse_payment_no?: string;
-              status?: string;
-              parties?: Array<{ id?: number }>;
-              allocations?: Array<{ id?: number }>;
-            };
-          };
-          const data = wrap?.data;
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const data = (raw as any)?.data?.data ?? (raw as any)?.data ?? raw;
           if (data?.id != null) {
             setReversePaymentSaveResponse({
               id: Number(data.id),
@@ -1329,23 +1388,13 @@ export default function PaymentCreate({
         : buildPaymentPayload(values);
 payload.is_agent = false ;
       if (isUpdate) {
-        const updateUrl = `${URL.payment}`;
-        const raw = await putAPICall(updateUrl, payload, API_HEADER);
-        const response =
-          (
-            raw as {
-              data?: {
-                id?: number;
-                payment_no?: string;
-                status?: string | number;
-              };
-            }
-          )?.data ?? raw;
-        const res = response as {
-          id?: number;
-          payment_no?: string;
-          status?: string | number;
-        };
+        const fd = buildPaymentFormData(payload);
+        const raw = (await apiCallProtected.put(
+          `${URL.payment}${saveResponse!.id}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const res = raw?.data?.data ?? raw?.data ?? raw;
         if (res?.id != null) {
           setSaveResponse({
             id: res.id ?? saveResponse.id,
@@ -1353,6 +1402,20 @@ payload.is_agent = false ;
             document_no: saveResponse.document_no ?? "",
             status: res.status != null ? String(res.status) : "UNPOSTED",
           });
+          // Refresh documents from response
+          if (Array.isArray(res.documents) && res.documents.length > 0) {
+            form.setFieldValue(
+              "supporting_documents",
+              res.documents.map((doc: any) => ({
+                name: (doc.document_name ?? doc.file_name ?? "").toString(),
+                file: null,
+                document_url:
+                  doc.document_download_url ?? doc.document_url ?? doc.document ?? "",
+                document_id: doc.id ?? undefined,
+                original_document_name: (doc.document_name ?? doc.file_name ?? "").toString(),
+              })),
+            );
+          }
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
           ToastNotification({
             type: "success",
@@ -1360,17 +1423,13 @@ payload.is_agent = false ;
           });
         }
       } else {
-        const raw = await postAPICall(URL.payment, payload, API_HEADER);
-        const wrap = raw as {
-          data?: {
-            id?: number;
-            payment_no?: string;
-            status?: string | number;
-            parties?: Array<{ id?: number; account_code?: string }>;
-            allocations?: Array<{ id?: number }>;
-          };
-        };
-        const data = wrap?.data;
+        const fd = buildPaymentFormData(payload);
+        const raw = (await apiCallProtected.post(
+          URL.payment,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const data = raw?.data?.data ?? raw?.data ?? raw;
         if (data?.id != null) {
           setSaveResponse({
             id: data.id,
@@ -1399,6 +1458,20 @@ payload.is_agent = false ;
               id: data.allocations![i]?.id ?? a.id,
             }));
             form.setFieldValue("adjustments", updatedAdjustments);
+          }
+          // Refresh documents from response
+          if (Array.isArray(data.documents) && data.documents.length > 0) {
+            form.setFieldValue(
+              "supporting_documents",
+              data.documents.map((doc: any) => ({
+                name: (doc.document_name ?? doc.file_name ?? "").toString(),
+                file: null,
+                document_url:
+                  doc.document_download_url ?? doc.document_url ?? doc.document ?? "",
+                document_id: doc.id ?? undefined,
+                original_document_name: (doc.document_name ?? doc.file_name ?? "").toString(),
+              })),
+            );
           }
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
           ToastNotification({
@@ -1436,20 +1509,13 @@ payload.is_agent = false ;
           paymentNo: reversePaymentSaveResponse.payment_no ?? "",
           status: "POSTED",
         });
-        const raw = await putAPICall(
-          URL.reversePayment,
-          payload,
-          API_HEADER,
-        );
-        const wrap = raw as {
-          data?: {
-            id?: number;
-            payment_no?: string;
-            reverse_payment_no?: string;
-            status?: string;
-          };
-        };
-        const res = wrap?.data;
+        const fd = buildReversalFormData(payload);
+        const raw = (await apiCallProtected.put(
+          `${URL.reversePayment}${reversePaymentSaveResponse.id}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const res = raw?.data?.data ?? raw?.data ?? raw;
         if (res?.id != null) {
           setReversePaymentSaveResponse((prev) => ({
             ...prev!,
@@ -1493,23 +1559,13 @@ payload.is_agent = false ;
     try {
       const payload = buildPaymentPayload(form.values, { status: "POSTED" });
       payload.is_agent = false;
-      const postUpdateUrl = `${URL.payment}`;
-      const raw = await putAPICall(postUpdateUrl, payload, API_HEADER);
-      const response =
-        (
-          raw as {
-            data?: {
-              id?: number;
-              payment_no?: string;
-              status?: string | number;
-            };
-          }
-        )?.data ?? raw;
-      const res = response as {
-        id?: number;
-        payment_no?: string;
-        status?: string | number;
-      };
+      const fd = buildPaymentFormData(payload);
+      const raw = (await apiCallProtected.put(
+        `${URL.payment}${saveResponse!.id}/`,
+        fd,
+        FORM_DATA_HEADERS,
+      )) as any;
+      const res = raw?.data?.data ?? raw?.data ?? raw;
       if (res?.id != null) {
         setSaveResponse((prev) => ({
           ...prev,

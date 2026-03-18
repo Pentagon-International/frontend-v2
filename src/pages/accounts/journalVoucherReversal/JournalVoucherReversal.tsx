@@ -1725,7 +1725,7 @@ import {
                     {isUpdate ? "Update" : "Save"}
                   </Button>
                 )}
-                {!isReadOnly && (
+                {(!isReadOnly && isUpdate) &&(
                   <Button
                     variant="filled"
                     color="green"

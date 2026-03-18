@@ -1709,10 +1709,10 @@ function JournalVoucher() {
                   loading={isSubmitting}
                   styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
                 >
-                  {isUpdate ? "Update Journal Voucher" : "Save Journal Voucher"}
+                  {isUpdate ? "Update" : "Save"}
                 </Button>
               )}
-              {!isReadOnly && (
+              {(!isReadOnly &&  isUpdate) && (
                 <Button
                   variant="filled"
                   color="green"
