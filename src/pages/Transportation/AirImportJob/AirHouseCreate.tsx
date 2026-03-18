@@ -1182,12 +1182,15 @@ function HouseCreate() {
     }
 
     // Load charges - handle both "charges" (mapped) and "mawb_charges" (raw API)
-    const chargesToLoad =
-      (editData.charges && Array.isArray(editData.charges)
-        ? editData.charges
-        : null) ||
-      (editData as { mawb_charges?: unknown[] }).mawb_charges ||
-      [];
+    const chargesToLoad = (() => {
+      const rawCharges = (editData as { charges?: unknown }).charges;
+      const rawMawbCharges = (editData as { mawb_charges?: unknown }).mawb_charges;
+      const chargesArr = Array.isArray(rawCharges) ? rawCharges : null;
+      const mawbArr = Array.isArray(rawMawbCharges) ? rawMawbCharges : null;
+      if (chargesArr && chargesArr.length > 0) return chargesArr;
+      if (mawbArr && mawbArr.length > 0) return mawbArr;
+      return [];
+    })();
     const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
     if (chargesArray.length === 0) {
       console.log("[AirHouseCreate] Charges: NOT SET (empty or missing)", {
@@ -1286,7 +1289,7 @@ function HouseCreate() {
             currencyIdFromApi ??
             (currByCode?.id != null ? String(currByCode.id) : "");
 
-          return {
+          const mapped = {
             id: charge.id != null ? Number(charge.id) : undefined,
             charge_id: chargeId,
             charge_name: charge.charge_name ? String(charge.charge_name) : "",
@@ -1297,7 +1300,37 @@ function HouseCreate() {
             roe: toNum(charge.roe),
             amount_per_unit: toNum(charge.amount_per_unit),
             amount: toNum(charge.amount),
+            // New fields (sell/cost) from API / job state
+            local_amount: toNum(charge.sell_local_amount ?? charge.local_amount),
+            cost_per_unit: toNum(charge.unit_cost ?? charge.cost_per_unit),
+            total_cost: toNum(charge.total_cost),
+            cost_local_amount: toNum(charge.cost_local_amount),
           };
+
+          console.log("🧾 [AIR_IMPORT_HOUSE] load charges (initial effect)", {
+            source:
+              (editData as { charges?: unknown[] }).charges &&
+              Array.isArray((editData as { charges: unknown[] }).charges) &&
+              (editData as { charges: unknown[] }).charges.length > 0
+                ? "charges"
+                : "mawb_charges",
+            raw: {
+              sell_local_amount: (charge as { sell_local_amount?: unknown })
+                .sell_local_amount,
+              unit_cost: (charge as { unit_cost?: unknown }).unit_cost,
+              total_cost: (charge as { total_cost?: unknown }).total_cost,
+              cost_local_amount: (charge as { cost_local_amount?: unknown })
+                .cost_local_amount,
+            },
+            mapped: {
+              local_amount: mapped.local_amount,
+              cost_per_unit: mapped.cost_per_unit,
+              total_cost: mapped.total_cost,
+              cost_local_amount: mapped.cost_local_amount,
+            },
+          });
+
+          return mapped;
         },
       );
       const allChargeNotSet = loadedCharges
@@ -1565,8 +1598,17 @@ function HouseCreate() {
     ) {
       return;
     }
-    const chargesToLoad = editData.charges || editData.mawb_charges;
-    if (!chargesToLoad || !Array.isArray(chargesToLoad)) return;
+    const rawCharges = (editData as { charges?: unknown }).charges;
+    const rawMawbCharges = (editData as { mawb_charges?: unknown }).mawb_charges;
+    const chargesArr = Array.isArray(rawCharges) ? rawCharges : null;
+    const mawbArr = Array.isArray(rawMawbCharges) ? rawMawbCharges : null;
+    const chargesToLoad =
+      chargesArr && chargesArr.length > 0
+        ? chargesArr
+        : mawbArr && mawbArr.length > 0
+          ? mawbArr
+          : null;
+    if (!chargesToLoad) return;
     const unitDataArr = unitArr as { id?: number; unit_code?: string }[];
     const currencyDataArr = currArr as {
       id?: number;

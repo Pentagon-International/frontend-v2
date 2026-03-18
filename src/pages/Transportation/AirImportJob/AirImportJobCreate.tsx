@@ -169,6 +169,13 @@ type HAWBDetail = {
     roe: number | null;
     amount_per_unit: number | null;
     amount: number | null;
+    // New payload fields (edit flow + submit payload)
+    local_amount?: number | null;
+    sell_local_amount?: number | null;
+    cost_per_unit?: number | null;
+    unit_cost?: number | null;
+    total_cost?: number | null;
+    cost_local_amount?: number | null;
   }>;
   mawb_charges?: Array<Record<string, unknown>>;
 };
@@ -752,7 +759,105 @@ function AirImportJobCreate() {
             },
           );
           const mappedHawbDetails = housingDetailsData.map(
-            (house: Record<string, unknown>) => ({
+            (house: Record<string, unknown>) => {
+              const toNum = (v: unknown): number | null => {
+                if (v == null) return null;
+                if (typeof v === "number" && !Number.isNaN(v)) return v;
+                const n = parseFloat(String(v));
+                return Number.isNaN(n) ? null : n;
+              };
+              const normalizePpCc = (value: unknown): string => {
+                const raw = String(value ?? "")
+                  .trim()
+                  .toUpperCase();
+                if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+                if (raw === "CC" || raw === "COLLECT") return "Collect";
+                return "";
+              };
+
+              const mawbChargesRaw = Array.isArray(house.mawb_charges)
+                ? (house.mawb_charges as Record<string, unknown>[])
+                : [];
+              const mappedCharges = mawbChargesRaw.map((charge) => {
+                const unitDetails = charge.unit_details as
+                  | { unit_id?: number; unit_code?: string }
+                  | undefined;
+                const currencyDetails = charge.currency_details as
+                  | { currency_id?: number; currency_code?: string }
+                  | undefined;
+                const unitCode = String(
+                  charge.unit_code ??
+                    charge.unit_input ??
+                    unitDetails?.unit_code ??
+                    "",
+                ).trim();
+                const currency = String(
+                  currencyDetails?.currency_code ?? charge.currency_code ?? "",
+                ).trim();
+                const chargeId =
+                  charge.charge_id != null
+                    ? Number(charge.charge_id)
+                    : charge.id != null
+                      ? Number(charge.id)
+                      : null;
+                const unitId =
+                  charge.unit_id != null
+                    ? String(charge.unit_id)
+                    : charge.unit != null
+                      ? String(charge.unit)
+                      : unitDetails?.unit_id != null
+                        ? String(unitDetails.unit_id)
+                        : "";
+                const currencyId =
+                  charge.currency_id != null
+                    ? String(charge.currency_id)
+                    : charge.currency != null
+                      ? String(charge.currency)
+                      : currencyDetails?.currency_id != null
+                        ? String(currencyDetails.currency_id)
+                        : "";
+                const mapped = {
+                  id: charge.id != null ? Number(charge.id) : undefined,
+                  charge_id: chargeId,
+                  charge_name: charge.charge_name
+                    ? String(charge.charge_name)
+                    : "",
+                  pp_cc: normalizePpCc(charge.pp_cc),
+                  unit_id: unitId,
+                  unit_code: unitCode,
+                  currency_id: currencyId,
+                  currency,
+                  no_of_unit: toNum(charge.no_of_unit),
+                  roe: toNum(charge.roe),
+                  amount_per_unit: toNum(charge.amount_per_unit),
+                  amount: toNum(charge.amount),
+                  local_amount: toNum(
+                    charge.sell_local_amount ?? charge.local_amount,
+                  ),
+                  cost_per_unit: toNum(charge.unit_cost ?? charge.cost_per_unit),
+                  total_cost: toNum(charge.total_cost),
+                  cost_local_amount: toNum(charge.cost_local_amount),
+                };
+                return mapped;
+              });
+
+              if (mawbChargesRaw.length > 0) {
+                console.log("🧾 [AIR_IMPORT_JOB] mawb_charges → charges mapping", {
+                  jobId: jobData?.job_id,
+                  houseId: house.id,
+                  mawbChargesCount: mawbChargesRaw.length,
+                  firstMawbCharge: mawbChargesRaw[0],
+                  firstMappedCharge: mappedCharges[0],
+                });
+              } else {
+                console.log("🧾 [AIR_IMPORT_JOB] No mawb_charges on house", {
+                  jobId: jobData?.job_id,
+                  houseId: house.id,
+                  keys: Object.keys(house ?? {}),
+                });
+              }
+
+              return {
               id: house.id != null ? Number(house.id) : undefined,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hawb_number:
@@ -882,72 +987,11 @@ function AirImportJobCreate() {
                       },
                     )
                   : [],
-              charges: (() => {
-                const chargesArray = (house.charges || house.mawb_charges) as
-                  | Record<string, unknown>[]
-                  | undefined;
-                if (chargesArray && Array.isArray(chargesArray)) {
-                  return chargesArray.map((charge: Record<string, unknown>) => {
-                    const unitDetails = charge.unit_details as
-                      | { unit_id?: number; unit_code?: string }
-                      | undefined;
-                    const currencyDetails = charge.currency_details as
-                      | { currency_id?: number; currency_code?: string }
-                      | undefined;
-                    const unitCode = String(
-                      charge.unit_code ??
-                        charge.unit_input ??
-                        unitDetails?.unit_code ??
-                        "",
-                    ).trim();
-                    const currency = String(
-                      currencyDetails?.currency_code ??
-                        charge.currency_code ??
-                        "",
-                    ).trim();
-                    const chargeId =
-                      charge.charge_id != null
-                        ? Number(charge.charge_id)
-                        : charge.id != null
-                          ? Number(charge.id)
-                          : null;
-                    const unitId =
-                      charge.unit_id != null
-                        ? String(charge.unit_id)
-                        : charge.unit != null
-                          ? String(charge.unit)
-                          : unitDetails?.unit_id != null
-                            ? String(unitDetails.unit_id)
-                            : "";
-                    const currencyId =
-                      charge.currency_id != null
-                        ? String(charge.currency_id)
-                        : charge.currency != null
-                          ? String(charge.currency)
-                          : currencyDetails?.currency_id != null
-                            ? String(currencyDetails.currency_id)
-                            : "";
-                    return {
-                      id: charge.id != null ? Number(charge.id) : undefined,
-                      charge_id: chargeId,
-                      charge_name: charge.charge_name
-                        ? String(charge.charge_name)
-                        : "",
-                      pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
-                      unit_id: unitId,
-                      unit_code: unitCode,
-                      currency_id: currencyId,
-                      currency,
-                      no_of_unit: charge.no_of_unit as number | null,
-                      roe: charge.roe as number | null,
-                      amount_per_unit: charge.amount_per_unit as number | null,
-                      amount: charge.amount as number | null,
-                    };
-                  });
-                }
-                return [];
-              })(),
-            }),
+              // Air Export flow stores normalized charges; keep raw too for payload parity/debug.
+              charges: mappedCharges,
+              mawb_charges: mawbChargesRaw,
+            };
+          },
           );
           console.log("[AirImportJobCreate] Mapped hawbDetails", {
             count: mappedHawbDetails.length,
@@ -958,6 +1002,11 @@ function AirImportJobCreate() {
             firstMappedChargesLength:
               (mappedHawbDetails[0] as { charges?: unknown[] })?.charges
                 ?.length ?? 0,
+          });
+          console.log("🧾 [AIR_IMPORT_JOB] first mapped charges (sell/cost)", {
+            firstHouseId: (mappedHawbDetails[0] as { id?: unknown })?.id,
+            firstCharge:
+              (mappedHawbDetails[0] as { charges?: unknown[] })?.charges?.[0],
           });
           setHawbDetails(mappedHawbDetails);
           hawbDetailsLoadedRef.current = true;
@@ -2165,22 +2214,57 @@ function AirImportJobCreate() {
               c.chargeable_weight != null ? String(c.chargeable_weight) : "",
             haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
           })),
-          mawb_charges: hawb.charges
-            ? hawb.charges.map((charge) => ({
-                ...(charge.id != null &&
-                  charge.id !== undefined && { id: Number(charge.id) }),
-                charge_id: charge.charge_id ?? null,
-                pp_cc: charge.pp_cc || "",
-                unit_id: charge.unit_id ? Number(charge.unit_id) : null,
-                currency_id: charge.currency_id
+          mawb_charges: (() => {
+            const src =
+              (hawb as { mawb_charges?: unknown }).mawb_charges ??
+              (hawb as { charges?: unknown }).charges ??
+              [];
+            const arr = Array.isArray(src) ? src : [];
+            return arr.map((charge: Record<string, unknown>) => ({
+              ...(charge.id != null && { id: Number(charge.id) }),
+              charge_id:
+                charge.charge_id != null ? Number(charge.charge_id) : null,
+              pp_cc: String(charge.pp_cc ?? ""),
+              unit_id:
+                charge.unit_id != null
+                  ? Number(charge.unit_id)
+                  : charge.unit != null
+                    ? Number(charge.unit)
+                    : null,
+              currency_id:
+                charge.currency_id != null
                   ? Number(charge.currency_id)
+                  : charge.currency != null
+                    ? Number(charge.currency)
+                    : null,
+              no_of_unit:
+                charge.no_of_unit != null ? Number(charge.no_of_unit) : null,
+              roe: charge.roe != null ? Number(charge.roe) : null,
+              amount_per_unit:
+                charge.amount_per_unit != null
+                  ? Number(charge.amount_per_unit)
                   : null,
-                no_of_unit: charge.no_of_unit ?? null,
-                roe: charge.roe ?? null,
-                amount_per_unit: charge.amount_per_unit ?? null,
-                amount: charge.amount ?? null,
-              }))
-            : [],
+              amount: charge.amount != null ? Number(charge.amount) : null,
+              sell_local_amount:
+                charge.sell_local_amount != null
+                  ? Number(charge.sell_local_amount)
+                  : charge.local_amount != null
+                    ? Number(charge.local_amount)
+                    : null,
+              unit_cost:
+                charge.unit_cost != null
+                  ? Number(charge.unit_cost)
+                  : charge.cost_per_unit != null
+                    ? Number(charge.cost_per_unit)
+                    : null,
+              total_cost:
+                charge.total_cost != null ? Number(charge.total_cost) : null,
+              cost_local_amount:
+                charge.cost_local_amount != null
+                  ? Number(charge.cost_local_amount)
+                  : null,
+            }));
+          })(),
         })),
         // Master-level estimates (Estimates tab)
         // Include any row that has meaningful data; drop only fully-empty rows.
@@ -2470,11 +2554,16 @@ function AirImportJobCreate() {
                         },
                       }}
                       onClick={() => {
-                        const allCollectCharges = hawbDetails.flatMap((hawb) =>
-                          (hawb.charges ?? [])
+                        const allCollectCharges = hawbDetails.flatMap((hawb) => {
+                          const src =
+                            (hawb as { mawb_charges?: unknown }).mawb_charges;
+                          const arr: Record<string, unknown>[] = Array.isArray(src)
+                            ? (src as Record<string, unknown>[])
+                            : [];
+                          return arr
                             .filter(
                               (c) =>
-                                String(c.pp_cc ?? "")
+                                String((c as { pp_cc?: unknown }).pp_cc ?? "")
                                   .trim() === "Collect",
                             )
                             .map((c) => ({
@@ -2490,8 +2579,8 @@ function AirImportJobCreate() {
                                   .shipper_code ??
                                 (hawb as { shipper_id?: string }).shipper_id ??
                                 "",
-                            })),
-                        );
+                            }));
+                        });
 
                         const firstHouse = hawbDetails[0];
 

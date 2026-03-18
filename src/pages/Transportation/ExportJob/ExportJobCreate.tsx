@@ -271,6 +271,10 @@ type HousingDetail = {
     roe: number | null;
     amount_per_unit: number | null;
     amount: number | null;
+    sell_local_amount?: number | null;
+    unit_cost?: number | null;
+    total_cost?: number | null;
+    cost_local_amount?: number | null;
   }>;
   mbl_charges?: Array<Record<string, unknown>>;
 };
@@ -700,9 +704,48 @@ function ExportJobCreate() {
                           ? String(charge.currency_id)
                           : "",
                       currency: charge.currency ? String(charge.currency) : "",
-                      roe: charge.roe as number | null,
-                      amount_per_unit: charge.amount_per_unit as number | null,
-                      amount: charge.amount as number | null,
+                      roe:
+                        charge.roe != null
+                          ? typeof charge.roe === "string"
+                            ? parseFloat(charge.roe) || null
+                            : (charge.roe as number)
+                          : null,
+                      amount_per_unit:
+                        charge.amount_per_unit != null
+                          ? typeof charge.amount_per_unit === "string"
+                            ? parseFloat(charge.amount_per_unit) || null
+                            : (charge.amount_per_unit as number)
+                          : null,
+                      amount:
+                        charge.amount != null
+                          ? typeof charge.amount === "string"
+                            ? parseFloat(charge.amount) || null
+                            : (charge.amount as number)
+                          : null,
+                      sell_local_amount:
+                        charge.sell_local_amount != null
+                          ? typeof charge.sell_local_amount === "string"
+                            ? parseFloat(charge.sell_local_amount) || null
+                            : (charge.sell_local_amount as number)
+                          : null,
+                      unit_cost:
+                        charge.unit_cost != null
+                          ? typeof charge.unit_cost === "string"
+                            ? parseFloat(charge.unit_cost) || null
+                            : (charge.unit_cost as number)
+                          : null,
+                      total_cost:
+                        charge.total_cost != null
+                          ? typeof charge.total_cost === "string"
+                            ? parseFloat(charge.total_cost) || null
+                            : (charge.total_cost as number)
+                          : null,
+                      cost_local_amount:
+                        charge.cost_local_amount != null
+                          ? typeof charge.cost_local_amount === "string"
+                            ? parseFloat(charge.cost_local_amount) || null
+                            : (charge.cost_local_amount as number)
+                          : null,
                     }))
                   : house.mbl_charges &&
                       Array.isArray(house.mbl_charges) &&
@@ -769,6 +812,38 @@ function ExportJobCreate() {
                                 : (charge.amount as number)
                               : null;
 
+                          const sellLocal =
+                            charge.sell_local_amount !== null &&
+                            charge.sell_local_amount !== undefined
+                              ? typeof charge.sell_local_amount === "string"
+                                ? parseFloat(charge.sell_local_amount) || null
+                                : (charge.sell_local_amount as number)
+                              : null;
+
+                          const unitCost =
+                            charge.unit_cost !== null &&
+                            charge.unit_cost !== undefined
+                              ? typeof charge.unit_cost === "string"
+                                ? parseFloat(charge.unit_cost) || null
+                                : (charge.unit_cost as number)
+                              : null;
+
+                          const totalCost =
+                            charge.total_cost !== null &&
+                            charge.total_cost !== undefined
+                              ? typeof charge.total_cost === "string"
+                                ? parseFloat(charge.total_cost) || null
+                                : (charge.total_cost as number)
+                              : null;
+
+                          const costLocal =
+                            charge.cost_local_amount !== null &&
+                            charge.cost_local_amount !== undefined
+                              ? typeof charge.cost_local_amount === "string"
+                                ? parseFloat(charge.cost_local_amount) || null
+                                : (charge.cost_local_amount as number)
+                              : null;
+
                           const unitDetails = charge.unit_details as
                             | { unit_id?: number; unit_code?: string }
                             | undefined;
@@ -820,6 +895,10 @@ function ExportJobCreate() {
                             roe: roeValue,
                             amount_per_unit: amountPerUnit,
                             amount: amount,
+                            sell_local_amount: sellLocal,
+                            unit_cost: unitCost,
+                            total_cost: totalCost,
+                            cost_local_amount: costLocal,
                           };
                         },
                       )
@@ -2175,6 +2254,16 @@ function ExportJobCreate() {
             roe: charge.roe || null,
             amount_per_unit: charge.amount_per_unit || null,
             amount: charge.amount || null,
+            sell_local_amount:
+              (charge.sell_local_amount ?? (charge as { local_amount?: unknown }).local_amount) != null
+                ? Number(charge.sell_local_amount ?? (charge as { local_amount?: unknown }).local_amount)
+                : null,
+            unit_cost:
+              (charge.unit_cost ?? (charge as { cost_per_unit?: unknown }).cost_per_unit) != null
+                ? Number(charge.unit_cost ?? (charge as { cost_per_unit?: unknown }).cost_per_unit)
+                : null,
+            total_cost: charge.total_cost != null ? Number(charge.total_cost) : null,
+            cost_local_amount: charge.cost_local_amount != null ? Number(charge.cost_local_amount) : null,
           })),
         })),
         container_details: containerDetailsForm.values.containers.map(

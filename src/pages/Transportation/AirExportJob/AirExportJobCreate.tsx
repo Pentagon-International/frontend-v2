@@ -763,6 +763,12 @@ function AirExportJobCreate() {
                   | Record<string, unknown>[]
                   | undefined;
                 if (chargesArray && Array.isArray(chargesArray)) {
+                  const toNum = (v: unknown): number | null => {
+                    if (v == null) return null;
+                    if (typeof v === "number" && !Number.isNaN(v)) return v;
+                    const n = parseFloat(String(v));
+                    return Number.isNaN(n) ? null : n;
+                  };
                   return chargesArray.map((charge: Record<string, unknown>) => {
                     const unitDetails = charge.unit_details as
                       | { unit_code?: string; unit_id?: number }
@@ -812,10 +818,16 @@ function AirExportJobCreate() {
                       unit_code: unitCode,
                       currency_id: currencyId,
                       currency,
-                      no_of_unit: charge.no_of_unit as number | null,
-                      roe: charge.roe as number | null,
-                      amount_per_unit: charge.amount_per_unit as number | null,
-                      amount: charge.amount as number | null,
+                      no_of_unit: toNum(charge.no_of_unit),
+                      roe: toNum(charge.roe),
+                      amount_per_unit: toNum(charge.amount_per_unit),
+                      amount: toNum(charge.amount),
+                      sell_local_amount: toNum(
+                        charge.sell_local_amount ?? charge.local_amount,
+                      ),
+                      unit_cost: toNum(charge.unit_cost ?? charge.cost_per_unit),
+                      total_cost: toNum(charge.total_cost),
+                      cost_local_amount: toNum(charge.cost_local_amount),
                     };
                   });
                 }

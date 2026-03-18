@@ -1044,36 +1044,53 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCurrencyIds, getRoeValue, currencyData]);
 
-  // Auto-calculate amount, cost_local_amount when dependencies change
-  // Formula: amount = roe * no_of_unit * amount_per_unit
+  // Auto-calculate amount, sell_local_amount, cost_local_amount when dependencies change
+  // Formula: amount = no_of_unit * amount_per_unit
   //          total_cost = unit_cost * no_of_unit
+  //          sell_local_amount = amount * roe
   //          cost_local_amount = total_cost * roe
   const chargeCalculationKeys = chargesForm.values.charges
     .map(
       (c) => `${c.roe || ""}_${c.no_of_unit || ""}_${c.amount_per_unit || ""}_${c.unit_cost || ""}_${c.total_cost || ""}`
     )
     .join(",");
+  const chargeAmounts = chargesForm.values.charges.map((c) => c.amount).join(",");
 
   useEffect(() => {
     const updatedCharges = chargesForm.values.charges.map((charge) => {
       const next = { ...charge };
 
-      // Calculate: amount = roe * no_of_unit * amount_per_unit
+      // Calculate: amount = no_of_unit * amount_per_unit
       if (
         charge.amount_per_unit !== null &&
         charge.amount_per_unit !== undefined &&
         charge.amount_per_unit > 0
       ) {
-        const roe =
-          charge.roe !== null && charge.roe !== undefined ? charge.roe : 0;
         const noOfUnit =
           charge.no_of_unit !== null && charge.no_of_unit !== undefined
             ? charge.no_of_unit
             : 0;
-        const calculatedAmount = parseFloat((roe * noOfUnit * charge.amount_per_unit).toFixed(2));
+        const calculatedAmount = parseFloat(
+          (noOfUnit * charge.amount_per_unit).toFixed(2),
+        );
         if (calculatedAmount !== next.amount) {
           next.amount = calculatedAmount > 0 ? calculatedAmount : null;
         }
+      }
+
+      // Calculate: sell_local_amount = amount * roe
+      if (
+        next.amount != null &&
+        next.amount > 0 &&
+        next.roe != null &&
+        next.roe > 0
+      ) {
+        const calculatedSellLocal = next.amount * next.roe;
+        if (calculatedSellLocal !== next.sell_local_amount) {
+          next.sell_local_amount = calculatedSellLocal;
+        }
+      } else if (next.sell_local_amount != null) {
+        next.sell_local_amount = null;
       }
 
       // Calculate: cost_local_amount = total_cost * roe
@@ -1083,7 +1100,7 @@ function HouseCreate() {
         next.roe != null &&
         next.roe > 0
       ) {
-        const calculatedCostLocal = parseFloat((next.total_cost * next.roe).toFixed(2));
+        const calculatedCostLocal = next.total_cost * next.roe;
         if (calculatedCostLocal !== next.cost_local_amount) {
           next.cost_local_amount = calculatedCostLocal;
         }
@@ -1094,19 +1111,20 @@ function HouseCreate() {
       return next;
     });
 
-    const hasChanges = updatedCharges.some(
-      (charge, index) => {
-        const orig = chargesForm.values.charges[index];
-        return charge.amount !== orig?.amount ||
-          charge.cost_local_amount !== orig?.cost_local_amount;
-      }
-    );
+    const hasChanges = updatedCharges.some((charge, index) => {
+      const orig = chargesForm.values.charges[index];
+      return (
+        charge.amount !== orig?.amount ||
+        charge.sell_local_amount !== orig?.sell_local_amount ||
+        charge.cost_local_amount !== orig?.cost_local_amount
+      );
+    });
 
     if (hasChanges) {
       chargesForm.setValues({ charges: updatedCharges });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCalculationKeys]);
+  }, [chargeCalculationKeys, chargeAmounts]);
 
   // Fetch invoice list when Accounts tab is active
   useEffect(() => {
@@ -3624,13 +3642,13 @@ function HouseCreate() {
                   <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.75}>
-                  <RequiredLabel label="No of Unit" required={false} />
-                </Grid.Col>
-                <Grid.Col span={0.75}>
                   <RequiredLabel label="Currency" required={true} />
                 </Grid.Col>
                 <Grid.Col span={0.75}>
                   <RequiredLabel label="ROE" required={true} />
+                </Grid.Col>
+                <Grid.Col span={0.75}>
+                  <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={3}>
                   <Grid gutter={4}>
@@ -3732,26 +3750,6 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={0.75}>
-                    <FormNumberInput
-                      placeholder="No of Unit"
-                      min={0}
-                      hideControls
-                      value={chargesForm.values.charges[index].no_of_unit ?? undefined}
-                      onChange={(value) => {
-                        const noOfUnit = value as number | null;
-                        chargesForm.setFieldValue(`charges.${index}.no_of_unit`, noOfUnit);
-                        const currentCharge = chargesForm.values.charges[index];
-                        if (currentCharge.amount_per_unit != null && currentCharge.amount_per_unit > 0 && noOfUnit != null && noOfUnit > 0) {
-                          const roe = currentCharge.roe ?? 0;
-                          chargesForm.setFieldValue(`charges.${index}.amount`, parseFloat((roe * noOfUnit * currentCharge.amount_per_unit).toFixed(2)));
-                        }
-                        if (currentCharge.unit_cost != null && currentCharge.unit_cost > 0 && noOfUnit != null && noOfUnit > 0) {
-                          chargesForm.setFieldValue(`charges.${index}.total_cost`, parseFloat((noOfUnit * currentCharge.unit_cost).toFixed(2)));
-                        }
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={0.75}>
                     <Dropdown
                       placeholder="Currency"
                       searchable
@@ -3785,11 +3783,6 @@ function HouseCreate() {
                       onChange={(value) => {
                         const roe = value as number | null;
                         chargesForm.setFieldValue(`charges.${index}.roe`, roe);
-                        const currentCharge = chargesForm.values.charges[index];
-                        if (currentCharge.amount_per_unit != null && currentCharge.amount_per_unit > 0 && roe != null && roe > 0) {
-                          const noOfUnit = currentCharge.no_of_unit ?? 0;
-                          chargesForm.setFieldValue(`charges.${index}.amount`, parseFloat((roe * noOfUnit * currentCharge.amount_per_unit).toFixed(2)));
-                        }
                         if (chargeErrors[index]?.roe) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
@@ -3800,6 +3793,28 @@ function HouseCreate() {
                         }
                       }}
                       error={chargeErrors[index]?.roe}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.75}>
+                    <FormNumberInput
+                      placeholder="No of Unit"
+                      min={0}
+                      hideControls
+                      value={chargesForm.values.charges[index].no_of_unit ?? undefined}
+                      onChange={(value) => {
+                        const noOfUnit = value as number | null;
+                        chargesForm.setFieldValue(`charges.${index}.no_of_unit`, noOfUnit);
+                        const currentCharge = chargesForm.values.charges[index];
+                        if (currentCharge.amount_per_unit != null && currentCharge.amount_per_unit > 0 && noOfUnit != null && noOfUnit > 0) {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.amount`,
+                            parseFloat((noOfUnit * currentCharge.amount_per_unit).toFixed(2)),
+                          );
+                        }
+                        if (currentCharge.unit_cost != null && currentCharge.unit_cost > 0 && noOfUnit != null && noOfUnit > 0) {
+                          chargesForm.setFieldValue(`charges.${index}.total_cost`, parseFloat((noOfUnit * currentCharge.unit_cost).toFixed(2)));
+                        }
+                      }}
                     />
                   </Grid.Col>
                   {/* Sell group: Amount/Unit, Amount, Sell Local Amount */}
@@ -3816,7 +3831,10 @@ function HouseCreate() {
                           chargesForm.setFieldValue(`charges.${index}.amount_per_unit`, amountPerUnit);
                           const currentCharge = chargesForm.values.charges[index];
                           if (amountPerUnit != null && amountPerUnit > 0 && currentCharge.no_of_unit != null && currentCharge.no_of_unit > 0) {
-                            chargesForm.setFieldValue(`charges.${index}.amount`, parseFloat(((currentCharge.roe ?? 0) * currentCharge.no_of_unit * amountPerUnit).toFixed(2)));
+                            chargesForm.setFieldValue(
+                              `charges.${index}.amount`,
+                              parseFloat((currentCharge.no_of_unit * amountPerUnit).toFixed(2)),
+                            );
                           }
                           if (chargeErrors[index]?.amount_per_unit) {
                             const newErrors = { ...chargeErrors };
