@@ -1970,10 +1970,21 @@ function HouseCreate() {
 
   // Handle save - navigate to ExportJobCreate with housing details
   const handleSave = () => {
+    const roundTo2 = (v: unknown): number | null => {
+      if (v == null) return null;
+      const n = typeof v === "number" ? v : parseFloat(String(v));
+      if (!Number.isFinite(n)) return null;
+      return Math.round(n * 100) / 100;
+    };
+
     // Prepare cargo details (container_number removed for Air)
-    const cargoDetailsForPayload = cargoDetails.map((cargo) => {
-      return cargo;
-    });
+    // Keep payload stable; only round known numeric cargo fields to 2dp
+    const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
+      ...cargo,
+      gross_weight: roundTo2((cargo as any).gross_weight),
+      volume: roundTo2((cargo as any).volume),
+      chargeable_weight: roundTo2((cargo as any).chargeable_weight),
+    }));
 
     // Get current form values - ensure we're using the latest form state
     const currentFormValues = form.values;

@@ -1834,6 +1834,13 @@ function HouseCreate() {
     const containerDetails = location.state?.containerDetails || [];
     const containerNumbers = location.state?.containerNumbers || [];
 
+    const roundTo2 = (v: unknown): number | null => {
+      if (v == null) return null;
+      const n = typeof v === "number" ? v : parseFloat(String(v));
+      if (!Number.isFinite(n)) return null;
+      return Math.round(n * 100) / 100;
+    };
+
     // Prepare cargo details with container_no (create) or container_id (edit)
     const cargoDetailsForPayload = cargoDetails.map((cargo, idx) => {
       // Keep the raw UI fields separate
@@ -1868,9 +1875,9 @@ function HouseCreate() {
 
       const basePayload: Record<string, unknown> = {
         no_of_packages: no_of_packages ?? null,
-        gross_weight: gross_weight ?? null,
-        volume: volume ?? null,
-        chargeable_weight: chargeable_weight ?? null,
+        gross_weight: roundTo2(gross_weight),
+        volume: roundTo2(volume),
+        chargeable_weight: roundTo2(chargeable_weight),
         haz: hazValue,
       };
 
