@@ -778,21 +778,21 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const unitOptions = useMemo(() => {
     if (!Array.isArray(unitDataRaw)) return [];
     return unitDataRaw.map((item: unknown) => {
-      const unitItem = item as { unit_code?: string };
+      const unitItem = item as { unit_code?: string ; unit_name?: string };
       return {
         value: String(unitItem.unit_code || ""),
-        label: unitItem.unit_code || "",
+        label: unitItem.unit_name || "",
       };
     });
   }, [unitDataRaw]);
 
   const updateCharge = (index: number, field: string, value: string) => {
-    setCharges(
-      charges.map((charge, i) => {
+    setCharges((prev) =>
+      prev.map((charge, i) => {
         if (i === index) {
           const updatedCharge = { ...charge, [field]: value };
 
-          // Calculate totals when relevant fields change
+          // Calculate totals when relevant fields change (row-level)
           // Formula: sell_per_unit * roe * no_of_units
           if (
             field === "no_of_units" ||
@@ -846,13 +846,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       total_cost: "",
       total_sell: "",
     };
-    setCharges([...charges, newCharge]);
+    setCharges((prev) => [...prev, newCharge]);
   };
 
   const removeCharge = (index: number) => {
-    if (charges.length > 1) {
-      setCharges(charges.filter((_, i) => i !== index));
-    }
+    setCharges((prev) =>
+      prev.length > 1 ? prev.filter((_, i) => i !== index) : prev,
+    );
   };
 
   // Function to map initial data to form values
@@ -1120,7 +1120,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       shipment_terms_code: "",
       shipment_terms_name: "",
       freight: "",
-      routed: "",
+      routed: "Self",
       routed_by: "",
       customer_service_name: "",
       is_direct: false,
@@ -1602,23 +1602,56 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     enabled: true,
   });
 
+  // When customer is selected, customer API may return assigned_to_display; we add it to routed-by options so we can set routed_by
+  const [assignedToDisplayFromCustomer, setAssignedToDisplayFromCustomer] =
+    useState<string | null>(null);
+
   // Format salespersons data
   const salespersonsData = useMemo(() => {
     const response = rawSalespersonsData as SalespersonsResponse;
-    if (
-      !response?.data ||
-      !Array.isArray(response.data) ||
-      !response.data.length
-    )
-      return [];
+    const options: Array<{
+      value: string;
+      label: string;
+      sales_coordinator: string;
+      customer_service: string;
+    }> =
+      response?.data && Array.isArray(response.data) && response.data.length > 0
+        ? response.data.map((item: SalespersonData) => ({
+            value: item.sales_person ? String(item.sales_person) : "",
+            label: item.sales_person,
+            sales_coordinator: item.sales_coordinator || "",
+            customer_service: item.customer_service || "",
+          }))
+        : [];
 
-    return response.data.map((item: SalespersonData) => ({
-      value: item.sales_person ? String(item.sales_person) : "",
-      label: item.sales_person,
-      sales_coordinator: item.sales_coordinator || "",
-      customer_service: item.customer_service || "",
-    }));
-  }, [rawSalespersonsData]);
+    if (assignedToDisplayFromCustomer && assignedToDisplayFromCustomer.trim() !== "") {
+      const exists = options.some((opt) => opt.value === assignedToDisplayFromCustomer);
+      if (!exists) {
+        options.unshift({
+          value: assignedToDisplayFromCustomer,
+          label: assignedToDisplayFromCustomer,
+          sales_coordinator: "",
+          customer_service: "",
+        });
+      }
+    }
+
+    // Create flow: ensure logged-in user is in options so "Routed By" can default to them
+    if (!isEditMode && user?.full_name?.trim()) {
+      const userDisplay = user.full_name.trim();
+      const exists = options.some((opt) => opt.value === userDisplay);
+      if (!exists) {
+        options.unshift({
+          value: userDisplay,
+          label: userDisplay,
+          sales_coordinator: "",
+          customer_service: "",
+        });
+      }
+    }
+
+    return options;
+  }, [rawSalespersonsData, assignedToDisplayFromCustomer, isEditMode, user?.full_name]);
 
   // quotation_primary_id when creating from quotation page (for filter-gained API)
   const quotationPrimaryId = initialData?.quotation_primary_id
@@ -1789,8 +1822,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   const prevRoutedRef = useRef<string | null>(null);
   const customerServiceNameInitializedRef = useRef(false);
-  const routedByInitializedRef = useRef(false);
-  const prevCustomerCodeRef = useRef<string>("");
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
   const populatedJobIdRef = useRef<number | null>(null);
 
@@ -2203,7 +2234,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
     if (chargesData) {
       const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
-        (charge: Record<string, unknown>) => ({
+        (charge: Record<string, unknown>) => {
+          const nestedCharge = charge.charge as Record<string, unknown> | undefined;
+          const chargeName =
+            charge.charge_name ||
+            nestedCharge?.charge_name ||
+            "";
+          return {
           id:
             charge.id != null
               ? typeof charge.id === "number"
@@ -2211,7 +2248,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 : Number(charge.id)
               : undefined,
           charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
-          charge_name: String(charge.charge_name || ""),
+          charge_name: String(chargeName),
           pp_cc: String(charge.pp_cc ?? "Collect"),
           currency_country_code: String(
             charge.currency_country_code || charge.currency || "",
@@ -2228,7 +2265,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             : "",
           total_cost: charge.total_cost ? String(charge.total_cost) : "",
           total_sell: charge.total_sell ? String(charge.total_sell) : "",
-        }),
+        };
+        },
       );
       setCharges(mappedCharges);
     }
@@ -2260,47 +2298,18 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, user?.full_name, form.values.customer_service_name]);
 
-  // Reset routedBy initial flag when routed or customer changes so we can set default again (dropdown stays changeable)
+  // Create flow only: when Routed is "Self" and no customer selected, default Routed By to logged-in user (edit flow uses initialData).
   useEffect(() => {
-    if (form.values.routed !== "Self") {
-      routedByInitializedRef.current = false;
-      return;
-    }
-    if (prevCustomerCodeRef.current !== form.values.customer_code) {
-      prevCustomerCodeRef.current = form.values.customer_code;
-      routedByInitializedRef.current = false;
+    if (isEditMode || form.values.routed !== "Self" || assignedToDisplayFromCustomer) return;
+    if (!user?.full_name?.trim()) return;
+    const name = user.full_name.trim();
+    if (form.values.routed_by !== name) {
+      form.setFieldValue("routed_by", name);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.routed, form.values.customer_code]);
+  }, [isEditMode, form.values.routed, assignedToDisplayFromCustomer, user?.full_name]);
 
-  // Set routed_by initial only when needed: customer selected → customer's salesperson (first); else → logged-in user. Never overwrite user's selection.
-  useEffect(() => {
-    if (isEditMode || form.values.routed !== "Self") return;
-    if (routedByInitializedRef.current) return;
-
-    if (salespersonsData.length > 0) {
-      const current = form.values.routed_by;
-      const inList = salespersonsData.some((o) => o.value === current);
-      if (!current || !inList) {
-        form.setFieldValue("routed_by", user?.full_name || salespersonsData[0].value);
-      }
-      routedByInitializedRef.current = true; // mark initialized so dropdown stays changeable
-    } else {
-      if (user?.full_name && !form.values.routed_by) {
-        form.setFieldValue("routed_by", user.full_name);
-      }
-      routedByInitializedRef.current = true;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    form.values.routed,
-    form.values.routed_by,
-    form.values.customer_code,
-    salespersonsData,
-    user?.full_name,
-  ]);
-
-  // Clear routed_by and customer_service_name when routed changes to "Agent" (but not on initial load)
+  // When user switches Routed to "Agent", clear routed_by (not on initial load).
   useEffect(() => {
     if (
       prevRoutedRef.current !== null &&
@@ -2308,7 +2317,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       form.values.routed === "Agent"
     ) {
       form.setFieldValue("routed_by", "");
-      routedByInitializedRef.current = false;
     }
     prevRoutedRef.current = form.values.routed;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3424,12 +3432,35 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     })}
                     value={form.values.customer_code}
                     displayValue={form.values.customer_name}
-                    onChange={(value, selectedData) => {
-                      form.setFieldValue("customer_code", value || "");
+                    returnOriginalData
+                    onChange={(value, selectedData, originalData) => {
+                      const newCode = value || "";
+                      form.setFieldValue("customer_code", newCode);
                       form.setFieldValue(
                         "customer_name",
                         selectedData?.label || "",
                       );
+                      if (!newCode) {
+                        setAssignedToDisplayFromCustomer(null);
+                        if (form.values.routed === "Self") {
+                          form.setFieldValue("routed_by", user?.full_name?.trim() || "");
+                        }
+                        return;
+                      }
+                      const assignedToDisplay = originalData?.assigned_to_display != null
+                        ? String(originalData.assigned_to_display).trim()
+                        : "";
+                      if (assignedToDisplay) {
+                        setAssignedToDisplayFromCustomer(assignedToDisplay);
+                        if (form.values.routed === "Self") {
+                          form.setFieldValue("routed_by", assignedToDisplay);
+                        }
+                      } else {
+                        setAssignedToDisplayFromCustomer(null);
+                        if (form.values.routed === "Self") {
+                          form.setFieldValue("routed_by", user?.full_name?.trim() || "");
+                        }
+                      }
                     }}
                     error={form.errors.customer_code as string}
                     minSearchLength={3}
@@ -5613,7 +5644,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 )}
                 {/* Dynamic Charge Rows */}
                 {charges.map((charge, index) => (
-                  <Box key={index}>
+                  <Box key={`charge-row-${index}`}>
                     <Grid gutter="sm">
                       <Grid.Col span={1.5}>
                         <SearchableSelect

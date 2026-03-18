@@ -89,9 +89,9 @@ type HouseDetailsForm = {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
-  notify_customer1_name: string;
-  notify_customer1_address: string;
-  notify_customer1_email: string;
+  notify1_customer_name: string;
+  notify1_customer_address: string;
+  notify1_customer_email: string;
   commodity_description: string;
   marks_no: string;
   item_no: string;
@@ -208,13 +208,13 @@ const fetchUnitMaster = async () => {
   try {
     const payload = {
       filters: {
-        service_type: ["FCL","LCL"],
+        service_type: ["FCL", "LCL"],
       },
     };
     const response = (await postAPICall(
       URL.unitMasterFilter,
       payload,
-      API_HEADER
+      API_HEADER,
     )) as { data?: unknown[] };
     return response?.data || [];
   } catch (error) {
@@ -241,7 +241,9 @@ const fetchEventMaster = async () => {
 // Validation handled in validateStep1 and validateStep2 functions
 
 const normalizePpCc = (value: unknown): string => {
-  const raw = String(value ?? "").trim().toUpperCase();
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return "";
@@ -269,7 +271,7 @@ function HouseCreate() {
 
       return 1;
     },
-    [user?.country?.country_code]
+    [user?.country?.country_code],
   );
 
   // Calculate chargeable weight: Max of (Gross Weight ÷ 1000) and Volume
@@ -282,7 +284,7 @@ function HouseCreate() {
 
       return Math.max(grossWeightInCbm, volumeInCbm);
     },
-    []
+    [],
   );
 
   // State for address options (populated from addresses_data when shipper/consignee is selected)
@@ -341,9 +343,9 @@ function HouseCreate() {
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
   const [invoiceListLoading, setInvoiceListLoading] = useState(false);
-  const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<string | null>(
-    null
-  );
+  const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<
+    string | null
+  >(null);
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
 
   const { data: eventMasterData = [] } = useQuery({
@@ -387,58 +389,55 @@ function HouseCreate() {
   });
 
   // Debounced shipment-party search for Shipper (import flow)
-  const debouncedShipperSearch = useDebouncedCallback(
-    async (term: string) => {
-      const query = term.trim();
-      if (!query || query.length < 2) {
+  const debouncedShipperSearch = useDebouncedCallback(async (term: string) => {
+    const query = term.trim();
+    if (!query || query.length < 2) {
+      setShipperOptions([]);
+      setShipperManualMode(false);
+      shipperDataRef.current = {};
+      return;
+    }
+
+    try {
+      const results = await commonSearchAPI({
+        endpoint: URL.shipmentParty,
+        query,
+      });
+
+      const arr = Array.isArray(results)
+        ? (results as Record<string, unknown>[])
+        : [];
+
+      if (!arr.length) {
         setShipperOptions([]);
-        setShipperManualMode(false);
+        setShipperManualMode(true);
         shipperDataRef.current = {};
+        // When shipment-party has no matches, keep user's typed text as manual entry
+        form.setFieldValue("shipper_code", "");
+        form.setFieldValue("shipper_name", query);
         return;
       }
 
-      try {
-        const results = await commonSearchAPI({
-          endpoint: URL.shipmentParty,
-          query,
-        });
+      const map: Record<string, Record<string, unknown>> = {};
+      const opts = arr.map((item) => {
+        const id = String(item.id ?? "");
+        map[id] = item;
+        return {
+          value: id,
+          label: String(item.customer_name || ""),
+        };
+      });
 
-        const arr = Array.isArray(results)
-          ? (results as Record<string, unknown>[])
-          : [];
-
-        if (!arr.length) {
-          setShipperOptions([]);
-          setShipperManualMode(true);
-          shipperDataRef.current = {};
-          // When shipment-party has no matches, keep user's typed text as manual entry
-          form.setFieldValue("shipper_code", "");
-          form.setFieldValue("shipper_name", query);
-          return;
-        }
-
-        const map: Record<string, Record<string, unknown>> = {};
-        const opts = arr.map((item) => {
-          const id = String(item.id ?? "");
-          map[id] = item;
-          return {
-            value: id,
-            label: String(item.customer_name || ""),
-          };
-        });
-
-        shipperDataRef.current = map;
-        setShipperOptions(opts);
-        setShipperManualMode(false);
-      } catch (error) {
-        console.error("Shipper shipment-party search failed:", error);
-        setShipperOptions([]);
-        setShipperManualMode(false);
-        shipperDataRef.current = {};
-      }
-    },
-    500,
-  );
+      shipperDataRef.current = map;
+      setShipperOptions(opts);
+      setShipperManualMode(false);
+    } catch (error) {
+      console.error("Shipper shipment-party search failed:", error);
+      setShipperOptions([]);
+      setShipperManualMode(false);
+      shipperDataRef.current = {};
+    }
+  }, 500);
 
   const getPartyEmail = (original: Record<string, unknown>): string => {
     const email =
@@ -458,7 +457,8 @@ function HouseCreate() {
       (original.address_data as unknown);
     if (!Array.isArray(raw)) return [];
     return (raw as Array<Record<string, unknown>>).map((a) => ({
-      address: (a.address as string | undefined) ?? (a.address1 as string | undefined),
+      address:
+        (a.address as string | undefined) ?? (a.address1 as string | undefined),
     }));
   };
 
@@ -515,7 +515,7 @@ function HouseCreate() {
             // Find container_id by matching container_number with containerDetails
             const matchedContainer = containerDetails.find(
               (container: Record<string, unknown>) =>
-                container.container_no === containerNumber
+                container.container_no === containerNumber,
             );
             const containerId = matchedContainer?.id
               ? typeof matchedContainer.id === "number"
@@ -542,14 +542,16 @@ function HouseCreate() {
                     : cargo.haz === "Yes" || cargo.haz === true
                   : null,
             };
-          }
+          },
         );
         setCargoDetails(mappedCargoDetails);
       }
 
       // Load charges - check both charges and mbl_charges
       const chargesToLoad =
-        (editData.charges && Array.isArray(editData.charges) ? editData.charges : null) ||
+        (editData.charges && Array.isArray(editData.charges)
+          ? editData.charges
+          : null) ||
         (editData as { mbl_charges?: unknown[] }).mbl_charges ||
         [];
       const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
@@ -557,16 +559,32 @@ function HouseCreate() {
       const currArr = Array.isArray(currencyData) ? currencyData : [];
       if (chargesArray.length > 0) {
         const unitDataArr = unitArr as { id?: number; unit_code?: string }[];
-        const currencyDataArr = currArr as { id?: number; code?: string; currency_code?: string }[];
+        const currencyDataArr = currArr as {
+          id?: number;
+          code?: string;
+          currency_code?: string;
+        }[];
         const mappedCharges = chargesArray.map(
           (charge: Record<string, unknown>) => {
-            const unitDetails = charge.unit_details as { unit_id?: number; unit_code?: string } | undefined;
-            const currencyDetails = charge.currency_details as { currency_id?: number; currency_code?: string } | undefined;
+            const unitDetails = charge.unit_details as
+              | { unit_id?: number; unit_code?: string }
+              | undefined;
+            const currencyDetails = charge.currency_details as
+              | { currency_id?: number; currency_code?: string }
+              | undefined;
             const unitCode = String(
-              charge.unit_code ?? charge.unit ?? charge.unit_input ?? unitDetails?.unit_code ?? ""
+              charge.unit_code ??
+                charge.unit ??
+                charge.unit_input ??
+                unitDetails?.unit_code ??
+                "",
             ).trim();
             const currencyCode = String(
-              charge.currency ?? currencyDetails?.currency_code ?? (charge.currency_details as Record<string, unknown>)?.currency_code ?? ""
+              charge.currency ??
+                currencyDetails?.currency_code ??
+                (charge.currency_details as Record<string, unknown>)
+                  ?.currency_code ??
+                "",
             ).trim();
 
             const toNum = (v: unknown): number | null => {
@@ -576,22 +594,50 @@ function HouseCreate() {
               return Number.isNaN(n) ? null : n;
             };
 
-            const chargeId = charge.charge_id != null ? Number(charge.charge_id) : charge.id != null ? Number(charge.id) : null;
+            const chargeId =
+              charge.charge_id != null
+                ? Number(charge.charge_id)
+                : charge.id != null
+                  ? Number(charge.id)
+                  : null;
             const unitIdFromApi =
-              charge.unit_id != null ? String(charge.unit_id) :
-              charge.unit != null ? String(charge.unit) :
-              unitDetails?.unit_id != null ? String(unitDetails.unit_id) : null;
+              charge.unit_id != null
+                ? String(charge.unit_id)
+                : charge.unit != null
+                  ? String(charge.unit)
+                  : unitDetails?.unit_id != null
+                    ? String(unitDetails.unit_id)
+                    : null;
             const currencyIdFromApi =
-              charge.currency_id != null ? String(charge.currency_id) :
-              charge.currency != null ? String(charge.currency) :
-              currencyDetails?.currency_id != null ? String(currencyDetails.currency_id) : null;
-            const unitByCode = unitCode ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode) : null;
-            const currByCode = currencyCode ? currencyDataArr.find((c) => (c.currency_code ?? c.code ?? "") === currencyCode) : null;
-            const unit_id = unitIdFromApi ?? (unitByCode?.id != null ? String(unitByCode.id) : "");
-            const currency_id = currencyIdFromApi ?? (currByCode?.id != null ? String(currByCode.id) : "");
+              charge.currency_id != null
+                ? String(charge.currency_id)
+                : charge.currency != null
+                  ? String(charge.currency)
+                  : currencyDetails?.currency_id != null
+                    ? String(currencyDetails.currency_id)
+                    : null;
+            const unitByCode = unitCode
+              ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode)
+              : null;
+            const currByCode = currencyCode
+              ? currencyDataArr.find(
+                  (c) => (c.currency_code ?? c.code ?? "") === currencyCode,
+                )
+              : null;
+            const unit_id =
+              unitIdFromApi ??
+              (unitByCode?.id != null ? String(unitByCode.id) : "");
+            const currency_id =
+              currencyIdFromApi ??
+              (currByCode?.id != null ? String(currByCode.id) : "");
 
             return {
-              id: charge.id != null ? (typeof charge.id === "number" ? charge.id : Number(charge.id)) : undefined,
+              id:
+                charge.id != null
+                  ? typeof charge.id === "number"
+                    ? charge.id
+                    : Number(charge.id)
+                  : undefined,
               charge_id: chargeId,
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
               pp_cc: normalizePpCc(charge.pp_cc),
@@ -608,7 +654,7 @@ function HouseCreate() {
               total_cost: toNum(charge.total_cost),
               cost_local_amount: toNum(charge.cost_local_amount),
             };
-          }
+          },
         );
         chargesForm.setValues({ charges: mappedCharges });
       }
@@ -669,33 +715,60 @@ function HouseCreate() {
           : ""),
       customer_service: editData?.customer_service || "",
       trade: editData?.trade || "",
-      agent_name: (editData as { agent_name?: string } | undefined)?.agent_name || "",
+      agent_name:
+        (editData as { agent_name?: string } | undefined)?.agent_name || "",
       agent_address:
-        (editData as { agent_address?: string } | undefined)?.agent_address || "",
-      agent_email: (editData as { agent_email?: string } | undefined)?.agent_email || "",
+        (editData as { agent_address?: string } | undefined)?.agent_address ||
+        "",
+      agent_email:
+        (editData as { agent_email?: string } | undefined)?.agent_email || "",
       shipper_code: editData?.shipper_code || "",
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
       shipper_state_id:
-      editData?.shipper_state_id != null
-        ? String(editData.shipper_state_id)
-        : "",
+        editData?.shipper_state_id != null
+          ? String(editData.shipper_state_id)
+          : "",
       consignee_code: editData?.consignee_code || "",
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
-      notify_customer1_name: editData?.notify_customer1_name || "",
-      notify_customer1_address: editData?.notify_customer1_address || "",
-      notify_customer1_email: editData?.notify_customer1_email || "",
+      notify1_customer_name:
+        (editData as { notify1_customer_name?: string })
+          ?.notify1_customer_name ??
+        editData?.notify_customer1_name ??
+        "",
+      notify1_customer_address:
+        (editData as { notify1_customer_address?: string })
+          ?.notify1_customer_address ??
+        editData?.notify_customer1_address ??
+        "",
+      notify1_customer_email:
+        (editData as { notify1_customer_email?: string })
+          ?.notify1_customer_email ??
+        editData?.notify_customer1_email ??
+        "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
-      events: Array.isArray((editData as { events?: unknown } | undefined)?.events)
-        ? ((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
-            ?.events ?? []
+      events: Array.isArray(
+        (editData as { events?: unknown } | undefined)?.events,
+      )
+        ? (
+            (
+              editData as
+                | {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                | undefined
+            )?.events ?? []
           ).map((e) => ({
             id: e.id != null ? Number(e.id) : undefined,
             type: String(e.type ?? ""),
@@ -703,9 +776,27 @@ function HouseCreate() {
           }))
         : [],
       event_modal_rows: [
-        ...(Array.isArray((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)?.events)
-          ? ((editData as { events?: Array<{ id?: number; type?: string; date?: string }> } | undefined)
-              ?.events ?? []
+        ...(Array.isArray(
+          (
+            editData as
+              | {
+                  events?: Array<{ id?: number; type?: string; date?: string }>;
+                }
+              | undefined
+          )?.events,
+        )
+          ? (
+              (
+                editData as
+                  | {
+                      events?: Array<{
+                        id?: number;
+                        type?: string;
+                        date?: string;
+                      }>;
+                    }
+                  | undefined
+              )?.events ?? []
             ).map((e) => ({
               id: e.id != null ? Number(e.id) : undefined,
               eventType: String(e.type ?? ""),
@@ -790,7 +881,10 @@ function HouseCreate() {
 
   // Similar booking check - modal and API (Ocean Import Job Create flow only)
   const [similarBookingModalOpen, setSimilarBookingModalOpen] = useState(false);
-  const [similarBookingData, setSimilarBookingData] = useState<Record<string, unknown> | null>(null);
+  const [similarBookingData, setSimilarBookingData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
   const fetchSimilarBookings = useCallback(
     async (hblNo: string, agentCode: string) => {
@@ -807,9 +901,13 @@ function HouseCreate() {
               destination_agent_code: agentCode.trim(),
             },
           },
-          API_HEADER
+          API_HEADER,
         )) as { success?: boolean; data?: unknown[] };
-        if (response?.success && Array.isArray(response.data) && response.data.length > 0) {
+        if (
+          response?.success &&
+          Array.isArray(response.data) &&
+          response.data.length > 0
+        ) {
           setSimilarBookingData(response.data[0] as Record<string, unknown>);
           setSimilarBookingModalOpen(true);
         }
@@ -817,14 +915,14 @@ function HouseCreate() {
         // Silent fail for optional feature
       }
     },
-    []
+    [],
   );
 
   const debouncedFetchSimilarBookings = useDebouncedCallback(
     (hblNo: string, agentCode: string) => {
       fetchSimilarBookings(hblNo, agentCode);
     },
-    2000
+    2000,
   );
 
   useEffect(() => {
@@ -834,7 +932,12 @@ function HouseCreate() {
     if (hblNo && agentName) {
       debouncedFetchSimilarBookings(hblNo, agentName);
     }
-  }, [isEditMode, form.values.hbl_number, form.values.agent_name, debouncedFetchSimilarBookings]);
+  }, [
+    isEditMode,
+    form.values.hbl_number,
+    form.values.agent_name,
+    debouncedFetchSimilarBookings,
+  ]);
 
   const fillFormFromSimilarBooking = useCallback(() => {
     const b = similarBookingData;
@@ -854,7 +957,10 @@ function HouseCreate() {
     form.setFieldValue("shipper_name", String(shipperName || ""));
     form.setFieldValue("consignee_code", String(consigneeCode || ""));
     form.setFieldValue("consignee_name", String(consigneeName || ""));
-    form.setFieldValue("commodity_description", String(rb.commodity_description || ""));
+    form.setFieldValue(
+      "commodity_description",
+      String(rb.commodity_description || ""),
+    );
     form.setFieldValue("marks_no", String(rb.marks_no || ""));
 
     // Shipper/consignee addresses - also populate address options for Dropdown
@@ -874,17 +980,24 @@ function HouseCreate() {
     const shipperEmail = rb.shipper_email;
     const consigneeEmail = rb.consignee_email;
     if (shipperEmail) form.setFieldValue("shipper_email", String(shipperEmail));
-    if (consigneeEmail) form.setFieldValue("consignee_email", String(consigneeEmail));
+    if (consigneeEmail)
+      form.setFieldValue("consignee_email", String(consigneeEmail));
 
-    // Notify customer name / address / email
+    // Notify customer name / address / email (payload keys: notify1_customer_*)
     if (rb.notify_customer) {
-      form.setFieldValue("notify_customer1_name", String(rb.notify_customer));
+      form.setFieldValue("notify1_customer_name", String(rb.notify_customer));
     }
     if (rb.notify_customer_address) {
-      form.setFieldValue("notify_customer1_address", String(rb.notify_customer_address));
+      form.setFieldValue(
+        "notify1_customer_address",
+        String(rb.notify_customer_address),
+      );
     }
     if (rb.notify_customer_email) {
-      form.setFieldValue("notify_customer1_email", String(rb.notify_customer_email));
+      form.setFieldValue(
+        "notify1_customer_email",
+        String(rb.notify_customer_email),
+      );
     }
 
     // Agent address and email (booking uses destination_agent_* for import)
@@ -901,7 +1014,10 @@ function HouseCreate() {
     }
     if (rb.routed) {
       const routed = String(rb.routed).toLowerCase();
-      form.setFieldValue("routed", routed === "self" || routed === "agent" ? routed : "self");
+      form.setFieldValue(
+        "routed",
+        routed === "self" || routed === "agent" ? routed : "self",
+      );
     }
     if (rb.routed_by) {
       form.setFieldValue("routed_by", String(rb.routed_by));
@@ -910,9 +1026,12 @@ function HouseCreate() {
     // Cargo details - from cargo_details array when service is FCL
     const serviceType = String(rb.service || "").toUpperCase();
     const isFCL = serviceType === "FCL";
-    const cargoDetailsData = rb.cargo_details as Array<Record<string, unknown>> | undefined;
+    const cargoDetailsData = rb.cargo_details as
+      | Array<Record<string, unknown>>
+      | undefined;
     const isHazardous = (rb as { is_hazardous?: boolean }).is_hazardous;
-    const hazValue = isHazardous === true ? true : isHazardous === false ? false : null;
+    const hazValue =
+      isHazardous === true ? true : isHazardous === false ? false : null;
 
     const toNum = (v: unknown): number | null => {
       if (v == null) return null;
@@ -920,11 +1039,18 @@ function HouseCreate() {
       return Number.isNaN(n) ? null : n;
     };
 
-    if (isFCL && cargoDetailsData && Array.isArray(cargoDetailsData) && cargoDetailsData.length > 0) {
+    if (
+      isFCL &&
+      cargoDetailsData &&
+      Array.isArray(cargoDetailsData) &&
+      cargoDetailsData.length > 0
+    ) {
       const mapped = cargoDetailsData.map((c) => ({
         container_number: String(c.container_no ?? c.container_number ?? ""),
         // FCL API uses no_of_containers; map to No of Packages
-        no_of_packages: toNum(c.no_of_containers ?? c.no_of_packages ?? rb.no_of_packages),
+        no_of_packages: toNum(
+          c.no_of_containers ?? c.no_of_packages ?? rb.no_of_packages,
+        ),
         gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
         // Volume left null - user will enter manually
         volume: null,
@@ -932,13 +1058,27 @@ function HouseCreate() {
         haz: (c.haz as boolean) ?? hazValue,
       }));
       setCargoDetails(mapped.length > 0 ? mapped : []);
-    } else if (cargoDetailsData && Array.isArray(cargoDetailsData) && cargoDetailsData.length > 0) {
+    } else if (
+      cargoDetailsData &&
+      Array.isArray(cargoDetailsData) &&
+      cargoDetailsData.length > 0
+    ) {
       const mapped = cargoDetailsData.map((c) => ({
         container_number: String(c.container_no ?? c.container_number ?? ""),
-        no_of_packages: toNum(c.no_of_packages ?? c.no_of_containers ?? rb.no_of_packages),
+        no_of_packages: toNum(
+          c.no_of_packages ?? c.no_of_containers ?? rb.no_of_packages,
+        ),
         gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
-        volume: toNum(c.volume) ?? toNum(c.volume_weight) ?? toNum(rb.volume) ?? toNum(rb.volume_weight),
-        chargeable_weight: toNum(c.chargeable_volume) ?? toNum(c.chargeable_weight) ?? toNum(rb.chargeable_volume) ?? toNum(rb.chargeable_weight),
+        volume:
+          toNum(c.volume) ??
+          toNum(c.volume_weight) ??
+          toNum(rb.volume) ??
+          toNum(rb.volume_weight),
+        chargeable_weight:
+          toNum(c.chargeable_volume) ??
+          toNum(c.chargeable_weight) ??
+          toNum(rb.chargeable_volume) ??
+          toNum(rb.chargeable_weight),
         haz: (c.haz as boolean) ?? hazValue,
       }));
       setCargoDetails(mapped.length > 0 ? mapped : []);
@@ -948,22 +1088,35 @@ function HouseCreate() {
         no_of_packages: toNum(rb.no_of_packages),
         gross_weight: toNum(rb.gross_weight),
         volume: toNum(rb.volume) ?? toNum(rb.volume_weight),
-        chargeable_weight: toNum(rb.chargeable_volume) ?? toNum(rb.chargeable_weight),
+        chargeable_weight:
+          toNum(rb.chargeable_volume) ?? toNum(rb.chargeable_weight),
         haz: hazValue,
       };
       setCargoDetails([row]);
     }
 
     // Charges from rate_details - use unit_id, currency_id from API
-    const rateDetails = rb.rate_details as Array<Record<string, unknown>> | undefined;
+    const rateDetails = rb.rate_details as
+      | Array<Record<string, unknown>>
+      | undefined;
     if (rateDetails && Array.isArray(rateDetails) && rateDetails.length > 0) {
       const mappedCharges = rateDetails.map((r) => {
-        const unitId = r.unit_id != null ? String(r.unit_id) : r.unit != null ? String(r.unit) : "";
-        const currencyId = (r as { currency_id?: unknown }).currency_id != null
-          ? String((r as { currency_id?: unknown }).currency_id)
-          : (r as { currency_country_code?: string }).currency_country_code != null
-            ? String((r as { currency_country_code?: string }).currency_country_code)
-            : "";
+        const unitId =
+          r.unit_id != null
+            ? String(r.unit_id)
+            : r.unit != null
+              ? String(r.unit)
+              : "";
+        const currencyId =
+          (r as { currency_id?: unknown }).currency_id != null
+            ? String((r as { currency_id?: unknown }).currency_id)
+            : (r as { currency_country_code?: string }).currency_country_code !=
+                null
+              ? String(
+                  (r as { currency_country_code?: string })
+                    .currency_country_code,
+                )
+              : "";
         return {
           charge_id: r.charge_id != null ? Number(r.charge_id) : null,
           charge_name: String(r.charge_name || ""),
@@ -972,9 +1125,13 @@ function HouseCreate() {
           unit_code: String(r.unit || ""),
           no_of_unit: r.no_of_units != null ? Number(r.no_of_units) : null,
           currency_id: currencyId,
-          currency: String((r as { currency_country_code?: string }).currency_country_code || ""),
+          currency: String(
+            (r as { currency_country_code?: string }).currency_country_code ||
+              "",
+          ),
           roe: r.roe != null ? Number(r.roe) : null,
-          amount_per_unit: r.sell_per_unit != null ? Number(r.sell_per_unit) : null,
+          amount_per_unit:
+            r.sell_per_unit != null ? Number(r.sell_per_unit) : null,
           amount: r.total_sell != null ? Number(r.total_sell) : null,
         };
       });
@@ -995,7 +1152,7 @@ function HouseCreate() {
     const updatedCargoDetails = cargoDetails.map((cargo) => {
       const chargeableWeight = calculateChargeableWeight(
         cargo.gross_weight,
-        cargo.volume
+        cargo.volume,
       );
       // Only update if chargeable_weight changed
       if (cargo.chargeable_weight === chargeableWeight) {
@@ -1010,7 +1167,7 @@ function HouseCreate() {
     // Only update if there are actual changes
     const hasChanges = updatedCargoDetails.some(
       (cargo, index) =>
-        cargo.chargeable_weight !== cargoDetails[index]?.chargeable_weight
+        cargo.chargeable_weight !== cargoDetails[index]?.chargeable_weight,
     );
 
     if (hasChanges) {
@@ -1024,11 +1181,17 @@ function HouseCreate() {
     .map((c) => c.currency_id)
     .join(",");
   useEffect(() => {
-    const currencyArr = (currencyData ?? []) as { id?: number; code?: string; currency_code?: string }[];
+    const currencyArr = (currencyData ?? []) as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
     const updatedCharges = chargesForm.values.charges.map((charge) => {
       let roe = charge.roe;
       if (charge.currency_id && !roe) {
-        const curr = currencyArr.find((c) => String(c.id) === charge.currency_id);
+        const curr = currencyArr.find(
+          (c) => String(c.id) === charge.currency_id,
+        );
         const code = curr?.currency_code ?? curr?.code ?? "";
         if (code) roe = getRoeValue(code);
       }
@@ -1038,7 +1201,7 @@ function HouseCreate() {
       return charge;
     });
     const hasChanges = updatedCharges.some(
-      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe
+      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe,
     );
     if (hasChanges) chargesForm.setValues({ charges: updatedCharges });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1130,7 +1293,11 @@ function HouseCreate() {
   useEffect(() => {
     if (active !== 4) return;
     setInvoiceListLoading(true);
-    postAPICall(URL.invoiceCombined, { filters: {"shipment_no": editData?.shipment_id, "is_agent":false} }, API_HEADER)
+    postAPICall(
+      URL.invoiceCombined,
+      { filters: { shipment_no: editData?.shipment_id, is_agent: false } },
+      API_HEADER,
+    )
       .then((res: unknown) => {
         const data = (res as { data?: InvoiceListItem[] })?.data;
         setInvoiceList(Array.isArray(data) ? data : []);
@@ -1172,7 +1339,11 @@ function HouseCreate() {
   // Format currency data: value = id, label = currency_code (for payload we send currency_id)
   const currencyOptions = useMemo(() => {
     if (!Array.isArray(currencyData)) return [];
-    const data = currencyData as { id?: number; code?: string; currency_code?: string }[];
+    const data = currencyData as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
     return data.map((item) => {
       const code = item.currency_code ?? item.code ?? "";
       const id = item.id != null ? String(item.id) : "";
@@ -1183,11 +1354,19 @@ function HouseCreate() {
   // Format unit data: value = id, label = unit_name or unit_code (for payload we send unit_id)
   const unitOptions = useMemo(() => {
     if (!Array.isArray(unitDataRaw)) return [];
-    const data = unitDataRaw as { id?: number; unit_code?: string; unit_name?: string; name?: string }[];
+    const data = unitDataRaw as {
+      id?: number;
+      unit_code?: string;
+      unit_name?: string;
+      name?: string;
+    }[];
     return data.map((item) => {
       const label = item.unit_name ?? item.name ?? item.unit_code ?? "";
       const id = item.id != null ? String(item.id) : "";
-      return { value: id || String(item.unit_code ?? ""), label: label || String(item.unit_code ?? "") };
+      return {
+        value: id || String(item.unit_code ?? ""),
+        label: label || String(item.unit_code ?? ""),
+      };
     });
   }, [unitDataRaw]);
 
@@ -1263,7 +1442,7 @@ function HouseCreate() {
       });
       console.log(
         "📊 updateTradeField after update, form.values.trade:",
-        form.values.trade
+        form.values.trade,
       );
     } else if (!hblDestinationCode && form.values.trade) {
       // Clear trade if HBL destination is cleared
@@ -1376,7 +1555,7 @@ function HouseCreate() {
         if (!isEditMode || !form.values.agent_address) {
           console.log(
             "✅ Setting HBL origin agent address from mblDetails.origin_agent_address:",
-            mblOriginAgentAddress
+            mblOriginAgentAddress,
           );
           form.setFieldValue("agent_address", mblOriginAgentAddress);
         }
@@ -1402,7 +1581,7 @@ function HouseCreate() {
           if (!isEditMode || !form.values.agent_address) {
             console.log(
               "✅ Setting HBL origin agent address from addresses_data:",
-              firstAddress
+              firstAddress,
             );
             form.setFieldValue("agent_address", firstAddress);
           }
@@ -1529,10 +1708,10 @@ function HouseCreate() {
       errors.agent_email = "Invalid email format";
     }
     if (
-      form.values.notify_customer1_email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.notify_customer1_email)
+      form.values.notify1_customer_email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.notify1_customer_email)
     ) {
-      errors.notify_customer1_email = "Invalid email format";
+      errors.notify1_customer_email = "Invalid email format";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1691,7 +1870,7 @@ function HouseCreate() {
           c.container_no === container_number ||
           // Also allow matching by index if containerNumbers are aligned
           (Array.isArray(containerNumbers) &&
-            containerNumbers[idx] === container_number)
+            containerNumbers[idx] === container_number),
       );
 
       // Build base payload common to create/edit
@@ -1800,20 +1979,20 @@ function HouseCreate() {
       shipper_address: form.values.shipper_address,
       shipper_email: form.values.shipper_email,
       shipper_state_id: form.values.shipper_state_id
-      ? Number(form.values.shipper_state_id)
-      : ((
-          editData as
-            | { shipment_id?: string; shipper_state_id?: number }
-            | undefined
-        )?.shipper_state_id ?? null),
-    shipment_id:
-      (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+        ? Number(form.values.shipper_state_id)
+        : ((
+            editData as
+              | { shipment_id?: string; shipper_state_id?: number }
+              | undefined
+          )?.shipper_state_id ?? null),
+      shipment_id:
+        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: form.values.consignee_name,
       consignee_address: form.values.consignee_address,
       consignee_email: form.values.consignee_email,
-      notify_customer1_name: form.values.notify_customer1_name,
-      notify_customer1_address: form.values.notify_customer1_address,
-      notify_customer1_email: form.values.notify_customer1_email,
+      notify1_customer_name: form.values.notify1_customer_name,
+      notify1_customer_address: form.values.notify1_customer_address,
+      notify1_customer_email: form.values.notify1_customer_email,
       commodity_description: form.values.commodity_description,
       marks_no: form.values.marks_no,
       item_no: form.values.item_no,
@@ -1829,7 +2008,7 @@ function HouseCreate() {
     if (isEditMode && editIndex !== undefined) {
       // Deep clone existing list (prevents stale nested references)
       updatedHousingDetails = JSON.parse(
-        JSON.stringify(existingHousingDetails)
+        JSON.stringify(existingHousingDetails),
       );
 
       // Safely replace the updated house
@@ -1915,17 +2094,17 @@ function HouseCreate() {
         )?.housing_details?.[editIndex ?? 0]?.shipper_gst_id ??
         null,
       shipper_state_id: v.shipper_state_id
-      ? Number(v.shipper_state_id)
-      : ((editData as { shipper_state_id?: number } | undefined)
-          ?.shipper_state_id ??
-        (
-          location.state?.job as {
-            housing_details?: Array<{ shipper_state_id?: number }>;
-          }
-        )?.housing_details?.[editIndex ?? 0]?.shipper_state_id ??
-        null),
-    shipment_id:
-      (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+        ? Number(v.shipper_state_id)
+        : ((editData as { shipper_state_id?: number } | undefined)
+            ?.shipper_state_id ??
+          (
+            location.state?.job as {
+              housing_details?: Array<{ shipper_state_id?: number }>;
+            }
+          )?.housing_details?.[editIndex ?? 0]?.shipper_state_id ??
+          null),
+      shipment_id:
+        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_code: v.consignee_code,
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
@@ -1938,9 +2117,9 @@ function HouseCreate() {
           }
         )?.housing_details?.[editIndex ?? 0]?.consignee_gst_id ??
         null,
-      notify_customer1_name: v.notify_customer1_name,
-      notify_customer1_address: v.notify_customer1_address,
-      notify_customer1_email: v.notify_customer1_email,
+      notify1_customer_name: v.notify1_customer_name,
+      notify1_customer_address: v.notify1_customer_address,
+      notify1_customer_email: v.notify1_customer_email,
       commodity_description: v.commodity_description,
       marks_no: v.marks_no,
       item_no: v.item_no,
@@ -1957,7 +2136,7 @@ function HouseCreate() {
 
       // Get default branch from user store or use default
       const defaultBranch = user?.branches?.find(
-        (branch) => branch.is_default
+        (branch) => branch.is_default,
       ) ||
         user?.branches?.[0] || { branch_name: "CHENNAI" };
       const country = user?.country || null;
@@ -1980,20 +2159,21 @@ function HouseCreate() {
         shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
         shipper_state_id: form.values.shipper_state_id
-        ? Number(form.values.shipper_state_id)
-        : ((
-            editData as
-              | { shipment_id?: string; shipper_state_id?: number }
-              | undefined
-          )?.shipper_state_id ?? null),
-      shipment_id:
-        (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+          ? Number(form.values.shipper_state_id)
+          : ((
+              editData as
+                | { shipment_id?: string; shipper_state_id?: number }
+                | undefined
+            )?.shipper_state_id ?? null),
+        shipment_id:
+          (editData as { shipment_id?: string } | undefined)?.shipment_id ??
+          null,
         consignee_name: form.values.consignee_name,
         consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,
-        notify_customer1_name: form.values.notify_customer1_name,
-        notify_customer1_address: form.values.notify_customer1_address,
-        notify_customer1_email: form.values.notify_customer1_email,
+        notify1_customer_name: form.values.notify1_customer_name,
+        notify1_customer_address: form.values.notify1_customer_address,
+        notify1_customer_email: form.values.notify1_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
         cargo_details: cargoDetails.map((cargo) => ({
@@ -2006,7 +2186,8 @@ function HouseCreate() {
         mbl_charges: chargesForm.values.charges
           .filter((charge) => charge.charge_name || charge.charge_id != null)
           .map((charge) => ({
-            ...(charge.id != null && charge.id !== undefined && { id: Number(charge.id) }),
+            ...(charge.id != null &&
+              charge.id !== undefined && { id: Number(charge.id) }),
             charge_id: charge.charge_id ?? null,
             charge_name: charge.charge_name,
             pp_cc: charge.pp_cc,
@@ -2038,7 +2219,7 @@ function HouseCreate() {
         jobData,
         housingData,
         defaultBranch,
-        country
+        country,
       );
       setPdfBlob(blobUrl);
     } catch (error) {
@@ -2169,27 +2350,57 @@ function HouseCreate() {
             onClick={() => {
               if (active === 0) {
                 if (!validateStep1()) return;
-                if (!validateStep2()) { setActive(1); return; }
-                if (!validateStep3()) { setActive(2); return; }
-                if (!validateStep4()) { setActive(3); return; }
+                if (!validateStep2()) {
+                  setActive(1);
+                  return;
+                }
+                if (!validateStep3()) {
+                  setActive(2);
+                  return;
+                }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
                 handleSave();
               } else if (active === 1) {
                 if (!validateStep2()) return;
-                if (!validateStep3()) { setActive(2); return; }
-                if (!validateStep4()) { setActive(3); return; }
+                if (!validateStep3()) {
+                  setActive(2);
+                  return;
+                }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
                 handleSave();
               } else if (active === 2) {
                 if (!validateStep3()) return;
-                if (!validateStep4()) { setActive(3); return; }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
                 handleSave();
               } else if (active === 3) {
                 if (!validateStep4()) return;
                 handleSave();
               } else if (active === 4) {
-                if (!validateStep1()) { setActive(0); return; }
-                if (!validateStep2()) { setActive(1); return; }
-                if (!validateStep3()) { setActive(2); return; }
-                if (!validateStep4()) { setActive(3); return; }
+                if (!validateStep1()) {
+                  setActive(0);
+                  return;
+                }
+                if (!validateStep2()) {
+                  setActive(1);
+                  return;
+                }
+                if (!validateStep3()) {
+                  setActive(2);
+                  return;
+                }
+                if (!validateStep4()) {
+                  setActive(3);
+                  return;
+                }
                 handleSave();
               }
             }}
@@ -2264,17 +2475,14 @@ function HouseCreate() {
                 onClick={() => {
                   const existing = form.values.events;
                   if (existing.length > 0) {
-                    form.setFieldValue(
-                      "event_modal_rows",
-                      [
-                        ...existing.map((e) => ({
-                          id: e.id,
-                          eventType: e.type,
-                          eventDate: e.date ? new Date(String(e.date)) : null,
-                        })),
-                        { id: undefined, eventType: null, eventDate: null },
-                      ],
-                    );
+                    form.setFieldValue("event_modal_rows", [
+                      ...existing.map((e) => ({
+                        id: e.id,
+                        eventType: e.type,
+                        eventDate: e.date ? new Date(String(e.date)) : null,
+                      })),
+                      { id: undefined, eventType: null, eventDate: null },
+                    ]);
                   } else {
                     form.setFieldValue("event_modal_rows", [
                       { id: undefined, eventType: null, eventDate: null },
@@ -2444,10 +2652,7 @@ function HouseCreate() {
           ))}
 
           <Group justify="flex-end" mt="md">
-            <Button
-              variant="subtle"
-              onClick={() => setEventsModalOpen(false)}
-            >
+            <Button variant="subtle" onClick={() => setEventsModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmitEventsModal}>Save Events</Button>
@@ -2595,7 +2800,7 @@ function HouseCreate() {
                     if (selectedData) {
                       form.setFieldValue(
                         "origin_name",
-                        selectedData.label.split(" (")[0] || ""
+                        selectedData.label.split(" (")[0] || "",
                       );
                     }
                   }}
@@ -2635,7 +2840,7 @@ function HouseCreate() {
                     if (selectedData) {
                       form.setFieldValue(
                         "destination_name",
-                        selectedData.label.split(" (")[0] || ""
+                        selectedData.label.split(" (")[0] || "",
                       );
                     } else if (!value) {
                       form.setFieldValue("destination_name", "");
@@ -2669,7 +2874,7 @@ function HouseCreate() {
                       });
                       console.log(
                         "📝 After setValues, form.values.trade:",
-                        form.values.trade
+                        form.values.trade,
                       );
                     } else if (!hblDestinationCode) {
                       // Clear trade if HBL destination is cleared
@@ -2677,7 +2882,7 @@ function HouseCreate() {
                       form.setFieldValue("trade", "");
                     } else {
                       console.log(
-                        "⚠️ No MBL destination found, cannot update Trade"
+                        "⚠️ No MBL destination found, cannot update Trade",
                       );
                     }
                   }}
@@ -2699,12 +2904,12 @@ function HouseCreate() {
                   onChange={(value) => {
                     console.log(
                       "📥 Trade Dropdown onChange triggered with value:",
-                      value
+                      value,
                     );
                     form.setFieldValue("trade", value || "");
                     console.log(
                       "📝 Trade Dropdown after setFieldValue, form.values.trade:",
-                      form.values.trade
+                      form.values.trade,
                     );
                   }}
                   error={form.errors.trade}
@@ -2756,7 +2961,7 @@ function HouseCreate() {
                     required
                     placeholder="Type agent name"
                     apiEndpoint={URL.agent}
-                  dropdownZIndex={10}
+                    dropdownZIndex={10}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_name),
@@ -2861,9 +3066,12 @@ function HouseCreate() {
                       }
                       const original = shipperDataRef.current[value] || {};
                       const name = String(
-                        (original as Record<string, unknown>).customer_name || "",
+                        (original as Record<string, unknown>).customer_name ||
+                          "",
                       );
-                      const email = getPartyEmail(original as Record<string, unknown>);
+                      const email = getPartyEmail(
+                        original as Record<string, unknown>,
+                      );
                       const addressesData = getPartyAddresses(
                         original as Record<string, unknown>,
                       );
@@ -2878,7 +3086,10 @@ function HouseCreate() {
                       form.setFieldValue("shipper_address", "");
                       setShipperAddressOptions(addressOptions);
                       if (addressOptions.length > 0) {
-                        form.setFieldValue("shipper_address", addressOptions[0].value);
+                        form.setFieldValue(
+                          "shipper_address",
+                          addressOptions[0].value,
+                        );
                       }
 
                       form.setFieldValue("shipper_code", value);
@@ -2911,7 +3122,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Shipper Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Shipper Email"
                   {...form.getInputProps("shipper_email")}
                   error={form.errors.shipper_email}
@@ -2971,7 +3182,7 @@ function HouseCreate() {
                     form.setFieldValue("consignee_code", value || "");
                     form.setFieldValue(
                       "consignee_name",
-                      selectedData?.label || ""
+                      selectedData?.label || "",
                     );
 
                     // Map email + addresses from customer-master response (addresses_data)
@@ -3013,7 +3224,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Consignee Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Consignee Email"
                   {...form.getInputProps("consignee_email")}
                   error={form.errors.consignee_email}
@@ -3048,9 +3259,9 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
 
-            {/* Notify Customer Section */}
+            {/* Notify Customer 1 Details - same payload/response keys as Import booking steppers */}
             <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
-              Notify Customer
+              Notify Customer Details
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
@@ -3065,14 +3276,14 @@ function HouseCreate() {
                     label: String(item.customer_name),
                   })}
                   value={
-                    form.values.notify_customer1_name
-                      ? String(form.values.notify_customer1_name)
+                    form.values.notify1_customer_name
+                      ? String(form.values.notify1_customer_name)
                       : ""
                   }
-                  displayValue={form.values.notify_customer1_name}
+                  displayValue={form.values.notify1_customer_name}
                   onChange={(value, selectedData, originalData) => {
                     const newValue = selectedData?.label || value || "";
-                    form.setFieldValue("notify_customer1_name", newValue);
+                    form.setFieldValue("notify1_customer_name", newValue);
 
                     if (
                       newValue &&
@@ -3097,19 +3308,19 @@ function HouseCreate() {
                         addressOptions[0].value
                       ) {
                         form.setFieldValue(
-                          "notify_customer1_address",
+                          "notify1_customer_address",
                           addressOptions[0].value,
                         );
                       } else {
-                        form.setFieldValue("notify_customer1_address", "");
+                        form.setFieldValue("notify1_customer_address", "");
                       }
                     } else {
                       setNotifyCustomerAddressOptions([]);
-                      form.setFieldValue("notify_customer1_address", "");
+                      form.setFieldValue("notify1_customer_address", "");
                     }
                   }}
                   returnOriginalData={true}
-                  error={form.errors.notify_customer1_name as string}
+                  error={form.errors.notify1_customer_name as string}
                   minSearchLength={2}
                 />
               </Grid.Col>
@@ -3117,43 +3328,42 @@ function HouseCreate() {
                 <FormTextInput
                   label="Notify Customer Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Notify Customer Email"
-                  {...form.getInputProps("notify_customer1_email")}
-                  error={form.errors.notify_customer1_email}
+                  {...form.getInputProps("notify1_customer_email")}
+                  error={form.errors.notify1_customer_email}
                 />
               </Grid.Col>
-
               <Grid.Col span={4}>
                 {notifyCustomerAddressOptions.length > 0 ? (
                   <Dropdown
                     label="Notify Customer Address"
-                    placeholder="Select notify customer address"
+                    placeholder="Select notify address"
                     searchable
                     data={notifyCustomerAddressOptions}
-                    value={form.values.notify_customer1_address || ""}
+                    value={form.values.notify1_customer_address || ""}
                     onChange={(value) => {
                       const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
-                        "notify_customer1_address",
+                        "notify1_customer_address",
                         formattedValue,
                       );
                     }}
-                    error={form.errors.notify_customer1_address}
+                    error={form.errors.notify1_customer_address}
                   />
                 ) : (
                   <FormTextArea
                     label="Notify Customer Address"
                     placeholder="Enter Notify Customer Address"
-                    value={form.values.notify_customer1_address}
+                    value={form.values.notify1_customer_address}
                     onChange={(e) => {
                       const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
-                        "notify_customer1_address",
+                        "notify1_customer_address",
                         formattedValue,
                       );
                     }}
-                    error={form.errors.notify_customer1_address}
+                    error={form.errors.notify1_customer_address}
                   />
                 )}
               </Grid.Col>
@@ -3226,7 +3436,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Origin Agent Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Origin Agent Email"
                   {...form.getInputProps("agent_email")}
                   error={form.errors.agent_email}
@@ -3297,7 +3507,7 @@ function HouseCreate() {
 
             {/* Dynamic Cargo Rows */}
             <Box mb="md">
-              <Grid 
+              <Grid
                 mb="xs"
                 style={{
                   fontWeight: 600,
@@ -3348,7 +3558,7 @@ function HouseCreate() {
                           location.state?.containerDetails || [];
                         const matchedContainer = containerDetails.find(
                           (container: Record<string, unknown>) =>
-                            container.container_no === value
+                            container.container_no === value,
                         );
                         const containerId =
                           matchedContainer?.id !== undefined &&
@@ -3517,7 +3727,7 @@ function HouseCreate() {
                           color="red"
                           onClick={() => {
                             const updated = cargoDetails.filter(
-                              (_, i) => i !== index
+                              (_, i) => i !== index,
                             );
                             setCargoDetails(updated);
                           }}
@@ -3565,44 +3775,45 @@ function HouseCreate() {
                   ` (${chargesForm.values.charges.length})`}
               </Text>
               {location.state?.job?.id != null && (
-              <Button
-                variant="outline"
-                color="#105476"
-                onClick={() => {
-                  const fullDetail = getCurrentHousingDetail();
-                  // For ocean import customer invoice, only Collect charges
-                  const collectCharges = (fullDetail.charges ?? []).filter(
-                    (c: { pp_cc?: string }) =>
-                      String(c.pp_cc ?? "").trim() === "Collect",
-                  );
-                  const detailForInvoice = {
-                    ...fullDetail,
-                    charges: collectCharges,
-                  };
-                  navigate("/SeaExport/import-job/invoice", {
-                    state: {
-                      serviceType: location.state?.mblDetails?.service || "FCL",
-                      hawbDetails: [detailForInvoice],
-                      housingDetails: [detailForInvoice],
-                      is_agent: false,
-                      // Explicitly indicate that Bill To / State / Address should come from consignee
-                      billToFrom: "consignee",
-                      ...(location.state?.job && { job: location.state.job }),
-                      ...(location.state?.mblDetails && {
-                        mblDetails: location.state.mblDetails,
-                      }),
-                      ...(location.state?.carrierDetails && {
-                        carrierDetails: location.state.carrierDetails,
-                      }),
-                      ...(location.state?.routings && {
-                        routings: location.state.routings,
-                      }),
-                    },
-                  });
-                }}
-              >
-                Create Invoice
-              </Button>
+                <Button
+                  variant="outline"
+                  color="#105476"
+                  onClick={() => {
+                    const fullDetail = getCurrentHousingDetail();
+                    // For ocean import customer invoice, only Collect charges
+                    const collectCharges = (fullDetail.charges ?? []).filter(
+                      (c: { pp_cc?: string }) =>
+                        String(c.pp_cc ?? "").trim() === "Collect",
+                    );
+                    const detailForInvoice = {
+                      ...fullDetail,
+                      charges: collectCharges,
+                    };
+                    navigate("/SeaExport/import-job/invoice", {
+                      state: {
+                        serviceType:
+                          location.state?.mblDetails?.service || "FCL",
+                        hawbDetails: [detailForInvoice],
+                        housingDetails: [detailForInvoice],
+                        is_agent: false,
+                        // Explicitly indicate that Bill To / State / Address should come from consignee
+                        billToFrom: "consignee",
+                        ...(location.state?.job && { job: location.state.job }),
+                        ...(location.state?.mblDetails && {
+                          mblDetails: location.state.mblDetails,
+                        }),
+                        ...(location.state?.carrierDetails && {
+                          carrierDetails: location.state.carrierDetails,
+                        }),
+                        ...(location.state?.routings && {
+                          routings: location.state.routings,
+                        }),
+                      },
+                    });
+                  }}
+                >
+                  Create Invoice
+                </Button>
               )}
             </Group>
 
@@ -3737,11 +3948,31 @@ function HouseCreate() {
                       value={charge.unit_id || null}
                       onChange={(value) => {
                         const unitId = value ?? "";
-                        const unitOpt = unitOptions.find((o) => o.value === unitId);
-                        const unitItem = Array.isArray(unitDataRaw) ? (unitDataRaw as { id?: number; unit_code?: string }[]).find((u) => String(u.id) === unitId || u.unit_code === unitId) : null;
-                        const unitCode = unitItem?.unit_code ?? unitOpt?.label ?? "";
-                        chargesForm.setFieldValue(`charges.${index}.unit_id`, unitId);
-                        chargesForm.setFieldValue(`charges.${index}.unit_code`, unitCode);
+                        const unitOpt = unitOptions.find(
+                          (o) => o.value === unitId,
+                        );
+                        const unitItem = Array.isArray(unitDataRaw)
+                          ? (
+                              unitDataRaw as {
+                                id?: number;
+                                unit_code?: string;
+                              }[]
+                            ).find(
+                              (u) =>
+                                String(u.id) === unitId ||
+                                u.unit_code === unitId,
+                            )
+                          : null;
+                        const unitCode =
+                          unitItem?.unit_code ?? unitOpt?.label ?? "";
+                        chargesForm.setFieldValue(
+                          `charges.${index}.unit_id`,
+                          unitId,
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.unit_code`,
+                          unitCode,
+                        );
                         const unitUpper = unitCode.toUpperCase();
                         let noOfUnit = charge.no_of_unit;
                         if (unitUpper === "SHIPMENT" || unitUpper === "SHPT" || unitUpper === "DOC") noOfUnit = 1;
@@ -3757,9 +3988,17 @@ function HouseCreate() {
                       value={charge.currency_id || null}
                       onChange={(value) => {
                         const currencyId = value ?? "";
-                        const code = currencyOptions.find((o) => o.value === currencyId)?.label ?? "";
-                        chargesForm.setFieldValue(`charges.${index}.currency_id`, currencyId);
-                        chargesForm.setFieldValue(`charges.${index}.currency`, code);
+                        const code =
+                          currencyOptions.find((o) => o.value === currencyId)
+                            ?.label ?? "";
+                        chargesForm.setFieldValue(
+                          `charges.${index}.currency_id`,
+                          currencyId,
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.currency`,
+                          code,
+                        );
                         const roe = code ? getRoeValue(code) : null;
                         if (roe !== null) chargesForm.setFieldValue(`charges.${index}.roe`, roe);
                         if (chargeErrors[index]?.currency_id) {
@@ -3985,12 +4224,12 @@ function HouseCreate() {
                 </Center>
               ) : (
                 <ScrollArea>
-                  <Table 
-                    withTableBorder 
-                    withColumnBorders 
-                    striped 
-                    highlightOnHover 
-                    style={{ minWidth: 700 }} 
+                  <Table
+                    withTableBorder
+                    withColumnBorders
+                    striped
+                    highlightOnHover
+                    style={{ minWidth: 700 }}
                     styles={{
                       th: {
                         padding: "8px",
@@ -4002,12 +4241,24 @@ function HouseCreate() {
                   >
                     <Table.Thead>
                       <Table.Tr>
-                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Daybook</Table.Th>
-                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice number</Table.Th>
-                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Date</Table.Th>
-                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Invoice Total</Table.Th>
-                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Status</Table.Th>
-                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>Actions</Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Daybook
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Invoice number
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Invoice Date
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Invoice Total
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Status
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Actions
+                        </Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -4022,8 +4273,11 @@ function HouseCreate() {
                       ) : (
                         invoiceList.map((row, idx) => {
                           const statusUpper = (row.status ?? "").toUpperCase();
-                          const isPosted = statusUpper === "POSTED" || row.status === "posted";
-                          const isUnposted = statusUpper === "UNPOSTED" || row.status === "unpost";
+                          const isPosted =
+                            statusUpper === "POSTED" || row.status === "posted";
+                          const isUnposted =
+                            statusUpper === "UNPOSTED" ||
+                            row.status === "unpost";
                           const isReversed =
                             statusUpper === "PARTIALLY REVERSED" ||
                             statusUpper === "FULLY REVERSED";
@@ -4036,7 +4290,9 @@ function HouseCreate() {
                           return (
                             <Fragment key={rowKey}>
                               <Table.Tr
-                                style={isReversed ? { cursor: "pointer" } : undefined}
+                                style={
+                                  isReversed ? { cursor: "pointer" } : undefined
+                                }
                                 onClick={(e) => {
                                   if (
                                     (e.target as HTMLElement).closest(
@@ -4055,400 +4311,584 @@ function HouseCreate() {
                                   );
                                 }}
                               >
-                                <Table.Td style={{ fontSize: "13px", width: "20%" }}>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "20%" }}
+                                >
                                   <Group gap="xs" wrap="nowrap">
                                     {isReversed && (
-                                      <Box component="span" style={{ display: "inline-flex" }}>
+                                      <Box
+                                        component="span"
+                                        style={{ display: "inline-flex" }}
+                                      >
                                         {isExpanded ? (
-                                          <IconChevronUp size={14} color="#105476" />
+                                          <IconChevronUp
+                                            size={14}
+                                            color="#105476"
+                                          />
                                         ) : (
-                                          <IconChevronDown size={14} color="#105476" />
+                                          <IconChevronDown
+                                            size={14}
+                                            color="#105476"
+                                          />
                                         )}
                                       </Box>
                                     )}
                                     {row.day_book_name ?? "-"}
                                   </Group>
                                 </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", width: "20%" }}>
-                                {row.document_no ?? "-"}
-                              </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", width: "15%" }}>
-                                {row.document_date ?? "-"}
-                              </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", width: "15%" }}>
-                                {row.total}
-                              </Table.Td>
-                              <Table.Td style={{ fontSize: "13px", width: "15%" }}>
-                                <Badge
-                                  size="sm"
-                                  variant="light"
-                                  color={isUnposted ? "yellow" : isPosted ? "green" : "#105476"}
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "20%" }}
                                 >
-                                  {row.status ?? "-"}
-                                </Badge>
-                              </Table.Td>
-                              <Table.Td
-                                style={{ fontSize: "13px", width: "15%" }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Menu shadow="md" width={200} position="bottom-end">
-                                  <Menu.Target>
-                                    <ActionIcon
-                                      variant="subtle"
-                                      color="#105476"
-                                      size="sm"
+                                  {row.document_no ?? "-"}
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "15%" }}
+                                >
+                                  {row.document_date ?? "-"}
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "15%" }}
+                                >
+                                  {row.total}
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "15%" }}
+                                >
+                                  <Badge
+                                    size="sm"
+                                    variant="light"
+                                    color={
+                                      isUnposted
+                                        ? "yellow"
+                                        : isPosted
+                                          ? "green"
+                                          : "#105476"
+                                    }
+                                  >
+                                    {row.status ?? "-"}
+                                  </Badge>
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "15%" }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Menu
+                                    shadow="md"
+                                    width={200}
+                                    position="bottom-end"
+                                  >
+                                    <Menu.Target>
+                                      <ActionIcon
+                                        variant="subtle"
+                                        color="#105476"
+                                        size="sm"
+                                        styles={{
+                                          root: {
+                                            fontFamily: "Inter",
+                                            fontSize: "13px",
+                                            border: "1px solid #E9ECEF",
+                                            borderRadius: "8px",
+                                            "&:hover": {
+                                              backgroundColor: "#F8F9FA",
+                                            },
+                                          },
+                                        }}
+                                      >
+                                        <IconDotsVertical size={16} />
+                                      </ActionIcon>
+                                    </Menu.Target>
+                                    <Menu.Dropdown
                                       styles={{
-                                        root: {
-                                          fontFamily: "Inter",
-                                          fontSize: "13px",
+                                        dropdown: {
                                           border: "1px solid #E9ECEF",
                                           borderRadius: "8px",
-                                          "&:hover": { backgroundColor: "#F8F9FA" },
+                                          padding: "8px",
+                                          boxShadow:
+                                            "0 4px 12px rgba(0, 0, 0, 0.1)",
                                         },
                                       }}
                                     >
-                                      <IconDotsVertical size={16} />
-                                    </ActionIcon>
-                                  </Menu.Target>
-                                  <Menu.Dropdown
-                                    styles={{
-                                      dropdown: {
-                                        border: "1px solid #E9ECEF",
-                                        borderRadius: "8px",
-                                        padding: "8px",
-                                        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                                      },
-                                    }}
-                                  >
-                                    <Menu.Item
-                                      leftSection={
-                                        <Box
-                                          style={{
-                                            backgroundColor: "#E7F5FF",
+                                      <Menu.Item
+                                        leftSection={
+                                          <Box
+                                            style={{
+                                              backgroundColor: "#E7F5FF",
+                                              borderRadius: "6px",
+                                              padding: "6px",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                            }}
+                                          >
+                                            <IconEye
+                                              size={16}
+                                              color="#105476"
+                                            />
+                                          </Box>
+                                        }
+                                        styles={{
+                                          item: {
+                                            fontFamily: "Inter",
+                                            fontSize: "13px",
+                                            fontWeight: 500,
                                             borderRadius: "6px",
-                                            padding: "6px",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
+                                            padding: "10px 12px",
+                                            marginBottom: "4px",
+                                            "&:hover": {
+                                              backgroundColor: "#F8F9FA",
+                                            },
+                                          },
+                                          itemLabel: {
+                                            fontFamily: "Inter",
+                                            fontSize: "13px",
+                                            fontWeight: 500,
+                                            color: "#424242",
+                                          },
+                                        }}
+                                        onClick={() =>
+                                          navigate(
+                                            `/SeaExport/import-job/invoice/view/${invoiceViewId}`,
+                                            {
+                                              state: {
+                                                invoiceData: row,
+                                                ...(location.state?.job && {
+                                                  job: location.state.job,
+                                                }),
+                                              },
+                                            },
+                                          )
+                                        }
+                                      >
+                                        View
+                                      </Menu.Item>
+                                      {isUnposted ? (
+                                        <Menu.Item
+                                          leftSection={
+                                            <Box
+                                              style={{
+                                                backgroundColor: "#E7F5FF",
+                                                borderRadius: "6px",
+                                                padding: "6px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                              }}
+                                            >
+                                              <IconEdit
+                                                size={16}
+                                                color="#105476"
+                                              />
+                                            </Box>
+                                          }
+                                          styles={{
+                                            item: {
+                                              fontFamily: "Inter",
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              borderRadius: "6px",
+                                              padding: "10px 12px",
+                                              marginBottom: "4px",
+                                              "&:hover": {
+                                                backgroundColor: "#F8F9FA",
+                                              },
+                                            },
+                                            itemLabel: {
+                                              fontFamily: "Inter",
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                            },
                                           }}
+                                          onClick={() =>
+                                            navigate(
+                                              `/SeaExport/import-job/invoice/edit/${row.invoice_id}`,
+                                              {
+                                                state: {
+                                                  invoiceData: row,
+                                                  ...(location.state?.job && {
+                                                    job: location.state.job,
+                                                  }),
+                                                },
+                                              },
+                                            )
+                                          }
                                         >
-                                          <IconEye size={16} color="#105476" />
-                                        </Box>
-                                      }
-                                      styles={{
-                                        item: {
-                                          fontFamily: "Inter",
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          borderRadius: "6px",
-                                          padding: "10px 12px",
-                                          marginBottom: "4px",
-                                          "&:hover": { backgroundColor: "#F8F9FA" },
-                                        },
-                                        itemLabel: {
-                                          fontFamily: "Inter",
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          color: "#424242",
-                                        },
-                                      }}
-                                      onClick={() =>
-                                        navigate(`/SeaExport/import-job/invoice/view/${invoiceViewId}`, {
-                                          state: {
-                                            invoiceData: row,
-                                            ...(location.state?.job && { job: location.state.job }),
-                                          },
-                                        })
-                                      }
-                                    >
-                                      View
-                                    </Menu.Item>
-                                    {isUnposted ? (
-                                      <Menu.Item
-                                        leftSection={
-                                          <Box
-                                            style={{
-                                              backgroundColor: "#E7F5FF",
+                                          Edit
+                                        </Menu.Item>
+                                      ) : (
+                                        <Menu.Item
+                                          leftSection={
+                                            <Box
+                                              style={{
+                                                backgroundColor: "#E7F5FF",
+                                                borderRadius: "6px",
+                                                padding: "6px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                              }}
+                                            >
+                                              <IconRefresh
+                                                size={16}
+                                                color="#105476"
+                                              />
+                                            </Box>
+                                          }
+                                          styles={{
+                                            item: {
+                                              fontFamily: "Inter",
+                                              fontSize: "13px",
+                                              fontWeight: 500,
                                               borderRadius: "6px",
-                                              padding: "6px",
-                                              display: "flex",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                            }}
-                                          >
-                                            <IconEdit size={16} color="#105476" />
-                                          </Box>
-                                        }
-                                        styles={{
-                                          item: {
-                                            fontFamily: "Inter",
-                                            fontSize: "13px",
-                                            fontWeight: 500,
-                                            borderRadius: "6px",
-                                            padding: "10px 12px",
-                                            marginBottom: "4px",
-                                            "&:hover": { backgroundColor: "#F8F9FA" },
-                                          },
-                                          itemLabel: {
-                                            fontFamily: "Inter",
-                                            fontSize: "13px",
-                                            fontWeight: 500,
-                                            color: "#424242",
-                                          },
-                                        }}
-                                        onClick={() =>
-                                          navigate(`/SeaExport/import-job/invoice/edit/${row.invoice_id}`, {
-                                            state: {
-                                              invoiceData: row,
-                                              ...(location.state?.job && { job: location.state.job }),
+                                              padding: "10px 12px",
+                                              marginBottom: "4px",
+                                              "&:hover": {
+                                                backgroundColor: "#F8F9FA",
+                                              },
                                             },
-                                          })
-                                        }
-                                      >
-                                        Edit
-                                      </Menu.Item>
-                                    ) : (
-                                      <Menu.Item
-                                        leftSection={
-                                          <Box
-                                            style={{
-                                              backgroundColor: "#E7F5FF",
-                                              borderRadius: "6px",
-                                              padding: "6px",
-                                              display: "flex",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                            }}
-                                          >
-                                            <IconRefresh size={16} color="#105476" />
-                                          </Box>
-                                        }
-                                        styles={{
-                                          item: {
-                                            fontFamily: "Inter",
-                                            fontSize: "13px",
-                                            fontWeight: 500,
-                                            borderRadius: "6px",
-                                            padding: "10px 12px",
-                                            marginBottom: "4px",
-                                            "&:hover": { backgroundColor: "#F8F9FA" },
-                                          },
-                                          itemLabel: {
-                                            fontFamily: "Inter",
-                                            fontSize: "13px",
-                                            fontWeight: 500,
-                                            color: "#424242",
-                                          },
-                                        }}
-                                        onClick={() =>
-                                          navigate("/SeaExport/import-job/invoice/reverse", {
-                                            state: {
-                                              document_no: row.document_no ?? "",
-                                              ...(location.state?.job && { job: location.state.job }),
+                                            itemLabel: {
+                                              fontFamily: "Inter",
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
                                             },
-                                          })
-                                        }
-                                      >
-                                        Invoice Reversal
-                                      </Menu.Item>
-                                    )}
-                                  </Menu.Dropdown>
-                                </Menu>
-                              </Table.Td>
-                            </Table.Tr>
-
-                            {isReversed && isExpanded && (
-                              <Table.Tr>
-                                <Table.Td
-                                  colSpan={6}
-                                  style={{
-                                    padding: 0,
-                                    verticalAlign: "top",
-                                    backgroundColor: "var(--mantine-color-gray-0)",
-                                  }}
-                                >
-                                  <Box p="sm" style={{ borderTop: "1px solid #E9ECEF" }}>
-                                    <Text size="sm" fw={600} c="#105476" mb="xs">
-                                      Reverse invoices
-                                    </Text>
-                                    <Table
-                                      withTableBorder
-                                      withColumnBorders
-                                      striped
-                                      style={{ minWidth: 700 }}
-                                    >
-                                      <Table.Thead>
-                                        <Table.Tr>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "20%" }}>
-                                            Daybook
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "20%" }}>
-                                            Invoice number
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "15%" }}>
-                                            Invoice Date
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "15%" }}>
-                                            Invoice Total
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "15%" }}>
-                                            Status
-                                          </Table.Th>
-                                          <Table.Th style={{ fontSize: "11px", fontWeight: 600, width: "15%" }}>
-                                            Actions
-                                          </Table.Th>
-                                        </Table.Tr>
-                                      </Table.Thead>
-                                      <Table.Tbody>
-                                        {hasReverseInvoices ? (
-                                          reverseInvoices.map((rev, idx) => (
-                                            <Table.Tr key={rev.id ?? idx}>
-                                              <Table.Td style={{ fontSize: "12px", width: "20%" }}>
-                                                {rev.day_book_name ?? "-"}
-                                              </Table.Td>
-                                              <Table.Td style={{ fontSize: "12px", width: "20%" }}>
-                                                {rev.document_no ?? "-"}
-                                              </Table.Td>
-                                              <Table.Td style={{ fontSize: "12px", width: "15%" }}>
-                                                {rev.document_date ?? "-"}
-                                              </Table.Td>
-                                              <Table.Td style={{ fontSize: "12px", width: "15%" }}>
-                                                {rev.total ?? "-"}
-                                              </Table.Td>
-                                              <Table.Td style={{ fontSize: "12px", width: "15%" }}>
-                                                <Badge size="sm" variant="light" color="#105476">
-                                                  {rev.status ?? "-"}
-                                                </Badge>
-                                              </Table.Td>
-                                              <Table.Td
-                                                style={{ fontSize: "12px", width: "15%" }}
-                                                onClick={(e) => e.stopPropagation()}
-                                              >
-                                                <Menu shadow="md" width={200} position="bottom-end">
-                                                  <Menu.Target>
-                                                    <ActionIcon
-                                                      variant="subtle"
-                                                      color="#105476"
-                                                      size="sm"
-                                                      styles={{
-                                                        root: {
-                                                          fontFamily: "Inter",
-                                                          fontSize: "13px",
-                                                          border: "1px solid #E9ECEF",
-                                                          borderRadius: "8px",
-                                                          "&:hover": { backgroundColor: "#F8F9FA" },
-                                                        },
-                                                      }}
-                                                    >
-                                                      <IconDotsVertical size={16} />
-                                                    </ActionIcon>
-                                                  </Menu.Target>
-                                                  <Menu.Dropdown
-                                                    styles={{
-                                                      dropdown: {
-                                                        border: "1px solid #E9ECEF",
-                                                        borderRadius: "8px",
-                                                        padding: "8px",
-                                                        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                                                      },
-                                                    }}
-                                                  >
-                                                    <Menu.Item
-                                                      leftSection={
-                                                        <Box
-                                                          style={{
-                                                            backgroundColor: "#E7F5FF",
-                                                            borderRadius: "6px",
-                                                            padding: "6px",
-                                                            display: "flex",
-                                                            alignItems: "center",
-                                                            justifyContent: "center",
-                                                          }}
-                                                        >
-                                                          <IconEye size={16} color="#105476" />
-                                                        </Box>
-                                                      }
-                                                      styles={{
-                                                        item: {
-                                                          fontFamily: "Inter",
-                                                          fontSize: "13px",
-                                                          fontWeight: 500,
-                                                          borderRadius: "6px",
-                                                          padding: "10px 12px",
-                                                          marginBottom: "4px",
-                                                          "&:hover": { backgroundColor: "#F8F9FA" },
-                                                        },
-                                                        itemLabel: {
-                                                          fontFamily: "Inter",
-                                                          fontSize: "13px",
-                                                          fontWeight: 500,
-                                                          color: "#424242",
-                                                        },
-                                                      }}
-                                                      onClick={() => {
-                                                        const targetId =
-                                                          (rev.reverse_invoice_id ?? row.reverse_invoice_id) as number;
-
-                                                        navigate(
-                                                          `/SeaExport/import-job/invoice/view/${targetId}`,
-                                                          {
-                                                            state: {
-                                                              invoiceData: {
-                                                                ...row,
-                                                                ...rev,
-                                                                id: targetId,
-                                                                document_no:
-                                                                  rev.document_no ??
-                                                                  (row as any).document_no,
-                                                                document_date:
-                                                                  rev.document_date ??
-                                                                  (row as any).document_date,
-                                                                total: rev.total ?? (row as any).total,
-                                                                status: rev.status ?? (row as any).status,
-                                                                day_book_name:
-                                                                  rev.day_book_name ??
-                                                                  (row as any).day_book_name,
-                                                              },
-                                                              ...(location.state?.job && {
-                                                                job: location.state.job,
-                                                              }),
-                                                            },
-                                                          }
-                                                        );
-                                                      }}
-                                                    >
-                                                      View
-                                                    </Menu.Item>
-                                                  </Menu.Dropdown>
-                                                </Menu>
-                                              </Table.Td>
-                                            </Table.Tr>
-                                          ))
-                                        ) : (
-                                          <Table.Tr>
-                                            <Table.Td colSpan={6} style={{ fontSize: "12px" }}>
-                                              <Center py="md">
-                                                <Text c="dimmed">No reverse invoices to display</Text>
-                                              </Center>
-                                            </Table.Td>
-                                          </Table.Tr>
-                                        )}
-                                      </Table.Tbody>
-                                    </Table>
-                                  </Box>
+                                          }}
+                                          onClick={() =>
+                                            navigate(
+                                              "/SeaExport/import-job/invoice/reverse",
+                                              {
+                                                state: {
+                                                  document_no:
+                                                    row.document_no ?? "",
+                                                  ...(location.state?.job && {
+                                                    job: location.state.job,
+                                                  }),
+                                                },
+                                              },
+                                            )
+                                          }
+                                        >
+                                          Invoice Reversal
+                                        </Menu.Item>
+                                      )}
+                                    </Menu.Dropdown>
+                                  </Menu>
                                 </Table.Td>
                               </Table.Tr>
-                            )}
-                          </Fragment>
-                        );
-                      })
-                    )}
-                  </Table.Tbody>
-                </Table>
-              </ScrollArea>
-            )}
-          </Box>
-        </Tabs.Panel>
+
+                              {isReversed && isExpanded && (
+                                <Table.Tr>
+                                  <Table.Td
+                                    colSpan={6}
+                                    style={{
+                                      padding: 0,
+                                      verticalAlign: "top",
+                                      backgroundColor:
+                                        "var(--mantine-color-gray-0)",
+                                    }}
+                                  >
+                                    <Box
+                                      p="sm"
+                                      style={{ borderTop: "1px solid #E9ECEF" }}
+                                    >
+                                      <Text
+                                        size="sm"
+                                        fw={600}
+                                        c="#105476"
+                                        mb="xs"
+                                      >
+                                        Reverse invoices
+                                      </Text>
+                                      <Table
+                                        withTableBorder
+                                        withColumnBorders
+                                        striped
+                                        style={{ minWidth: 700 }}
+                                      >
+                                        <Table.Thead>
+                                          <Table.Tr>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "20%",
+                                              }}
+                                            >
+                                              Daybook
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "20%",
+                                              }}
+                                            >
+                                              Invoice number
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "15%",
+                                              }}
+                                            >
+                                              Invoice Date
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "15%",
+                                              }}
+                                            >
+                                              Invoice Total
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "15%",
+                                              }}
+                                            >
+                                              Status
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "15%",
+                                              }}
+                                            >
+                                              Actions
+                                            </Table.Th>
+                                          </Table.Tr>
+                                        </Table.Thead>
+                                        <Table.Tbody>
+                                          {hasReverseInvoices ? (
+                                            reverseInvoices.map((rev, idx) => (
+                                              <Table.Tr key={rev.id ?? idx}>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "20%",
+                                                  }}
+                                                >
+                                                  {rev.day_book_name ?? "-"}
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "20%",
+                                                  }}
+                                                >
+                                                  {rev.document_no ?? "-"}
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "15%",
+                                                  }}
+                                                >
+                                                  {rev.document_date ?? "-"}
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "15%",
+                                                  }}
+                                                >
+                                                  {rev.total ?? "-"}
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "15%",
+                                                  }}
+                                                >
+                                                  <Badge
+                                                    size="sm"
+                                                    variant="light"
+                                                    color="#105476"
+                                                  >
+                                                    {rev.status ?? "-"}
+                                                  </Badge>
+                                                </Table.Td>
+                                                <Table.Td
+                                                  style={{
+                                                    fontSize: "12px",
+                                                    width: "15%",
+                                                  }}
+                                                  onClick={(e) =>
+                                                    e.stopPropagation()
+                                                  }
+                                                >
+                                                  <Menu
+                                                    shadow="md"
+                                                    width={200}
+                                                    position="bottom-end"
+                                                  >
+                                                    <Menu.Target>
+                                                      <ActionIcon
+                                                        variant="subtle"
+                                                        color="#105476"
+                                                        size="sm"
+                                                        styles={{
+                                                          root: {
+                                                            fontFamily: "Inter",
+                                                            fontSize: "13px",
+                                                            border:
+                                                              "1px solid #E9ECEF",
+                                                            borderRadius: "8px",
+                                                            "&:hover": {
+                                                              backgroundColor:
+                                                                "#F8F9FA",
+                                                            },
+                                                          },
+                                                        }}
+                                                      >
+                                                        <IconDotsVertical
+                                                          size={16}
+                                                        />
+                                                      </ActionIcon>
+                                                    </Menu.Target>
+                                                    <Menu.Dropdown
+                                                      styles={{
+                                                        dropdown: {
+                                                          border:
+                                                            "1px solid #E9ECEF",
+                                                          borderRadius: "8px",
+                                                          padding: "8px",
+                                                          boxShadow:
+                                                            "0 4px 12px rgba(0, 0, 0, 0.1)",
+                                                        },
+                                                      }}
+                                                    >
+                                                      <Menu.Item
+                                                        leftSection={
+                                                          <Box
+                                                            style={{
+                                                              backgroundColor:
+                                                                "#E7F5FF",
+                                                              borderRadius:
+                                                                "6px",
+                                                              padding: "6px",
+                                                              display: "flex",
+                                                              alignItems:
+                                                                "center",
+                                                              justifyContent:
+                                                                "center",
+                                                            }}
+                                                          >
+                                                            <IconEye
+                                                              size={16}
+                                                              color="#105476"
+                                                            />
+                                                          </Box>
+                                                        }
+                                                        styles={{
+                                                          item: {
+                                                            fontFamily: "Inter",
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            borderRadius: "6px",
+                                                            padding:
+                                                              "10px 12px",
+                                                            marginBottom: "4px",
+                                                            "&:hover": {
+                                                              backgroundColor:
+                                                                "#F8F9FA",
+                                                            },
+                                                          },
+                                                          itemLabel: {
+                                                            fontFamily: "Inter",
+                                                            fontSize: "13px",
+                                                            fontWeight: 500,
+                                                            color: "#424242",
+                                                          },
+                                                        }}
+                                                        onClick={() => {
+                                                          const targetId =
+                                                            (rev.reverse_invoice_id ??
+                                                              row.reverse_invoice_id) as number;
+
+                                                          navigate(
+                                                            `/SeaExport/import-job/invoice/view/${targetId}`,
+                                                            {
+                                                              state: {
+                                                                invoiceData: {
+                                                                  ...row,
+                                                                  ...rev,
+                                                                  id: targetId,
+                                                                  document_no:
+                                                                    rev.document_no ??
+                                                                    (row as any)
+                                                                      .document_no,
+                                                                  document_date:
+                                                                    rev.document_date ??
+                                                                    (row as any)
+                                                                      .document_date,
+                                                                  total:
+                                                                    rev.total ??
+                                                                    (row as any)
+                                                                      .total,
+                                                                  status:
+                                                                    rev.status ??
+                                                                    (row as any)
+                                                                      .status,
+                                                                  day_book_name:
+                                                                    rev.day_book_name ??
+                                                                    (row as any)
+                                                                      .day_book_name,
+                                                                },
+                                                                ...(location
+                                                                  .state
+                                                                  ?.job && {
+                                                                  job: location
+                                                                    .state.job,
+                                                                }),
+                                                              },
+                                                            },
+                                                          );
+                                                        }}
+                                                      >
+                                                        View
+                                                      </Menu.Item>
+                                                    </Menu.Dropdown>
+                                                  </Menu>
+                                                </Table.Td>
+                                              </Table.Tr>
+                                            ))
+                                          ) : (
+                                            <Table.Tr>
+                                              <Table.Td
+                                                colSpan={6}
+                                                style={{ fontSize: "12px" }}
+                                              >
+                                                <Center py="md">
+                                                  <Text c="dimmed">
+                                                    No reverse invoices to
+                                                    display
+                                                  </Text>
+                                                </Center>
+                                              </Table.Td>
+                                            </Table.Tr>
+                                          )}
+                                        </Table.Tbody>
+                                      </Table>
+                                    </Box>
+                                  </Table.Td>
+                                </Table.Tr>
+                              )}
+                            </Fragment>
+                          );
+                        })
+                      )}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </Box>
+          </Tabs.Panel>
         )}
       </Tabs>
 
@@ -4533,8 +4973,8 @@ function HouseCreate() {
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            A similar booking is found for the house number. Do you want to add it
-            to the house?
+            A similar booking is found for the house number. Do you want to add
+            it to the house?
           </Text>
           <Group justify="flex-end" mt="md">
             <Button variant="outline" onClick={dismissSimilarBookingModal}>

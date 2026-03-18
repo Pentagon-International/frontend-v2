@@ -86,9 +86,12 @@ type HAWBDetailsForm = {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
-  notify_customer1_name: string;
-  notify_customer1_address: string;
-  notify_customer1_email: string;
+  notify1_customer_name: string;
+  notify1_customer_address: string;
+  notify1_customer_email: string;
+  notify2_customer_name: string;
+  notify2_customer_address: string;
+  notify2_customer_email: string;
   commodity_description: string;
   marks_no: string;
   item_no: string;
@@ -286,6 +289,8 @@ function HouseCreate() {
   >([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
+  const [notify2CustomerAddressOptions, setNotify2CustomerAddressOptions] =
+    useState<Array<{ value: string; label: string }>>([]);
   const [agentAddressOptions, setAgentAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
@@ -301,6 +306,33 @@ function HouseCreate() {
     boolean | null
   >(null);
   const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
+
+  // Notify Customer (shipment-party) - same pattern as Consignee
+  const [notifyCustomerSearch, setNotifyCustomerSearch] = useState("");
+  const [notifyCustomerOptions, setNotifyCustomerOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [notifyCustomerHasResults, setNotifyCustomerHasResults] = useState<
+    boolean | null
+  >(null);
+  const [notifyCustomerSelectedId, setNotifyCustomerSelectedId] = useState("");
+  const notifyCustomerDataRef = useRef<Record<string, Record<string, unknown>>>(
+    {},
+  );
+
+  // Notify Customer 2 (shipment-party) - same pattern as Consignee / Notify 1
+  const [notify2CustomerSearch, setNotify2CustomerSearch] = useState("");
+  const [notify2CustomerOptions, setNotify2CustomerOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [notify2CustomerHasResults, setNotify2CustomerHasResults] = useState<
+    boolean | null
+  >(null);
+  const [notify2CustomerSelectedId, setNotify2CustomerSelectedId] =
+    useState("");
+  const notify2CustomerDataRef = useRef<
+    Record<string, Record<string, unknown>>
+  >({});
 
   // State for cargo details
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
@@ -422,10 +454,13 @@ function HouseCreate() {
           : ""),
       customer_service: editData?.customer_service || "",
       trade: editData?.trade || "Re Export",
-      agent_name: (editData as { agent_name?: string } | undefined)?.agent_name || "",
+      agent_name:
+        (editData as { agent_name?: string } | undefined)?.agent_name || "",
       agent_address:
-        (editData as { agent_address?: string } | undefined)?.agent_address || "",
-      agent_email: (editData as { agent_email?: string } | undefined)?.agent_email || "",
+        (editData as { agent_address?: string } | undefined)?.agent_address ||
+        "",
+      agent_email:
+        (editData as { agent_email?: string } | undefined)?.agent_email || "",
       shipper_code: editData?.shipper_code || "", // Will be set when user selects from SearchableSelect
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
@@ -438,9 +473,30 @@ function HouseCreate() {
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
-      notify_customer1_name: editData?.notify_customer1_name || "",
-      notify_customer1_address: editData?.notify_customer1_address || "",
-      notify_customer1_email: editData?.notify_customer1_email || "",
+      notify1_customer_name:
+        (editData as { notify1_customer_name?: string })
+          ?.notify1_customer_name ??
+        editData?.notify_customer1_name ??
+        "",
+      notify1_customer_address:
+        (editData as { notify1_customer_address?: string })
+          ?.notify1_customer_address ??
+        editData?.notify_customer1_address ??
+        "",
+      notify1_customer_email:
+        (editData as { notify1_customer_email?: string })
+          ?.notify1_customer_email ??
+        editData?.notify_customer1_email ??
+        "",
+      notify2_customer_name:
+        (editData as { notify2_customer_name?: string })
+          ?.notify2_customer_name ?? "",
+      notify2_customer_address:
+        (editData as { notify2_customer_address?: string })
+          ?.notify2_customer_address ?? "",
+      notify2_customer_email:
+        (editData as { notify2_customer_email?: string })
+          ?.notify2_customer_email ?? "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
@@ -674,7 +730,8 @@ function HouseCreate() {
         customer_service: editData.customer_service || "",
         trade: editData.trade || "Re Export",
         agent_name: (editData as { agent_name?: string }).agent_name || "",
-        agent_address: (editData as { agent_address?: string }).agent_address || "",
+        agent_address:
+          (editData as { agent_address?: string }).agent_address || "",
         agent_email: (editData as { agent_email?: string }).agent_email || "",
         shipper_code: "", // Will be set when user selects from SearchableSelect
         shipper_name: editData.shipper_name || "",
@@ -692,9 +749,30 @@ function HouseCreate() {
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
         consignee_email: editData.consignee_email || "",
-        notify_customer1_name: editData.notify_customer1_name || "",
-        notify_customer1_address: editData.notify_customer1_address || "",
-        notify_customer1_email: editData.notify_customer1_email || "",
+        notify1_customer_name:
+          (editData as { notify1_customer_name?: string })
+            .notify1_customer_name ??
+          editData.notify_customer1_name ??
+          "",
+        notify1_customer_address:
+          (editData as { notify1_customer_address?: string })
+            .notify1_customer_address ??
+          editData.notify_customer1_address ??
+          "",
+        notify1_customer_email:
+          (editData as { notify1_customer_email?: string })
+            .notify1_customer_email ??
+          editData.notify_customer1_email ??
+          "",
+        notify2_customer_name:
+          (editData as { notify2_customer_name?: string })
+            .notify2_customer_name ?? "",
+        notify2_customer_address:
+          (editData as { notify2_customer_address?: string })
+            .notify2_customer_address ?? "",
+        notify2_customer_email:
+          (editData as { notify2_customer_email?: string })
+            .notify2_customer_email ?? "",
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
       });
@@ -707,6 +785,49 @@ function HouseCreate() {
         consigneeDataRef.current[name] = {
           customer_name: name,
         } as Record<string, unknown>;
+      }
+
+      // Prefill notify customer 1 search and options so the Notify Customer 1 field shows on edit
+      const notify1Name =
+        (editData as { notify1_customer_name?: string })
+          .notify1_customer_name ?? editData.notify_customer1_name;
+      if (notify1Name) {
+        const name = toTitleCase(String(notify1Name));
+        setNotifyCustomerSearch(name);
+        setNotifyCustomerOptions([{ value: name, label: name }]);
+        setNotifyCustomerSelectedId(name);
+        notifyCustomerDataRef.current[name] = {
+          customer_name: name,
+        } as Record<string, unknown>;
+      }
+      // Prefill notify customer 2 search and options
+      const notify2Name = (editData as { notify2_customer_name?: string })
+        .notify2_customer_name;
+      if (notify2Name) {
+        const name = toTitleCase(String(notify2Name));
+        setNotify2CustomerSearch(name);
+        setNotify2CustomerOptions([{ value: name, label: name }]);
+        setNotify2CustomerSelectedId(name);
+        notify2CustomerDataRef.current[name] = {
+          customer_name: name,
+        } as Record<string, unknown>;
+        if (
+          (editData as { notify2_customer_address?: string })
+            .notify2_customer_address
+        ) {
+          setNotify2CustomerAddressOptions([
+            {
+              value: String(
+                (editData as { notify2_customer_address?: string })
+                  .notify2_customer_address,
+              ),
+              label: String(
+                (editData as { notify2_customer_address?: string })
+                  .notify2_customer_address,
+              ),
+            },
+          ]);
+        }
       }
     }
 
@@ -1059,6 +1180,130 @@ function HouseCreate() {
     500,
   );
 
+  // Debounced shipment-party search for Notify Customer 1 - same API & pattern as Consignee
+  const debouncedNotifyCustomerSearch = useDebouncedCallback(
+    async (term: string) => {
+      const query = term.trim();
+      if (!query || query.length < 2) {
+        setNotifyCustomerOptions([]);
+        setNotifyCustomerHasResults(null);
+        setNotifyCustomerSelectedId("");
+        notifyCustomerDataRef.current = {};
+        setNotifyCustomerAddressOptions([]);
+        form.setFieldValue("notify1_customer_address", "");
+        form.setFieldValue("notify1_customer_email", "");
+        return;
+      }
+
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.shipmentParty,
+          query,
+        });
+
+        const arr = Array.isArray(results)
+          ? (results as Record<string, unknown>[])
+          : [];
+
+        if (!arr.length) {
+          setNotifyCustomerOptions([]);
+          setNotifyCustomerHasResults(false);
+          notifyCustomerDataRef.current = {};
+          setNotifyCustomerAddressOptions([]);
+          form.setFieldValue("notify1_customer_name", query);
+          form.setFieldValue("notify1_customer_address", "");
+          form.setFieldValue("notify1_customer_email", "");
+          return;
+        }
+
+        const map: Record<string, Record<string, unknown>> = {};
+        const opts = arr.map((item) => {
+          const id = String(item.id ?? "");
+          map[id] = item;
+          return {
+            value: id,
+            label: String(item.customer_name || ""),
+          };
+        });
+
+        notifyCustomerDataRef.current = map;
+        setNotifyCustomerOptions(opts);
+        setNotifyCustomerHasResults(true);
+      } catch (error) {
+        console.error("Notify customer 1 shipment-party search failed:", error);
+        setNotifyCustomerOptions([]);
+        setNotifyCustomerHasResults(null);
+        notifyCustomerDataRef.current = {};
+        setNotifyCustomerAddressOptions([]);
+        form.setFieldValue("notify1_customer_address", "");
+        form.setFieldValue("notify1_customer_email", "");
+      }
+    },
+    500,
+  );
+
+  // Debounced shipment-party search for Notify Customer 2 - same API as Consignee / Notify 1
+  const debouncedNotify2CustomerSearch = useDebouncedCallback(
+    async (term: string) => {
+      const query = term.trim();
+      if (!query || query.length < 2) {
+        setNotify2CustomerOptions([]);
+        setNotify2CustomerHasResults(null);
+        setNotify2CustomerSelectedId("");
+        notify2CustomerDataRef.current = {};
+        setNotify2CustomerAddressOptions([]);
+        form.setFieldValue("notify2_customer_address", "");
+        form.setFieldValue("notify2_customer_email", "");
+        return;
+      }
+
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.shipmentParty,
+          query,
+        });
+
+        const arr = Array.isArray(results)
+          ? (results as Record<string, unknown>[])
+          : [];
+
+        if (!arr.length) {
+          setNotify2CustomerOptions([]);
+          setNotify2CustomerHasResults(false);
+          notify2CustomerDataRef.current = {};
+          setNotify2CustomerAddressOptions([]);
+          form.setFieldValue("notify2_customer_name", query);
+          form.setFieldValue("notify2_customer_address", "");
+          form.setFieldValue("notify2_customer_email", "");
+          return;
+        }
+
+        const map: Record<string, Record<string, unknown>> = {};
+        const opts = arr.map((item) => {
+          const id = String(item.id ?? "");
+          map[id] = item;
+          return {
+            value: id,
+            label: String(item.customer_name || ""),
+          };
+        });
+
+        notify2CustomerDataRef.current = map;
+        setNotify2CustomerOptions(opts);
+        setNotify2CustomerHasResults(true);
+      } catch (error) {
+        console.error("Notify customer 2 shipment-party search failed:", error);
+        setNotify2CustomerOptions([]);
+        setNotify2CustomerHasResults(null);
+        notify2CustomerDataRef.current = {};
+        setNotify2CustomerAddressOptions([]);
+        form.setFieldValue("notify2_customer_address", "");
+        form.setFieldValue("notify2_customer_email", "");
+      }
+    },
+    500,
+  );
+
   const getPartyEmail = (original: Record<string, unknown>): string => {
     const email =
       (original.customer_email as string | undefined) ??
@@ -1359,11 +1604,10 @@ function HouseCreate() {
       location.state?.mawbDetails || location.state?.mawbDetails;
     if (!mawbDetails) return;
 
-    const mawbOriginAgent = (mawbDetails as { agent_name?: string })?.agent_name || "";
-    const mawbOriginAgentData = (mawbDetails as { agent_data?: unknown })?.agent_data as
-      | Record<string, unknown>
-      | null
-      | undefined;
+    const mawbOriginAgent =
+      (mawbDetails as { agent_name?: string })?.agent_name || "";
+    const mawbOriginAgentData = (mawbDetails as { agent_data?: unknown })
+      ?.agent_data as Record<string, unknown> | null | undefined;
 
     console.log("🔍 MAWB Origin Agent Auto-fill:", {
       mawbOriginAgent,
@@ -1423,11 +1667,12 @@ function HouseCreate() {
         (mawbDetails as { agent_name?: string })?.agent_name || "";
 
       // If agent_name is empty, try to get it from agent_data
-      if (!mawbOriginAgentName && (mawbDetails as { agent_data?: unknown })?.agent_data) {
-        const originAgentData = (mawbDetails as { agent_data?: unknown }).agent_data as Record<
-          string,
-          unknown
-        >;
+      if (
+        !mawbOriginAgentName &&
+        (mawbDetails as { agent_data?: unknown })?.agent_data
+      ) {
+        const originAgentData = (mawbDetails as { agent_data?: unknown })
+          .agent_data as Record<string, unknown>;
         // Try to get customer_name from agent_data
         mawbOriginAgentName = (originAgentData.customer_name as string) || "";
       }
@@ -1526,10 +1771,16 @@ function HouseCreate() {
       errors.agent_email = "Invalid email format";
     }
     if (
-      form.values.notify_customer1_email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.notify_customer1_email)
+      form.values.notify1_customer_email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.notify1_customer_email)
     ) {
-      errors.notify_customer1_email = "Invalid email format";
+      errors.notify1_customer_email = "Invalid email format";
+    }
+    if (
+      form.values.notify2_customer_email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.values.notify2_customer_email)
+    ) {
+      errors.notify2_customer_email = "Invalid email format";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1704,9 +1955,12 @@ function HouseCreate() {
           }
         )?.housing_details?.[editIndex ?? 0]?.consignee_gst_id ??
         null,
-      notify_customer1_name: v.notify_customer1_name,
-      notify_customer1_address: v.notify_customer1_address,
-      notify_customer1_email: v.notify_customer1_email,
+      notify1_customer_name: v.notify1_customer_name,
+      notify1_customer_address: v.notify1_customer_address,
+      notify1_customer_email: v.notify1_customer_email,
+      notify2_customer_name: v.notify2_customer_name,
+      notify2_customer_address: v.notify2_customer_address,
+      notify2_customer_email: v.notify2_customer_email,
       commodity_description: v.commodity_description,
       marks_no: v.marks_no,
       cargo_details: cargoDetails,
@@ -1761,9 +2015,12 @@ function HouseCreate() {
       consignee_name: currentFormValues.consignee_name,
       consignee_address: currentFormValues.consignee_address,
       consignee_email: currentFormValues.consignee_email,
-      notify_customer1_name: currentFormValues.notify_customer1_name,
-      notify_customer1_address: currentFormValues.notify_customer1_address,
-      notify_customer1_email: currentFormValues.notify_customer1_email,
+      notify1_customer_name: currentFormValues.notify1_customer_name,
+      notify1_customer_address: currentFormValues.notify1_customer_address,
+      notify1_customer_email: currentFormValues.notify1_customer_email,
+      notify2_customer_name: currentFormValues.notify2_customer_name,
+      notify2_customer_address: currentFormValues.notify2_customer_address,
+      notify2_customer_email: currentFormValues.notify2_customer_email,
       commodity_description: currentFormValues.commodity_description,
       marks_no: currentFormValues.marks_no,
       item_no: currentFormValues.item_no,
@@ -1848,9 +2105,12 @@ function HouseCreate() {
         consignee_name: form.values.consignee_name,
         consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,
-        notify_customer1_name: form.values.notify_customer1_name,
-        notify_customer1_address: form.values.notify_customer1_address,
-        notify_customer1_email: form.values.notify_customer1_email,
+        notify1_customer_name: form.values.notify1_customer_name,
+        notify1_customer_address: form.values.notify1_customer_address,
+        notify1_customer_email: form.values.notify1_customer_email,
+        notify2_customer_name: form.values.notify2_customer_name,
+        notify2_customer_address: form.values.notify2_customer_address,
+        notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
         cargo_details: cargoDetails.map((cargo) => ({
@@ -2756,7 +3016,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Consignee Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Consignee Email"
                   {...form.getInputProps("consignee_email")}
                   error={form.errors.consignee_email}
@@ -2792,113 +3052,297 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
 
-            {/* Notify Customer Section */}
+            {/* Notify Customer 1 Details */}
             <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
-              Notify Customer
+              Notify Customer 1 Details
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Notify Customer Name"
-                  placeholder="Type notify customer name"
-                  apiEndpoint={URL.consignee}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code),
-                    label: String(item.customer_name),
-                  })}
-                  value={
-                    form.values.notify_customer1_name
-                      ? String(form.values.notify_customer1_name)
-                      : ""
-                  }
-                  displayValue={form.values.notify_customer1_name}
-                  onChange={(value, selectedData, originalData) => {
-                    const newValue = selectedData?.label || value || "";
-
-                    form.setFieldValue("notify_customer1_name", newValue);
-
-                    // Use originalData to populate address options
-                    if (
-                      newValue &&
-                      originalData &&
-                      (originalData as Record<string, unknown>).addresses_data
-                    ) {
-                      // Create address options from addresses_data
-                      const addressOptions = (
-                        (originalData as Record<string, unknown>)
-                          .addresses_data as Array<{
-                          id: number;
-                          address: string;
-                        }>
-                      ).map((addr: { id: number; address: string }) => ({
-                        value: addr.address,
-                        label: addr.address,
-                      }));
-
+                {notifyCustomerHasResults === false &&
+                notifyCustomerSearch.trim().length >= 2 ? (
+                  <FormTextInput
+                    label="Notify Customer 1 Name"
+                    placeholder="Enter notify customer name"
+                    value={notifyCustomerSearch}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      setNotifyCustomerSearch(v);
+                      form.setFieldValue("notify1_customer_name", v);
+                      setNotifyCustomerAddressOptions([]);
+                      form.setFieldValue("notify1_customer_address", "");
+                      form.setFieldValue("notify1_customer_email", "");
+                    }}
+                    error={form.errors.notify1_customer_name as string}
+                  />
+                ) : (
+                  <Select
+                    label="Notify Customer 1 Name"
+                    placeholder="Select or search notify customer"
+                    searchable
+                    clearable
+                    data={notifyCustomerOptions}
+                    searchValue={notifyCustomerSearch}
+                    onSearchChange={(value) => {
+                      const v = toTitleCase(value);
+                      setNotifyCustomerSearch(v);
+                      debouncedNotifyCustomerSearch(v);
+                    }}
+                    value={notifyCustomerSelectedId || ""}
+                    onChange={(value) => {
+                      if (!value) {
+                        setNotifyCustomerSelectedId("");
+                        form.setFieldValue("notify1_customer_name", "");
+                        form.setFieldValue("notify1_customer_address", "");
+                        form.setFieldValue("notify1_customer_email", "");
+                        setNotifyCustomerAddressOptions([]);
+                        return;
+                      }
+                      const original =
+                        notifyCustomerDataRef.current[value] || {};
+                      const name = String(
+                        (original as Record<string, unknown>).customer_name ||
+                          "",
+                      );
+                      const email = getPartyEmail(
+                        original as Record<string, unknown>,
+                      );
+                      const addressesData = getPartyAddresses(
+                        original as Record<string, unknown>,
+                      );
+                      const addressOptions = addressesData
+                        .filter((a) => a.address)
+                        .map((a) => {
+                          const addr = toTitleCase(String(a.address || ""));
+                          return { value: addr, label: addr };
+                        });
                       setNotifyCustomerAddressOptions(addressOptions);
 
-                      // Auto-select the first address if available
-                      if (addressOptions.length > 0 && addressOptions[0].value) {
+                      form.setFieldValue(
+                        "notify1_customer_name",
+                        toTitleCase(name),
+                      );
+                      form.setFieldValue("notify1_customer_email", email);
+                      form.setFieldValue("notify1_customer_address", "");
+                      if (addressOptions.length > 0) {
                         form.setFieldValue(
-                          "notify_customer1_address",
+                          "notify1_customer_address",
                           addressOptions[0].value,
                         );
-                      } else {
-                        form.setFieldValue("notify_customer1_address", "");
                       }
-                    } else {
-                      setNotifyCustomerAddressOptions([]);
-                      form.setFieldValue("notify_customer1_address", "");
-                    }
-                  }}
-                  returnOriginalData={true}
-                  error={form.errors.notify_customer1_name as string}
-                  minSearchLength={2}
-                />
+                      setNotifyCustomerSearch(name);
+                      setNotifyCustomerSelectedId(value);
+                    }}
+                    comboboxProps={{ zIndex: 10 }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        height: "36px",
+                        fontFamily: "Inter",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    nothingFoundMessage="No notify customer found - type to enter new"
+                    error={form.errors.notify1_customer_name as string}
+                  />
+                )}
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
-                  label="Notify Customer Email"
+                  label="Notify Customer 1 Email"
                   type="email"
-                  format = "normal"
-                  placeholder="Enter Notify Customer Email"
-                  {...form.getInputProps("notify_customer1_email")}
-                  error={form.errors.notify_customer1_email}
+                  format="normal"
+                  placeholder="Enter Notify Customer 1 Email"
+                  {...form.getInputProps("notify1_customer_email")}
+                  error={form.errors.notify1_customer_email}
                 />
               </Grid.Col>
-
               <Grid.Col span={4}>
                 {notifyCustomerAddressOptions.length > 0 ? (
                   <Dropdown
-                    label="Notify Customer Address"
-                    placeholder="Select notify customer address"
+                    key={`notify1-address-${notifyCustomerSelectedId || "none"}`}
+                    label="Notify Customer 1 Address"
+                    placeholder="Select notify address"
                     searchable
                     data={notifyCustomerAddressOptions}
-                    value={form.values.notify_customer1_address || ""}
+                    value={form.values.notify1_customer_address || ""}
                     onChange={(value) => {
                       const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
-                        "notify_customer1_address",
+                        "notify1_customer_address",
                         formattedValue,
                       );
                     }}
-                    error={form.errors.notify_customer1_address}
+                    error={form.errors.notify1_customer_address}
                   />
                 ) : (
                   <FormTextInput
-                    label="Notify Customer Address"
-                    placeholder="Enter Notify Customer Address"
+                    label="Notify Customer 1 Address"
+                    placeholder="Enter Notify Customer 1 Address"
                     minRows={2}
-                    value={form.values.notify_customer1_address}
+                    value={form.values.notify1_customer_address}
                     onChange={(e) => {
                       const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
-                        "notify_customer1_address",
+                        "notify1_customer_address",
                         formattedValue,
                       );
                     }}
-                    error={form.errors.notify_customer1_address}
+                    error={form.errors.notify1_customer_address}
+                  />
+                )}
+              </Grid.Col>
+            </Grid>
+
+            {/* Notify Customer 2 Details */}
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+              Notify Customer 2 Details
+            </Text>
+            <Grid mb="xs">
+              <Grid.Col span={4}>
+                {notify2CustomerHasResults === false &&
+                notify2CustomerSearch.trim().length >= 2 ? (
+                  <FormTextInput
+                    label="Notify Customer 2 Name"
+                    placeholder="Enter notify customer name"
+                    value={notify2CustomerSearch}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      setNotify2CustomerSearch(v);
+                      form.setFieldValue("notify2_customer_name", v);
+                      setNotify2CustomerAddressOptions([]);
+                      form.setFieldValue("notify2_customer_address", "");
+                      form.setFieldValue("notify2_customer_email", "");
+                    }}
+                    error={form.errors.notify2_customer_name as string}
+                  />
+                ) : (
+                  <Select
+                    label="Notify Customer 2 Name"
+                    placeholder="Select or search notify customer"
+                    searchable
+                    clearable
+                    data={notify2CustomerOptions}
+                    searchValue={notify2CustomerSearch}
+                    onSearchChange={(value) => {
+                      const v = toTitleCase(value);
+                      setNotify2CustomerSearch(v);
+                      debouncedNotify2CustomerSearch(v);
+                    }}
+                    value={notify2CustomerSelectedId || ""}
+                    onChange={(value) => {
+                      if (!value) {
+                        setNotify2CustomerSelectedId("");
+                        form.setFieldValue("notify2_customer_name", "");
+                        form.setFieldValue("notify2_customer_address", "");
+                        form.setFieldValue("notify2_customer_email", "");
+                        setNotify2CustomerAddressOptions([]);
+                        return;
+                      }
+                      const original =
+                        notify2CustomerDataRef.current[value] || {};
+                      const name = String(
+                        (original as Record<string, unknown>).customer_name ||
+                          "",
+                      );
+                      const email = getPartyEmail(
+                        original as Record<string, unknown>,
+                      );
+                      const addressesData = getPartyAddresses(
+                        original as Record<string, unknown>,
+                      );
+                      const addressOptions = addressesData
+                        .filter((a) => a.address)
+                        .map((a) => {
+                          const addr = toTitleCase(String(a.address || ""));
+                          return { value: addr, label: addr };
+                        });
+                      setNotify2CustomerAddressOptions(addressOptions);
+
+                      form.setFieldValue(
+                        "notify2_customer_name",
+                        toTitleCase(name),
+                      );
+                      form.setFieldValue("notify2_customer_email", email);
+                      form.setFieldValue("notify2_customer_address", "");
+                      if (addressOptions.length > 0) {
+                        form.setFieldValue(
+                          "notify2_customer_address",
+                          addressOptions[0].value,
+                        );
+                      }
+                      setNotify2CustomerSearch(name);
+                      setNotify2CustomerSelectedId(value);
+                    }}
+                    comboboxProps={{ zIndex: 10 }}
+                    styles={{
+                      input: {
+                        fontSize: "13px",
+                        height: "36px",
+                        fontFamily: "Inter",
+                      },
+                      label: {
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                        marginBottom: "4px",
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                      },
+                    }}
+                    nothingFoundMessage="No notify customer found - type to enter new"
+                    error={form.errors.notify2_customer_name as string}
+                  />
+                )}
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Notify Customer 2 Email"
+                  type="email"
+                  format="normal"
+                  placeholder="Enter Notify Customer 2 Email"
+                  {...form.getInputProps("notify2_customer_email")}
+                  error={form.errors.notify2_customer_email}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                {notify2CustomerAddressOptions.length > 0 ? (
+                  <Dropdown
+                    key={`notify2-address-${notify2CustomerSelectedId || "none"}`}
+                    label="Notify Customer 2 Address"
+                    placeholder="Select notify address"
+                    searchable
+                    data={notify2CustomerAddressOptions}
+                    value={form.values.notify2_customer_address || ""}
+                    onChange={(value) => {
+                      const formattedValue = value ? toTitleCase(value) : "";
+                      form.setFieldValue(
+                        "notify2_customer_address",
+                        formattedValue,
+                      );
+                    }}
+                    error={form.errors.notify2_customer_address}
+                  />
+                ) : (
+                  <FormTextInput
+                    label="Notify Customer 2 Address"
+                    placeholder="Enter Notify Customer 2 Address"
+                    minRows={2}
+                    value={form.values.notify2_customer_address}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue(
+                        "notify2_customer_address",
+                        formattedValue,
+                      );
+                    }}
+                    error={form.errors.notify2_customer_address}
                   />
                 )}
               </Grid.Col>
@@ -2948,8 +3392,14 @@ function HouseCreate() {
                       setAgentAddressOptions(addressOptions);
 
                       // Auto-select the first address if available
-                      if (addressOptions.length > 0 && addressOptions[0].value) {
-                        form.setFieldValue("agent_address", addressOptions[0].value);
+                      if (
+                        addressOptions.length > 0 &&
+                        addressOptions[0].value
+                      ) {
+                        form.setFieldValue(
+                          "agent_address",
+                          addressOptions[0].value,
+                        );
                       } else {
                         form.setFieldValue("agent_address", "");
                       }
@@ -2967,7 +3417,7 @@ function HouseCreate() {
                 <FormTextInput
                   label="Destination Agent Email"
                   type="email"
-                  format = "normal"
+                  format="normal"
                   placeholder="Enter Destination Agent Email"
                   {...form.getInputProps("agent_email")}
                   error={form.errors.agent_email}

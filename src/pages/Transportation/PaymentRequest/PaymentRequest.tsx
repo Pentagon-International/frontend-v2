@@ -182,10 +182,9 @@ type PaymentRequestFormData = {
   voucher_type: string;
   cinv: boolean;
   actual_invoice_no: string;
-  account_code: string;
+  account_id: string;
   currency: string;
   amount: number | null;
-  subledger_code: string;
   crj_date: Date | null;
   paid_to_type: string;
   not_over: string;
@@ -229,6 +228,7 @@ type PaymentRequestFromApi = {
   CINV?: boolean;
   proforma_inv_no?: string;
   actual_inv_no?: string;
+  account_id?: number;
   account_code?: string;
   subledger_code?: string;
   amount?: number | string | null;
@@ -548,16 +548,15 @@ function PaymentRequest( serviceType: string  ) {
 
   const accountOptions = useMemo(() => {
     const data = chartOfAccountsData as Array<{
+      id?: number;
       gl_account_code?: string;
       account_name?: string;
-      sl_code?: string;
     }>;
     if (!Array.isArray(data)) return [];
     return data
       .map((item) => ({
-        value: String(item.gl_account_code ?? ""),
+        value: item.id != null ? String(item.id) : "",
         label: item.account_name ?? item.gl_account_code ?? "",
-        sl_code: item.sl_code ?? "",
       }))
       .filter((o) => o.value);
   }, [chartOfAccountsData]);
@@ -585,10 +584,9 @@ function PaymentRequest( serviceType: string  ) {
       voucher_type: "",
       cinv: false,
       actual_invoice_no: "",
-      account_code: "",
+      account_id: "",
       currency: defaultBranchCurrency,
       amount: null,
-      subledger_code: "",
       crj_date: null,
       paid_to_type: "",
       not_over: "",
@@ -686,8 +684,7 @@ function PaymentRequest( serviceType: string  ) {
         CINV: values.cinv ?? false,
         proforma_inv_no: values.proforma_invoice_no_1 ?? "",
         actual_inv_no: values.actual_invoice_no ?? "",
-        account_code: values.account_code ?? "",
-        subledger_code: values.subledger_code ?? "",
+        account_id: values.account_id ? Number(values.account_id) : undefined,
         amount: values.amount != null ? Number(values.amount) : null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
@@ -802,10 +799,9 @@ function PaymentRequest( serviceType: string  ) {
               voucher_type: d.vouchar_type ?? "",
               cinv: d.CINV ?? false,
               actual_invoice_no: d.actual_inv_no ?? "",
-              account_code: d.account_code ?? "",
+              account_id: d.account_id != null ? String(d.account_id) : "",
               currency: d.currency_code ?? values.currency,
               amount: d.amount != null ? Number(d.amount) : null,
-              subledger_code: d.subledger_code ?? "",
               crj_date: normalizeDate(d.crj_date),
               paid_to_type: d.paid_to_type ?? "",
               not_over: d.not_over ?? "",
@@ -907,10 +903,9 @@ function PaymentRequest( serviceType: string  ) {
       voucher_type: d.vouchar_type ?? "",
       cinv: d.CINV ?? false,
       actual_invoice_no: d.actual_inv_no ?? "",
-      account_code: d.account_code ?? "",
+      account_id: d.account_id != null ? String(d.account_id) : "",
       currency: d.currency_code ?? defaultBranchCurrency,
       amount: d.amount != null ? Number(d.amount) : null,
-      subledger_code: d.subledger_code ?? "",
       crj_date: normalizeDate(d.crj_date),
       paid_to_type: d.paid_to_type ?? "",
       not_over: d.not_over ?? "",
@@ -1555,35 +1550,14 @@ function PaymentRequest( serviceType: string  ) {
                 label="Account Name"
                 placeholder="Select account"
                 data={accountOptions}
-                value={form.values.account_code || null}
+                value={form.values.account_id || null}
                 onChange={(value) => {
-                  const code = value ?? "";
-                  form.setFieldValue("account_code", code);
-                  const opt = accountOptions.find((o) => o.value === code) as
-                    | { sl_code?: string }
-                    | undefined;
-                  form.setFieldValue("subledger_code", opt?.sl_code ?? "");
+                  form.setFieldValue("account_id", value ?? "");
                 }}
                 searchable
                 clearable
                 readOnly={isReadOnly}
                 styles={inputStyles}
-              />
-            </Grid.Col>
-
-            <Grid.Col span={2}>
-              <TextInput
-                label="Subledger Code"
-                placeholder="Subledger"
-                value={form.values.subledger_code}
-                readOnly
-                styles={{
-                  ...inputStyles,
-                  input: {
-                    ...inputStyles.input,
-                    backgroundColor: isReadOnly ? "var(--mantine-color-gray-0)" : undefined,
-                  },
-                }}
               />
             </Grid.Col>
 

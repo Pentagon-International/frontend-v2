@@ -42,7 +42,7 @@ import {
 } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
-import { putAPICall } from "../../../service/putApiCall";
+import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 
@@ -52,7 +52,7 @@ const fetchDaybookJV = async (): Promise<unknown[]> => {
   try {
     const response = await postAPICall(
       URL.daybook,
-      { filters: { document_type: "JV" } },
+      { filters: { document_type: "GLJ" } },
       API_HEADER,
     );
     return (response as { data?: unknown[] })?.data ?? [];
@@ -112,6 +112,7 @@ type JVFormValues = {
   journal_no: string;
   day_book_id: string;
   note: string;
+  narration: string;
   journal_date: Date | null;
   status: string;
   file_name: string;
@@ -314,6 +315,7 @@ function JournalVoucher() {
       journal_no: "",
       day_book_id: "",
       note: "",
+      narration: "",
       journal_date: new Date(),
       status: "UNPOSTED",
       file_name: "",
@@ -355,43 +357,88 @@ function JournalVoucher() {
   const buildPayload = (values: JVFormValues, overrideStatus?: string) => {
     const formatDate = (d: Date | null) =>
       d ? d.toISOString().split("T")[0] : null;
+
+    // Compute totals from charges (3 decimal precision)
+    let debit = 0;
+    let credit = 0;
+    for (const row of values.charges) {
+      const amt = row.local_amount ?? 0;
+      if (row.dr_cr === "Dr") debit += amt;
+      else credit += amt;
+    }
+    const debitTotal = Math.round(debit * 1000) / 1000;
+    const creditTotal = Math.round(credit * 1000) / 1000;
+    const difference = Math.round((debit - credit) * 1000) / 1000;
+
+    // Top-level account_name: first charge that has one
+    const firstAccountName =
+      values.charges.find((c) => c.account_name)?.account_name ?? "";
+
     return {
       ...(isUpdate ? { id: saveResponse?.id ?? Number(recordId) } : {}),
-      day_book_id: values.day_book_id ? Number(values.day_book_id) : null,
-      note: values.note ?? "",
+      document_no: values.journal_no || values.document_id || "",
+      account_name: firstAccountName,
+      narration: values.narration ?? "",
       journal_date: formatDate(values.journal_date),
+      note: values.note ?? "",
       status: overrideStatus ?? values.status ?? "UNPOSTED",
-      charges_data: values.charges.map((c) => ({
+      debit_total: debitTotal.toFixed(3),
+      credit_total: creditTotal.toFixed(3),
+      difference: difference.toFixed(3),
+      charges: values.charges.map((c) => ({
         ...(c.id != null ? { id: c.id } : {}),
-        segment: c.segment ?? "",
-        job_no: c.job_no ?? "",
-        sub_job: c.sub_job ?? "",
-        booking_no: c.booking_no ?? "",
-        cn_r: c.cn_r ?? "",
         charge_id: c.charge_id ?? null,
-        account_code: c.account_code ?? "",
-        subledger_code: c.subledger_code ?? "",
+        currency_id: c.currency_id ? Number(c.currency_id) : null,
+        account_name: c.account_name ?? "",
+        subledger: c.subledger_code ?? "",
         code: c.code ?? "",
         key: c.key ?? "",
-        currency_id: c.currency_id ? Number(c.currency_id) : null,
-        roe: c.roe ?? null,
-        amount: c.amount ?? null,
-        local_amount: c.local_amount ?? null,
+        roe: c.roe != null ? Number(c.roe).toFixed(3) : "0.000",
+        amount: c.amount != null ? Number(c.amount).toFixed(3) : "0.000",
+        local_amount:
+          c.local_amount != null ? Number(c.local_amount).toFixed(3) : "0.000",
         dr_cr: c.dr_cr ?? "Dr",
         narration: c.narration ?? "",
+        c_r_n: c.cn_r ?? "",
       })),
     };
+  };
+
+  /** Build a multipart/form-data body from the JSON payload + supporting documents.
+   *  Fields:
+   *    journal_voucher          – JSON-stringified payload
+   *    document_names[i]        – display name for document i
+   *    document[i]              – File object for document i
+   */
+  const buildFormData = (payload: object): FormData => {
+    const fd = new FormData();
+    fd.append("journal_voucher", JSON.stringify(payload));
+    supportingDocuments.forEach((doc, i) => {
+      if (doc.name) fd.append(`document_names[${i}]`, doc.name);
+      if (doc.file) fd.append(`document[${i}]`, doc.file);
+    });
+    return fd;
+  };
+
+  const FORM_DATA_HEADERS = {
+    ...API_HEADER,
+    headers: {
+      ...API_HEADER.headers,
+      "Content-Type": "multipart/form-data",
+    },
   };
 
   const handleSubmit = async (values: JVFormValues) => {
     setIsSubmitting(true);
     try {
       const payload = buildPayload(values);
+      const fd = buildFormData(payload);
       if (isUpdate) {
-        const res = (await putAPICall(
-          `${(URL as any).journalVoucher}`,
-          payload,
-          API_HEADER,
+        const recordIdNum = saveResponse?.id ?? Number(recordId);
+        const res = (await apiCallProtected.put(
+          `${(URL as any).journalVoucher}${recordIdNum}/`,
+          fd,
+          FORM_DATA_HEADERS,
         )) as any;
         if (res) {
           const d = res?.data?.data ?? res?.data ?? res;
@@ -404,10 +451,10 @@ function JournalVoucher() {
           ToastNotification({ message: "Journal voucher updated successfully", type: "success" });
         }
       } else {
-        const res = (await postAPICall(
+        const res = (await apiCallProtected.post(
           (URL as any).journalVoucher,
-          payload,
-          API_HEADER,
+          fd,
+          FORM_DATA_HEADERS,
         )) as any;
         if (res) {
           const d = res?.data?.data ?? res?.data ?? res;
@@ -435,11 +482,13 @@ function JournalVoucher() {
     setIsSubmitting(true);
     try {
       const payload = buildPayload(form.values, "POSTED");
+      const fd = buildFormData(payload);
       if (isUpdate) {
-        const res = (await putAPICall(
-          `${(URL as any).journalVoucher}`,
-          payload,
-          API_HEADER,
+        const recordIdNum = saveResponse?.id ?? Number(recordId);
+        const res = (await apiCallProtected.put(
+          `${(URL as any).journalVoucher}${recordIdNum}/`,
+          fd,
+          FORM_DATA_HEADERS,
         )) as any;
         if (res) {
           const d = res?.data?.data ?? res?.data ?? res;
@@ -453,10 +502,10 @@ function JournalVoucher() {
           ToastNotification({ message: "Journal voucher posted successfully", type: "success" });
         }
       } else {
-        const res = (await postAPICall(
+        const res = (await apiCallProtected.post(
           (URL as any).journalVoucher,
-          payload,
-          API_HEADER,
+          fd,
+          FORM_DATA_HEADERS,
         )) as any;
         if (res) {
           const d = res?.data?.data ?? res?.data ?? res;
@@ -484,9 +533,9 @@ function JournalVoucher() {
   const tableHeaders = [
     { label: "SNo", width: "40px" },
     // { label: "Seg", width: "68px" },
-    { label: "Job", width: "88px" },
+    { label: "Job Id", width: "88px" },
     // { label: "Sub Job", width: "80px" },
-    { label: "Booking No.", width: "108px" },
+    { label: "Shipment Id", width: "108px" },
     { label: "C/R/N", width: "62px" },
     { label: "Charge", width: "148px" },
     { label: "*Account Name", width: "168px" },
@@ -841,12 +890,27 @@ function JournalVoucher() {
                 </Grid.Col>
 
                                 {/* Note */}
-                                <Grid.Col span={4}>
+                <Grid.Col span={3}>
                   <Textarea
                     label="Note"
                     placeholder="Enter note"
                     value={form.values.note}
                     onChange={(e) => form.setFieldValue("note", e.target.value)}
+                    readOnly={isReadOnly}
+                    rows={2}
+                    styles={textareaStyles}
+                  />
+                </Grid.Col>
+
+                {/* Narration */}
+                <Grid.Col span={3}>
+                  <Textarea
+                    label="Narration"
+                    placeholder="Enter narration"
+                    value={form.values.narration}
+                    onChange={(e) =>
+                      form.setFieldValue("narration", e.target.value)
+                    }
                     readOnly={isReadOnly}
                     rows={2}
                     styles={textareaStyles}
