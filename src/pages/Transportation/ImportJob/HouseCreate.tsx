@@ -1956,7 +1956,7 @@ function HouseCreate() {
       return basePayload;
     });
 
-    // Prepare charges payload - include id only in edit mode, charge_id for Invoice flow
+    // Prepare charges payload - include id only in edit mode, charge_id, supplier_code for API
     const chargesForPayload = chargesForm.values.charges.map((charge) => ({
       ...(isEditMode &&
         charge.id && {
@@ -1977,6 +1977,8 @@ function HouseCreate() {
       unit_cost: charge.unit_cost ?? null,
       total_cost: charge.total_cost ?? null,
       cost_local_amount: charge.cost_local_amount ?? null,
+      supplier_code: charge.supplier_code || null,
+      supplier_name: charge.supplier_name ?? null,
     }));
 
     // Prepare housing detail object

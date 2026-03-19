@@ -167,6 +167,8 @@ type HAWBDetail = {
     unit_cost?: number | null;
     total_cost?: number | null;
     cost_local_amount?: number | null;
+    supplier_code?: string | null;
+    supplier_name?: string | null;
   }>;
   mawb_charges?: Array<Record<string, unknown>>;
 };
@@ -2062,7 +2064,10 @@ function AirExportJobCreate() {
                 ...(charge.id != null &&
                   charge.id !== undefined && { id: Number(charge.id) }),
                 charge_id: charge.charge_id ?? null,
-                charge_name: charge.charge_name || "",
+                supplier_code:
+                  charge.supplier_code != null
+                    ? String(charge.supplier_code)
+                    : null,
                 pp_cc: charge.pp_cc || "",
                 unit_id: charge.unit_id ? String(charge.unit_id) : "",
                 no_of_unit: charge.no_of_unit || null,

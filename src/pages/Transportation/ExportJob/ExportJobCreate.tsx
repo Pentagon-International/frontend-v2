@@ -2283,7 +2283,6 @@ function ExportJobCreate() {
                 }),
               charge_id:
                 charge.charge_id != null ? Number(charge.charge_id) : null,
-              charge_name: charge.charge_name ? String(charge.charge_name) : "",
               supplier_code:
                 charge.supplier_code != null
                   ? String(charge.supplier_code)

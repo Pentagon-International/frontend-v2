@@ -3851,33 +3851,62 @@ function HouseCreate() {
                 <Grid.Col span={0.7} />
                 <Grid.Col span={0.7} />
                 <Grid.Col span={2.55}>
-                  <Box style={{ border: "1.5px solid #228be6", borderRadius: 6, textAlign: "center", padding: "2px 0", color: "#228be6", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>
+                  <Box
+                    style={{
+                      border: "1.5px solid #228be6",
+                      borderRadius: 6,
+                      textAlign: "center",
+                      padding: "2px 0",
+                      color: "#228be6",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: 1,
+                    }}
+                  >
                     SELL
                   </Box>
                 </Grid.Col>
                 <Grid.Col span={3.65}>
-                  <Box style={{ border: "1.5px solid #e67700", borderRadius: 6, textAlign: "center", padding: "2px 0", color: "#e67700", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>
+                  <Box
+                    style={{
+                      border: "1.5px solid #e67700",
+                      borderRadius: 6,
+                      textAlign: "center",
+                      padding: "2px 0",
+                      color: "#e67700",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: 1,
+                    }}
+                  >
                     COST
                   </Box>
                 </Grid.Col>
                 <Grid.Col span={0.5} />
               </Grid>
               {/* Field labels row */}
-              <Grid mb="xs" style={{ fontWeight: 600, color: "#105476" }} gutter="sm">
+              <Grid
+                mb="xs"
+                style={{
+                  fontWeight: 600,
+                  color: "#105476",
+                }}
+                gutter="sm"
+              >
                 <Grid.Col span={1.4}>
-                  <RequiredLabel label="Charge Name" required={true} />
+                  <RequiredLabel label="Charge Name" required />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
-                  <RequiredLabel label="Prepaid / Collect" required={true} />
+                  <RequiredLabel label="Prepaid / Collect" required />
                 </Grid.Col>
                 <Grid.Col span={0.8}>
                   <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.8}>
-                  <RequiredLabel label="Currency" required={true} />
+                  <RequiredLabel label="Currency" required />
                 </Grid.Col>
                 <Grid.Col span={0.7}>
-                  <RequiredLabel label="ROE" required={true} />
+                  <RequiredLabel label="ROE" required />
                 </Grid.Col>
                 <Grid.Col span={0.7}>
                   <RequiredLabel label="No of Unit" required={false} />
@@ -3886,7 +3915,7 @@ function HouseCreate() {
                   <RequiredLabel label="Amount/Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.85}>
-                  <RequiredLabel label="Amount" required={true} />
+                  <RequiredLabel label="Amount" required />
                 </Grid.Col>
                 <Grid.Col span={0.85}>
                   <RequiredLabel label="Local Amount" required={false} />
@@ -3910,7 +3939,7 @@ function HouseCreate() {
 
               {chargesForm.values.charges.map((charge, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1.4}>
                     <SearchableSelect
                       placeholder="Type charge name"
                       apiEndpoint={URL.chargeMaster}
@@ -3949,6 +3978,13 @@ function HouseCreate() {
                       error={chargeErrors[index]?.charge_name}
                       minSearchLength={2}
                       dropdownZIndex={1000}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={0.9}>

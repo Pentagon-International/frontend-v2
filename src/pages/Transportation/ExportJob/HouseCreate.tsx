@@ -1944,7 +1944,7 @@ function HouseCreate() {
       return basePayload;
     });
 
-    // Prepare charges payload - include id, charge_id, unit_id, currency_id
+    // Prepare charges payload - include id, charge_id, supplier_code, unit_id, currency_id
     const chargesForPayload = chargesForm.values.charges.map((charge) => ({
       ...(isEditMode &&
         charge.id && {
@@ -1965,6 +1965,8 @@ function HouseCreate() {
       unit_cost: charge.unit_cost ?? null,
       total_cost: charge.total_cost ?? null,
       cost_local_amount: charge.cost_local_amount ?? null,
+      supplier_code: charge.supplier_code || null,
+      supplier_name: charge.supplier_name ?? null,
     }));
 
     // Prepare housing detail object
