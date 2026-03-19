@@ -30,7 +30,7 @@ import {
   IconUpload,
   IconX,
 } from "@tabler/icons-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -89,7 +89,7 @@ type JVChargeRow = {
   segment: string;
   job_no: string;
   sub_job: string;
-  booking_no: string;
+  shipment_id: string;
   cn_r: string;
   charge_id: number | null;
   charge_name: string;
@@ -129,7 +129,7 @@ const emptyRow = (): JVChargeRow => ({
   segment: "",
   job_no: "",
   sub_job: "",
-  booking_no: "",
+  shipment_id: "",
   cn_r: "",
   charge_id: null,
   charge_name: "",
@@ -234,6 +234,12 @@ function JournalVoucher() {
   const isUpdate =
     (saveResponse?.id != null && saveResponse.id > 0) || Boolean(recordId);
 
+  // ID of the source JV when opening as a JV Reversal (no recordId in URL)
+  const reversalSourceId = (location.state as any)?.reversalOf?.id;
+  const isReversalMode = Boolean(reversalSourceId) && !recordId;
+  // The ID to fetch for edit / view / reversal pre-fill
+  const fetchId = recordId ?? (reversalSourceId != null ? String(reversalSourceId) : undefined);
+
   // ─── Queries ─────────────────────────────────────────────────────────────
 
   const { data: daybookData = [], isLoading: isDaybookLoading } = useQuery({
@@ -252,6 +258,17 @@ function JournalVoucher() {
     queryKey: ["chartOfAccounts"],
     queryFn: fetchChartOfAccounts,
     staleTime: Infinity,
+  });
+
+  // ─── Fetch full JV record by ID (Edit / View / JV Reversal) ──────────────
+
+  const { data: jvFetchRes, isLoading: isJVFetching } = useQuery({
+    queryKey: ["journalVoucher-detail", fetchId],
+    enabled: Boolean(fetchId),
+    queryFn: () =>
+      getAPICall(`${(URL as any).journalVoucher}${fetchId}/`, API_HEADER),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   // ─── Derived options ─────────────────────────────────────────────────────
@@ -329,6 +346,85 @@ function JournalVoucher() {
     },
   });
 
+  // ─── Populate form from API response (Edit / View / JV Reversal) ─────────
+
+  useEffect(() => {
+    if (!jvFetchRes) return;
+
+    const d = (jvFetchRes as any)?.data?.data ?? (jvFetchRes as any)?.data ?? jvFetchRes;
+    if (!d || typeof d !== "object" || Array.isArray(d)) return;
+
+    const parseDate = (v: string | null | undefined): Date | null => {
+      if (!v) return null;
+      const dt = new Date(v);
+      return isNaN(dt.getTime()) ? null : dt;
+    };
+
+    if (!isReversalMode) {
+      setSaveResponse({
+        id: d.id,
+        journal_no: d.document_no ?? "",
+        status: d.status ?? "",
+      });
+    }
+
+    const chargesFromApi =
+      Array.isArray(d.charges) && d.charges.length > 0
+        ? d.charges.map((c: any) => ({
+            id: isReversalMode ? null : (c.id ?? null),
+            segment: "",
+            job_no: c.job_id ?? "",
+            sub_job: "",
+            shipment_id: c.shipment_id ?? "",
+            cn_r: c.c_r_n ?? "",
+            charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+            charge_name: "",
+            account_code: c.code ?? "",
+            account_name: c.account_name ?? "",
+            subledger_code: c.subledger ?? "",
+            code: c.code ?? "",
+            key: c.key ?? "",
+            currency_id: c.currency_id != null ? String(c.currency_id) : "",
+            currency_code: "",
+            roe: c.roe != null ? Number(c.roe) : null,
+            amount: c.amount != null ? Number(c.amount) : null,
+            local_amount: c.local_amount != null ? Number(c.local_amount) : null,
+            dr_cr: isReversalMode
+              ? c.dr_cr === "Dr" ? "Cr" : "Dr"
+              : (c.dr_cr ?? "Dr"),
+            narration: c.narration ?? "",
+          }))
+        : [emptyRow()];
+
+    form.setValues({
+      document_id: isReversalMode ? "" : (d.id ? String(d.id) : ""),
+      journal_no: isReversalMode ? "" : (d.document_no ?? ""),
+      day_book_id: d.daybook_id != null ? String(d.daybook_id) : "",
+      note: d.note ?? "",
+      narration: d.narration ?? "",
+      journal_date: isReversalMode ? new Date() : (parseDate(d.journal_date) ?? new Date()),
+      status: isReversalMode ? "UNPOSTED" : (d.status ?? "UNPOSTED"),
+      file_name: "",
+      reversal_daybook_id: "",
+      reversal_journal_no: "",
+      charges: chargesFromApi,
+    });
+
+    // Populate supporting documents for edit/view (skip for reversal)
+    if (!isReversalMode && Array.isArray(d.documents) && d.documents.length > 0) {
+      setSupportingDocuments(
+        d.documents.map((doc: any) => ({
+          name: doc.document_name ??  "",
+          file: null,
+          document_url: doc.document_download_url ?? doc.document_url ?? "",
+          document_id: doc.id ?? undefined,
+          original_document_name: doc.document_name ?? "",
+        })),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jvFetchRes]);
+
   // ─── Totals ───────────────────────────────────────────────────────────────
 
   const totals = useMemo(() => {
@@ -385,6 +481,7 @@ function JournalVoucher() {
       debit_total: debitTotal.toFixed(3),
       credit_total: creditTotal.toFixed(3),
       difference: difference.toFixed(3),
+      daybook_id: values.day_book_id ? Number(values.day_book_id) : null,
       charges: values.charges.map((c) => ({
         ...(c.id != null ? { id: c.id } : {}),
         charge_id: c.charge_id ?? null,
@@ -400,6 +497,8 @@ function JournalVoucher() {
         dr_cr: c.dr_cr ?? "Dr",
         narration: c.narration ?? "",
         c_r_n: c.cn_r ?? "",
+        shipment_id: c.shipment_id ?? "",
+        job_id: c.job_no ?? "",
       })),
     };
   };
@@ -413,9 +512,13 @@ function JournalVoucher() {
   const buildFormData = (payload: object): FormData => {
     const fd = new FormData();
     fd.append("journal_voucher", JSON.stringify(payload));
-    supportingDocuments.forEach((doc, i) => {
-      if (doc.name) fd.append(`document_names[${i}]`, doc.name);
-      if (doc.file) fd.append(`document[${i}]`, doc.file);
+    let fileIndex = 0;
+    supportingDocuments.forEach((doc) => {
+      if (doc.file) {
+        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
+        fd.append(`document[${fileIndex}]`, doc.file);
+        fileIndex++;
+      }
     });
     return fd;
   };
@@ -500,6 +603,7 @@ function JournalVoucher() {
           }));
           form.setFieldValue("status", "POSTED");
           ToastNotification({ message: "Journal voucher posted successfully", type: "success" });
+          navigate("/journal-voucher");
         }
       } else {
         const res = (await apiCallProtected.post(
@@ -516,6 +620,7 @@ function JournalVoucher() {
             form.setFieldValue("status", "POSTED");
           }
           ToastNotification({ message: "Journal voucher posted successfully", type: "success" });
+          navigate("/journal-voucher");
         }
       }
     } catch (err: unknown) {
@@ -552,7 +657,7 @@ function JournalVoucher() {
 
   return (
     <Box p="md" style={{ position: "relative" }}>
-      {/* Loading overlay */}
+      {/* Loading overlay – saving */}
       {isSubmitting && (
         <Box
           style={{
@@ -569,6 +674,28 @@ function JournalVoucher() {
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
               Saving journal voucher...
+            </Text>
+          </Stack>
+        </Box>
+      )}
+
+      {/* Loading overlay – fetching record */}
+      {isJVFetching && (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(255,255,255,0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9998,
+          }}
+        >
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="#105476" fw={500}>
+              Loading journal voucher...
             </Text>
           </Stack>
         </Box>
@@ -594,7 +721,7 @@ function JournalVoucher() {
                       color="#105476"
                       styles={{ root: { textTransform: "none" } }}
                     >
-                      {form.values.document_id || String(saveResponse.id) || "—"}
+                      {form.values.document_id || "—"}
                     </Badge>
                   </Group>
                 )}
@@ -1143,9 +1270,9 @@ function JournalVoucher() {
                         <td style={cellStyle}>
                           <TextInput
                             placeholder="Booking No."
-                            value={row.booking_no}
+                            value={row.shipment_id}
                             onChange={(e) =>
-                              form.setFieldValue(`charges.${index}.booking_no`, e.target.value)
+                              form.setFieldValue(`charges.${index}.shipment_id`, e.target.value)
                             }
                             readOnly={isReadOnly}
                             styles={inputCell}
@@ -1551,27 +1678,29 @@ function JournalVoucher() {
               Cancel
             </Button>
             <Group gap="sm">
-              <Button
-                variant="outline"
-                color="#105476"
-                onClick={() => {
-                  if (supportingDocuments.length === 0) {
-                    setSupportingDocuments([{ name: "", file: null }]);
-                  }
-                  const newErrors: { [key: number]: string } = {};
-                  supportingDocuments.forEach((doc, idx) => {
-                    if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                      newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+              {!isReadOnly && (
+                <Button
+                  variant="outline"
+                  color="#105476"
+                  onClick={() => {
+                    if (supportingDocuments.length === 0) {
+                      setSupportingDocuments([{ name: "", file: null }]);
                     }
-                  });
-                  setFileErrors(newErrors);
-                  openDocumentsModal();
-                }}
-                disabled={isSubmitting}
-                styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
-              >
-                Attach Supporting Documents
-              </Button>
+                    const newErrors: { [key: number]: string } = {};
+                    supportingDocuments.forEach((doc, idx) => {
+                      if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                        newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                      }
+                    });
+                    setFileErrors(newErrors);
+                    openDocumentsModal();
+                  }}
+                  disabled={isSubmitting}
+                  styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+                >
+                  Attach Supporting Documents
+                </Button>
+              )}
               {!isReadOnly && (
                 <Button
                   type="submit"
@@ -1580,7 +1709,20 @@ function JournalVoucher() {
                   loading={isSubmitting}
                   styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
                 >
-                  {isUpdate ? "Update Journal Voucher" : "Save Journal Voucher"}
+                  {isUpdate ? "Update" : "Save"}
+                </Button>
+              )}
+              {(!isReadOnly &&  isUpdate) && (
+                <Button
+                  variant="filled"
+                  color="green"
+                  leftSection={<IconSend size={16} />}
+                  onClick={handlePost}
+                  disabled={isSubmitting || form.values.status === "POSTED"}
+                  loading={isSubmitting}
+                  styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+                >
+                  Post
                 </Button>
               )}
             </Group>

@@ -150,6 +150,9 @@ import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierIn
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
 import SupplierInvoiceReversalMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceReversalMaster";
 import JournalVoucher from "../pages/accounts/journalVoucher/JournalVoucher";
+import JournalVoucherMaster from "../pages/accounts/journalVoucher/JournalVoucherMaster";
+import JournalVoucherReversal from "../pages/accounts/journalVoucherReversal/JournalVoucherReversal";
+import JournalVoucherReversalMaster from "../pages/accounts/journalVoucherReversal/JournalVoucherReversalMaster";
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
@@ -332,10 +335,17 @@ const NavigationRoutes = () => {
         <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
-        <Route path="/journal-voucher" element={<JournalVoucher />} />
+        <Route path="/journal-voucher" element={<JournalVoucherMaster />} />
         <Route path="/journal-voucher/create" element={<JournalVoucher />} />
         <Route path="/journal-voucher/edit/:id" element={<JournalVoucher />} />
         <Route path="/journal-voucher/view/:id" element={<JournalVoucher />} />
+        <Route
+          path="/journal-voucher-reversal"
+          element={<JournalVoucherReversalMaster />}
+        />
+        <Route path="/journal-voucher-reversal/create" element={<JournalVoucherReversal />} />
+        <Route path="/journal-voucher-reversal/edit/:id" element={<JournalVoucherReversal />} />
+        <Route path="/journal-voucher-reversal/view/:id" element={<JournalVoucherReversal />} />
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />

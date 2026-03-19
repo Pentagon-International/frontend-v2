@@ -953,7 +953,7 @@ function OceanExportBookingMaster() {
                 c={"#444955"}
                 style={{ fontFamily: "Inter", fontSize: "16px" }}
               >
-                Sea Export Booking Lists
+                Ocean Export Booking Lists
               </Text>
 
               <Group gap="xs" wrap="nowrap">
@@ -1243,7 +1243,7 @@ function OceanExportBookingMaster() {
               <Stack align="center" gap="md">
                 <Loader size="lg" color="#105476" />
                 <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                  Loading sea export booking...
+                  Loading Ocean export booking...
                 </Text>
               </Stack>
             </Center>

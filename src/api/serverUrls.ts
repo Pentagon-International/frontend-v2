@@ -143,7 +143,9 @@ export const URL = {
   paymentRequest: "payment-request/",
   paymentRequestFilter: "filter/payment-request/",
   journalVoucher: "journal_voucher/",
-  journalVoucherFilter: "filter/journal-voucher/",
+  journalVoucherFilter: "filter/journal_voucher/",
+  journalVoucherReversal: "reverse_voucher/",
+  journalVoucherReversalFilter: "filter/reverse_voucher/",
 
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",

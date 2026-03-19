@@ -41,7 +41,7 @@ import {
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
-import { putAPICall } from "../../../service/putApiCall";
+import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 
 const RECEIPT_TYPE_OPTIONS = [
@@ -1182,6 +1182,62 @@ export default function ReceiptCreate({
     return base;
   };
 
+  const FORM_DATA_HEADERS = {
+    ...API_HEADER,
+    headers: {
+      ...API_HEADER.headers,
+      "Content-Type": "multipart/form-data",
+    },
+  };
+
+  /**
+   * Builds a multipart/form-data body for reverse-receipt API calls.
+   * Fields:
+   *   reverse_receipt       – JSON-stringified payload
+   *   document_names[i]     – display name for document i
+   *   document[i]           – File object for document i
+   *   document_id[i]        – server-side ID of an existing document (when replacing)
+   */
+  const buildReversalFormData = (payload: object): FormData => {
+    const fd = new FormData();
+    fd.append("reverse_receipt", JSON.stringify(payload));
+    let fileIndex = 0;
+    form.values.supporting_documents.forEach((doc) => {
+      if (doc.file) {
+        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
+        fd.append(`document[${fileIndex}]`, doc.file);
+        if (doc.document_id != null)
+          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
+        fileIndex++;
+      }
+    });
+    return fd;
+  };
+
+  /**
+   * Builds a multipart/form-data body for receipt API calls.
+   * Fields:
+   *   receipt           – JSON-stringified payload
+   *   document_names[i] – display name for document i
+   *   document[i]       – File object for document i
+   *   document_id[i]    – server-side ID of an existing document (when replacing)
+   */
+  const buildReceiptFormData = (payload: object): FormData => {
+    const fd = new FormData();
+    fd.append("receipt", JSON.stringify(payload));
+    let fileIndex = 0;
+    form.values.supporting_documents.forEach((doc) => {
+      if (doc.file) {
+        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
+        fd.append(`document[${fileIndex}]`, doc.file);
+        if (doc.document_id != null)
+          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
+        fileIndex++;
+      }
+    });
+    return fd;
+  };
+
   const handleSubmit = async (values: ReceiptFormValues) => {
     const partyLocalTotal =
       (values.details ?? []).reduce(
@@ -1229,16 +1285,13 @@ export default function ReceiptCreate({
             detailsOverride: detailsForPayload,
           });
           payload.is_agent = false;
-          const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
-          const wrap = raw as {
-            data?: {
-              id?: number;
-              receipt_no?: string;
-              reverse_receipt_no?: string;
-              status?: string;
-            };
-          };
-          const res = wrap?.data;
+          const fd = buildReversalFormData(payload);
+          const raw = (await apiCallProtected.put(
+            `${URL.reverseReceipt}${reverseReceiptSaveResponse.id}/`,
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const res = raw?.data?.data ?? raw?.data ?? raw;
           if (res?.id != null) {
             setReverseReceiptSaveResponse((prev) => ({
               id: prev!.id,
@@ -1261,23 +1314,13 @@ export default function ReceiptCreate({
             detailsOverride: detailsForPayload,
           });
           payload.is_agent = false;
-          // Create receipt reversal: POST
-          const raw = await postAPICall(
+          const fd = buildReversalFormData(payload);
+          const raw = (await apiCallProtected.post(
             URL.reverseReceipt,
-            payload,
-            API_HEADER,
-          );
-          const wrap = raw as {
-            data?: {
-              id?: number;
-              receipt_no?: string;
-              reverse_receipt_no?: string;
-              status?: string;
-              parties?: Array<{ id?: number }>;
-              allocations?: Array<{ id?: number }>;
-            };
-          };
-          const data = wrap?.data;
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const data = raw?.data?.data ?? raw?.data ?? raw;
           if (data?.id != null) {
             setReverseReceiptSaveResponse({
               id: Number(data.id),
@@ -1329,22 +1372,13 @@ export default function ReceiptCreate({
         : buildReceiptPayload(values);
 payload.is_agent = false;
       if (isUpdate) {
-        const raw = await putAPICall(URL.receipt, payload, API_HEADER);
-        const response =
-          (
-            raw as {
-              data?: {
-                id?: number;
-                receipt_no?: string;
-                status?: string | number;
-              };
-            }
-          )?.data ?? raw;
-        const res = response as {
-          id?: number;
-          receipt_no?: string;
-          status?: string | number;
-        };
+        const fd = buildReceiptFormData(payload);
+        const raw = (await apiCallProtected.put(
+          `${URL.receipt}${saveResponse!.id}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const res = raw?.data?.data ?? raw?.data ?? raw;
         if (res?.id != null) {
           setSaveResponse({
             id: res.id ?? saveResponse.id,
@@ -1359,17 +1393,13 @@ payload.is_agent = false;
           });
         }
       } else {
-        const raw = await postAPICall(URL.receipt, payload, API_HEADER);
-        const wrap = raw as {
-          data?: {
-            id?: number;
-            receipt_no?: string;
-            status?: string | number;
-            parties?: Array<{ id?: number; subledger_code?: string }>;
-            allocations?: Array<{ id?: number }>;
-          };
-        };
-        const data = wrap?.data;
+        const fd = buildReceiptFormData(payload);
+        const raw = (await apiCallProtected.post(
+          URL.receipt,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const data = raw?.data?.data ?? raw?.data ?? raw;
         if (data?.id != null) {
           setSaveResponse({
             id: data.id,
@@ -1436,16 +1466,13 @@ payload.is_agent = false;
         status: "POSTED",
       });
       payload.is_agent = false;
-      const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
-      const wrap = raw as {
-        data?: {
-          id?: number;
-          receipt_no?: string;
-          reverse_receipt_no?: string;
-          status?: string;
-        };
-      };
-      const res = wrap?.data;
+      const fd = buildReversalFormData(payload);
+      const raw = (await apiCallProtected.put(
+        `${URL.reverseReceipt}${reverseReceiptSaveResponse.id}/`,
+        fd,
+        FORM_DATA_HEADERS,
+      )) as any;
+      const res = raw?.data?.data ?? raw?.data ?? raw;
       if (res?.id != null) {
         setReverseReceiptSaveResponse((prev) => ({
           ...prev!,
@@ -1486,22 +1513,13 @@ payload.is_agent = false;
     try {
       const payload = buildReceiptPayload(form.values, { status: "POSTED" });
       payload.is_agent = false;
-      const raw = await putAPICall(URL.receipt, payload, API_HEADER);
-      const response =
-        (
-          raw as {
-            data?: {
-              id?: number;
-              receipt_no?: string;
-              status?: string | number;
-            };
-          }
-        )?.data ?? raw;
-      const res = response as {
-        id?: number;
-        receipt_no?: string;
-        status?: string | number;
-      };
+      const fd = buildReceiptFormData(payload);
+      const raw = (await apiCallProtected.put(
+        `${URL.receipt}${saveResponse!.id}/`,
+        fd,
+        FORM_DATA_HEADERS,
+      )) as any;
+      const res = raw?.data?.data ?? raw?.data ?? raw;
       if (res?.id != null) {
         setSaveResponse((prev) => ({
           ...prev,
