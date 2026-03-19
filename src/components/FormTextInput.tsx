@@ -34,13 +34,8 @@ const applyFormat = (value: string, format: TextFormatType): string => {
   }
 };
 
-const FormTextInput: React.FC<FormTextInputProps> = ({
-  format = "initcap",
-  onChange,
-  value,
-  defaultValue,
-  ...props
-}) => {
+const FormTextInput = React.forwardRef<HTMLInputElement, FormTextInputProps>(
+  ({ format = "initcap", onChange, value, defaultValue, ...props }, ref) => {
   const isControlled = value !== undefined;
 
   const [internalValue, setInternalValue] = useState<string>(
@@ -63,16 +58,18 @@ const FormTextInput: React.FC<FormTextInputProps> = ({
     onChange?.(e);
   };
 
-  return (
-    <TextInput
-      radius="sm"
-      size="sm"
-      styles={getStandardFieldStyles()}
-      {...props}
-      value={displayValue}
-      onChange={handleChange}
-    />
-  );
-};
+    return (
+      <TextInput
+        ref={ref}
+        radius="sm"
+        size="sm"
+        styles={getStandardFieldStyles()}
+        {...props}
+        value={displayValue}
+        onChange={handleChange}
+      />
+    );
+  },
+);
 
 export default FormTextInput;

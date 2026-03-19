@@ -105,7 +105,6 @@ interface CargoDetail {
 
   // FCL specific fields
   container_type_code?: string;
-  container_no?: string;
   no_of_containers?: number;
 }
 
@@ -117,7 +116,6 @@ const DEFAULT_CARGO_ROW: CargoDetail = {
   volume: undefined,
   chargeable_volume: undefined,
   container_type_code: undefined,
-  container_no: undefined,
   no_of_containers: undefined,
 };
 
@@ -315,7 +313,6 @@ const validationSchema = yup.object({
       volume: yup.number().nullable(),
       chargeable_volume: yup.number().nullable(),
       container_type_code: yup.string().nullable(),
-      container_no: yup.string().nullable(),
       no_of_containers: yup.number().nullable(),
     }),
   ),
@@ -616,6 +613,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [notifyCustomerHasResults, setNotifyCustomerHasResults] = useState<
     boolean | null
   >(null);
+  const [notifyCustomerIsSearching, setNotifyCustomerIsSearching] =
+    useState(false);
   const [notifyCustomerSelectedId, setNotifyCustomerSelectedId] = useState("");
   const notifyCustomerDataRef =
     useRef<Record<string, Record<string, unknown>>>({});
@@ -628,6 +627,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [notify2CustomerHasResults, setNotify2CustomerHasResults] = useState<
     boolean | null
   >(null);
+  const [notify2CustomerIsSearching, setNotify2CustomerIsSearching] =
+    useState(false);
   const [notify2CustomerSelectedId, setNotify2CustomerSelectedId] = useState("");
   const notify2CustomerDataRef =
     useRef<Record<string, Record<string, unknown>>>({});
@@ -640,7 +641,44 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [consigneeHasResults, setConsigneeHasResults] = useState<
     boolean | null
   >(null);
+  const [consigneeIsSearching, setConsigneeIsSearching] = useState(false);
   const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
+
+  const consigneeSelectRef = useRef<HTMLInputElement | null>(null);
+  const consigneeTextRef = useRef<HTMLInputElement | null>(null);
+  const notify1SelectRef = useRef<HTMLInputElement | null>(null);
+  const notify1TextRef = useRef<HTMLInputElement | null>(null);
+  const notify2SelectRef = useRef<HTMLInputElement | null>(null);
+  const notify2TextRef = useRef<HTMLInputElement | null>(null);
+
+  const consigneeUseTextInput =
+    consigneeHasResults === false && consigneeSearch.trim().length >= 2;
+  const notify1UseTextInput =
+    notifyCustomerHasResults === false && notifyCustomerSearch.trim().length >= 2;
+  const notify2UseTextInput =
+    notify2CustomerHasResults === false && notify2CustomerSearch.trim().length >= 2;
+
+  const focusSoon = (el: HTMLInputElement | null) => {
+    if (!el) return;
+    setTimeout(() => el.focus(), 0);
+  };
+
+  useEffect(() => {
+    focusSoon(
+      consigneeUseTextInput ? consigneeTextRef.current : consigneeSelectRef.current,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consigneeUseTextInput]);
+
+  useEffect(() => {
+    focusSoon(notify1UseTextInput ? notify1TextRef.current : notify1SelectRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notify1UseTextInput]);
+
+  useEffect(() => {
+    focusSoon(notify2UseTextInput ? notify2TextRef.current : notify2SelectRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notify2UseTextInput]);
 
   const defaultCurrency = (() => {
     const userData = localStorage.getItem("user");
@@ -977,7 +1015,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               container_type_code: cargo.container_type_code
                 ? String(cargo.container_type_code)
                 : undefined,
-              container_no: cargo.container_no ? String(cargo.container_no) : undefined,
               no_of_containers: cargo.no_of_containers
                 ? Number(cargo.no_of_containers)
                 : undefined,
@@ -992,7 +1029,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               volume: undefined,
               chargeable_volume: undefined,
               container_type_code: undefined,
-              container_no: undefined,
               no_of_containers: undefined,
             },
           ],
@@ -1724,10 +1760,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (!query || query.length < 2) {
       setConsigneeOptions([]);
       setConsigneeHasResults(null);
+      setConsigneeIsSearching(false);
       consigneeDataRef.current = {};
       return;
     }
     try {
+      setConsigneeIsSearching(true);
+      setConsigneeHasResults(null);
       const results = await commonSearchAPI({
         endpoint: URL.shipmentParty,
         query,
@@ -1738,6 +1777,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       if (!arr.length) {
         setConsigneeOptions([]);
         setConsigneeHasResults(false);
+        form.setFieldValue("consignee_name", toTitleCase(query));
+        form.setFieldValue("consignee_code", "");
         form.setFieldValue("consignee_address", "");
         form.setFieldValue("consignee_address_id", 0);
         form.setFieldValue("consignee_email", "");
@@ -1761,8 +1802,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       setConsigneeOptions([]);
       setConsigneeHasResults(null);
       consigneeDataRef.current = {};
+    } finally {
+      setConsigneeIsSearching(false);
     }
-  }, 500);
+  }, 300);
 
   const debouncedNotifyCustomerSearch = useDebouncedCallback(
     async (term: string) => {
@@ -1770,11 +1813,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       if (!query || query.length < 2) {
         setNotifyCustomerOptions([]);
         setNotifyCustomerHasResults(null);
+        setNotifyCustomerIsSearching(false);
         setNotifyCustomerAddressOptions([]);
         notifyCustomerDataRef.current = {};
         return;
       }
       try {
+        setNotifyCustomerIsSearching(true);
+        setNotifyCustomerHasResults(null);
         const results = await commonSearchAPI({
           endpoint: URL.shipmentParty,
           query,
@@ -1786,7 +1832,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           setNotifyCustomerOptions([]);
           setNotifyCustomerHasResults(false);
           setNotifyCustomerAddressOptions([]);
-          form.setFieldValue("notify1_customer_name", query);
+          form.setFieldValue("notify1_customer_name", toTitleCase(query));
           form.setFieldValue("notify1_customer_address", "");
           form.setFieldValue("notify1_customer_email", "");
           notifyCustomerDataRef.current = {};
@@ -1806,9 +1852,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         setNotifyCustomerOptions([]);
         setNotifyCustomerHasResults(null);
         notifyCustomerDataRef.current = {};
+      } finally {
+        setNotifyCustomerIsSearching(false);
       }
     },
-    500,
+    300,
   );
 
   const debouncedNotify2CustomerSearch = useDebouncedCallback(
@@ -1817,11 +1865,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       if (!query || query.length < 2) {
         setNotify2CustomerOptions([]);
         setNotify2CustomerHasResults(null);
+        setNotify2CustomerIsSearching(false);
         setNotify2CustomerAddressOptions([]);
         notify2CustomerDataRef.current = {};
         return;
       }
       try {
+        setNotify2CustomerIsSearching(true);
+        setNotify2CustomerHasResults(null);
         const results = await commonSearchAPI({
           endpoint: URL.shipmentParty,
           query,
@@ -1833,7 +1884,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           setNotify2CustomerOptions([]);
           setNotify2CustomerHasResults(false);
           setNotify2CustomerAddressOptions([]);
-          form.setFieldValue("notify2_customer_name", query);
+          form.setFieldValue("notify2_customer_name", toTitleCase(query));
           form.setFieldValue("notify2_customer_address", "");
           form.setFieldValue("notify2_customer_email", "");
           notify2CustomerDataRef.current = {};
@@ -1853,9 +1904,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         setNotify2CustomerOptions([]);
         setNotify2CustomerHasResults(null);
         notify2CustomerDataRef.current = {};
+      } finally {
+        setNotify2CustomerIsSearching(false);
       }
     },
-    500,
+    300,
   );
 
   const prevRoutedRef = useRef<string | null>(null);
@@ -2598,7 +2651,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             volume: cargo.volume || null,
             chargeable_volume: cargo.chargeable_volume || null,
             container_type_code: cargo.container_type_code || null,
-            container_no: cargo.container_no || null,
             no_of_containers: cargo.no_of_containers || null,
           };
           if (cargo.id != null && cargo.id !== undefined) {
@@ -4242,6 +4294,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {consigneeHasResults === false &&
                   consigneeSearch.trim().length >= 2 ? (
                     <FormTextInput
+                      ref={consigneeTextRef}
                       label="Consignee Name"
                       placeholder="Enter consignee name"
                       value={form.values.consignee_name || consigneeSearch}
@@ -4254,6 +4307,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     />
                   ) : (
                     <Select
+                      ref={consigneeSelectRef}
                       label="Consignee Name"
                       placeholder="Select or search consignee"
                       searchable
@@ -4263,7 +4317,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       onSearchChange={(value) => {
                         const v = toTitleCase(value);
                         setConsigneeSearch(v);
+                        setConsigneeHasResults(null);
                         debouncedConsigneeSearch(v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && consigneeIsSearching) {
+                          e.preventDefault();
+                        }
                       }}
                       value={form.values.consignee_code || ""}
                       onChange={(value) => {
@@ -4677,6 +4737,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {notifyCustomerHasResults === false &&
                   notifyCustomerSearch.trim().length >= 2 ? (
                     <FormTextInput
+                      ref={notify1TextRef}
                       label="Notify Customer 1 Name"
                       placeholder="Enter notify customer name"
                       value={notifyCustomerSearch || notifyCustomerDisplayName || ""}
@@ -4691,6 +4752,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     />
                   ) : (
                     <Select
+                      ref={notify1SelectRef}
                       label="Notify Customer 1 Name"
                       placeholder="Select or search notify customer"
                       searchable
@@ -4705,7 +4767,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       onSearchChange={(value) => {
                         const v = toTitleCase(value);
                         setNotifyCustomerSearch(v);
+                        setNotifyCustomerHasResults(null);
                         debouncedNotifyCustomerSearch(v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && notifyCustomerIsSearching) {
+                          e.preventDefault();
+                        }
                       }}
                       value={notifyCustomerSelectedId || ""}
                       onChange={(value) => {
@@ -4781,6 +4849,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {notify2CustomerHasResults === false &&
                   notify2CustomerSearch.trim().length >= 2 ? (
                     <FormTextInput
+                      ref={notify2TextRef}
                       label="Notify Customer 2 Name"
                       placeholder="Enter notify customer name"
                       value={notify2CustomerSearch || notify2CustomerDisplayName || ""}
@@ -4795,6 +4864,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     />
                   ) : (
                     <Select
+                      ref={notify2SelectRef}
                       label="Notify Customer 2 Name"
                       placeholder="Select or search notify customer"
                       searchable
@@ -4809,7 +4879,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       onSearchChange={(value) => {
                         const v = toTitleCase(value);
                         setNotify2CustomerSearch(v);
+                        setNotify2CustomerHasResults(null);
                         debouncedNotify2CustomerSearch(v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && notify2CustomerIsSearching) {
+                          e.preventDefault();
+                        }
                       }}
                       value={notify2CustomerSelectedId || ""}
                       onChange={(value) => {
@@ -5094,13 +5170,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {form.values.service === "LCL" && (
                     <Grid>
                       <Grid.Col span={3}>
-                        <FormTextInput
-                          label="Container Number"
-                          placeholder="Enter container number"
-                          {...form.getInputProps("cargo_details.0.container_no")}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={2.25}>
                         <FormNumberInput
                           label="No of Packages"
                           placeholder="Enter number of packages"
@@ -5110,7 +5179,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={2.25}>
+                      <Grid.Col span={3}>
                         <FormNumberInput
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
@@ -5121,7 +5190,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={2.25}>
+                      <Grid.Col span={3}>
                         <FormNumberInput
                           label="Volume (cbm)"
                           placeholder="Enter volume"
@@ -5130,7 +5199,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           {...form.getInputProps("cargo_details.0.volume")}
                         />
                       </Grid.Col>
-                      <Grid.Col span={2.25}>
+                      <Grid.Col span={3}>
                         <FormNumberInput
                           label="Chargeable Volume (cbm)"
                           // placeholder="Auto-calculated"
@@ -5162,47 +5231,33 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         }}
                         gutter="sm"
                       >
-                        <Grid.Col span={3}>
-                          <RequiredLabel
-                            label="Container Number"
-                            required={false}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={3}>
+                        <Grid.Col span={3.5}>
                           <RequiredLabel
                             label="Container Type"
                             required={false}
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
+                        <Grid.Col span={3.5}>
                           <RequiredLabel
                             label="No of Containers"
                             required={false}
                           />
                         </Grid.Col>
-                        <Grid.Col span={2.5}>
+                        <Grid.Col span={3.5}>
                           <RequiredLabel
                             label="Gross Weight"
                             required={false}
                           />
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={1.5}>
                           <RequiredLabel label="Actions" required={false} />
                         </Grid.Col>
                       </Grid>
-                      <Stack gap="sm">
+                          <Stack gap="sm">
                         {form.values.cargo_details.map((_, cargoIndex) => (
                           <Box key={cargoIndex}>
                             <Grid gutter={"sm"}>
-                              <Grid.Col span={3}>
-                                <FormTextInput
-                                  placeholder="Enter container number"
-                                  {...form.getInputProps(
-                                    `cargo_details.${cargoIndex}.container_no`,
-                                  )}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={3}>
+                              <Grid.Col span={3.5}>
                                 <Dropdown
                                   placeholder="Select container type"
                                   searchable
@@ -5213,7 +5268,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                   )}
                                 />
                               </Grid.Col>
-                              <Grid.Col span={2.5}>
+                              <Grid.Col span={3.5}>
                                 <FormNumberInput
                                   placeholder="Enter number of containers"
                                   min={1}
@@ -5222,7 +5277,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                   )}
                                 />
                               </Grid.Col>
-                              <Grid.Col span={2.5}>
+                              <Grid.Col span={3.5}>
                                 <FormNumberInput
                                   placeholder="Enter gross weight"
                                   min={0}
@@ -5233,7 +5288,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                 />
                               </Grid.Col>
                               {/* Add/Remove buttons */}
-                              <Grid.Col span={1}>
+                              <Grid.Col span={1.5}>
                                 <Group gap="sm">
                                   {cargoIndex ===
                                     form.values.cargo_details.length - 1 && (
@@ -5251,7 +5306,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                           volume: undefined,
                                           chargeable_volume: undefined,
                                           container_type_code: undefined,
-                                          container_no: undefined,
                                           no_of_containers: undefined,
                                         });
                                       }}

@@ -648,16 +648,37 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     null,
   );
   const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const [shipperIsSearching, setShipperIsSearching] = useState(false);
+  const shipperSelectRef = useRef<HTMLInputElement | null>(null);
+  const shipperTextRef = useRef<HTMLInputElement | null>(null);
+
+  const shipperUseTextInput =
+    shipperHasResults === false && shipperSearch.trim().length >= 2;
+
+  const focusSoon = (el: HTMLInputElement | null) => {
+    if (!el) return;
+    setTimeout(() => el.focus(), 0);
+  };
+
+  useEffect(() => {
+    focusSoon(
+      shipperUseTextInput ? shipperTextRef.current : shipperSelectRef.current,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipperUseTextInput]);
 
   const debouncedShipperSearch = useDebouncedCallback(async (term: string) => {
     const query = term.trim();
     if (!query || query.length < 2) {
       setShipperOptions([]);
       setShipperHasResults(null);
+      setShipperIsSearching(false);
       shipperDataRef.current = {};
       return;
     }
     try {
+      setShipperIsSearching(true);
+      setShipperHasResults(null);
       const results = await commonSearchAPI({
         endpoint: URL.shipmentParty,
         query,
@@ -668,6 +689,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       if (!arr.length) {
         setShipperOptions([]);
         setShipperHasResults(false);
+        form.setFieldValue("shipper_name", toTitleCase(query));
         form.setFieldValue("shipper_address", "");
         form.setFieldValue("shipper_address_id", 0);
         form.setFieldValue("shipper_email", "");
@@ -691,6 +713,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       setShipperOptions([]);
       setShipperHasResults(null);
       shipperDataRef.current = {};
+    } finally {
+      setShipperIsSearching(false);
     }
   }, 500);
 
@@ -1880,8 +1904,13 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
 
     // When customer is selected, add assigned_to_display from customer response so routed_by can show it
-    if (assignedToDisplayFromCustomer && assignedToDisplayFromCustomer.trim() !== "") {
-      const exists = options.some((opt) => opt.value === assignedToDisplayFromCustomer);
+    if (
+      assignedToDisplayFromCustomer &&
+      assignedToDisplayFromCustomer.trim() !== ""
+    ) {
+      const exists = options.some(
+        (opt) => opt.value === assignedToDisplayFromCustomer,
+      );
       if (!exists) {
         options.unshift({
           value: assignedToDisplayFromCustomer,
@@ -1907,7 +1936,13 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
 
     return options;
-  }, [rawSalespersonsData, isEditMode, initialData, assignedToDisplayFromCustomer, user?.full_name]);
+  }, [
+    rawSalespersonsData,
+    isEditMode,
+    initialData,
+    assignedToDisplayFromCustomer,
+    user?.full_name,
+  ]);
 
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
   const populatedJobIdRef = useRef<number | null>(null);
@@ -1953,7 +1988,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         { value: String(resolvedId), label: String(jobData.consignee_address) },
       ]);
       form.setFieldValue("consignee_address_id", resolvedId);
-      form.setFieldValue("consignee_address", String(jobData.consignee_address));
+      form.setFieldValue(
+        "consignee_address",
+        String(jobData.consignee_address),
+      );
     }
     if (jobData.forwarder_name)
       setForwarderDisplayName(String(jobData.forwarder_name));
@@ -2336,37 +2374,37 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     if (chargesData) {
       const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
         (charge: Record<string, unknown>) => {
-          const nestedCharge = charge.charge as Record<string, unknown> | undefined;
+          const nestedCharge = charge.charge as
+            | Record<string, unknown>
+            | undefined;
           const chargeName =
-            charge.charge_name ||
-            nestedCharge?.charge_name ||
-            "";
+            charge.charge_name || nestedCharge?.charge_name || "";
           return {
-          id:
-            charge.id != null
-              ? typeof charge.id === "number"
-                ? charge.id
-                : Number(charge.id)
-              : undefined,
-          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
-          charge_name: String(chargeName),
-          pp_cc: String(charge.pp_cc ?? "Collect"),
-          currency_country_code: String(
-            charge.currency_country_code || charge.currency || "",
-          ),
-          roe: charge.roe ? String(charge.roe) : "",
-          unit: String(charge.unit || ""),
-          no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
-          sell_per_unit: charge.sell_per_unit
-            ? String(charge.sell_per_unit)
-            : "",
-          min_sell: charge.min_sell ? String(charge.min_sell) : "",
-          cost_per_unit: charge.cost_per_unit
-            ? String(charge.cost_per_unit)
-            : "",
-          total_cost: charge.total_cost ? String(charge.total_cost) : "",
-          total_sell: charge.total_sell ? String(charge.total_sell) : "",
-        };
+            id:
+              charge.id != null
+                ? typeof charge.id === "number"
+                  ? charge.id
+                  : Number(charge.id)
+                : undefined,
+            charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
+            charge_name: String(chargeName),
+            pp_cc: String(charge.pp_cc ?? "Collect"),
+            currency_country_code: String(
+              charge.currency_country_code || charge.currency || "",
+            ),
+            roe: charge.roe ? String(charge.roe) : "",
+            unit: String(charge.unit || ""),
+            no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
+            sell_per_unit: charge.sell_per_unit
+              ? String(charge.sell_per_unit)
+              : "",
+            min_sell: charge.min_sell ? String(charge.min_sell) : "",
+            cost_per_unit: charge.cost_per_unit
+              ? String(charge.cost_per_unit)
+              : "",
+            total_cost: charge.total_cost ? String(charge.total_cost) : "",
+            total_sell: charge.total_sell ? String(charge.total_sell) : "",
+          };
         },
       );
       setCharges(mappedCharges);
@@ -2425,7 +2463,12 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   // Set customer_service_name to logged-in user once in create mode (never when routed_by is selected)
   useEffect(() => {
-    if (isEditMode || !user?.full_name || customerServiceNameInitializedRef.current) return;
+    if (
+      isEditMode ||
+      !user?.full_name ||
+      customerServiceNameInitializedRef.current
+    )
+      return;
     if (form.values.customer_service_name !== "") return;
     form.setFieldValue("customer_service_name", user.full_name);
     customerServiceNameInitializedRef.current = true;
@@ -2434,14 +2477,24 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   // Create flow only: when Routed is "Self" and no customer selected, default Routed By to logged-in user (edit flow uses initialData).
   useEffect(() => {
-    if (isEditMode || form.values.routed !== "Self" || assignedToDisplayFromCustomer) return;
+    if (
+      isEditMode ||
+      form.values.routed !== "Self" ||
+      assignedToDisplayFromCustomer
+    )
+      return;
     if (!user?.full_name?.trim()) return;
     const name = user.full_name.trim();
     if (form.values.routed_by !== name) {
       form.setFieldValue("routed_by", name);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditMode, form.values.routed, assignedToDisplayFromCustomer, user?.full_name]);
+  }, [
+    isEditMode,
+    form.values.routed,
+    assignedToDisplayFromCustomer,
+    user?.full_name,
+  ]);
 
   // When user switches Routed to "Agent", clear routed_by (not on initial load).
   useEffect(() => {
@@ -3395,7 +3448,15 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           {/* Action menu - available on all steps */}
           <Group justify="space-between" mb="md">
             <Text size="md" fw={600} c="#105476">
-              {active === 0 ? "Import Booking" : active === 1 ? "Party Details" : active === 2 ? "Cargo Details" : active === 3 ? "Pickup & Delivery Details" : "Charges & Summary"}
+              {active === 0
+                ? "Import Booking"
+                : active === 1
+                  ? "Party Details"
+                  : active === 2
+                    ? "Cargo Details"
+                    : active === 3
+                      ? "Pickup & Delivery Details"
+                      : "Charges & Summary"}
             </Text>
             <Menu shadow="md" width={220} position="bottom-end">
               <Menu.Target>
@@ -3586,13 +3647,17 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       if (!newCode) {
                         setAssignedToDisplayFromCustomer(null);
                         if (form.values.routed === "Self") {
-                          form.setFieldValue("routed_by", user?.full_name?.trim() || "");
+                          form.setFieldValue(
+                            "routed_by",
+                            user?.full_name?.trim() || "",
+                          );
                         }
                         return;
                       }
-                      const assignedToDisplay = originalData?.assigned_to_display != null
-                        ? String(originalData.assigned_to_display).trim()
-                        : "";
+                      const assignedToDisplay =
+                        originalData?.assigned_to_display != null
+                          ? String(originalData.assigned_to_display).trim()
+                          : "";
                       if (assignedToDisplay) {
                         setAssignedToDisplayFromCustomer(assignedToDisplay);
                         if (form.values.routed === "Self") {
@@ -3601,7 +3666,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       } else {
                         setAssignedToDisplayFromCustomer(null);
                         if (form.values.routed === "Self") {
-                          form.setFieldValue("routed_by", user?.full_name?.trim() || "");
+                          form.setFieldValue(
+                            "routed_by",
+                            user?.full_name?.trim() || "",
+                          );
                         }
                       }
                     }}
@@ -4240,6 +4308,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   {shipperHasResults === false &&
                   shipperSearch.trim().length >= 2 ? (
                     <FormTextInput
+                      ref={shipperTextRef}
                       label="Shipper Name"
                       placeholder="Enter shipper name"
                       value={form.values.shipper_name || shipperSearch}
@@ -4252,6 +4321,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     />
                   ) : (
                     <Select
+                      ref={shipperSelectRef}
                       label="Shipper Name"
                       placeholder="Select or search shipper"
                       searchable
@@ -4261,7 +4331,13 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       onSearchChange={(value) => {
                         const v = toTitleCase(value);
                         setShipperSearch(v);
+                        setShipperHasResults(null);
                         debouncedShipperSearch(v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && shipperIsSearching) {
+                          e.preventDefault();
+                        }
                       }}
                       value={form.values.shipper_code || ""}
                       onChange={(value) => {
@@ -4324,7 +4400,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Shipper E-mail ID"
                     placeholder="Enter email address"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("shipper_email")}
                   />
                 </Grid.Col>
@@ -4339,7 +4415,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     }}
                   />
                 </Grid.Col>
-                
               </Grid>
 
               <Divider my="md" />
@@ -4368,7 +4443,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       // Store the selected consignee name for display and payload
                       if (newValue && selectedData) {
                         setConsigneeDisplayName(selectedData.label);
-                        form.setFieldValue("consignee_name", selectedData.label);
+                        form.setFieldValue(
+                          "consignee_name",
+                          selectedData.label,
+                        );
                       } else {
                         setConsigneeDisplayName(null);
                         setConsigneeAddressOptions([]);
@@ -4381,19 +4459,24 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
                       if (selectedData) {
                         setConsigneeDisplayName(selectedData.label);
-                        form.setFieldValue("consignee_name", selectedData.label);
+                        form.setFieldValue(
+                          "consignee_name",
+                          selectedData.label,
+                        );
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -4403,20 +4486,20 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         const primary = addressesData.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue(
                             "consignee_address_id",
-                            primary.id
+                            primary.id,
                           );
                           form.setFieldValue(
                             "consignee_address",
-                            primary.address ?? ""
+                            primary.address ?? "",
                           );
                           form.setFieldValue(
                             "consignee_email",
-                            primary.email ?? ""
+                            primary.email ?? "",
                           );
                         } else {
                           form.setFieldValue("consignee_address_id", 0);
@@ -4434,7 +4517,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Consignee Email Id"
                     placeholder="Enter email address"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("consignee_email")}
                   />
                 </Grid.Col>
@@ -4446,14 +4529,20 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     clearable
                     data={consigneeAddressOptions}
                     value={
-                      consigneeAddressOptions.length > 0 && form.values.consignee_address_id !== 0
+                      consigneeAddressOptions.length > 0 &&
+                      form.values.consignee_address_id !== 0
                         ? String(form.values.consignee_address_id)
                         : ""
                     }
                     key={`consignee-${form.values.consignee_address_id}`}
                     onChange={(value) => {
-                      form.setFieldValue("consignee_address_id", value ? parseInt(value) || 0 : 0);
-                      const opt = consigneeAddressOptions.find((o) => o.value === value);
+                      form.setFieldValue(
+                        "consignee_address_id",
+                        value ? parseInt(value) || 0 : 0,
+                      );
+                      const opt = consigneeAddressOptions.find(
+                        (o) => o.value === value,
+                      );
                       form.setFieldValue("consignee_address", opt?.label ?? "");
                     }}
                     error={form.errors.consignee_address_id}
@@ -4496,16 +4585,18 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         setForwarderDisplayName(selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -4515,16 +4606,16 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue(
                             "forwarder_address_id",
-                            primary.id
+                            primary.id,
                           );
                           form.setFieldValue(
                             "forwarder_email",
-                            primary.email ?? ""
+                            primary.email ?? "",
                           );
                         } else {
                           form.setFieldValue("forwarder_address_id", 0);
@@ -4541,7 +4632,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Forwarder Email Id"
                     placeholder="Enter email address"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("forwarder_email")}
                   />
                 </Grid.Col>
@@ -4553,19 +4644,21 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     clearable
                     data={forwarderAddressOptions}
                     key={
-                      form.values.forwarder_address_id && form.values.forwarder_address_id !== 0
+                      form.values.forwarder_address_id &&
+                      form.values.forwarder_address_id !== 0
                         ? String(form.values.forwarder_address_id)
                         : "forwarder-empty"
                     }
                     value={
-                      form.values.forwarder_address_id && form.values.forwarder_address_id !== 0
+                      form.values.forwarder_address_id &&
+                      form.values.forwarder_address_id !== 0
                         ? String(form.values.forwarder_address_id)
                         : ""
                     }
                     onChange={(value) => {
                       form.setFieldValue(
                         "forwarder_address_id",
-                        value ? parseInt(value) : 0
+                        value ? parseInt(value) : 0,
                       );
                     }}
                     error={form.errors.forwarder_address_id}
@@ -4609,16 +4702,18 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         setDestinationAgentDisplayName(selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -4628,26 +4723,20 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue(
                             "destination_agent_address_id",
-                            primary.id
+                            primary.id,
                           );
                           form.setFieldValue(
                             "destination_agent_email",
-                            primary.email ?? ""
+                            primary.email ?? "",
                           );
                         } else {
-                          form.setFieldValue(
-                            "destination_agent_address_id",
-                            0
-                          );
-                          form.setFieldValue(
-                            "destination_agent_email",
-                            ""
-                          );
+                          form.setFieldValue("destination_agent_address_id", 0);
+                          form.setFieldValue("destination_agent_email", "");
                         }
                       }
                     }}
@@ -4661,7 +4750,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     withAsterisk
                     label="Origin Agent Email Id"
                     placeholder="Enter email address"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("destination_agent_email")}
                   />
                 </Grid.Col>
@@ -4674,19 +4763,21 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     withAsterisk
                     data={agentAddressOptions}
                     key={
-                      form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0
+                      form.values.destination_agent_address_id &&
+                      form.values.destination_agent_address_id !== 0
                         ? String(form.values.destination_agent_address_id)
                         : "agent-empty"
                     }
                     value={
-                      form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0
+                      form.values.destination_agent_address_id &&
+                      form.values.destination_agent_address_id !== 0
                         ? String(form.values.destination_agent_address_id)
                         : ""
                     }
                     onChange={(value) => {
                       form.setFieldValue(
                         "destination_agent_address_id",
-                        value ? parseInt(value) : 0
+                        value ? parseInt(value) : 0,
                       );
                     }}
                     error={form.errors.destination_agent_address_id}
@@ -4728,16 +4819,18 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         setBillingCustomerDisplayName(selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -4747,18 +4840,15 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue(
                             "billing_customer_address_id",
-                            primary.id
+                            primary.id,
                           );
                         } else {
-                          form.setFieldValue(
-                            "billing_customer_address_id",
-                            0
-                          );
+                          form.setFieldValue("billing_customer_address_id", 0);
                         }
                       }
                     }}
@@ -4775,19 +4865,21 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     clearable
                     data={billingCustomerAddressOptions}
                     key={
-                      form.values.billing_customer_address_id && form.values.billing_customer_address_id !== 0
+                      form.values.billing_customer_address_id &&
+                      form.values.billing_customer_address_id !== 0
                         ? String(form.values.billing_customer_address_id)
                         : "billing-empty"
                     }
                     value={
-                      form.values.billing_customer_address_id && form.values.billing_customer_address_id !== 0
+                      form.values.billing_customer_address_id &&
+                      form.values.billing_customer_address_id !== 0
                         ? String(form.values.billing_customer_address_id)
                         : ""
                     }
                     onChange={(value) => {
                       form.setFieldValue(
                         "billing_customer_address_id",
-                        value ? parseInt(value) : 0
+                        value ? parseInt(value) : 0,
                       );
                     }}
                     error={form.errors.billing_customer_address_id}
@@ -4813,7 +4905,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       label: String(item.customer_name),
                     })}
                     value={form.values.notify_customer_code}
-                    displayValue={notifyCustomerDisplayName ?? form.values.notify1_customer_name}
+                    displayValue={
+                      notifyCustomerDisplayName ??
+                      form.values.notify1_customer_name
+                    }
                     onChange={(value, selectedData, originalData) => {
                       const newValue = value || "";
                       form.setFieldValue("notify_customer_code", newValue);
@@ -4826,36 +4921,55 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         return;
                       }
                       if (selectedData) {
-                        form.setFieldValue("notify1_customer_name", selectedData.label);
+                        form.setFieldValue(
+                          "notify1_customer_name",
+                          selectedData.label,
+                        );
                         setNotifyCustomerDisplayName(selectedData.label);
                       }
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
-                        const addressOptions = addressesData.map((addr) => ({
-                          value: addr.address ?? "",
-                          label: addr.address ?? "",
-                        })).filter((a) => a.value);
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
+                        const addressOptions = addressesData
+                          .map((addr) => ({
+                            value: addr.address ?? "",
+                            label: addr.address ?? "",
+                          }))
+                          .filter((a) => a.value);
                         setNotifyCustomerAddressOptions(addressOptions);
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         const firstAddr = addressesData[0];
                         if (primary) {
-                          form.setFieldValue("notify1_customer_address", primary.address ?? "");
-                          form.setFieldValue("notify1_customer_email", primary.email ?? "");
+                          form.setFieldValue(
+                            "notify1_customer_address",
+                            primary.address ?? "",
+                          );
+                          form.setFieldValue(
+                            "notify1_customer_email",
+                            primary.email ?? "",
+                          );
                         } else if (firstAddr) {
-                          form.setFieldValue("notify1_customer_address", firstAddr.address ?? "");
-                          form.setFieldValue("notify1_customer_email", firstAddr.email ?? "");
+                          form.setFieldValue(
+                            "notify1_customer_address",
+                            firstAddr.address ?? "",
+                          );
+                          form.setFieldValue(
+                            "notify1_customer_email",
+                            firstAddr.email ?? "",
+                          );
                         } else {
                           form.setFieldValue("notify1_customer_address", "");
                           form.setFieldValue("notify1_customer_email", "");
@@ -4885,7 +4999,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       data={notifyCustomerAddressOptions}
                       value={form.values.notify1_customer_address || ""}
                       onChange={(value) =>
-                        form.setFieldValue("notify1_customer_address", value ?? "")
+                        form.setFieldValue(
+                          "notify1_customer_address",
+                          value ?? "",
+                        )
                       }
                     />
                   ) : (
@@ -4894,7 +5011,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       placeholder="Enter notify address"
                       value={form.values.notify1_customer_address}
                       onChange={(e) =>
-                        form.setFieldValue("notify1_customer_address", e.currentTarget.value)
+                        form.setFieldValue(
+                          "notify1_customer_address",
+                          e.currentTarget.value,
+                        )
                       }
                     />
                   )}
@@ -4919,7 +5039,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     })}
                     value={form.values.notify2_customer_code}
                     displayValue={
-                      notify2CustomerDisplayName ?? form.values.notify2_customer_name
+                      notify2CustomerDisplayName ??
+                      form.values.notify2_customer_name
                     }
                     onChange={(value, selectedData, originalData) => {
                       const newValue = value || "";
@@ -4944,14 +5065,13 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         (originalData as Record<string, unknown>).addresses_data
                       ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData
                           .map((addr) => ({
                             value: addr.address ?? "",
@@ -5067,16 +5187,18 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         setChaDisplayName(selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -5086,7 +5208,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue("cha_address_id", primary.id);
@@ -5108,19 +5230,21 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     clearable
                     data={chaAddressOptions}
                     key={
-                      form.values.cha_address_id && form.values.cha_address_id !== 0
+                      form.values.cha_address_id &&
+                      form.values.cha_address_id !== 0
                         ? String(form.values.cha_address_id)
                         : "cha-empty"
                     }
                     value={
-                      form.values.cha_address_id && form.values.cha_address_id !== 0
+                      form.values.cha_address_id &&
+                      form.values.cha_address_id !== 0
                         ? String(form.values.cha_address_id)
                         : ""
                     }
                     onChange={(value) => {
                       form.setFieldValue(
                         "cha_address_id",
-                        value ? parseInt(value) : 0
+                        value ? parseInt(value) : 0,
                       );
                     }}
                     error={form.errors.cha_address_id}
@@ -5134,7 +5258,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           {/* Step 3: Cargo Details */}
           {active === 2 && (
             <Box>
-
               {/* Common Fields */}
               <Grid mb="xl">
                 <Grid.Col span={12}>
@@ -5549,7 +5672,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     label="Transporter Email Id"
                     placeholder="Enter transporter email"
                     type="email"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("transporter_email")}
                   />
                 </Grid.Col>
@@ -5680,7 +5803,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           {/* Step 5: Rate Details */}
           {active === 4 && (
             <Box>
-
               {/* Quotation/Contract No - Separate common field */}
               <Grid mb="md">
                 <Grid.Col span={4}>
@@ -6082,12 +6204,18 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             Next
           </Button>
           <Button
-            rightSection={(isSubmitting ? <Loader size={16} /> : <IconCheck size={16} />)}
+            rightSection={
+              isSubmitting ? <Loader size={16} /> : <IconCheck size={16} />
+            }
             onClick={() => handleSubmit()}
             color="#105476"
             disabled={active === 4 && isSubmitting}
           >
-            {isSubmitting ? (isEditMode ? "Updating booking..." : "Creating booking...") : "Submit"}
+            {isSubmitting
+              ? isEditMode
+                ? "Updating booking..."
+                : "Creating booking..."
+              : "Submit"}
           </Button>
         </Group>
       </Box>
