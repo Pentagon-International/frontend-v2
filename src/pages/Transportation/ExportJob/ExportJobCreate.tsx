@@ -3774,6 +3774,18 @@ function ExportJobCreate() {
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.container_no`,
                       )}
+                      value={
+                        containerDetailsForm.values.containers[index]?.container_no || ""
+                      }
+                      onChange={(e) => {
+                        const raw = e.currentTarget.value.toUpperCase();
+                        const alnumOnly = raw.replace(/[^A-Z0-9]/g, "");
+                        const next = alnumOnly.slice(0, 11);
+                        containerDetailsForm.setFieldValue(
+                          `containers.${index}.container_no`,
+                          next,
+                        );
+                      }}
                       disabled={isReadOnly}
                       error={
                         containerDetailsForm.errors[

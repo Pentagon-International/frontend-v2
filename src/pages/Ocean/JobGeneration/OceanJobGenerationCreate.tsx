@@ -137,7 +137,13 @@ const containerDetailsSchema = yup.object({
     .array()
     .of(
       yup.object({
-        container_number: yup.string().required("Container number is required"),
+        container_number: yup
+          .string()
+          .required("Container number is required")
+          .matches(
+            /^[A-Za-z0-9]{11}$/,
+            "Container number must be exactly 11 characters",
+          ),
         container_type: yup.string().required("Container type is required"),
         custom_seal_number: yup.string().optional(),
         actual_seal_number: yup.string().optional(),
@@ -566,7 +572,15 @@ function OceanJobGenerationCreate() {
   };
 
   const handleNext = () => {
-    // Allow navigation without validation
+    // Validate Equipments step before moving forward.
+    // This applies in both create and edit flows.
+    if (active === 1) {
+      const containerValidation = containerForm.validate();
+      if (containerValidation.hasErrors) {
+        return;
+      }
+    }
+
     setActive((current) => current + 1);
   };
 
@@ -1579,6 +1593,20 @@ function OceanJobGenerationCreate() {
                         {...containerForm.getInputProps(
                           `containers.${index}.container_number`,
                         )}
+                        value={
+                          containerForm.values.containers[index]?.container_number || ""
+                        }
+                        onChange={(e) => {
+                          const raw = e.currentTarget.value.toUpperCase();
+                          const alnumOnly = raw.replace(/[^A-Z0-9]/g, "");
+                          const next = alnumOnly.slice(0, 11);
+                          containerForm.setFieldValue(
+                            `containers.${index}.container_number`,
+                            next,
+                          );
+                        }}
+                        inputMode="text"
+                        maxLength={11}
                         disabled={isReadOnly}
                       />
                     </Grid.Col>
