@@ -896,6 +896,38 @@ function HouseCreate() {
   // Memoize additionalParams to prevent SearchableSelect from recreating fetchData on every render
   const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
 
+  // Memoize displayFormat callbacks for SearchableSelect to avoid refetch loops on rerenders
+  const portDisplayFormat = useCallback((item: Record<string, unknown>) => {
+    return {
+      value: String(item.port_code),
+      label: `${String(item.port_name)} (${String(item.port_code)})`,
+    };
+  }, []);
+
+  const customerNameOnlyDisplayFormat = useCallback(
+    (item: Record<string, unknown>) => ({
+      value: String(item.customer_name ?? ""),
+      label: String(item.customer_name ?? ""),
+    }),
+    [],
+  );
+
+  const customerCodeNameDisplayFormat = useCallback(
+    (item: Record<string, unknown>) => ({
+      value: String(item.customer_code ?? ""),
+      label: String(item.customer_name ?? ""),
+    }),
+    [],
+  );
+
+  const chargeNameDisplayFormat = useCallback(
+    (item: Record<string, unknown>) => ({
+      value: String(item.id ?? ""),
+      label: String(item.charge_name ?? ""),
+    }),
+    [],
+  );
+
   // Similar booking check - modal and API (Ocean Import Job Create flow only)
   const [similarBookingModalOpen, setSimilarBookingModalOpen] = useState(false);
   const [similarBookingData, setSimilarBookingData] = useState<Record<
@@ -2821,10 +2853,7 @@ function HouseCreate() {
                   dropdownZIndex={10}
                   placeholder="Type origin code or name"
                   searchFields={["port_code", "port_name"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
+                  displayFormat={portDisplayFormat}
                   value={form.values.origin_code}
                   displayValue={
                     form.values.origin_name
@@ -2859,10 +2888,7 @@ function HouseCreate() {
                   dropdownZIndex={10}
                   placeholder="Type destination code or name"
                   searchFields={["port_code", "port_name"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
+                  displayFormat={portDisplayFormat}
                   value={form.values.destination_code}
                   displayValue={
                     form.values.destination_name
@@ -3004,10 +3030,7 @@ function HouseCreate() {
                     apiEndpoint={URL.agent}
                     dropdownZIndex={10}
                     searchFields={["customer_name", "customer_code"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_name),
-                      label: String(item.customer_name),
-                    })}
+                    displayFormat={customerNameOnlyDisplayFormat}
                     value={form.values.routed_by}
                     displayValue={form.values.routed_by}
                     onChange={(value) => {
@@ -3213,10 +3236,7 @@ function HouseCreate() {
                   apiEndpoint={URL.consignee}
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code),
-                    label: String(item.customer_name),
-                  })}
+                  displayFormat={customerCodeNameDisplayFormat}
                   value={form.values.consignee_code}
                   displayValue={form.values.consignee_name}
                   onChange={(value, selectedData, originalData) => {
@@ -3312,10 +3332,7 @@ function HouseCreate() {
                   apiEndpoint={URL.consignee}
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_name ?? ""),
-                    label: String(item.customer_name ?? ""),
-                  })}
+                  displayFormat={customerNameOnlyDisplayFormat}
                   value={
                     form.values.notify1_customer_name
                       ? String(form.values.notify1_customer_name)
@@ -3421,10 +3438,7 @@ function HouseCreate() {
                   apiEndpoint={URL.agent}
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_name),
-                    label: String(item.customer_name),
-                  })}
+                  displayFormat={customerNameOnlyDisplayFormat}
                   value={form.values.agent_name}
                   displayValue={form.values.agent_name}
                   onChange={(value, _selectedData, originalData) => {
@@ -3520,10 +3534,7 @@ function HouseCreate() {
                   placeholder="Type CHA name"
                   apiEndpoint={URL.cha}
                   searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code ?? ""),
-                    label: String(item.customer_name ?? ""),
-                  })}
+                  displayFormat={customerCodeNameDisplayFormat}
                   value={form.values.cha_code || null}
                   displayValue={form.values.cha_name}
                   onChange={(value, _selectedData, originalData) => {
@@ -4034,10 +4045,7 @@ function HouseCreate() {
                       placeholder="Type charge name"
                       apiEndpoint={URL.chargeMaster}
                       searchFields={["charge_name", "charge_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.id ?? ""),
-                        label: String(item.charge_name ?? ""),
-                      })}
+                      displayFormat={chargeNameDisplayFormat}
                       value={
                         charge.charge_id != null
                           ? String(charge.charge_id)
@@ -4412,10 +4420,7 @@ function HouseCreate() {
                       placeholder="Type supplier"
                       apiEndpoint={URL.supplierByType}
                       searchFields={["customer_name", "customer_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.customer_code ?? ""),
-                        label: String(item.customer_name ?? ""),
-                      })}
+                      displayFormat={customerCodeNameDisplayFormat}
                       value={
                         charge.supplier_code
                           ? String(charge.supplier_code)
