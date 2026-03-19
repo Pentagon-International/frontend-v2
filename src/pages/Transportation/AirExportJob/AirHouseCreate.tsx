@@ -77,6 +77,10 @@ type HAWBDetailsForm = {
   agent_name: string;
   agent_address: string;
   agent_email: string;
+  /** internal select value; not sent in payload */
+  cha_code: string;
+  cha_name: string;
+  cha_address: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
@@ -132,6 +136,8 @@ type ChargeDetail = {
   cost_per_unit?: number | null;
   total_cost?: number | null;
   cost_local_amount?: number | null;
+  supplier_code?: string;
+  supplier_name?: string;
 };
 
 // Reverse invoice item (from API reverse_invoices)
@@ -384,6 +390,8 @@ function HouseCreate() {
           cost_per_unit: null,
           total_cost: null,
           cost_local_amount: null,
+          supplier_code: "",
+          supplier_name: "",
         },
       ],
     },
@@ -461,6 +469,9 @@ function HouseCreate() {
         "",
       agent_email:
         (editData as { agent_email?: string } | undefined)?.agent_email || "",
+      cha_code: (editData as { cha_code?: string })?.cha_code ?? "",
+      cha_name: (editData as { cha_name?: string })?.cha_name ?? "",
+      cha_address: (editData as { cha_address?: string })?.cha_address ?? "",
       shipper_code: editData?.shipper_code || "", // Will be set when user selects from SearchableSelect
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
@@ -928,6 +939,8 @@ function HouseCreate() {
             id: charge.id != null ? Number(charge.id) : undefined,
             charge_id: chargeId,
             charge_name: charge.charge_name ? String(charge.charge_name) : "",
+            supplier_code: charge.supplier_code ? String(charge.supplier_code) : "",
+            supplier_name: charge.supplier_name ? String(charge.supplier_name) : "",
             pp_cc,
             unit_id,
             no_of_unit: toNum(charge.no_of_unit),
@@ -1919,6 +1932,8 @@ function HouseCreate() {
       agent_name: v.agent_name,
       agent_address: v.agent_address,
       agent_email: v.agent_email,
+      cha_name: v.cha_name,
+      cha_address: v.cha_address,
       shipper_code: v.shipper_code,
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
@@ -2011,6 +2026,8 @@ function HouseCreate() {
       agent_name: currentFormValues.agent_name,
       agent_address: currentFormValues.agent_address,
       agent_email: currentFormValues.agent_email,
+      cha_name: currentFormValues.cha_name,
+      cha_address: currentFormValues.cha_address,
       shipper_name: currentFormValues.shipper_name,
       shipper_address: currentFormValues.shipper_address,
       shipper_email: currentFormValues.shipper_email,
@@ -2141,13 +2158,15 @@ function HouseCreate() {
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             no_of_unit: charge.no_of_unit ?? null,
-            roe: charge.roe ?? null,
-            amount_per_unit: charge.amount_per_unit ?? null,
-            amount: charge.amount ?? null,
-            sell_local_amount: charge.local_amount ?? null,
-            unit_cost: charge.cost_per_unit ?? null,
-            total_cost: charge.total_cost ?? null,
-            cost_local_amount: charge.cost_local_amount ?? null,
+            roe: roundTo2(charge.roe),
+            amount_per_unit: roundTo2(charge.amount_per_unit),
+            amount: roundTo2(charge.amount),
+            sell_local_amount: roundTo2(charge.local_amount),
+            unit_cost: roundTo2(charge.cost_per_unit),
+            total_cost: roundTo2(charge.total_cost),
+            cost_local_amount: roundTo2(charge.cost_local_amount),
+            supplier_code: charge.supplier_code || null,
+            supplier_name: charge.supplier_name || null,
           })),
       };
 
@@ -3464,6 +3483,75 @@ function HouseCreate() {
                 )}
               </Grid.Col>
             </Grid>
+
+            <Grid mb="xs">
+              <Grid.Col span={4}>
+                <SearchableSelect
+                  label="CHA Name"
+                  placeholder="Type CHA name"
+                  apiEndpoint={URL.cha}
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.customer_code ?? ""),
+                    label: String(item.customer_name ?? ""),
+                  })}
+                  value={form.values.cha_code || null}
+                  displayValue={form.values.cha_name}
+                  onChange={(value, _selectedData, originalData) => {
+                    const chaCode = value || "";
+                    const chaName =
+                      (originalData as Record<string, unknown> | undefined)
+                        ?.customer_name != null
+                        ? String(
+                            (originalData as Record<string, unknown>).customer_name,
+                          )
+                        : "";
+                    form.setFieldValue("cha_code", chaCode);
+                    form.setFieldValue("cha_name", chaName);
+
+                    const addr =
+                      (originalData as Record<string, unknown> | undefined)
+                        ?.addresses_data &&
+                      Array.isArray(
+                        (originalData as Record<string, unknown>).addresses_data,
+                      ) &&
+                      (
+                        (originalData as Record<string, unknown>).addresses_data as Array<{
+                          address?: unknown;
+                        }>
+                      )[0]?.address
+                        ? String(
+                            (
+                              (originalData as Record<string, unknown>).addresses_data as Array<{
+                                address?: unknown;
+                              }>
+                            )[0].address,
+                          )
+                        : "";
+
+                    if (addr) {
+                      form.setFieldValue("cha_address", toTitleCase(addr));
+                    } else if (!chaCode) {
+                      form.setFieldValue("cha_address", "");
+                    }
+                  }}
+                  returnOriginalData={true}
+                  minSearchLength={2}
+                />
+              </Grid.Col>
+              <Grid.Col span={8}>
+                <FormTextArea
+                  label="CHA Address"
+                  placeholder="Enter CHA Address"
+                  minRows={2}
+                  value={form.values.cha_address}
+                  onChange={(e) => {
+                    const formattedValue = toTitleCase(e.currentTarget.value);
+                    form.setFieldValue("cha_address", formattedValue);
+                  }}
+                />
+              </Grid.Col>
+            </Grid>
           </Box>
         </Tabs.Panel>
 
@@ -3756,59 +3844,66 @@ function HouseCreate() {
             <Box mb="md">
               {/* Group title row: Sell / Cost */}
               <Grid mb={2} gutter="sm" style={{ fontWeight: 700 }}>
-                <Grid.Col span={1.5} />
-                <Grid.Col span={0.75} />
-                <Grid.Col span={0.75} />
-                <Grid.Col span={0.75} />
-                <Grid.Col span={0.75} />
-                <Grid.Col span={0.75} />
-                <Grid.Col span={3}>
+                <Grid.Col span={1.4} />
+                <Grid.Col span={0.9} />
+                <Grid.Col span={0.8} />
+                <Grid.Col span={0.8} />
+                <Grid.Col span={0.7} />
+                <Grid.Col span={0.7} />
+                <Grid.Col span={2.55}>
                   <Box style={{ border: "1.5px solid #228be6", borderRadius: 6, textAlign: "center", padding: "2px 0", color: "#228be6", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>
                     SELL
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={3}>
+                <Grid.Col span={3.65}>
                   <Box style={{ border: "1.5px solid #e67700", borderRadius: 6, textAlign: "center", padding: "2px 0", color: "#e67700", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>
                     COST
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={0.75} />
+                <Grid.Col span={0.5} />
               </Grid>
               {/* Field labels row */}
               <Grid mb="xs" style={{ fontWeight: 600, color: "#105476" }} gutter="sm">
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1.4}>
                   <RequiredLabel label="Charge Name" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.9}>
                   <RequiredLabel label="Prepaid / Collect" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.8}>
                   <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.8}>
                   <RequiredLabel label="Currency" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="ROE" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={3}>
-                  <Grid gutter={4}>
-                    <Grid.Col span={4}><RequiredLabel label="Amount/Unit" required={false} /></Grid.Col>
-                    <Grid.Col span={4}><RequiredLabel label="Amount" required={true} /></Grid.Col>
-                    <Grid.Col span={4}><RequiredLabel label="Local Amount" required={false} /></Grid.Col>
-                  </Grid>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Amount/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={3}>
-                  <Grid gutter={4}>
-                    <Grid.Col span={4}><RequiredLabel label="Cost/Unit" required={false} /></Grid.Col>
-                    <Grid.Col span={4}><RequiredLabel label="Total Cost" required={false} /></Grid.Col>
-                    <Grid.Col span={4}><RequiredLabel label="Local Amount" required={false} /></Grid.Col>
-                  </Grid>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Amount" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Local Amount" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Cost/Unit" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Total Cost" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Local Amount" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.1}>
+                  <RequiredLabel label="Supplier" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.5}>
                   <RequiredLabel label="Actions" required={false} />
                 </Grid.Col>
               </Grid>
@@ -3856,7 +3951,7 @@ function HouseCreate() {
                       dropdownZIndex={1000}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.9}>
                     <Dropdown
                       placeholder="Select Prepaid/Collect"
                       searchable
@@ -3884,7 +3979,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.pp_cc}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.8}>
                     <Dropdown
                       placeholder="Select Unit"
                       searchable
@@ -3919,7 +4014,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.8}>
                     <Dropdown
                       placeholder="Select Currency"
                       searchable
@@ -3954,7 +4049,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.currency_id}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="ROE"
                       min={0}
@@ -3978,7 +4073,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.roe}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
@@ -4030,9 +4125,7 @@ function HouseCreate() {
                       })()}
                     />
                   </Grid.Col>
-                  {/* Sell group: Amount/Unit, Amount, Local Amount */}
-                  <Grid.Col span={3}>
-                    <Box style={{ border: "1.5px solid #228be6", borderRadius: 6, padding: "4px 6px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                  <Grid.Col span={0.85}>
                       <FormNumberInput
                         placeholder="Amount/Unit"
                         min={0}
@@ -4064,87 +4157,132 @@ function HouseCreate() {
                         }}
                         error={chargeErrors[index]?.amount_per_unit}
                       />
-                      <FormNumberInput
-                        placeholder="Amount"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.amount || undefined}
-                        onChange={(value) => {
-                          chargesForm.setFieldValue(`charges.${index}.amount`, value as number | null);
-                          if (chargeErrors[index]?.amount) {
-                            const newErrors = { ...chargeErrors };
-                            if (newErrors[index]) {
-                              delete newErrors[index].amount;
-                              if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
-                            }
-                            setChargeErrors(newErrors);
-                          }
-                        }}
-                        error={chargeErrors[index]?.amount}
-                      />
-                      <FormNumberInput
-                        placeholder="Local Amount"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.local_amount || undefined}
-                        onChange={(value) => {
-                          chargesForm.setFieldValue(`charges.${index}.local_amount`, value as number | null);
-                        }}
-                      />
-                    </Box>
                   </Grid.Col>
-                  {/* Cost group: Cost/Unit, Total Cost, Local Amount */}
-                  <Grid.Col span={3}>
-                    <Box style={{ border: "1.5px solid #e67700", borderRadius: 6, padding: "4px 6px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                      <FormNumberInput
-                        placeholder="Cost/Unit"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.cost_per_unit || undefined}
-                        onChange={(value) => {
-                          const costPerUnit = value as number | null;
-                          chargesForm.setFieldValue(`charges.${index}.cost_per_unit`, costPerUnit);
-                          const currentCharge = chargesForm.values.charges[index];
-                          if (costPerUnit != null && costPerUnit > 0 && currentCharge.no_of_unit != null && currentCharge.no_of_unit > 0) {
-                            chargesForm.setFieldValue(`charges.${index}.total_cost`, parseFloat((currentCharge.no_of_unit * costPerUnit).toFixed(2)));
-                          } else {
-                            chargesForm.setFieldValue(`charges.${index}.total_cost`, null);
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Amount"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.amount || undefined}
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(`charges.${index}.amount`, value as number | null);
+                        if (chargeErrors[index]?.amount) {
+                          const newErrors = { ...chargeErrors };
+                          if (newErrors[index]) {
+                            delete newErrors[index].amount;
+                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
                           }
-                        }}
-                      />
-                      <FormNumberInput
-                        placeholder="Total Cost"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.total_cost || undefined}
-                        onChange={(value) => {
-                          chargesForm.setFieldValue(`charges.${index}.total_cost`, value as number | null);
-                        }}
-                      />
-                      <FormNumberInput
-                        placeholder="Local Amount"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.cost_local_amount || undefined}
-                        onChange={(value) => {
-                          chargesForm.setFieldValue(`charges.${index}.cost_local_amount`, value as number | null);
-                        }}
-                      />
-                    </Box>
+                          setChargeErrors(newErrors);
+                        }
+                      }}
+                      error={chargeErrors[index]?.amount}
+                    />
                   </Grid.Col>
-                  <Grid.Col
-                    span={0.75}
-                    style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "flex-start" }}
-                  >
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Local Amount"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.local_amount || undefined}
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(
+                          `charges.${index}.local_amount`,
+                          value as number | null,
+                        );
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Cost/Unit"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.cost_per_unit || undefined}
+                      onChange={(value) => {
+                        const costPerUnit = value as number | null;
+                        chargesForm.setFieldValue(`charges.${index}.cost_per_unit`, costPerUnit);
+                        const currentCharge = chargesForm.values.charges[index];
+                        if (
+                          costPerUnit != null &&
+                          costPerUnit > 0 &&
+                          currentCharge.no_of_unit != null &&
+                          currentCharge.no_of_unit > 0
+                        ) {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.total_cost`,
+                            parseFloat((currentCharge.no_of_unit * costPerUnit).toFixed(2)),
+                          );
+                        } else {
+                          chargesForm.setFieldValue(`charges.${index}.total_cost`, null);
+                        }
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Total Cost"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.total_cost || undefined}
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(
+                          `charges.${index}.total_cost`,
+                          value as number | null,
+                        );
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Local Amount"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.cost_local_amount || undefined}
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(
+                          `charges.${index}.cost_local_amount`,
+                          value as number | null,
+                        );
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={1.1}>
+                    <SearchableSelect
+                      placeholder="Type supplier"
+                      apiEndpoint={URL.supplierByType}
+                      searchFields={["customer_name", "customer_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.customer_code ?? ""),
+                        label: String(item.customer_name ?? ""),
+                      })}
+                      value={charge.supplier_code ? String(charge.supplier_code) : null}
+                      displayValue={charge.supplier_name || undefined}
+                      onChange={(value, selectedData) => {
+                        chargesForm.setFieldValue(`charges.${index}.supplier_code`, value || "");
+                        chargesForm.setFieldValue(
+                          `charges.${index}.supplier_name`,
+                          selectedData?.label || "",
+                        );
+                      }}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.5} style={{ display: "flex", gap: "6px", alignItems: "center", justifyContent: "flex-start" }}>
                     {chargesForm.values.charges.length - 1 === index && (
-                      <Button
-                        size="sm"
-                        px={12}
+                      <ActionIcon
                         variant="light"
                         color="#105476"
                         onClick={() => {
@@ -4162,16 +4300,16 @@ function HouseCreate() {
                             cost_per_unit: null,
                             total_cost: null,
                             cost_local_amount: null,
+                            supplier_code: "",
+                            supplier_name: "",
                           });
                         }}
                       >
                         <IconPlus size={16} />
-                      </Button>
+                      </ActionIcon>
                     )}
                     {chargesForm.values.charges.length > 1 && (
-                      <Button
-                        size="sm"
-                        px={12}
+                      <ActionIcon
                         variant="light"
                         color="red"
                         onClick={() => {
@@ -4179,7 +4317,7 @@ function HouseCreate() {
                         }}
                       >
                         <IconTrash size={16} />
-                      </Button>
+                      </ActionIcon>
                     )}
                   </Grid.Col>
                 </Grid>

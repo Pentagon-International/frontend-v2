@@ -707,6 +707,8 @@ function AirExportJobCreate() {
               agent_name: house.agent_name ? String(house.agent_name) : "",
               agent_address: house.agent_address ? String(house.agent_address) : "",
               agent_email: house.agent_email ? String(house.agent_email) : "",
+              cha_name: house.cha_name ? String(house.cha_name) : "",
+              cha_address: house.cha_address ? String(house.cha_address) : "",
               shipper_code: house.shipper_code
                 ? String(house.shipper_code)
                 : "",
@@ -821,6 +823,14 @@ function AirExportJobCreate() {
                             : "";
                     return {
                       id: charge.id != null ? Number(charge.id) : undefined,
+                      supplier_code:
+                        charge.supplier_code != null
+                          ? String(charge.supplier_code)
+                          : "",
+                      supplier_name:
+                        charge.supplier_name != null
+                          ? String(charge.supplier_name)
+                          : "",
                       charge_id: chargeId,
                       charge_name: charge.charge_name
                         ? String(charge.charge_name)
@@ -2006,6 +2016,8 @@ function AirExportJobCreate() {
           agent_name: hawb.agent_name,
           agent_address: hawb.agent_address || "",
           agent_email: hawb.agent_email || "",
+          cha_name: (hawb as { cha_name?: string }).cha_name || null,
+          cha_address: (hawb as { cha_address?: string }).cha_address || null,
           shipper_code: hawb.shipper_code,
           shipper_name: hawb.shipper_name,
           shipper_address: hawb.shipper_address || "",

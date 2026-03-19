@@ -113,7 +113,7 @@ function normalizePpCc(value: unknown): string {
 
 export type EstimatesSectionProps = {
   form: UseFormReturnType<EstimatesFormValues>;
-  serviceType?: string[];
+  serviceType?: string | string[];
   readOnly?: boolean;
   /** Defaults to URL.supplierByType */
   supplierEndpoint?: string;
@@ -134,6 +134,12 @@ export function EstimatesSection({
   debugTag,
 }: EstimatesSectionProps) {
   const user = useAuthStore((state) => state.user);
+  const serviceTypeValue = Array.isArray(serviceType)
+    ? (serviceType[0] ?? "")
+    : (serviceType ?? "");
+  const serviceTypeKey = Array.isArray(serviceType)
+    ? serviceType.join(",")
+    : (serviceType ?? "");
 
   const { data: currencyDataRaw = [] } = useQuery({
     queryKey: ["currencyMaster"],
@@ -143,8 +149,8 @@ export function EstimatesSection({
   });
 
   const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster", serviceType ?? ""],
-    queryFn: () => fetchUnitMaster(serviceType ?? ""),
+    queryKey: ["unitMaster", serviceTypeKey],
+    queryFn: () => fetchUnitMaster(serviceTypeValue),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
@@ -172,8 +178,6 @@ export function EstimatesSection({
     const estimates = form.values.estimates ?? [];
     const missingByRow = estimates.map((r) => {
       const missing: string[] = [];
-      if (!r.supplier_code) missing.push("supplier_code");
-      if (!r.supplier_name) missing.push("supplier_name");
       if (r.charge_id == null) missing.push("charge_id");
       if (!r.charge_name) missing.push("charge_name");
       if (!normalizePpCc(r.pp_cc)) missing.push("pp_cc");
@@ -218,9 +222,6 @@ export function EstimatesSection({
         gutter="sm"
       >
         <Grid.Col span={1.75}>
-          <RequiredLabel label="Supplier" required={true} />
-        </Grid.Col>
-        <Grid.Col span={1.75}>
           <RequiredLabel label="Charge" required={true} />
         </Grid.Col>
         <Grid.Col span={1.25}>
@@ -244,6 +245,9 @@ export function EstimatesSection({
         <Grid.Col span={1}>
           <RequiredLabel label="Total Cost" required={true} />
         </Grid.Col>
+        <Grid.Col span={1.75}>
+          <RequiredLabel label="Supplier" required={false} />
+        </Grid.Col>
         <Grid.Col span={0.85}>
           <RequiredLabel label="Actions" required={false} />
         </Grid.Col>
@@ -251,40 +255,6 @@ export function EstimatesSection({
 
       {form.values.estimates.map((row, index) => (
         <Grid key={index} gutter="sm" mb="xs" align="flex-end">
-          <Grid.Col span={1.75}>
-            <SearchableSelect
-              placeholder="Type supplier"
-              apiEndpoint={supplierEndpoint}
-              searchFields={["customer_name", "customer_code"]}
-              displayFormat={(item: Record<string, unknown>) => ({
-                value: String(item.customer_code ?? ""),
-                label: String(item.customer_name ?? ""),
-              })}
-              value={row.supplier_code || null}
-              displayValue={row.supplier_name || undefined}
-              onChange={(value, selectedData) => {
-                form.setFieldValue(
-                  `estimates.${index}.supplier_code`,
-                  value || "",
-                );
-                form.setFieldValue(
-                  `estimates.${index}.supplier_name`,
-                  selectedData?.label || "",
-                );
-              }}
-              disabled={readOnly}
-              minSearchLength={2}
-              dropdownZIndex={1000}
-              styles={{
-                input: {
-                  fontSize: "13px",
-                  fontFamily: "Inter",
-                  height: "36px",
-                },
-              }}
-            />
-          </Grid.Col>
-
           <Grid.Col span={1.75}>
             <SearchableSelect
               placeholder="Type charge"
@@ -439,6 +409,37 @@ export function EstimatesSection({
               }}
               disabled={readOnly}
               readOnly
+            />
+          </Grid.Col>
+
+          <Grid.Col span={1.75}>
+            <SearchableSelect
+              placeholder="Type supplier"
+              apiEndpoint={supplierEndpoint}
+              searchFields={["customer_name", "customer_code"]}
+              displayFormat={(item: Record<string, unknown>) => ({
+                value: String(item.customer_code ?? ""),
+                label: String(item.customer_name ?? ""),
+              })}
+              value={row.supplier_code || null}
+              displayValue={row.supplier_name || undefined}
+              onChange={(value, selectedData) => {
+                form.setFieldValue(`estimates.${index}.supplier_code`, value || "");
+                form.setFieldValue(
+                  `estimates.${index}.supplier_name`,
+                  selectedData?.label || "",
+                );
+              }}
+              disabled={readOnly}
+              minSearchLength={2}
+              dropdownZIndex={1000}
+              styles={{
+                input: {
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  height: "36px",
+                },
+              }}
             />
           </Grid.Col>
 

@@ -79,6 +79,10 @@ type HouseDetailsForm = {
   agent_name: string;
   agent_address: string;
   agent_email: string;
+  /** internal select value; not sent in payload */
+  cha_code: string;
+  cha_name: string;
+  cha_address: string;
   // Internal selection ids/codes (NOT sent in payload)
   shipper_code: string;
   shipper_name: string;
@@ -136,6 +140,8 @@ type ChargeDetail = {
   unit_cost?: number | null;
   total_cost?: number | null;
   cost_local_amount?: number | null;
+  supplier_code?: string;
+  supplier_name?: string;
 };
 
 // Reverse invoice item (from API reverse_invoices)
@@ -383,6 +389,8 @@ function HouseCreate() {
           unit_cost: null,
           total_cost: null,
           cost_local_amount: null,
+          supplier_code: "",
+          supplier_name: "",
         },
       ],
     },
@@ -640,6 +648,12 @@ function HouseCreate() {
                   : undefined,
               charge_id: chargeId,
               charge_name: charge.charge_name ? String(charge.charge_name) : "",
+              supplier_code: charge.supplier_code
+                ? String(charge.supplier_code)
+                : "",
+              supplier_name: charge.supplier_name
+                ? String(charge.supplier_name)
+                : "",
               pp_cc: normalizePpCc(charge.pp_cc),
               unit_id,
               unit_code: unitCode,
@@ -722,6 +736,9 @@ function HouseCreate() {
         "",
       agent_email:
         (editData as { agent_email?: string } | undefined)?.agent_email || "",
+      cha_code: (editData as { cha_code?: string })?.cha_code ?? "",
+      cha_name: (editData as { cha_name?: string })?.cha_name ?? "",
+      cha_address: (editData as { cha_address?: string })?.cha_address ?? "",
       shipper_code: editData?.shipper_code || "",
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
@@ -1214,10 +1231,13 @@ function HouseCreate() {
   //          cost_local_amount = total_cost * roe
   const chargeCalculationKeys = chargesForm.values.charges
     .map(
-      (c) => `${c.roe || ""}_${c.no_of_unit || ""}_${c.amount_per_unit || ""}_${c.unit_cost || ""}_${c.total_cost || ""}`
+      (c) =>
+        `${c.roe || ""}_${c.no_of_unit || ""}_${c.amount_per_unit || ""}_${c.unit_cost || ""}_${c.total_cost || ""}`,
     )
     .join(",");
-  const chargeAmounts = chargesForm.values.charges.map((c) => c.amount).join(",");
+  const chargeAmounts = chargesForm.values.charges
+    .map((c) => c.amount)
+    .join(",");
 
   useEffect(() => {
     const updatedCharges = chargesForm.values.charges.map((charge) => {
@@ -1981,6 +2001,8 @@ function HouseCreate() {
       agent_name: form.values.agent_name,
       agent_address: form.values.agent_address,
       agent_email: form.values.agent_email,
+      cha_name: form.values.cha_name,
+      cha_address: form.values.cha_address,
       shipper_name: form.values.shipper_name,
       shipper_address: form.values.shipper_address,
       shipper_email: form.values.shipper_email,
@@ -2087,6 +2109,8 @@ function HouseCreate() {
       agent_name: v.agent_name,
       agent_address: v.agent_address,
       agent_email: v.agent_email,
+      cha_name: v.cha_name,
+      cha_address: v.cha_address,
       shipper_code: v.shipper_code,
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
@@ -2137,6 +2161,13 @@ function HouseCreate() {
 
   // Generate PDF preview from current form data
   const generatePDFPreview = () => {
+    const roundTo2 = (v: unknown): number | null => {
+      if (v == null) return null;
+      const n = typeof v === "number" ? v : parseFloat(String(v));
+      if (!Number.isFinite(n)) return null;
+      return Math.round(n * 100) / 100;
+    };
+
     try {
       setPreviewOpen(true);
 
@@ -2202,13 +2233,15 @@ function HouseCreate() {
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             currency: charge.currency,
             no_of_unit: charge.no_of_unit,
-            roe: charge.roe,
-            amount_per_unit: charge.amount_per_unit,
-            amount: charge.amount,
-            sell_local_amount: charge.sell_local_amount ?? null,
-            unit_cost: charge.unit_cost ?? null,
-            total_cost: charge.total_cost ?? null,
-            cost_local_amount: charge.cost_local_amount ?? null,
+            roe: roundTo2(charge.roe),
+            amount_per_unit: roundTo2(charge.amount_per_unit),
+            amount: roundTo2(charge.amount),
+            sell_local_amount: roundTo2(charge.sell_local_amount),
+            unit_cost: roundTo2(charge.unit_cost),
+            total_cost: roundTo2(charge.total_cost),
+            cost_local_amount: roundTo2(charge.cost_local_amount),
+            supplier_code: charge.supplier_code || null,
+            supplier_name: charge.supplier_name || null,
           })),
       };
 
@@ -3278,8 +3311,8 @@ function HouseCreate() {
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code),
-                    label: String(item.customer_name),
+                    value: String(item.customer_name ?? ""),
+                    label: String(item.customer_name ?? ""),
                   })}
                   value={
                     form.values.notify1_customer_name
@@ -3287,8 +3320,8 @@ function HouseCreate() {
                       : ""
                   }
                   displayValue={form.values.notify1_customer_name}
-                  onChange={(value, selectedData, originalData) => {
-                    const newValue = selectedData?.label || value || "";
+                  onChange={(value, _selectedData, originalData) => {
+                    const newValue = value || "";
                     form.setFieldValue("notify1_customer_name", newValue);
 
                     if (
@@ -3475,6 +3508,79 @@ function HouseCreate() {
                     error={form.errors.agent_address}
                   />
                 )}
+              </Grid.Col>
+            </Grid>
+
+            <Grid mb="xs">
+              <Grid.Col span={4}>
+                <SearchableSelect
+                  label="CHA Name"
+                  placeholder="Type CHA name"
+                  apiEndpoint={URL.cha}
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.customer_code ?? ""),
+                    label: String(item.customer_name ?? ""),
+                  })}
+                  value={form.values.cha_code || null}
+                  displayValue={form.values.cha_name}
+                  onChange={(value, _selectedData, originalData) => {
+                    const chaCode = value || "";
+                    const chaName =
+                      (originalData as Record<string, unknown> | undefined)
+                        ?.customer_name != null
+                        ? String(
+                            (originalData as Record<string, unknown>).customer_name,
+                          )
+                        : "";
+                    form.setFieldValue("cha_code", chaCode);
+                    form.setFieldValue("cha_name", chaName);
+
+                    const addr =
+                      (originalData as Record<string, unknown> | undefined)
+                        ?.addresses_data &&
+                      Array.isArray(
+                        (originalData as Record<string, unknown>)
+                          .addresses_data,
+                      ) &&
+                      (
+                        (originalData as Record<string, unknown>)
+                          .addresses_data as Array<{
+                          address?: unknown;
+                        }>
+                      )[0]?.address
+                        ? String(
+                            (
+                              (originalData as Record<string, unknown>)
+                                .addresses_data as Array<{
+                                address?: unknown;
+                              }>
+                            )[0].address,
+                          )
+                        : "";
+
+                    if (addr) {
+                      form.setFieldValue("cha_address", toTitleCase(addr));
+                    } else if (!chaCode) {
+                      form.setFieldValue("cha_address", "");
+                    }
+                  }}
+                  returnOriginalData={true}
+                  minSearchLength={2}
+                  dropdownZIndex={1000}
+                />
+              </Grid.Col>
+              <Grid.Col span={8}>
+                <FormTextArea
+                  label="CHA Address"
+                  placeholder="Enter CHA Address"
+                  minRows={2}
+                  value={form.values.cha_address}
+                  onChange={(e) => {
+                    const formattedValue = toTitleCase(e.currentTarget.value);
+                    form.setFieldValue("cha_address", formattedValue);
+                  }}
+                />
               </Grid.Col>
             </Grid>
           </Box>
@@ -3827,21 +3933,47 @@ function HouseCreate() {
             <Box mb="md">
               {/* Group title row: Sell / Cost */}
               <Grid mb={2} gutter="sm" style={{ fontWeight: 700 }}>
-                <Grid.Col span={1.5} /><Grid.Col span={0.75} /><Grid.Col span={0.75} />
-                <Grid.Col span={0.75} /><Grid.Col span={0.75} /><Grid.Col span={0.75} />
-                <Grid.Col span={3}>
-                  <Box style={{ border: "1.5px solid #228be6", borderRadius: 6, textAlign: "center", padding: "2px 0", color: "#228be6", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>
+                <Grid.Col span={1.4} />
+                <Grid.Col span={0.9} />
+                <Grid.Col span={0.8} />
+                <Grid.Col span={0.8} />
+                <Grid.Col span={0.7} />
+                <Grid.Col span={0.7} />
+                <Grid.Col span={2.55}>
+                  <Box
+                    style={{
+                      border: "1.5px solid #228be6",
+                      borderRadius: 6,
+                      textAlign: "center",
+                      padding: "2px 0",
+                      color: "#228be6",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: 1,
+                    }}
+                  >
                     SELL
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={3}>
-                  <Box style={{ border: "1.5px solid #e67700", borderRadius: 6, textAlign: "center", padding: "2px 0", color: "#e67700", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>
+                <Grid.Col span={3.65}>
+                  <Box
+                    style={{
+                      border: "1.5px solid #e67700",
+                      borderRadius: 6,
+                      textAlign: "center",
+                      padding: "2px 0",
+                      color: "#e67700",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: 1,
+                    }}
+                  >
                     COST
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={0.75} />
+                <Grid.Col span={0.5} />
               </Grid>
-              <Grid 
+              <Grid
                 mb="xs"
                 style={{
                   fontWeight: 600,
@@ -3849,39 +3981,46 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1.4}>
                   <RequiredLabel label="Charge Name" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.9}>
                   <RequiredLabel label="Prepaid / Collect" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.8}>
                   <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.8}>
                   <RequiredLabel label="Currency" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="ROE" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={3}>
-                  <Grid gutter={4}>
-                    <Grid.Col span={4}><RequiredLabel label="Amount/Unit" required={false} /></Grid.Col>
-                    <Grid.Col span={4}><RequiredLabel label="Amount" required={true} /></Grid.Col>
-                    <Grid.Col span={4}><RequiredLabel label="Sell Local Amt" required={false} /></Grid.Col>
-                  </Grid>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Amount/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={3}>
-                  <Grid gutter={4}>
-                    <Grid.Col span={4}><RequiredLabel label="Cost/Unit" required={false} /></Grid.Col>
-                    <Grid.Col span={4}><RequiredLabel label="Total Cost" required={false} /></Grid.Col>
-                    <Grid.Col span={4}><RequiredLabel label="Cost Local Amt" required={false} /></Grid.Col>
-                  </Grid>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Amount" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Sell Local Amt" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Cost/Unit" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Total Cost" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.85}>
+                  <RequiredLabel label="Cost Local Amt" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.1}>
+                  <RequiredLabel label="Supplier" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.5}>
                   <RequiredLabel label="Actions" required={false} />
                 </Grid.Col>
               </Grid>
@@ -3906,13 +4045,20 @@ function HouseCreate() {
                       onChange={(value, selectedData) => {
                         const chargeId = value ? Number(value) : null;
                         const chargeName = selectedData?.label ?? "";
-                        chargesForm.setFieldValue(`charges.${index}.charge_id`, chargeId);
-                        chargesForm.setFieldValue(`charges.${index}.charge_name`, chargeName);
+                        chargesForm.setFieldValue(
+                          `charges.${index}.charge_id`,
+                          chargeId,
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.charge_name`,
+                          chargeName,
+                        );
                         if (chargeErrors[index]?.charge_name) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
                             delete newErrors[index].charge_name;
-                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                            if (Object.keys(newErrors[index]).length === 0)
+                              delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
@@ -3920,7 +4066,13 @@ function HouseCreate() {
                       error={chargeErrors[index]?.charge_name}
                       minSearchLength={2}
                       dropdownZIndex={1000}
-                      styles={{ input: { fontSize: "13px", fontFamily: "Inter", height: "36px" } }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={0.75}>
@@ -3933,12 +4085,16 @@ function HouseCreate() {
                       ]}
                       value={charge.pp_cc || null}
                       onChange={(value) => {
-                        chargesForm.setFieldValue(`charges.${index}.pp_cc`, value || "");
+                        chargesForm.setFieldValue(
+                          `charges.${index}.pp_cc`,
+                          value || "",
+                        );
                         if (chargeErrors[index]?.pp_cc) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
                             delete newErrors[index].pp_cc;
-                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                            if (Object.keys(newErrors[index]).length === 0)
+                              delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
@@ -3981,8 +4137,17 @@ function HouseCreate() {
                         );
                         const unitUpper = unitCode.toUpperCase();
                         let noOfUnit = charge.no_of_unit;
-                        if (unitUpper === "SHIPMENT" || unitUpper === "SHPT" || unitUpper === "DOC") noOfUnit = 1;
-                        if (noOfUnit !== charge.no_of_unit) chargesForm.setFieldValue(`charges.${index}.no_of_unit`, noOfUnit);
+                        if (
+                          unitUpper === "SHIPMENT" ||
+                          unitUpper === "SHPT" ||
+                          unitUpper === "DOC"
+                        )
+                          noOfUnit = 1;
+                        if (noOfUnit !== charge.no_of_unit)
+                          chargesForm.setFieldValue(
+                            `charges.${index}.no_of_unit`,
+                            noOfUnit,
+                          );
                       }}
                     />
                   </Grid.Col>
@@ -4006,12 +4171,17 @@ function HouseCreate() {
                           code,
                         );
                         const roe = code ? getRoeValue(code) : null;
-                        if (roe !== null) chargesForm.setFieldValue(`charges.${index}.roe`, roe);
+                        if (roe !== null)
+                          chargesForm.setFieldValue(
+                            `charges.${index}.roe`,
+                            roe,
+                          );
                         if (chargeErrors[index]?.currency_id) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
                             delete newErrors[index].currency_id;
-                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                            if (Object.keys(newErrors[index]).length === 0)
+                              delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
@@ -4032,7 +4202,8 @@ function HouseCreate() {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
                             delete newErrors[index].roe;
-                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                            if (Object.keys(newErrors[index]).length === 0)
+                              delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
@@ -4040,139 +4211,247 @@ function HouseCreate() {
                       error={chargeErrors[index]?.roe}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
                       hideControls
-                      value={chargesForm.values.charges[index].no_of_unit ?? undefined}
+                      value={
+                        chargesForm.values.charges[index].no_of_unit ??
+                        undefined
+                      }
                       onChange={(value) => {
                         const noOfUnit = value as number | null;
-                        chargesForm.setFieldValue(`charges.${index}.no_of_unit`, noOfUnit);
+                        chargesForm.setFieldValue(
+                          `charges.${index}.no_of_unit`,
+                          noOfUnit,
+                        );
                         const currentCharge = chargesForm.values.charges[index];
-                        if (currentCharge.amount_per_unit != null && currentCharge.amount_per_unit > 0 && noOfUnit != null && noOfUnit > 0) {
+                        if (
+                          currentCharge.amount_per_unit != null &&
+                          currentCharge.amount_per_unit > 0 &&
+                          noOfUnit != null &&
+                          noOfUnit > 0
+                        ) {
                           chargesForm.setFieldValue(
                             `charges.${index}.amount`,
-                            parseFloat((noOfUnit * currentCharge.amount_per_unit).toFixed(2)),
+                            parseFloat(
+                              (
+                                noOfUnit * currentCharge.amount_per_unit
+                              ).toFixed(2),
+                            ),
                           );
                         }
-                        if (currentCharge.unit_cost != null && currentCharge.unit_cost > 0 && noOfUnit != null && noOfUnit > 0) {
-                          chargesForm.setFieldValue(`charges.${index}.total_cost`, parseFloat((noOfUnit * currentCharge.unit_cost).toFixed(2)));
+                        if (
+                          currentCharge.unit_cost != null &&
+                          currentCharge.unit_cost > 0 &&
+                          noOfUnit != null &&
+                          noOfUnit > 0
+                        ) {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.total_cost`,
+                            parseFloat(
+                              (noOfUnit * currentCharge.unit_cost).toFixed(2),
+                            ),
+                          );
                         }
                       }}
                     />
                   </Grid.Col>
-                  {/* Sell group: Amount/Unit, Amount, Sell Local Amount */}
-                  <Grid.Col span={3}>
-                    <Box style={{ border: "1.5px solid #228be6", borderRadius: 6, padding: "4px 6px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                      <FormNumberInput
-                        placeholder="Amount/Unit"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.amount_per_unit || undefined}
-                        onChange={(value) => {
-                          const amountPerUnit = value as number | null;
-                          chargesForm.setFieldValue(`charges.${index}.amount_per_unit`, amountPerUnit);
-                          const currentCharge = chargesForm.values.charges[index];
-                          if (amountPerUnit != null && amountPerUnit > 0 && currentCharge.no_of_unit != null && currentCharge.no_of_unit > 0) {
-                            chargesForm.setFieldValue(
-                              `charges.${index}.amount`,
-                              parseFloat((currentCharge.no_of_unit * amountPerUnit).toFixed(2)),
-                            );
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Amount/Unit"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.amount_per_unit || undefined}
+                      onChange={(value) => {
+                        const amountPerUnit = value as number | null;
+                        chargesForm.setFieldValue(
+                          `charges.${index}.amount_per_unit`,
+                          amountPerUnit,
+                        );
+                        const currentCharge = chargesForm.values.charges[index];
+                        if (
+                          amountPerUnit != null &&
+                          amountPerUnit > 0 &&
+                          currentCharge.no_of_unit != null &&
+                          currentCharge.no_of_unit > 0
+                        ) {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.amount`,
+                            parseFloat(
+                              (
+                                currentCharge.no_of_unit * amountPerUnit
+                              ).toFixed(2),
+                            ),
+                          );
+                        }
+                        if (chargeErrors[index]?.amount_per_unit) {
+                          const newErrors = { ...chargeErrors };
+                          if (newErrors[index]) {
+                            delete newErrors[index].amount_per_unit;
+                            if (Object.keys(newErrors[index]).length === 0)
+                              delete newErrors[index];
                           }
-                          if (chargeErrors[index]?.amount_per_unit) {
-                            const newErrors = { ...chargeErrors };
-                            if (newErrors[index]) {
-                              delete newErrors[index].amount_per_unit;
-                              if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
-                            }
-                            setChargeErrors(newErrors);
-                          }
-                        }}
-                        error={chargeErrors[index]?.amount_per_unit}
-                      />
-                      <FormNumberInput
-                        placeholder="Amount"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.amount || undefined}
-                        onChange={(value) => {
-                          chargesForm.setFieldValue(`charges.${index}.amount`, value as number | null);
-                          if (chargeErrors[index]?.amount) {
-                            const newErrors = { ...chargeErrors };
-                            if (newErrors[index]) {
-                              delete newErrors[index].amount;
-                              if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
-                            }
-                            setChargeErrors(newErrors);
-                          }
-                        }}
-                        error={chargeErrors[index]?.amount}
-                      />
-                      <FormNumberInput
-                        placeholder="Sell Local Amt"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.sell_local_amount || undefined}
-                        onChange={(value) => {
-                          chargesForm.setFieldValue(`charges.${index}.sell_local_amount`, value as number | null);
-                        }}
-                      />
-                    </Box>
+                          setChargeErrors(newErrors);
+                        }
+                      }}
+                      error={chargeErrors[index]?.amount_per_unit}
+                    />
                   </Grid.Col>
-                  {/* Cost group: Cost/Unit, Total Cost, Cost Local Amount */}
-                  <Grid.Col span={3}>
-                    <Box style={{ border: "1.5px solid #e67700", borderRadius: 6, padding: "4px 6px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                      <FormNumberInput
-                        placeholder="Cost/Unit"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.unit_cost || undefined}
-                        onChange={(value) => {
-                          const unitCost = value as number | null;
-                          chargesForm.setFieldValue(`charges.${index}.unit_cost`, unitCost);
-                          const currentCharge = chargesForm.values.charges[index];
-                          if (unitCost != null && unitCost > 0 && currentCharge.no_of_unit != null && currentCharge.no_of_unit > 0) {
-                            chargesForm.setFieldValue(`charges.${index}.total_cost`, parseFloat((currentCharge.no_of_unit * unitCost).toFixed(2)));
-                          } else {
-                            chargesForm.setFieldValue(`charges.${index}.total_cost`, null);
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Amount"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.amount || undefined}
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(
+                          `charges.${index}.amount`,
+                          value as number | null,
+                        );
+                        if (chargeErrors[index]?.amount) {
+                          const newErrors = { ...chargeErrors };
+                          if (newErrors[index]) {
+                            delete newErrors[index].amount;
+                            if (Object.keys(newErrors[index]).length === 0)
+                              delete newErrors[index];
                           }
-                        }}
-                      />
-                      <FormNumberInput
-                        placeholder="Total Cost"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.total_cost || undefined}
-                        onChange={(value) => {
-                          chargesForm.setFieldValue(`charges.${index}.total_cost`, value as number | null);
-                        }}
-                      />
-                      <FormNumberInput
-                        placeholder="Cost Local Amt"
-                        min={0}
-                        hideControls
-                        decimalScale={2}
-                        value={charge.cost_local_amount || undefined}
-                        onChange={(value) => {
-                          chargesForm.setFieldValue(`charges.${index}.cost_local_amount`, value as number | null);
-                        }}
-                      />
-                    </Box>
+                          setChargeErrors(newErrors);
+                        }
+                      }}
+                      error={chargeErrors[index]?.amount}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Sell Local Amt"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.sell_local_amount || undefined}
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(
+                          `charges.${index}.sell_local_amount`,
+                          value as number | null,
+                        );
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Cost/Unit"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.unit_cost || undefined}
+                      onChange={(value) => {
+                        const unitCost = value as number | null;
+                        chargesForm.setFieldValue(
+                          `charges.${index}.unit_cost`,
+                          unitCost,
+                        );
+                        const currentCharge = chargesForm.values.charges[index];
+                        if (
+                          unitCost != null &&
+                          unitCost > 0 &&
+                          currentCharge.no_of_unit != null &&
+                          currentCharge.no_of_unit > 0
+                        ) {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.total_cost`,
+                            parseFloat(
+                              (currentCharge.no_of_unit * unitCost).toFixed(2),
+                            ),
+                          );
+                        } else {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.total_cost`,
+                            null,
+                          );
+                        }
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Total Cost"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.total_cost || undefined}
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(
+                          `charges.${index}.total_cost`,
+                          value as number | null,
+                        );
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.85}>
+                    <FormNumberInput
+                      placeholder="Cost Local Amt"
+                      min={0}
+                      hideControls
+                      decimalScale={2}
+                      value={charge.cost_local_amount || undefined}
+                      onChange={(value) => {
+                        chargesForm.setFieldValue(
+                          `charges.${index}.cost_local_amount`,
+                          value as number | null,
+                        );
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={1.1}>
+                    <SearchableSelect
+                      placeholder="Type supplier"
+                      apiEndpoint={URL.supplierByType}
+                      searchFields={["customer_name", "customer_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.customer_code ?? ""),
+                        label: String(item.customer_name ?? ""),
+                      })}
+                      value={
+                        charge.supplier_code
+                          ? String(charge.supplier_code)
+                          : null
+                      }
+                      displayValue={charge.supplier_name || undefined}
+                      onChange={(value, selectedData) => {
+                        chargesForm.setFieldValue(
+                          `charges.${index}.supplier_code`,
+                          value || "",
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.supplier_name`,
+                          selectedData?.label || "",
+                        );
+                      }}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
                   </Grid.Col>
                   <Grid.Col
-                    span={0.75}
-                    style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "flex-start" }}
+                    span={0.5}
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      alignItems: "center",
+                      justifyContent: "flex-start",
+                    }}
                   >
                     {chargesForm.values.charges.length - 1 === index && (
-                      <Button
-                        size="sm"
-                        px={12}
+                      <ActionIcon
                         variant="light"
                         color="#105476"
                         onClick={() => {
@@ -4192,16 +4471,16 @@ function HouseCreate() {
                             unit_cost: null,
                             total_cost: null,
                             cost_local_amount: null,
+                            supplier_code: "",
+                            supplier_name: "",
                           });
                         }}
                       >
                         <IconPlus size={16} />
-                      </Button>
+                      </ActionIcon>
                     )}
                     {chargesForm.values.charges.length > 1 && (
-                      <Button
-                        size="sm"
-                        px={12}
+                      <ActionIcon
                         variant="light"
                         color="red"
                         onClick={() => {
@@ -4209,7 +4488,7 @@ function HouseCreate() {
                         }}
                       >
                         <IconTrash size={16} />
-                      </Button>
+                      </ActionIcon>
                     )}
                   </Grid.Col>
                 </Grid>

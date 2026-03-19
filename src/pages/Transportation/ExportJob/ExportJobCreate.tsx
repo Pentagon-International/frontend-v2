@@ -275,6 +275,8 @@ type HousingDetail = {
     unit_cost?: number | null;
     total_cost?: number | null;
     cost_local_amount?: number | null;
+    supplier_code?: string | null;
+    supplier_name?: string | null;
   }>;
   mbl_charges?: Array<Record<string, unknown>>;
 };
@@ -610,6 +612,8 @@ function ExportJobCreate() {
               agent_name: house.agent_name ? String(house.agent_name) : "",
               agent_address: house.agent_address ? String(house.agent_address) : "",
               agent_email: house.agent_email ? String(house.agent_email) : "",
+              cha_name: house.cha_name ? String(house.cha_name) : "",
+              cha_address: house.cha_address ? String(house.cha_address) : "",
               shipper_name: house.shipper_name
                 ? String(house.shipper_name)
                 : "",
@@ -911,6 +915,12 @@ function ExportJobCreate() {
                             unit_cost: unitCost,
                             total_cost: totalCost,
                             cost_local_amount: costLocal,
+                            supplier_code: charge.supplier_code
+                              ? String(charge.supplier_code)
+                              : "",
+                            supplier_name: charge.supplier_name
+                              ? String(charge.supplier_name)
+                              : "",
                           };
                         },
                       )
@@ -2207,6 +2217,8 @@ function ExportJobCreate() {
           agent_name: house.agent_name,
           agent_address: house.agent_address || "",
           agent_email: house.agent_email || "",
+          cha_name: (house as { cha_name?: string }).cha_name || null,
+          cha_address: (house as { cha_address?: string }).cha_address || null,
           shipper_name: house.shipper_name,
           shipper_address: house.shipper_address || "",
           shipper_email: house.shipper_email || "",
@@ -2255,34 +2267,72 @@ function ExportJobCreate() {
                 : null,
           })),
           // Each housing detail has its own mbl_charges
-          mbl_charges: (house.charges || []).map((charge) => ({
-            ...(mode === "edit" &&
-              charge.id && {
-                id:
-                  typeof charge.id === "number" ? charge.id : Number(charge.id),
-              }),
-            charge_id: charge.charge_id ?? null,
-            charge_name: charge.charge_name || "",
-            pp_cc: charge.pp_cc || "",
-            unit_id: charge.unit_id ? Number(charge.unit_id) : null,
-            // unit_input: charge.unit_code || "",
-            currency_id: charge.currency_id ? Number(charge.currency_id) : null,
-            no_of_unit: charge.no_of_unit || null,
-            // currency: charge.currency || "",
-            roe: charge.roe || null,
-            amount_per_unit: charge.amount_per_unit || null,
-            amount: charge.amount || null,
-            sell_local_amount:
-              (charge.sell_local_amount ?? (charge as { local_amount?: unknown }).local_amount) != null
-                ? Number(charge.sell_local_amount ?? (charge as { local_amount?: unknown }).local_amount)
-                : null,
-            unit_cost:
-              (charge.unit_cost ?? (charge as { cost_per_unit?: unknown }).cost_per_unit) != null
-                ? Number(charge.unit_cost ?? (charge as { cost_per_unit?: unknown }).cost_per_unit)
-                : null,
-            total_cost: charge.total_cost != null ? Number(charge.total_cost) : null,
-            cost_local_amount: charge.cost_local_amount != null ? Number(charge.cost_local_amount) : null,
-          })),
+          mbl_charges: (() => {
+            const src =
+              (house as { mbl_charges?: unknown }).mbl_charges ??
+              (house as { charges?: unknown }).charges ??
+              [];
+            const arr = Array.isArray(src) ? src : [];
+            return arr.map((charge: Record<string, unknown>) => ({
+              ...(mode === "edit" &&
+                charge.id != null && {
+                  id:
+                    typeof charge.id === "number"
+                      ? charge.id
+                      : Number(charge.id),
+                }),
+              charge_id:
+                charge.charge_id != null ? Number(charge.charge_id) : null,
+              charge_name: charge.charge_name ? String(charge.charge_name) : "",
+              supplier_code:
+                charge.supplier_code != null
+                  ? String(charge.supplier_code)
+                  : null,
+              pp_cc: String(charge.pp_cc ?? ""),
+              unit_id:
+                charge.unit_id != null
+                  ? Number(charge.unit_id)
+                  : charge.unit != null
+                    ? Number(charge.unit)
+                    : null,
+              currency_id:
+                charge.currency_id != null
+                  ? Number(charge.currency_id)
+                  : charge.currency != null
+                    ? Number(charge.currency)
+                    : null,
+              no_of_unit:
+                charge.no_of_unit != null ? Number(charge.no_of_unit) : null,
+              roe: charge.roe != null ? Number(charge.roe) : null,
+              amount_per_unit:
+                charge.amount_per_unit != null
+                  ? Number(charge.amount_per_unit)
+                  : null,
+              amount: charge.amount != null ? Number(charge.amount) : null,
+              sell_local_amount:
+                charge.sell_local_amount != null
+                  ? Number(charge.sell_local_amount)
+                  : (charge as { local_amount?: unknown }).local_amount != null
+                    ? Number(
+                        (charge as { local_amount?: unknown }).local_amount,
+                      )
+                    : null,
+              unit_cost:
+                charge.unit_cost != null
+                  ? Number(charge.unit_cost)
+                  : (charge as { cost_per_unit?: unknown }).cost_per_unit != null
+                    ? Number(
+                        (charge as { cost_per_unit?: unknown }).cost_per_unit,
+                      )
+                    : null,
+              total_cost:
+                charge.total_cost != null ? Number(charge.total_cost) : null,
+              cost_local_amount:
+                charge.cost_local_amount != null
+                  ? Number(charge.cost_local_amount)
+                  : null,
+            }));
+          })(),
         })),
         container_details: containerDetailsForm.values.containers.map(
           (container) => {
