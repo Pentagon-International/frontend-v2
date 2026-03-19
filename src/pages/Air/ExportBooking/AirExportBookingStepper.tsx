@@ -652,6 +652,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [notifyCustomerHasResults, setNotifyCustomerHasResults] = useState<
     boolean | null
   >(null);
+  const [notifyCustomerIsSearching, setNotifyCustomerIsSearching] =
+    useState(false);
   const [notifyCustomerSelectedId, setNotifyCustomerSelectedId] = useState("");
   const notifyCustomerDataRef =
     useRef<Record<string, Record<string, unknown>>>({});
@@ -664,6 +666,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [notify2CustomerHasResults, setNotify2CustomerHasResults] = useState<
     boolean | null
   >(null);
+  const [notify2CustomerIsSearching, setNotify2CustomerIsSearching] =
+    useState(false);
   const [notify2CustomerSelectedId, setNotify2CustomerSelectedId] = useState("");
   const notify2CustomerDataRef =
     useRef<Record<string, Record<string, unknown>>>({});
@@ -678,7 +682,46 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [consigneeHasResults, setConsigneeHasResults] = useState<
     boolean | null
   >(null);
+  const [consigneeIsSearching, setConsigneeIsSearching] = useState(false);
   const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
+
+  const consigneeSelectRef = useRef<HTMLInputElement | null>(null);
+  const consigneeTextRef = useRef<HTMLInputElement | null>(null);
+  const notify1SelectRef = useRef<HTMLInputElement | null>(null);
+  const notify1TextRef = useRef<HTMLInputElement | null>(null);
+  const notify2SelectRef = useRef<HTMLInputElement | null>(null);
+  const notify2TextRef = useRef<HTMLInputElement | null>(null);
+
+  const consigneeUseTextInput =
+    consigneeHasResults === false && consigneeSearch.trim().length >= 2;
+  const notify1UseTextInput =
+    notifyCustomerHasResults === false &&
+    notifyCustomerSearch.trim().length >= 2;
+  const notify2UseTextInput =
+    notify2CustomerHasResults === false &&
+    notify2CustomerSearch.trim().length >= 2;
+
+  const focusSoon = (el: HTMLInputElement | null) => {
+    if (!el) return;
+    setTimeout(() => el.focus(), 0);
+  };
+
+  useEffect(() => {
+    focusSoon(
+      consigneeUseTextInput ? consigneeTextRef.current : consigneeSelectRef.current,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consigneeUseTextInput]);
+
+  useEffect(() => {
+    focusSoon(notify1UseTextInput ? notify1TextRef.current : notify1SelectRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notify1UseTextInput]);
+
+  useEffect(() => {
+    focusSoon(notify2UseTextInput ? notify2TextRef.current : notify2SelectRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notify2UseTextInput]);
 
   const defaultCurrency = (() => {
     const userData = localStorage.getItem("user");
@@ -1787,11 +1830,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       if (!query || query.length < 2) {
         setConsigneeOptions([]);
         setConsigneeHasResults(null);
+        setConsigneeIsSearching(false);
         consigneeDataRef.current = {};
         return;
       }
 
       try {
+        setConsigneeIsSearching(true);
+        setConsigneeHasResults(null);
         const results = await commonSearchAPI({
           endpoint: URL.shipmentParty,
           query,
@@ -1804,6 +1850,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       if (!arr.length) {
         setConsigneeOptions([]);
         setConsigneeHasResults(false);
+        form.setFieldValue("consignee_name", toTitleCase(query));
+        form.setFieldValue("consignee_code", "");
         form.setFieldValue("consignee_address", "");
         form.setFieldValue("consignee_address_id", 0);
         form.setFieldValue("consignee_email", "");
@@ -1829,9 +1877,11 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         setConsigneeOptions([]);
         setConsigneeHasResults(null);
         consigneeDataRef.current = {};
+      } finally {
+        setConsigneeIsSearching(false);
       }
     },
-    500,
+    300,
   );
 
   // Debounced notify customer 1 search - same API as consignee
@@ -1841,11 +1891,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       if (!query || query.length < 2) {
         setNotifyCustomerOptions([]);
         setNotifyCustomerHasResults(null);
+        setNotifyCustomerIsSearching(false);
         setNotifyCustomerAddressOptions([]);
         notifyCustomerDataRef.current = {};
         return;
       }
       try {
+        setNotifyCustomerIsSearching(true);
+        setNotifyCustomerHasResults(null);
         const results = await commonSearchAPI({
           endpoint: URL.shipmentParty,
           query,
@@ -1857,7 +1910,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           setNotifyCustomerOptions([]);
           setNotifyCustomerHasResults(false);
           setNotifyCustomerAddressOptions([]);
-          form.setFieldValue("notify1_customer_name", query);
+          form.setFieldValue("notify1_customer_name", toTitleCase(query));
           form.setFieldValue("notify1_customer_address", "");
           form.setFieldValue("notify1_customer_email", "");
           notifyCustomerDataRef.current = {};
@@ -1877,9 +1930,11 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         setNotifyCustomerOptions([]);
         setNotifyCustomerHasResults(null);
         notifyCustomerDataRef.current = {};
+      } finally {
+        setNotifyCustomerIsSearching(false);
       }
     },
-    500,
+    300,
   );
 
   // Debounced notify customer 2 search - same API as consignee
@@ -1889,11 +1944,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       if (!query || query.length < 2) {
         setNotify2CustomerOptions([]);
         setNotify2CustomerHasResults(null);
+        setNotify2CustomerIsSearching(false);
         setNotify2CustomerAddressOptions([]);
         notify2CustomerDataRef.current = {};
         return;
       }
       try {
+        setNotify2CustomerIsSearching(true);
+        setNotify2CustomerHasResults(null);
         const results = await commonSearchAPI({
           endpoint: URL.shipmentParty,
           query,
@@ -1905,7 +1963,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           setNotify2CustomerOptions([]);
           setNotify2CustomerHasResults(false);
           setNotify2CustomerAddressOptions([]);
-          form.setFieldValue("notify2_customer_name", query);
+          form.setFieldValue("notify2_customer_name", toTitleCase(query));
           form.setFieldValue("notify2_customer_address", "");
           form.setFieldValue("notify2_customer_email", "");
           notify2CustomerDataRef.current = {};
@@ -1925,9 +1983,11 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         setNotify2CustomerOptions([]);
         setNotify2CustomerHasResults(null);
         notify2CustomerDataRef.current = {};
+      } finally {
+        setNotify2CustomerIsSearching(false);
       }
     },
-    500,
+    300,
   );
 
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
@@ -4230,6 +4290,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {consigneeHasResults === false &&
                   consigneeSearch.trim().length >= 2 ? (
                     <FormTextInput
+                      ref={consigneeTextRef}
                       label="Consignee Name"
                       placeholder="Enter consignee name"
                       value={form.values.consignee_name || consigneeSearch}
@@ -4242,6 +4303,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     />
                   ) : (
                     <Select
+                      ref={consigneeSelectRef}
                       label="Consignee Name"
                       placeholder="Select or search consignee"
                       searchable
@@ -4267,7 +4329,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       onSearchChange={(value) => {
                         const v = toTitleCase(value);
                         setConsigneeSearch(v);
+                        setConsigneeHasResults(null);
                         debouncedConsigneeSearch(v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && consigneeIsSearching) {
+                          e.preventDefault();
+                        }
                       }}
                       value={form.values.consignee_code || ""}
                       onChange={(value) => {
@@ -4665,6 +4733,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {notifyCustomerHasResults === false &&
                   notifyCustomerSearch.trim().length >= 2 ? (
                     <FormTextInput
+                      ref={notify1TextRef}
                       label="Notify Customer 1 Name"
                       placeholder="Enter notify customer name"
                       value={notifyCustomerSearch || notifyCustomerDisplayName || ""}
@@ -4679,6 +4748,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     />
                   ) : (
                     <Select
+                      ref={notify1SelectRef}
                       label="Notify Customer 1 Name"
                       placeholder="Select or search notify customer"
                       searchable
@@ -4693,7 +4763,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       onSearchChange={(value) => {
                         const v = toTitleCase(value);
                         setNotifyCustomerSearch(v);
+                        setNotifyCustomerHasResults(null);
                         debouncedNotifyCustomerSearch(v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && notifyCustomerIsSearching) {
+                          e.preventDefault();
+                        }
                       }}
                       value={notifyCustomerSelectedId || ""}
                       onChange={(value) => {
@@ -4769,6 +4845,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {notify2CustomerHasResults === false &&
                   notify2CustomerSearch.trim().length >= 2 ? (
                     <FormTextInput
+                      ref={notify2TextRef}
                       label="Notify Customer 2 Name"
                       placeholder="Enter notify customer name"
                       value={notify2CustomerSearch || notify2CustomerDisplayName || ""}
@@ -4783,6 +4860,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     />
                   ) : (
                     <Select
+                      ref={notify2SelectRef}
                       label="Notify Customer 2 Name"
                       placeholder="Select or search notify customer"
                       searchable
@@ -4797,7 +4875,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       onSearchChange={(value) => {
                         const v = toTitleCase(value);
                         setNotify2CustomerSearch(v);
+                        setNotify2CustomerHasResults(null);
                         debouncedNotify2CustomerSearch(v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && notify2CustomerIsSearching) {
+                          e.preventDefault();
+                        }
                       }}
                       value={notify2CustomerSelectedId || ""}
                       onChange={(value) => {
