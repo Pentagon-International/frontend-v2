@@ -76,6 +76,15 @@ interface ImportShipmentStepperProps {
   onEditFormPopulated?: () => void;
 }
 
+interface ContainerDetail {
+  id?: number;
+  container_no?: string;
+  no_of_packages?: string;
+  gross_weight?: string;
+  volume?: string;
+  chargeable_weight?: string;
+}
+
 interface CargoDetail {
   // Common fields
   id?: number;
@@ -90,7 +99,16 @@ interface CargoDetail {
   container_type_code?: string;
   container_no?: string;
   no_of_containers?: number;
+  containers?: ContainerDetail[];
 }
+
+const DEFAULT_CONTAINER_ROW: ContainerDetail = {
+  container_no: undefined,
+  no_of_packages: undefined,
+  gross_weight: undefined,
+  volume: undefined,
+  chargeable_weight: undefined,
+};
 
 const DEFAULT_CARGO_ROW: CargoDetail = {
   no_of_packages: undefined,
@@ -102,6 +120,7 @@ const DEFAULT_CARGO_ROW: CargoDetail = {
   container_type_code: undefined,
   container_no: undefined,
   no_of_containers: undefined,
+  containers: [],
 };
 
 interface BookingEvent {
@@ -349,6 +368,15 @@ const validationSchema = yup.object({
       container_type_code: yup.string().nullable(),
       container_no: yup.string().nullable(),
       no_of_containers: yup.number().nullable(),
+      containers: yup.array().of(
+        yup.object({
+          container_no: yup.string().nullable(),
+          no_of_packages: yup.string().nullable(),
+          gross_weight: yup.string().nullable(),
+          volume: yup.string().nullable(),
+          chargeable_weight: yup.string().nullable(),
+        }),
+      ),
     }),
   ),
 
@@ -1040,6 +1068,26 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               no_of_containers: cargo.no_of_containers
                 ? Number(cargo.no_of_containers)
                 : undefined,
+              containers: Array.isArray(cargo.containers)
+                ? (cargo.containers as Array<Record<string, unknown>>).map(
+                    (c) => ({
+                      id: c.id != null ? Number(c.id) : undefined,
+                      container_no: c.container_no
+                        ? String(c.container_no)
+                        : undefined,
+                      no_of_packages: c.no_of_packages
+                        ? String(c.no_of_packages)
+                        : undefined,
+                      gross_weight: c.gross_weight
+                        ? String(c.gross_weight)
+                        : undefined,
+                      volume: c.volume ? String(c.volume) : undefined,
+                      chargeable_weight: c.chargeable_weight
+                        ? String(c.chargeable_weight)
+                        : undefined,
+                    }),
+                  )
+                : [],
             }),
           )
         : [
@@ -1053,6 +1101,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               container_type_code: undefined,
               container_no: undefined,
               no_of_containers: undefined,
+              containers: [],
             },
           ],
 
@@ -1261,6 +1310,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           chargeable_volume: undefined,
           container_type_code: undefined,
           no_of_containers: undefined,
+          containers: [],
         },
       ],
 
@@ -2479,21 +2529,23 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       const volume = Number(cargo.volume) || null;
 
       if (grossWeight || volume) {
-        const chargeableVolume = calculateChargeableVolume(grossWeight, volume);
-        if (cargo.chargeable_volume !== chargeableVolume) {
+        const gw = grossWeight ? grossWeight / 1000 : 0;
+        const vol = volume || 0;
+        const chargeableWeight = Math.max(gw, vol);
+        if (cargo.chargeable_weight !== chargeableWeight) {
           form.setFieldValue(
-            "cargo_details.0.chargeable_volume",
-            chargeableVolume,
+            "cargo_details.0.chargeable_weight",
+            chargeableWeight,
           );
         }
       } else {
-        if (cargo.chargeable_volume !== null) {
-          form.setFieldValue("cargo_details.0.chargeable_volume", null);
+        if (cargo.chargeable_weight !== null) {
+          form.setFieldValue("cargo_details.0.chargeable_weight", null);
         }
       }
-      // Clear chargeable weight when service is LCL
-      if (cargo.chargeable_weight !== null) {
-        form.setFieldValue("cargo_details.0.chargeable_weight", null);
+      // Clear chargeable volume when service is LCL
+      if (cargo.chargeable_volume !== null) {
+        form.setFieldValue("cargo_details.0.chargeable_volume", null);
       }
     } else if (form.values.service === "AIR") {
       const grossWeight = Number(cargo.gross_weight) || null;
@@ -2675,6 +2727,24 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           if (cargo.id != null && cargo.id !== undefined) {
             cargoPayload.id =
               typeof cargo.id === "number" ? cargo.id : Number(cargo.id);
+          }
+          if (Array.isArray(cargo.containers) && cargo.containers.length > 0) {
+            cargoPayload.containers = cargo.containers.map((c) => {
+              const containerPayload: Record<string, unknown> = {
+                container_no: c.container_no || null,
+                no_of_packages: c.no_of_packages || null,
+                gross_weight: c.gross_weight || null,
+                volume: c.volume || null,
+                chargeable_weight: c.chargeable_weight || null,
+              };
+              if (c.id != null && c.id !== undefined) {
+                containerPayload.id =
+                  typeof c.id === "number" ? c.id : Number(c.id);
+              }
+              return containerPayload;
+            });
+          } else {
+            cargoPayload.containers = [];
           }
           return cargoPayload;
         }),
@@ -5330,9 +5400,26 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               {/* Service-specific Cargo Details - Only show when service is selected */}
               {form.values.service && (
                 <>
-                  <Text size="sm" fw={500} mb="md" c="#105476">
-                    Cargo Details for {form.values.service}
-                  </Text>
+                  <Group justify="space-between" mb="md" align="center">
+                    <Text size="sm" fw={500} c="#105476">
+                      Cargo Details for {form.values.service}
+                    </Text>
+                    {form.values.service === "FCL" && (
+                      <Button
+                        variant="light"
+                        color="#105476"
+                        size="sm"
+                        leftSection={<IconPlus size={14} />}
+                        onClick={() =>
+                          form.insertListItem("cargo_details", {
+                            ...DEFAULT_CARGO_ROW,
+                          })
+                        }
+                      >
+                        Add
+                      </Button>
+                    )}
+                  </Group>
 
                   {/* AIR Service Cargo Details - Single Fields */}
                   {form.values.service === "AIR" && (
@@ -5371,7 +5458,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       </Grid.Col>
                       <Grid.Col span={3}>
                         <FormNumberInput
-                          label="Chargeable Weight (kg)"
+                          label="Chargeable Weight (cbm)"
                           // placeholder="Auto-calculated"
                           min={0}
                           decimalScale={2}
@@ -5404,7 +5491,19 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   {/* LCL Service Cargo Details - Single Fields */}
                   {form.values.service === "LCL" && (
                     <Grid>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2}>
+                        <Dropdown
+                          label="Container Type"
+                          placeholder="Select type"
+                          searchable
+                          data={containerTypeOptions}
+                          nothingFoundMessage="No container types found"
+                          {...form.getInputProps(
+                            "cargo_details.0.container_type_code",
+                          )}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={2}>
                         <FormTextInput
                           label="Container Number"
                           placeholder="Enter container number"
@@ -5413,17 +5512,17 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={2.25}>
+                      <Grid.Col span={2}>
                         <FormNumberInput
                           label="No of Packages"
-                          placeholder="Enter number of packages"
+                          placeholder="Enter packages"
                           min={1}
                           {...form.getInputProps(
                             "cargo_details.0.no_of_packages",
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={2.25}>
+                      <Grid.Col span={2}>
                         <FormNumberInput
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
@@ -5434,7 +5533,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={2.25}>
+                      <Grid.Col span={2}>
                         <FormNumberInput
                           label="Volume (cbm)"
                           placeholder="Enter volume"
@@ -5443,15 +5542,15 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           {...form.getInputProps("cargo_details.0.volume")}
                         />
                       </Grid.Col>
-                      <Grid.Col span={2.25}>
+                      <Grid.Col span={2}>
                         <FormNumberInput
-                          label="Chargeable Volume (cbm)"
+                          label="Chargeable Weight (cbm)"
                           placeholder="Auto-calculated"
                           min={0}
                           decimalScale={2}
                           readOnly
                           {...form.getInputProps(
-                            "cargo_details.0.chargeable_volume",
+                            "cargo_details.0.chargeable_weight",
                           )}
                           styles={{
                             input: {
@@ -5477,56 +5576,58 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
                   {/* FCL Service Cargo Details */}
                   {form.values.service === "FCL" && (
-                    <>
-                      <Grid
-                        mb="sm"
-                        style={{
-                          fontWeight: 600,
-                          color: "#105476",
-                        }}
-                        gutter="sm"
-                      >
-                        <Grid.Col span={3}>
-                          <RequiredLabel
-                            label="Container Number"
-                            required={false}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={3}>
-                          <RequiredLabel
-                            label="Container Type"
-                            required={false}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <RequiredLabel
-                            label="No of Containers"
-                            required={false}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <RequiredLabel
-                            label="Gross Weight"
-                            required={false}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={1}>
-                          <RequiredLabel label="Actions" required={false} />
-                        </Grid.Col>
-                      </Grid>
-                      <Stack gap="md">
-                        {form.values.cargo_details.map((_, cargoIndex) => (
-                          <Box key={cargoIndex}>
-                            <Grid gutter={"sm"}>
-                              <Grid.Col span={3}>
-                                <FormTextInput
-                                  placeholder="Enter container number"
-                                  {...form.getInputProps(
-                                    `cargo_details.${cargoIndex}.container_no`,
-                                  )}
+                    <Stack gap="md">
+                      {form.values.cargo_details.map(
+                        (cargoItem, cargoIndex) => (
+                          <Box
+                            key={cargoIndex}
+                            style={{
+                              border:
+                                cargoItem.containers &&
+                                cargoItem.containers.length > 0
+                                  ? "1px solid #b8d8ea"
+                                  : "1px solid #e0e0e0",
+                              borderRadius: "8px",
+                              padding: "12px",
+                            }}
+                          >
+                            <Grid
+                              mb="xs"
+                              style={{
+                                fontWeight: 600,
+                                color: "#105476",
+                              }}
+                              gutter="sm"
+                            >
+                              <Grid.Col span={3.5}>
+                                <RequiredLabel
+                                  label="Container Type"
+                                  required={false}
                                 />
                               </Grid.Col>
                               <Grid.Col span={3}>
+                                <RequiredLabel
+                                  label="No of Containers"
+                                  required={false}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={3}>
+                                <RequiredLabel
+                                  label="Gross Weight (kg)"
+                                  required={false}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={2.5}>
+                                {form.values.cargo_details.length > 1 && (
+                                  <RequiredLabel
+                                    label="Actions"
+                                    required={false}
+                                  />
+                                )}
+                              </Grid.Col>
+                            </Grid>
+                            <Grid gutter="sm">
+                              <Grid.Col span={3.5}>
                                 <Dropdown
                                   placeholder="Select container type"
                                   searchable
@@ -5537,16 +5638,73 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                   )}
                                 />
                               </Grid.Col>
-                              <Grid.Col span={2.5}>
+                              <Grid.Col span={3}>
                                 <FormNumberInput
-                                  placeholder="Enter number of containers"
+                                  placeholder="No of containers"
                                   min={1}
-                                  {...form.getInputProps(
-                                    `cargo_details.${cargoIndex}.no_of_containers`,
-                                  )}
+                                  value={
+                                    form.values.cargo_details[cargoIndex]
+                                      ?.no_of_containers ?? ""
+                                  }
+                                  onChange={(val) => {
+                                    const count = Number(val) || 0;
+                                    form.setFieldValue(
+                                      `cargo_details.${cargoIndex}.no_of_containers`,
+                                      count || undefined,
+                                    );
+                                    const existing =
+                                      form.values.cargo_details[cargoIndex]
+                                        ?.containers || [];
+                                    if (count > existing.length) {
+                                      const toAdd = count - existing.length;
+                                      for (let i = 0; i < toAdd; i++) {
+                                        form.insertListItem(
+                                          `cargo_details.${cargoIndex}.containers`,
+                                          { ...DEFAULT_CONTAINER_ROW },
+                                        );
+                                      }
+                                    } else if (count < existing.length) {
+                                      let total = 0;
+                                      for (let i = 0; i < count; i++) {
+                                        total +=
+                                          parseFloat(
+                                            String(
+                                              existing[i]
+                                                ?.gross_weight || "0",
+                                            ),
+                                          ) || 0;
+                                      }
+                                      for (
+                                        let i = existing.length - 1;
+                                        i >= count;
+                                        i--
+                                      ) {
+                                        form.removeListItem(
+                                          `cargo_details.${cargoIndex}.containers`,
+                                          i,
+                                        );
+                                      }
+                                      form.setFieldValue(
+                                        `cargo_details.${cargoIndex}.gross_weight`,
+                                        parseFloat(total.toFixed(2)) ||
+                                          undefined,
+                                      );
+                                    }
+                                    if (count === 0) {
+                                      form.setFieldValue(
+                                        `cargo_details.${cargoIndex}.gross_weight`,
+                                        undefined,
+                                      );
+                                    }
+                                  }}
+                                  error={
+                                    form.errors[
+                                      `cargo_details.${cargoIndex}.no_of_containers`
+                                    ]
+                                  }
                                 />
                               </Grid.Col>
-                              <Grid.Col span={2.5}>
+                              <Grid.Col span={3}>
                                 <FormNumberInput
                                   placeholder="Enter gross weight"
                                   min={0}
@@ -5556,56 +5714,213 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                   )}
                                 />
                               </Grid.Col>
-                              {/* Add/Remove buttons */}
-                              <Grid.Col span={1}>
-                                <Group gap="sm">
-                                  {cargoIndex ===
-                                    form.values.cargo_details.length - 1 && (
-                                    <Button
-                                      variant="light"
-                                      color="#105476"
-                                      size="sm"
-                                      px={12}
-                                      onClick={() => {
-                                        form.insertListItem("cargo_details", {
-                                          no_of_packages: undefined,
-                                          gross_weight: undefined,
-                                          volume_weight: undefined,
-                                          chargeable_weight: undefined,
-                                          volume: undefined,
-                                          chargeable_volume: undefined,
-                                          container_type_code: undefined,
-                                          container_no: undefined,
-                                          no_of_containers: undefined,
-                                        });
-                                      }}
-                                    >
-                                      <IconPlus size={14} />
-                                    </Button>
-                                  )}
-                                  {form.values.cargo_details.length > 1 && (
-                                    <Button
-                                      variant="light"
-                                      color="red"
-                                      size="sm"
-                                      px={12}
-                                      onClick={() =>
-                                        form.removeListItem(
-                                          "cargo_details",
-                                          cargoIndex,
-                                        )
-                                      }
-                                    >
-                                      <IconTrash size={14} />
-                                    </Button>
-                                  )}
-                                </Group>
+                              <Grid.Col span={2.5}>
+                                {form.values.cargo_details.length > 1 && (
+                                  <Button
+                                    variant="light"
+                                    color="red"
+                                    size="sm"
+                                    px={10}
+                                    onClick={() =>
+                                      form.removeListItem(
+                                        "cargo_details",
+                                        cargoIndex,
+                                      )
+                                    }
+                                  >
+                                    <IconTrash size={14} />
+                                  </Button>
+                                )}
                               </Grid.Col>
                             </Grid>
+
+                            {/* Container detail rows - always visible */}
+                            {cargoItem.containers &&
+                              cargoItem.containers.length > 0 && (
+                                <Box mt="md" pt={"md"} style={{borderTop: "1px solid #e0e0e0"}}>
+                                  <Grid
+                                    gutter="sm"
+                                    mb="sm"
+                                    style={{
+                                      fontWeight: 600,
+                                      color: "#105476",
+                                    }}
+                                  >
+                                    <Grid.Col span={2.4}>
+                                      <RequiredLabel
+                                        label="Container No"
+                                        required={false}
+                                      />
+                                    </Grid.Col>
+                                    <Grid.Col span={2.4}>
+                                      <RequiredLabel
+                                        label="No of Packages"
+                                        required={false}
+                                      />
+                                    </Grid.Col>
+                                    <Grid.Col span={2.4}>
+                                      <RequiredLabel
+                                        label="Gross Weight (kg)"
+                                        required={false}
+                                      />
+                                    </Grid.Col>
+                                    <Grid.Col span={2.4}>
+                                      <RequiredLabel
+                                        label="Volume (cbm)"
+                                        required={false}
+                                      />
+                                    </Grid.Col>
+                                    <Grid.Col span={2.4}>
+                                      <RequiredLabel
+                                        label="Chargeable Weight (cbm)"
+                                        required={false}
+                                      />
+                                    </Grid.Col>
+                                  </Grid>
+                                  <Stack gap="sm">
+                                    {cargoItem.containers.map((_, cIdx) => (
+                                      <Grid
+                                        key={cIdx}
+                                        gutter="sm"
+                                        align="center"
+                                      >
+                                        <Grid.Col span={2.4}>
+                                          <FormTextInput
+                                            placeholder="Enter container no"
+                                            {...form.getInputProps(
+                                              `cargo_details.${cargoIndex}.containers.${cIdx}.container_no`,
+                                            )}
+                                          />
+                                        </Grid.Col>
+                                        <Grid.Col span={2.4}>
+                                          <FormTextInput
+                                            placeholder="Enter packages"
+                                            {...form.getInputProps(
+                                              `cargo_details.${cargoIndex}.containers.${cIdx}.no_of_packages`,
+                                            )}
+                                          />
+                                        </Grid.Col>
+                                        <Grid.Col span={2.4}>
+                                          <FormTextInput
+                                            placeholder="Enter gross weight"
+                                            {...form.getInputProps(
+                                              `cargo_details.${cargoIndex}.containers.${cIdx}.gross_weight`,
+                                            )}
+                                            onChange={(e) => {
+                                              const val =
+                                                e.currentTarget.value;
+                                              form.setFieldValue(
+                                                `cargo_details.${cargoIndex}.containers.${cIdx}.gross_weight`,
+                                                val,
+                                              );
+                                              const rawGw =
+                                                parseFloat(val) || 0;
+                                              const gw = rawGw / 1000;
+                                              const vol =
+                                                parseFloat(
+                                                  String(
+                                                    form.values.cargo_details[
+                                                      cargoIndex
+                                                    ]?.containers?.[cIdx]
+                                                      ?.volume || "0",
+                                                  ),
+                                                ) || 0;
+                                              const newCw = Math.max(gw, vol);
+                                              form.setFieldValue(
+                                                `cargo_details.${cargoIndex}.containers.${cIdx}.chargeable_weight`,
+                                                newCw.toFixed(2),
+                                              );
+                                              const containers =
+                                                form.values.cargo_details[
+                                                  cargoIndex
+                                                ]?.containers || [];
+                                              let total = 0;
+                                              containers.forEach((c, i) => {
+                                                if (i === cIdx) {
+                                                  total += rawGw;
+                                                } else {
+                                                  total +=
+                                                    parseFloat(
+                                                      String(
+                                                        c.gross_weight || "0",
+                                                      ),
+                                                    ) || 0;
+                                                }
+                                              });
+                                              form.setFieldValue(
+                                                `cargo_details.${cargoIndex}.gross_weight`,
+                                                parseFloat(total.toFixed(2)),
+                                              );
+                                            }}
+                                          />
+                                        </Grid.Col>
+                                        <Grid.Col span={2.4}>
+                                          <FormTextInput
+                                            placeholder="Enter volume"
+                                            {...form.getInputProps(
+                                              `cargo_details.${cargoIndex}.containers.${cIdx}.volume`,
+                                            )}
+                                            onChange={(e) => {
+                                              const val =
+                                                e.currentTarget.value;
+                                              form.setFieldValue(
+                                                `cargo_details.${cargoIndex}.containers.${cIdx}.volume`,
+                                                val,
+                                              );
+                                              const vol =
+                                                parseFloat(val) || 0;
+                                              const rawGw =
+                                                parseFloat(
+                                                  String(
+                                                    form.values.cargo_details[
+                                                      cargoIndex
+                                                    ]?.containers?.[cIdx]
+                                                      ?.gross_weight || "0",
+                                                  ),
+                                                ) || 0;
+                                              const gw = rawGw / 1000;
+                                              const newCw = Math.max(gw, vol);
+                                              form.setFieldValue(
+                                                `cargo_details.${cargoIndex}.containers.${cIdx}.chargeable_weight`,
+                                                newCw.toFixed(2),
+                                              );
+                                            }}
+                                          />
+                                        </Grid.Col>
+                                        <Grid.Col span={2.4}>
+                                          <FormTextInput
+                                            placeholder="Auto-calculated"
+                                            readOnly
+                                            {...form.getInputProps(
+                                              `cargo_details.${cargoIndex}.containers.${cIdx}.chargeable_weight`,
+                                            )}
+                                            styles={{
+                                              input: {
+                                                backgroundColor: "#f5f5f5",
+                                                cursor: "not-allowed",
+                                                fontSize: "13px",
+                                                fontFamily: "Inter",
+                                                height: "36px",
+                                              },
+                                              label: {
+                                                fontSize: "13px",
+                                                fontWeight: 500,
+                                                color: "#424242",
+                                                marginBottom: "4px",
+                                                fontFamily: "Inter",
+                                              },
+                                            }}
+                                          />
+                                        </Grid.Col>
+                                      </Grid>
+                                    ))}
+                                  </Stack>
+                                </Box>
+                              )}
                           </Box>
-                        ))}
-                      </Stack>
-                    </>
+                        ),
+                      )}
+                    </Stack>
                   )}
                 </>
               )}
