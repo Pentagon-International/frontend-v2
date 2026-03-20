@@ -5508,8 +5508,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       </Grid.Col>
                       <Grid.Col span={2}>
                         <FormTextInput
-                          label="Container Number"
+                          label="Container No"
                           placeholder="Enter container number"
+                          maxLength={11}
                           format="capital"
                           {...form.getInputProps(
                             "cargo_details.0.container_no",
@@ -5792,6 +5793,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                           <FormTextInput
                                             placeholder="Enter container no"
                                             format="capital"
+                                            maxLength={11}
                                             {...form.getInputProps(
                                               `cargo_details.${cargoIndex}.containers.${cIdx}.container_no`,
                                             )}
