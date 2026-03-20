@@ -1033,7 +1033,7 @@ function CustomerMaster() {
       {
         accessorKey: "customer_name",
         header: "Customer Name",
-        size: 300,
+        size: 250,
         Cell: ({ row }) => {
           const customer = row.original as CustomerData;
           return (
@@ -1051,15 +1051,14 @@ function CustomerMaster() {
           );
         },
       },
-      // {
-      //   accessorKey: "customer_type",
-      //   header: "Customer Type",
-      //   size: 150,
-      //   Cell: ({ cell }) => (
-      //     <Text size="sm">{cell.getValue<string>() || "N/A"}</Text>
-      //   ),
-      // },
-
+      {
+        accessorKey: "customer_type_name",
+        header: "Customer Type",
+        size: 150,
+        Cell: ({ cell }) => (
+          <Text size="sm">{cell.getValue<string>() || "N/A"}</Text>
+        ),
+      },
       {
         accessorKey: "term_code",
         header: "Term Code",
