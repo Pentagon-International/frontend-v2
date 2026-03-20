@@ -1989,6 +1989,13 @@ function HouseCreate() {
     });
 
     // Prepare charges payload - include id only in edit mode, charge_id, supplier_code for API
+    const roundTo2ForCharges = (v: unknown): number | null => {
+      if (v == null) return null;
+      const n = typeof v === "number" ? v : parseFloat(String(v));
+      if (!Number.isFinite(n)) return null;
+      return Number(n.toFixed(2));
+    };
+
     const chargesForPayload = chargesForm.values.charges.map((charge) => ({
       ...(isEditMode &&
         charge.id && {
@@ -2002,13 +2009,13 @@ function HouseCreate() {
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
       no_of_unit: charge.no_of_unit,
-      roe: charge.roe,
-      amount_per_unit: charge.amount_per_unit,
-      amount: charge.amount,
-      sell_local_amount: charge.sell_local_amount ?? null,
-      unit_cost: charge.unit_cost ?? null,
-      total_cost: charge.total_cost ?? null,
-      cost_local_amount: charge.cost_local_amount ?? null,
+      roe: roundTo2ForCharges(charge.roe),
+      amount_per_unit: roundTo2ForCharges(charge.amount_per_unit),
+      amount: roundTo2ForCharges(charge.amount),
+      sell_local_amount: roundTo2ForCharges(charge.sell_local_amount),
+      unit_cost: roundTo2ForCharges(charge.unit_cost),
+      total_cost: roundTo2ForCharges(charge.total_cost),
+      cost_local_amount: roundTo2ForCharges(charge.cost_local_amount),
       supplier_code: charge.supplier_code || null,
       supplier_name: charge.supplier_name ?? null,
     }));

@@ -2090,6 +2090,15 @@ function ImportJobCreate() {
       return;
     }
     try {
+      // Backend rejects numeric fields with more than 2 decimals.
+      // Round right before we build the final create/edit payload.
+      const roundTo2 = (v: unknown): number | null => {
+        if (v == null) return null;
+        const n = typeof v === "number" ? v : parseFloat(String(v));
+        if (!Number.isFinite(n)) return null;
+        return Number(n.toFixed(2));
+      };
+
       const payload = {
         service: mblDetailsForm.values.service,
         service_type: "Import", // Based on the example payload
@@ -2250,9 +2259,9 @@ function ImportJobCreate() {
             ...(cargo.container_no && { container_no: cargo.container_no }),
             ...(cargo.container_id && { container_id: cargo.container_id }),
             no_of_packages: cargo.no_of_packages,
-            gross_weight: cargo.gross_weight,
-            volume: cargo.volume,
-            chargeable_weight: cargo.chargeable_weight,
+            gross_weight: roundTo2(cargo.gross_weight),
+            volume: roundTo2(cargo.volume),
+            chargeable_weight: roundTo2(cargo.chargeable_weight),
             haz:
               cargo.haz !== null && cargo.haz !== undefined
                 ? typeof cargo.haz === "boolean"
@@ -2298,34 +2307,23 @@ function ImportJobCreate() {
                     : null,
               no_of_unit:
                 charge.no_of_unit != null ? Number(charge.no_of_unit) : null,
-              roe: charge.roe != null ? Number(charge.roe) : null,
-              amount_per_unit:
-                charge.amount_per_unit != null
-                  ? Number(charge.amount_per_unit)
-                  : null,
-              amount: charge.amount != null ? Number(charge.amount) : null,
+              roe: roundTo2(charge.roe),
+              amount_per_unit: roundTo2(charge.amount_per_unit),
+              amount: roundTo2(charge.amount),
               sell_local_amount:
-                charge.sell_local_amount != null
-                  ? Number(charge.sell_local_amount)
-                  : (charge as { local_amount?: unknown }).local_amount != null
-                    ? Number(
-                        (charge as { local_amount?: unknown }).local_amount,
-                      )
-                    : null,
+                roundTo2(
+                  charge.sell_local_amount != null
+                    ? charge.sell_local_amount
+                    : (charge as { local_amount?: unknown }).local_amount,
+                ),
               unit_cost:
-                charge.unit_cost != null
-                  ? Number(charge.unit_cost)
-                  : (charge as { cost_per_unit?: unknown }).cost_per_unit != null
-                    ? Number(
-                        (charge as { cost_per_unit?: unknown }).cost_per_unit,
-                      )
-                    : null,
-              total_cost:
-                charge.total_cost != null ? Number(charge.total_cost) : null,
-              cost_local_amount:
-                charge.cost_local_amount != null
-                  ? Number(charge.cost_local_amount)
-                  : null,
+                roundTo2(
+                  charge.unit_cost != null
+                    ? charge.unit_cost
+                    : (charge as { cost_per_unit?: unknown }).cost_per_unit,
+                ),
+              total_cost: roundTo2(charge.total_cost),
+              cost_local_amount: roundTo2(charge.cost_local_amount),
             }));
           })(),
         })),
