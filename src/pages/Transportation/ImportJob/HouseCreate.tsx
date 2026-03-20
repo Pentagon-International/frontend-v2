@@ -53,6 +53,7 @@ import {
 } from "../../../components";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
@@ -1933,18 +1934,11 @@ function HouseCreate() {
           : haz === false || haz === "No" || String(haz).toLowerCase() === "no"
             ? false
             : null;
-
-      const roundTo2 = (v: unknown): number | null => {
-        if (v == null) return null;
-        const n = typeof v === "number" ? v : parseFloat(String(v));
-        if (!Number.isFinite(n)) return null;
-        return Math.round(n * 100) / 100;
-      };
       const basePayload: Record<string, unknown> = {
         no_of_packages: no_of_packages ?? null,
-        gross_weight: roundTo2(gross_weight),
-        volume: roundTo2(volume),
-        chargeable_weight: roundTo2(chargeable_weight),
+        gross_weight: roundToDecimals(gross_weight) ?? null,
+        volume: roundToDecimals(volume) ?? null,
+        chargeable_weight: roundToDecimals(chargeable_weight) ?? null,
         haz: hazValue,
       };
 
@@ -1989,13 +1983,6 @@ function HouseCreate() {
     });
 
     // Prepare charges payload - include id only in edit mode, charge_id, supplier_code for API
-    const roundTo2ForCharges = (v: unknown): number | null => {
-      if (v == null) return null;
-      const n = typeof v === "number" ? v : parseFloat(String(v));
-      if (!Number.isFinite(n)) return null;
-      return Number(n.toFixed(2));
-    };
-
     const chargesForPayload = chargesForm.values.charges.map((charge) => ({
       ...(isEditMode &&
         charge.id && {
@@ -2009,13 +1996,13 @@ function HouseCreate() {
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
       no_of_unit: charge.no_of_unit,
-      roe: roundTo2ForCharges(charge.roe),
-      amount_per_unit: roundTo2ForCharges(charge.amount_per_unit),
-      amount: roundTo2ForCharges(charge.amount),
-      sell_local_amount: roundTo2ForCharges(charge.sell_local_amount),
-      unit_cost: roundTo2ForCharges(charge.unit_cost),
-      total_cost: roundTo2ForCharges(charge.total_cost),
-      cost_local_amount: roundTo2ForCharges(charge.cost_local_amount),
+      roe: roundToDecimals(charge.roe) ?? null,
+      amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+      amount: roundToDecimals(charge.amount) ?? null,
+      sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
+      unit_cost: roundToDecimals(charge.unit_cost) ?? null,
+      total_cost: roundToDecimals(charge.total_cost) ?? null,
+      cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
       supplier_code: charge.supplier_code || null,
       supplier_name: charge.supplier_name ?? null,
     }));
@@ -2202,13 +2189,6 @@ function HouseCreate() {
 
   // Generate PDF preview from current form data
   const generatePDFPreview = () => {
-    const roundTo2 = (v: unknown): number | null => {
-      if (v == null) return null;
-      const n = typeof v === "number" ? v : parseFloat(String(v));
-      if (!Number.isFinite(n)) return null;
-      return Math.round(n * 100) / 100;
-    };
-
     try {
       setPreviewOpen(true);
 
@@ -2274,13 +2254,13 @@ function HouseCreate() {
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             currency: charge.currency,
             no_of_unit: charge.no_of_unit,
-            roe: roundTo2(charge.roe),
-            amount_per_unit: roundTo2(charge.amount_per_unit),
-            amount: roundTo2(charge.amount),
-            sell_local_amount: roundTo2(charge.sell_local_amount),
-            unit_cost: roundTo2(charge.unit_cost),
-            total_cost: roundTo2(charge.total_cost),
-            cost_local_amount: roundTo2(charge.cost_local_amount),
+            roe: roundToDecimals(charge.roe) ?? null,
+            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundToDecimals(charge.amount) ?? null,
+            sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
+            unit_cost: roundToDecimals(charge.unit_cost) ?? null,
+            total_cost: roundToDecimals(charge.total_cost) ?? null,
+            cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
             supplier_code: charge.supplier_code || null,
             supplier_name: charge.supplier_name || null,
           })),

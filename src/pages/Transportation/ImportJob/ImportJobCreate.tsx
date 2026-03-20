@@ -58,6 +58,7 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 
@@ -2092,13 +2093,6 @@ function ImportJobCreate() {
     try {
       // Backend rejects numeric fields with more than 2 decimals.
       // Round right before we build the final create/edit payload.
-      const roundTo2 = (v: unknown): number | null => {
-        if (v == null) return null;
-        const n = typeof v === "number" ? v : parseFloat(String(v));
-        if (!Number.isFinite(n)) return null;
-        return Number(n.toFixed(2));
-      };
-
       const payload = {
         service: mblDetailsForm.values.service,
         service_type: "Import", // Based on the example payload
@@ -2259,9 +2253,9 @@ function ImportJobCreate() {
             ...(cargo.container_no && { container_no: cargo.container_no }),
             ...(cargo.container_id && { container_id: cargo.container_id }),
             no_of_packages: cargo.no_of_packages,
-            gross_weight: roundTo2(cargo.gross_weight),
-            volume: roundTo2(cargo.volume),
-            chargeable_weight: roundTo2(cargo.chargeable_weight),
+            gross_weight: roundToDecimals(cargo.gross_weight) ?? null,
+            volume: roundToDecimals(cargo.volume) ?? null,
+            chargeable_weight: roundToDecimals(cargo.chargeable_weight) ?? null,
             haz:
               cargo.haz !== null && cargo.haz !== undefined
                 ? typeof cargo.haz === "boolean"
@@ -2307,23 +2301,23 @@ function ImportJobCreate() {
                     : null,
               no_of_unit:
                 charge.no_of_unit != null ? Number(charge.no_of_unit) : null,
-              roe: roundTo2(charge.roe),
-              amount_per_unit: roundTo2(charge.amount_per_unit),
-              amount: roundTo2(charge.amount),
-              sell_local_amount:
-                roundTo2(
+            roe: roundToDecimals(charge.roe) ?? null,
+            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundToDecimals(charge.amount) ?? null,
+            sell_local_amount:
+              roundToDecimals(
                   charge.sell_local_amount != null
                     ? charge.sell_local_amount
                     : (charge as { local_amount?: unknown }).local_amount,
-                ),
-              unit_cost:
-                roundTo2(
+                ) ?? null,
+            unit_cost:
+              roundToDecimals(
                   charge.unit_cost != null
                     ? charge.unit_cost
                     : (charge as { cost_per_unit?: unknown }).cost_per_unit,
-                ),
-              total_cost: roundTo2(charge.total_cost),
-              cost_local_amount: roundTo2(charge.cost_local_amount),
+                ) ?? null,
+            total_cost: roundToDecimals(charge.total_cost) ?? null,
+            cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
             }));
           })(),
         })),

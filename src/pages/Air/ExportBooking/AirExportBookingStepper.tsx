@@ -49,6 +49,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../../store/authStore";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
@@ -2755,11 +2756,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         cargo_details: form.values.cargo_details.map((cargo) => {
           const cargoPayload: Record<string, unknown> = {
             no_of_packages: cargo.no_of_packages || null,
-            gross_weight: cargo.gross_weight || null,
-            volume_weight: cargo.volume_weight || null,
-            chargeable_weight: cargo.chargeable_weight || null,
-            volume: cargo.volume || null,
-            chargeable_volume: cargo.chargeable_volume || null,
+            gross_weight: roundToDecimals(cargo.gross_weight) || null,
+            volume_weight: roundToDecimals(cargo.volume_weight) || null,
+            chargeable_weight:
+              roundToDecimals(cargo.chargeable_weight) || null,
+            volume: roundToDecimals(cargo.volume) || null,
+            chargeable_volume:
+              roundToDecimals(cargo.chargeable_volume) || null,
             container_type_code: cargo.container_type_code || null,
             no_of_containers: cargo.no_of_containers || null,
           };
@@ -2825,14 +2828,17 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             // charge_name: charge.charge_name,
             pp_cc: charge.pp_cc || "",
             currency_country_code: charge.currency_country_code,
-            roe: parseFloat(charge.roe) || 1,
+            roe: roundToDecimals(parseFloat(charge.roe)) || 1,
             unit: charge.unit,
-            no_of_units: parseFloat(charge.no_of_units) || 0,
-            sell_per_unit: parseFloat(charge.sell_per_unit) || 0,
-            min_sell: parseFloat(charge.min_sell) || 0,
-            cost_per_unit: parseFloat(charge.cost_per_unit) || 0,
-            total_cost: parseFloat(charge.total_cost) || 0,
-            total_sell: parseFloat(charge.total_sell) || 0,
+            no_of_units: roundToDecimals(parseFloat(charge.no_of_units)) || 0,
+            sell_per_unit:
+              roundToDecimals(parseFloat(charge.sell_per_unit)) || 0,
+            min_sell: roundToDecimals(parseFloat(charge.min_sell)) || 0,
+            cost_per_unit:
+              roundToDecimals(parseFloat(charge.cost_per_unit)) || 0,
+            total_cost: roundToDecimals(parseFloat(charge.total_cost)) || 0,
+            total_sell:
+              roundToDecimals(parseFloat(charge.total_sell)) || 0,
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
