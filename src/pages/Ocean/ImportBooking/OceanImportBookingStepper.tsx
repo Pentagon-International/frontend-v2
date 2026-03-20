@@ -366,11 +366,11 @@ const validationSchema = yup.object({
       volume: yup.number().nullable(),
       chargeable_volume: yup.number().nullable(),
       container_type_code: yup.string().nullable(),
-      container_no: yup.string().nullable(),
+      container_no: yup.string().nullable().matches(/^[A-Za-z0-9]{11}$/, "Container No must be exactly 11 characters"),
       no_of_containers: yup.number().nullable(),
       containers: yup.array().of(
         yup.object({
-          container_no: yup.string().nullable(),
+          container_no: yup.string().nullable().matches(/^[A-Za-z0-9]{11}$/, "Container No must be exactly 11 characters"),
           no_of_packages: yup.string().nullable(),
           gross_weight: yup.string().nullable(),
           volume: yup.string().nullable(),
@@ -2625,7 +2625,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         (field) => validation.errors[field],
       );
 
-      if (hasRequiredFieldErrors) {
+      const hasCargoErrors = Object.keys(validation.errors).some((key) =>
+        key.startsWith("cargo_details"),
+      );
+
+      if (hasRequiredFieldErrors || hasCargoErrors) {
         console.log(
           "Required fields have validation errors:",
           validation.errors,
@@ -5340,10 +5344,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     maxRows={6}
                     value={form.values.commodity_description}
                     onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
                         "commodity_description",
-                        formattedValue,
+                        e.currentTarget.value,
                       );
                     }}
                     error={form.errors.commodity_description}
@@ -5507,6 +5510,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         <FormTextInput
                           label="Container Number"
                           placeholder="Enter container number"
+                          format="capital"
                           {...form.getInputProps(
                             "cargo_details.0.container_no",
                           )}
@@ -5787,6 +5791,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                         <Grid.Col span={2.4}>
                                           <FormTextInput
                                             placeholder="Enter container no"
+                                            format="capital"
                                             {...form.getInputProps(
                                               `cargo_details.${cargoIndex}.containers.${cIdx}.container_no`,
                                             )}
