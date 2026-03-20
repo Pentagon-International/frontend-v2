@@ -162,14 +162,16 @@ const mblDetailsSchema = yup.object({
   origin_agent: yup
     .string()
     // Custom test to make the conditional "required" behavior deterministic.
-    // We treat Direct as required only when is_direct === true.
+    // We treat Direct as NOT required when is_direct === true.
+    // Destination Agent is required when is_direct === false.
     .test(
       "origin_agent-required-when-direct",
       "Destination Agent is required",
       function (value) {
         const parent = this.parent as { is_direct?: boolean };
         const isDirect = parent.is_direct === true;
-        if (!isDirect) return true;
+        // If Direct = Yes (true), Destination Agent is optional
+        if (isDirect) return true;
 
         if (value == null) {
           return this.createError({
@@ -2011,7 +2013,7 @@ function ExportJobCreate() {
         missingFields.push("Service");
       }
       if (
-        mblDetailsForm.values.is_direct &&
+        !mblDetailsForm.values.is_direct &&
         !mblDetailsForm.values.origin_agent?.trim()
       ) {
         missingFields.push("Destination Agent");
@@ -2139,24 +2141,21 @@ function ExportJobCreate() {
     }
 
     // Validate MBL and Carrier details before submission
-    // When "Direct" is No, Destination Agent is not required.
-    // Clear any stale Yup error from a previous toggle so Update can proceed normally.
-    if (mblDetailsForm.values.is_direct !== true) {
+    // When "Direct" is Yes, Destination Agent is not required.
+    // Clear any stale Yup error from a previous toggle so Update/Create can proceed normally.
+    if (mblDetailsForm.values.is_direct === true) {
       mblDetailsForm.clearFieldError("origin_agent");
     }
     const mblValidation = mblDetailsForm.validate();
     const carrierValidation = carrierDetailsForm.validate();
 
-    // Extra safety: if Direct is No, ignore origin_agent errors entirely.
+    // Extra safety: if Direct is Yes, ignore origin_agent errors entirely.
     // This ensures we never block inline UI due to stale conditional validation.
-    if (mblDetailsForm.values.is_direct !== true) {
-      mblDetailsForm.clearFieldError("origin_agent");
-    }
     const originAgentError = (
       mblValidation.errors as Record<string, unknown> | undefined
     )?.origin_agent;
     const shouldIgnoreOriginAgent =
-      mblDetailsForm.values.is_direct !== true && !!originAgentError;
+      mblDetailsForm.values.is_direct === true && !!originAgentError;
 
     if (
       (mblValidation.hasErrors && !shouldIgnoreOriginAgent) ||
@@ -2934,7 +2933,7 @@ function ExportJobCreate() {
               <Grid.Col span={3}>
                 <SearchableSelect
                   label="Destination Agent"
-                  required={mblDetailsForm.values.is_direct}
+                  required={!mblDetailsForm.values.is_direct}
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
                   searchFields={["customer_name", "customer_code"]}
@@ -3150,9 +3149,9 @@ function ExportJobCreate() {
                     const isDirect = value === "true";
                     mblDetailsForm.setFieldValue("is_direct", isDirect);
 
-                    // If switching back to "No", clear any previously shown Destination Agent error
-                    // so Update doesn't look blocked.
-                    if (!isDirect) {
+                    // If switching to "Yes" (Direct=true), Destination Agent becomes optional.
+                    // Clear any previously shown Destination Agent error so Update doesn't look blocked.
+                    if (isDirect) {
                       mblDetailsForm.clearFieldError("origin_agent");
                       // Also clear values to avoid any stale selected temp values.
                       mblDetailsForm.setFieldValue("origin_agent", "");
