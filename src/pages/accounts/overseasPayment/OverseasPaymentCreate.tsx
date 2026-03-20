@@ -41,7 +41,7 @@ import {
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
-import { putAPICall } from "../../../service/putApiCall";
+import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -774,6 +774,29 @@ export default function OverseasPaymentCreate({
         status: (paymentFromState.status ?? "UNPOSTED").toString(),
       });
     }
+
+    // Populate documents for edit/view (documents are passed from the list in `location.state`)
+    const rawDocs = (paymentFromState as any)?.documents;
+    if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+      form.setFieldValue(
+        "supporting_documents",
+        rawDocs.map((doc: any) => ({
+          name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+          file: null as File | null,
+          document_url:
+            doc.document_download_url ??
+            doc.document_url ??
+            doc.url ??
+            "",
+          document_id: doc.id ?? undefined,
+          original_document_name:
+            (doc.original_document_name ??
+              doc.document_name ??
+              doc.file_name ??
+              "").toString(),
+        })),
+      );
+    }
     // Re-run when state changes (e.g. navigating from list to edit/view with different row)
   }, [
     paymentFromState,
@@ -1181,6 +1204,64 @@ export default function OverseasPaymentCreate({
     return base;
   };
 
+  const FORM_DATA_HEADERS = {
+    ...API_HEADER,
+    headers: {
+      ...API_HEADER.headers,
+      "Content-Type": "multipart/form-data",
+    },
+  };
+
+  /**
+   * Builds multipart/form-data for `URL.reversePayment` (PUT/POST):
+   * - reverse_payment: JSON payload
+   * - document_names[i], document[i], document_id[i] (when available)
+   */
+  const buildReversalFormData = (payload: object): FormData => {
+    const fd = new FormData();
+    fd.append("reverse_payment", JSON.stringify(payload));
+
+    let fileIndex = 0;
+    form.values.supporting_documents.forEach((doc) => {
+      // Only send fields for newly uploaded files
+      if (doc.file) {
+        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
+        fd.append(`document[${fileIndex}]`, doc.file);
+        if (doc.document_id != null) {
+          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
+        }
+        fileIndex++;
+      }
+    });
+
+    return fd;
+  };
+
+  /**
+   * Builds multipart/form-data for `URL.payment` (PUT/POST):
+   * - payment: JSON payload
+   * - document_names[i], document[i], document_id[i]
+   */
+  const buildPaymentFormData = (payload: object): FormData => {
+    const fd = new FormData();
+    fd.append("payment", JSON.stringify(payload));
+
+    let fileIndex = 0;
+    form.values.supporting_documents.forEach((doc) => {
+      // Only send fields for newly uploaded files
+      if (doc.file) {
+        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
+        fd.append(`document[${fileIndex}]`, doc.file);
+        if (doc.document_id != null) {
+          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
+        }
+        fileIndex++;
+      }
+    });
+
+    return fd;
+  };
+
   const handleSubmit = async (values: PaymentFormValues) => {
     const partyLocalTotal =
       (values.details ?? []).reduce(
@@ -1227,20 +1308,13 @@ export default function OverseasPaymentCreate({
             status: "UNPOSTED",
             detailsOverride: detailsForPayload,
           });
-          const raw = await putAPICall(
-            URL.reversePayment,
-            payload,
-            API_HEADER,
-          );
-          const wrap = raw as {
-            data?: {
-              id?: number;
-              payment_no?: string;
-              reverse_payment_no?: string;
-              status?: string;
-            };
-          };
-          const res = wrap?.data;
+          const fd = buildReversalFormData(payload);
+          const raw = (await apiCallProtected.put(
+            `${URL.reversePayment}${reversePaymentSaveResponse.id}/`,
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const res = raw?.data?.data ?? raw?.data ?? raw;
           if (res?.id != null) {
             setReversePaymentSaveResponse((prev) => ({
               ...prev!,
@@ -1250,6 +1324,24 @@ export default function OverseasPaymentCreate({
                 res.reverse_payment_no ?? prev?.reverse_payment_no ?? "",
               status: res.status != null ? String(res.status) : "UNPOSTED",
             }));
+
+            if (Array.isArray(res.documents) && res.documents.length > 0) {
+              form.setFieldValue(
+                "supporting_documents",
+                res.documents.map((doc: any) => ({
+                  name: (doc.document_name ?? doc.file_name ?? "").toString(),
+                  file: null,
+                  document_url:
+                    doc.document_download_url ??
+                    doc.document_url ??
+                    doc.url ??
+                    "",
+                  document_id: doc.id ?? undefined,
+                  original_document_name:
+                    doc.original_document_name ?? doc.document_name ?? "",
+                })),
+              );
+            }
             await queryClient.invalidateQueries({ queryKey: ["payment"] });
             await queryClient.invalidateQueries({
               queryKey: ["payment-reversal"],
@@ -1263,22 +1355,13 @@ export default function OverseasPaymentCreate({
           const payload = buildReversalPayload(values, {
             detailsOverride: detailsForPayload,
           });
-          const raw = await postAPICall(
+          const fd = buildReversalFormData(payload);
+          const raw = (await apiCallProtected.post(
             URL.reversePayment,
-            payload,
-            API_HEADER,
-          );
-          const wrap = raw as {
-            data?: {
-              id?: number;
-              payment_no?: string;
-              reverse_payment_no?: string;
-              status?: string;
-              parties?: Array<{ id?: number }>;
-              allocations?: Array<{ id?: number }>;
-            };
-          };
-          const data = wrap?.data;
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const data = raw?.data?.data ?? raw?.data ?? raw;
           if (data?.id != null) {
             setReversePaymentSaveResponse({
               id: Number(data.id),
@@ -1286,6 +1369,24 @@ export default function OverseasPaymentCreate({
               reverse_payment_no: data.reverse_payment_no ?? "",
               status: data.status != null ? String(data.status) : "UNPOSTED",
             });
+
+            if (Array.isArray(data.documents) && data.documents.length > 0) {
+              form.setFieldValue(
+                "supporting_documents",
+                data.documents.map((doc: any) => ({
+                  name: (doc.document_name ?? doc.file_name ?? "").toString(),
+                  file: null,
+                  document_url:
+                    doc.document_download_url ??
+                    doc.document_url ??
+                    doc.url ??
+                    "",
+                  document_id: doc.id ?? undefined,
+                  original_document_name:
+                    doc.original_document_name ?? doc.document_name ?? "",
+                })),
+              );
+            }
             if (
               data.parties &&
               Array.isArray(data.parties) &&
@@ -1330,23 +1431,14 @@ export default function OverseasPaymentCreate({
         : buildPaymentPayload(values);
 payload.is_agent = true;
       if (isUpdate) {
-        const updateUrl = `${URL.payment}`;
-        const raw = await putAPICall(updateUrl, payload, API_HEADER);
-        const response =
-          (
-            raw as {
-              data?: {
-                id?: number;
-                payment_no?: string;
-                status?: string | number;
-              };
-            }
-          )?.data ?? raw;
-        const res = response as {
-          id?: number;
-          payment_no?: string;
-          status?: string | number;
-        };
+        const fd = buildPaymentFormData(payload);
+        const recordIdNum = saveResponse?.id ?? Number(paymentFromState?.id);
+        const raw = (await apiCallProtected.put(
+          `${URL.payment}${recordIdNum}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const res = raw?.data?.data ?? raw?.data ?? raw;
         if (res?.id != null) {
           setSaveResponse({
             id: res.id ?? saveResponse.id,
@@ -1354,6 +1446,24 @@ payload.is_agent = true;
             document_no: saveResponse.document_no ?? "",
             status: res.status != null ? String(res.status) : "UNPOSTED",
           });
+          if (Array.isArray(res.documents) && res.documents.length > 0) {
+            form.setFieldValue(
+              "supporting_documents",
+              res.documents.map((doc: any) => ({
+                name:
+                  (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                file: null,
+                document_url:
+                  doc.document_download_url ??
+                  doc.document_url ??
+                  doc.url ??
+                  "",
+                document_id: doc.id ?? undefined,
+                original_document_name:
+                  doc.original_document_name ?? doc.document_name ?? "",
+              })),
+            );
+          }
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
           ToastNotification({
             type: "success",
@@ -1361,17 +1471,13 @@ payload.is_agent = true;
           });
         }
       } else {
-        const raw = await postAPICall(URL.payment, payload, API_HEADER);
-        const wrap = raw as {
-          data?: {
-            id?: number;
-            payment_no?: string;
-            status?: string | number;
-            parties?: Array<{ id?: number; account_code?: string }>;
-            allocations?: Array<{ id?: number }>;
-          };
-        };
-        const data = wrap?.data;
+        const fd = buildPaymentFormData(payload);
+        const raw = (await apiCallProtected.post(
+          URL.payment,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const data = raw?.data?.data ?? raw?.data ?? raw;
         if (data?.id != null) {
           setSaveResponse({
             id: data.id,
@@ -1400,6 +1506,24 @@ payload.is_agent = true;
               id: data.allocations![i]?.id ?? a.id,
             }));
             form.setFieldValue("adjustments", updatedAdjustments);
+          }
+          if (Array.isArray(data.documents) && data.documents.length > 0) {
+            form.setFieldValue(
+              "supporting_documents",
+              data.documents.map((doc: any) => ({
+                name:
+                  (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                file: null,
+                document_url:
+                  doc.document_download_url ??
+                  doc.document_url ??
+                  doc.url ??
+                  "",
+                document_id: doc.id ?? undefined,
+                original_document_name:
+                  doc.original_document_name ?? doc.document_name ?? "",
+              })),
+            );
           }
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
           ToastNotification({
@@ -1437,20 +1561,13 @@ payload.is_agent = true;
           paymentNo: reversePaymentSaveResponse.payment_no ?? "",
           status: "POSTED",
         });
-        const raw = await putAPICall(
-          URL.reversePayment,
-          payload,
-          API_HEADER,
-        );
-        const wrap = raw as {
-          data?: {
-            id?: number;
-            payment_no?: string;
-            reverse_payment_no?: string;
-            status?: string;
-          };
-        };
-        const res = wrap?.data;
+        const fd = buildReversalFormData(payload);
+        const raw = (await apiCallProtected.put(
+          `${URL.reversePayment}${reversePaymentSaveResponse.id}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const res = raw?.data?.data ?? raw?.data ?? raw;
         if (res?.id != null) {
           setReversePaymentSaveResponse((prev) => ({
             ...prev!,
@@ -1460,6 +1577,24 @@ payload.is_agent = true;
               res.reverse_payment_no ?? prev?.reverse_payment_no ?? "",
             status: res.status != null ? String(res.status) : "POSTED",
           }));
+
+          if (Array.isArray(res.documents) && res.documents.length > 0) {
+            form.setFieldValue(
+              "supporting_documents",
+              res.documents.map((doc: any) => ({
+                name: (doc.document_name ?? doc.file_name ?? "").toString(),
+                file: null,
+                document_url:
+                  doc.document_download_url ??
+                  doc.document_url ??
+                  doc.url ??
+                  "",
+                document_id: doc.id ?? undefined,
+                original_document_name:
+                  doc.original_document_name ?? doc.document_name ?? "",
+              })),
+            );
+          }
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
           await queryClient.invalidateQueries({
             queryKey: ["payment-reversal"],
@@ -1494,23 +1629,13 @@ payload.is_agent = true;
     try {
       const payload = buildPaymentPayload(form.values, { status: "POSTED" });
       payload.is_agent = true;
-      const postUpdateUrl = `${URL.payment}`;
-      const raw = await putAPICall(postUpdateUrl, payload, API_HEADER);
-      const response =
-        (
-          raw as {
-            data?: {
-              id?: number;
-              payment_no?: string;
-              status?: string | number;
-            };
-          }
-        )?.data ?? raw;
-      const res = response as {
-        id?: number;
-        payment_no?: string;
-        status?: string | number;
-      };
+      const fd = buildPaymentFormData(payload);
+      const raw = (await apiCallProtected.put(
+        `${URL.payment}${saveResponse.id}/`,
+        fd,
+        FORM_DATA_HEADERS,
+      )) as any;
+      const res = raw?.data?.data ?? raw?.data ?? raw;
       if (res?.id != null) {
         setSaveResponse((prev) => ({
           ...prev,
@@ -1519,6 +1644,26 @@ payload.is_agent = true;
           document_no: prev?.document_no ?? "",
           status: res.status != null ? String(res.status) : "POSTED",
         }));
+
+        if (Array.isArray(res.documents) && res.documents.length > 0) {
+          form.setFieldValue(
+            "supporting_documents",
+            res.documents.map((doc: any) => ({
+              name:
+                (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+              file: null,
+              document_url:
+                doc.document_download_url ??
+                doc.document_url ??
+                doc.url ??
+                "",
+              document_id: doc.id ?? undefined,
+              original_document_name:
+                doc.original_document_name ?? doc.document_name ?? "",
+            })),
+          );
+        }
+
         await queryClient.invalidateQueries({ queryKey: ["payment"] });
         ToastNotification({
           type: "success",
@@ -2563,12 +2708,11 @@ payload.is_agent = true;
             )}
           </Modal>
 
-          {/* Supporting Documents Modal - not shown in view flow */}
-          {!isViewRoute && (
-            <Modal
+          {/* Supporting Documents Modal */}
+          <Modal
               opened={documentsModalOpened}
               onClose={closeDocumentsModal}
-              title="Attach Supporting Documents"
+              title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
               size="xl"
               centered
               style={{ fontFamily: "Inter" }}
@@ -2604,6 +2748,7 @@ payload.is_agent = true;
                         </Text>
                         <Dropzone
                           onDrop={(files: File[]) => {
+                            if (isReadOnly) return;
                             if (files.length === 0) return;
                             const file = files[0];
                             if (fileErrors[index]) {
@@ -2628,7 +2773,6 @@ payload.is_agent = true;
                               ...updatedDocs[index],
                               file,
                               document_url: undefined,
-                              document_id: undefined,
                             };
                             form.setFieldValue(
                               "supporting_documents",
@@ -2748,7 +2892,7 @@ payload.is_agent = true;
                                 </>
                               )}
                             </Group>
-                            {(doc.file || doc.document_url) && (
+                            {!isReadOnly && (doc.file || doc.document_url) && (
                               <Button
                                 variant="subtle"
                                 color="red"
@@ -2829,8 +2973,9 @@ payload.is_agent = true;
                       </Button>
                     </Grid.Col>
                     <Grid.Col span={1} offset={11}>
-                      {index ===
-                        form.values.supporting_documents.length - 1 && (
+                      {!isReadOnly &&
+                        index ===
+                          form.values.supporting_documents.length - 1 && (
                         <Button
                           variant="light"
                           color="#105476"
@@ -2848,7 +2993,8 @@ payload.is_agent = true;
                   </Grid>
                 ))}
 
-                {form.values.supporting_documents.length === 0 && (
+                {!isReadOnly &&
+                  form.values.supporting_documents.length === 0 && (
                   <Button
                     variant="light"
                     color="#105476"
@@ -2871,41 +3017,38 @@ payload.is_agent = true;
                 </Group>
               </Stack>
             </Modal>
-          )}
 
           <Group justify="flex-end" mt="xl">
-            {!isViewRoute && (
-              <Button
-                variant="outline"
-                size="sm"
-                styles={{
-                  root: {
-                    borderColor: "#105476",
-                    color: "#666",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                  },
-                }}
-                onClick={() => {
-                  if (form.values.supporting_documents.length === 0) {
-                    form.setFieldValue("supporting_documents", [
-                      { name: "", file: null },
-                    ]);
+            <Button
+              variant="outline"
+              size="sm"
+              styles={{
+                root: {
+                  borderColor: "#105476",
+                  color: "#666",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                },
+              }}
+              onClick={() => {
+                if (form.values.supporting_documents.length === 0) {
+                  form.setFieldValue("supporting_documents", [{ name: "", file: null }]);
+                }
+                const newErrors: { [key: number]: string } = {};
+                form.values.supporting_documents.forEach((doc, idx) => {
+                  if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                    newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                   }
-                  const newErrors: { [key: number]: string } = {};
-                  form.values.supporting_documents.forEach((doc, idx) => {
-                    if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                      newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
-                    }
-                  });
-                  setFileErrors(newErrors);
-                  openDocumentsModal();
-                }}
-                disabled={isSubmitting}
-              >
-                Attach supporting document
-              </Button>
-            )}
+                });
+                setFileErrors(newErrors);
+                openDocumentsModal();
+              }}
+              disabled={isSubmitting}
+            >
+              {isReadOnly
+                ? "View supporting document(s)"
+                : "Attach supporting document"}
+            </Button>
             <Button
               variant="outline"
               color="#105476"

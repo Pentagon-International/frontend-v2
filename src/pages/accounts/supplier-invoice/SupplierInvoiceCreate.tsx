@@ -28,6 +28,7 @@ import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
+import { apiCallProtected } from "../../../api/axios";
 import {
   Dropdown,
   SearchableSelect,
@@ -37,7 +38,6 @@ import {
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
-import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
 
 const fetchCurrencyMaster = async () => {
@@ -789,6 +789,14 @@ export default function SupplierInvoiceCreate({
     });
     // Force charges to apply (same as ReceiptCreate: setFieldValue after setValues so list array is always shown)
     form.setFieldValue("charges_data", mappedCharges);
+    // Support documents for edit/view flows
+    const rawDocs =
+      (invoiceFromState as any)?.documents ??
+      (invoiceFromState as any)?.supporting_documents;
+    form.setFieldValue(
+      "supporting_documents",
+      mapApiDocumentsToSupportingDocuments(rawDocs),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceFromState?.id, isViewMode, isEditMode, isReversalCreate, isReversal]);
 
@@ -936,6 +944,62 @@ export default function SupplierInvoiceCreate({
     };
   };
 
+  const FORM_DATA_HEADERS = {
+    ...API_HEADER,
+    headers: {
+      ...(API_HEADER as any).headers,
+      "Content-Type": "multipart/form-data",
+    },
+  };
+
+  const mapApiDocumentsToSupportingDocuments = (
+    docs: Array<Record<string, any>> | undefined,
+  ): SupportingDocument[] => {
+    if (!Array.isArray(docs) || docs.length === 0) return [];
+    return docs.map((doc) => {
+      const downloadUrl =
+        doc.document_download_url ??
+        doc.document_url ??
+        doc.url ??
+        "";
+      return {
+        name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+        file: null,
+        document_url: downloadUrl,
+        document_id: doc.id ?? undefined,
+        original_document_name:
+          doc.original_document_name ??
+          doc.document_name ??
+          doc.file_name ??
+          "",
+      };
+    });
+  };
+
+  const buildSupplierInvoiceFormData = (
+    payload: Record<string, unknown>,
+    formKey: "supplier_invoice" | "reverse_supplier_invoice",
+  ): FormData => {
+    const fd = new FormData();
+    fd.append(formKey, JSON.stringify(payload));
+
+    let fileIndex = 0;
+    form.values.supporting_documents.forEach((doc) => {
+      if (!doc.file) return;
+
+      // Backend expects `document_names[i]` whenever `document[i]` exists.
+      fd.append(`document_names[${fileIndex}]`, (doc.name ?? "").toString());
+      fd.append(`document[${fileIndex}]`, doc.file);
+      if (doc.document_id != null) {
+        fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
+      }
+
+      fileIndex++;
+    });
+
+    return fd;
+  };
+
   const applyReverseInvoiceResponseToForm = (
     data: Record<string, unknown> & {
       charges_data?: ApiCharge[];
@@ -1012,38 +1076,27 @@ export default function SupplierInvoiceCreate({
           (payload as Record<string, unknown>).crj_number = String(sourceCrj);
       }
       const reversalUrl = isReversal ? URL.reverseSupplierInvoice : URL.supplierInvoice;
-      // putAPICall appends payload.id/ to the URL, so pass base URL only for reversal to avoid .../10/10/
+      // For multipart, we call apiCallProtected directly (no helper appending payload.id/).
       const reversalEditUrl =
         isReversal && saveResponse?.id != null
           ? URL.reverseSupplierInvoice
           : null;
 
       if (isEdit) {
-        const url = reversalEditUrl ?? URL.supplierInvoice;
-        const raw = (await putAPICall(url, payload, API_HEADER)) as
-          | {
-              data?: {
-                id?: number;
-                crj_number?: string;
-                status?: unknown;
-                charges?: ApiCharge[];
-                charges_data?: ApiCharge[];
-              };
-            }
-          | { id?: number; crj_number?: string; status?: unknown }
-          | undefined;
-        const data = (
-          raw && "data" in raw && raw.data != null ? raw.data : raw
-        ) as
-          | {
-              id?: number;
-              crj_number?: string;
-              status?: unknown;
-              charges?: ApiCharge[];
-              charges_data?: ApiCharge[];
-              Inv_Crn_no?: string;
-            }
-          | undefined;
+        const baseUrl = reversalEditUrl ?? URL.supplierInvoice;
+        const id = (payload as any).id ?? saveResponse?.id;
+        const fd = buildSupplierInvoiceFormData(
+          payload,
+          isReversal ? "reverse_supplier_invoice" : "supplier_invoice",
+        );
+
+        const raw = (await apiCallProtected.put(
+          `${baseUrl}${id}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+
+        const data = raw?.data?.data ?? raw?.data ?? raw;
         if (data) {
           const dataWithReverse = data as { reverse_crj_number?: string };
           setSaveResponse({
@@ -1072,6 +1125,12 @@ export default function SupplierInvoiceCreate({
               mapApiChargesToRows(data.charges),
             );
           }
+
+          // Refresh supporting docs so downloads work in edit/view
+          form.setFieldValue(
+            "supporting_documents",
+            mapApiDocumentsToSupportingDocuments((data as any).documents),
+          );
           ToastNotification({
             message: isReversal
               ? "Supplier invoice reverse updated successfully"
@@ -1080,30 +1139,17 @@ export default function SupplierInvoiceCreate({
           });
         }
       } else {
-        const raw = (await postAPICall(reversalUrl, payload, API_HEADER)) as
-          | {
-              data?: {
-                id?: number;
-                crj_number?: string;
-                status?: unknown;
-                charges?: ApiCharge[];
-                charges_data?: ApiCharge[];
-              };
-            }
-          | { id?: number; crj_number?: string; status?: unknown }
-          | undefined;
-        const data = (
-          raw && "data" in raw && raw.data != null ? raw.data : raw
-        ) as
-          | {
-              id?: number;
-              crj_number?: string;
-              status?: unknown;
-              charges?: ApiCharge[];
-              charges_data?: ApiCharge[];
-              Inv_Crn_no?: string;
-            }
-          | undefined;
+        const fd = buildSupplierInvoiceFormData(
+          payload,
+          isReversal ? "reverse_supplier_invoice" : "supplier_invoice",
+        );
+        const raw = (await apiCallProtected.post(
+          reversalUrl,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+
+        const data = raw?.data?.data ?? raw?.data ?? raw;
         if (data) {
           const dataWithReverse = data as { reverse_crj_number?: string };
           setSaveResponse({
@@ -1126,6 +1172,11 @@ export default function SupplierInvoiceCreate({
               mapApiChargesToRows(data.charges),
             );
           }
+
+          form.setFieldValue(
+            "supporting_documents",
+            mapApiDocumentsToSupportingDocuments((data as any).documents),
+          );
           ToastNotification({
             message: isReversal
               ? "Supplier invoice reverse created successfully"
@@ -1160,22 +1211,22 @@ export default function SupplierInvoiceCreate({
       const payload = buildPayload(form.values, "POSTED");
       (payload as Record<string, unknown>).is_agent =
         isOverseasCrjDaybook ? true : false;
-      // putAPICall appends payload.id/ to the URL, so pass base URL only
       const postUrl = isReversal
         ? URL.reverseSupplierInvoice
         : URL.supplierInvoice;
-      const raw = (await putAPICall(postUrl, payload, API_HEADER)) as
-        | {
-            data?: {
-              id?: number;
-              crj_number?: string;
-              status?: unknown;
-              charges?: ApiCharge[];
-            };
-          }
-        | { id?: number; status?: unknown }
-        | undefined;
-      const data = raw && "data" in raw && raw.data != null ? raw.data : raw;
+
+      const fd = buildSupplierInvoiceFormData(
+        payload,
+        isReversal ? "reverse_supplier_invoice" : "supplier_invoice",
+      );
+
+      const raw = (await apiCallProtected.put(
+        `${postUrl}${saveResponse.id}/`,
+        fd,
+        FORM_DATA_HEADERS,
+      )) as any;
+
+      const data = raw?.data?.data ?? raw?.data ?? raw;
       if (data) {
         const statusStr =
           (data as { status?: unknown }).status != null
@@ -1191,6 +1242,11 @@ export default function SupplierInvoiceCreate({
             mapApiChargesToRows((data as { charges: ApiCharge[] }).charges),
           );
         }
+
+        form.setFieldValue(
+          "supporting_documents",
+          mapApiDocumentsToSupportingDocuments((data as any).documents),
+        );
         ToastNotification({
           message: "Supplier invoice posted successfully",
           type: "success",
@@ -2155,12 +2211,11 @@ export default function SupplierInvoiceCreate({
             </Grid.Col>
           </Grid>
 
-          {/* Supporting Documents Modal - not shown in view flow */}
-          {!isViewMode && (
-            <Modal
+          {/* Supporting Documents Modal */}
+          <Modal
               opened={documentsModalOpened}
               onClose={closeDocumentsModal}
-              title="Attach Supporting Documents"
+              title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
               size="xl"
               centered
               style={{ fontFamily: "Inter" }}
@@ -2174,7 +2229,9 @@ export default function SupplierInvoiceCreate({
                         label="Document Name"
                         placeholder="Enter document name"
                         value={doc.name}
+                        disabled={isReadOnly}
                         onChange={(e) => {
+                          if (isReadOnly) return;
                           const updatedDocs = [
                             ...form.values.supporting_documents,
                           ];
@@ -2196,6 +2253,7 @@ export default function SupplierInvoiceCreate({
                         </Text>
                         <Dropzone
                           onDrop={(files: File[]) => {
+                            if (isReadOnly) return;
                             if (files.length === 0) return;
                             const file = files[0];
                             if (fileErrors[index]) {
@@ -2220,7 +2278,6 @@ export default function SupplierInvoiceCreate({
                               ...updatedDocs[index],
                               file,
                               document_url: undefined,
-                              document_id: undefined,
                             };
                             form.setFieldValue(
                               "supporting_documents",
@@ -2228,6 +2285,7 @@ export default function SupplierInvoiceCreate({
                             );
                           }}
                           onReject={(files: any[]) => {
+                            if (isReadOnly) return;
                             const rejection = files[0];
                             if (
                               rejection?.errors?.some(
@@ -2340,7 +2398,7 @@ export default function SupplierInvoiceCreate({
                                 </>
                               )}
                             </Group>
-                            {(doc.file || doc.document_url) && (
+                            {!isReadOnly && (doc.file || doc.document_url) && (
                               <Button
                                 variant="subtle"
                                 color="red"
@@ -2381,80 +2439,86 @@ export default function SupplierInvoiceCreate({
                         )}
                       </Box>
                     </Grid.Col>
-                    <Grid.Col span={1}>
-                      <Button
-                        variant="light"
-                        color="red"
-                        onClick={() => {
-                          if (fileErrors[index]) {
-                            const newErrors = { ...fileErrors };
-                            delete newErrors[index];
-                            setFileErrors(newErrors);
-                          }
-                          if (form.values.supporting_documents.length === 1) {
-                            form.setFieldValue("supporting_documents", [
-                              { name: "", file: null },
-                            ]);
-                          } else {
-                            const updatedDocs =
-                              form.values.supporting_documents.filter(
-                                (_, i) => i !== index,
-                              );
-                            form.setFieldValue(
-                              "supporting_documents",
-                              updatedDocs,
-                            );
-                            const newErrors: { [key: number]: string } = {};
-                            Object.keys(fileErrors).forEach((key) => {
-                              const keyNum = parseInt(key);
-                              if (keyNum < index) {
-                                newErrors[keyNum] = fileErrors[keyNum];
-                              } else if (keyNum > index) {
-                                newErrors[keyNum - 1] = fileErrors[keyNum];
-                              }
-                            });
-                            setFileErrors(newErrors);
-                          }
-                        }}
-                      >
-                        <IconTrash size={16} />
-                      </Button>
-                    </Grid.Col>
-                    <Grid.Col span={1} offset={11}>
-                      {index ===
-                        form.values.supporting_documents.length - 1 && (
+                    {!isReadOnly && (
+                      <Grid.Col span={1}>
                         <Button
                           variant="light"
-                          color="#105476"
+                          color="red"
                           onClick={() => {
-                            form.setFieldValue("supporting_documents", [
-                              ...form.values.supporting_documents,
-                              { name: "", file: null },
-                            ]);
+                            if (fileErrors[index]) {
+                              const newErrors = { ...fileErrors };
+                              delete newErrors[index];
+                              setFileErrors(newErrors);
+                            }
+                            if (
+                              form.values.supporting_documents.length === 1
+                            ) {
+                              form.setFieldValue("supporting_documents", [
+                                { name: "", file: null },
+                              ]);
+                            } else {
+                              const updatedDocs =
+                                form.values.supporting_documents.filter(
+                                  (_, i) => i !== index,
+                                );
+                              form.setFieldValue(
+                                "supporting_documents",
+                                updatedDocs,
+                              );
+                              const newErrors: { [key: number]: string } = {};
+                              Object.keys(fileErrors).forEach((key) => {
+                                const keyNum = parseInt(key);
+                                if (keyNum < index) {
+                                  newErrors[keyNum] = fileErrors[keyNum];
+                                } else if (keyNum > index) {
+                                  newErrors[keyNum - 1] = fileErrors[keyNum];
+                                }
+                              });
+                              setFileErrors(newErrors);
+                            }
                           }}
                         >
-                          <IconPlus size={16} />
+                          <IconTrash size={16} />
                         </Button>
-                      )}
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={1} offset={11}>
+                      {!isReadOnly &&
+                        index ===
+                          form.values.supporting_documents.length - 1 && (
+                          <Button
+                            variant="light"
+                            color="#105476"
+                            onClick={() => {
+                              form.setFieldValue("supporting_documents", [
+                                ...form.values.supporting_documents,
+                                { name: "", file: null },
+                              ]);
+                            }}
+                          >
+                            <IconPlus size={16} />
+                          </Button>
+                        )}
                     </Grid.Col>
                   </Grid>
                 ))}
 
-                {form.values.supporting_documents.length === 0 && (
-                  <Button
-                    variant="light"
-                    color="#105476"
-                    leftSection={<IconPlus size={16} />}
-                    onClick={() => {
-                      form.setFieldValue("supporting_documents", [
-                        { name: "", file: null },
-                      ]);
-                    }}
-                    fullWidth
-                  >
-                    Add Document
-                  </Button>
-                )}
+                {!isReadOnly &&
+                  form.values.supporting_documents.length === 0 && (
+                    <Button
+                      variant="light"
+                      color="#105476"
+                      leftSection={<IconPlus size={16} />}
+                      onClick={() => {
+                        form.setFieldValue("supporting_documents", [
+                          { name: "", file: null },
+                        ]);
+                      }}
+                      fullWidth
+                    >
+                      Add Document
+                    </Button>
+                  )}
 
                 <Group justify="flex-end" mt="md">
                   <Button variant="outline" onClick={closeDocumentsModal}>
@@ -2463,68 +2527,68 @@ export default function SupplierInvoiceCreate({
                 </Group>
               </Stack>
             </Modal>
-          )}
 
-          {!isReadOnly && (
-            <Group justify="flex-end" mt="lg" gap="sm">
-              {!isViewMode && (
+          <Group justify="flex-end" mt="lg" gap="sm">
+            <Button
+              variant="outline"
+              size="sm"
+              styles={{
+                root: {
+                  borderColor: "#105476",
+                  color: "#666",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                },
+              }}
+              onClick={() => {
+                if (!isReadOnly && form.values.supporting_documents.length === 0) {
+                  form.setFieldValue("supporting_documents", [
+                    { name: "", file: null },
+                  ]);
+                }
+                const newErrors: { [key: number]: string } = {};
+                form.values.supporting_documents.forEach((doc, idx) => {
+                  if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                    newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                  }
+                });
+                setFileErrors(newErrors);
+                openDocumentsModal();
+              }}
+              disabled={isSubmitting}
+            >
+              {isReadOnly ? "View supporting document(s)" : "Attach supporting document"}
+            </Button>
+
+            {!isReadOnly && (
+              <>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  styles={{
-                    root: {
-                      borderColor: "#105476",
-                      color: "#666",
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                  onClick={() => {
-                    if (form.values.supporting_documents.length === 0) {
-                      form.setFieldValue("supporting_documents", [
-                        { name: "", file: null },
-                      ]);
-                    }
-                    const newErrors: { [key: number]: string } = {};
-                    form.values.supporting_documents.forEach((doc, idx) => {
-                      if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                        newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
-                      }
-                    });
-                    setFileErrors(newErrors);
-                    openDocumentsModal();
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Attach supporting document
-                </Button>
-              )}
-              <Button
-                type="submit"
-                color="#105476"
-                rightSection={<IconChevronRight size={16} />}
-                loading={isSubmitting}
-              >
-                {saveResponse?.id != null
-                  ? isReversal
-                    ? "Update"
-                    : "Update Supplier Invoice"
-                  : isReversal
-                    ? "Create Supplier Invoice Reverse"
-                    : "Save Supplier Invoice"}
-              </Button>
-              {saveResponse?.id != null && statusUpper === "UNPOSTED" && (
-                <Button
-                  type="button"
-                  color="black"
+                  type="submit"
+                  color="#105476"
+                  rightSection={<IconChevronRight size={16} />}
                   loading={isSubmitting}
-                  onClick={handlePost}
                 >
-                  Post
+                  {saveResponse?.id != null
+                    ? isReversal
+                      ? "Update"
+                      : "Update Supplier Invoice"
+                    : isReversal
+                      ? "Create Supplier Invoice Reverse"
+                      : "Save Supplier Invoice"}
                 </Button>
-              )}
-            </Group>
-          )}
+                {saveResponse?.id != null && statusUpper === "UNPOSTED" && (
+                  <Button
+                    type="button"
+                    color="black"
+                    loading={isSubmitting}
+                    onClick={handlePost}
+                  >
+                    Post
+                  </Button>
+                )}
+              </>
+            )}
+          </Group>
         </Box>
       </Stack>
     </Box>
