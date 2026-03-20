@@ -53,6 +53,7 @@ import {
   SingleDateInput,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
@@ -2221,20 +2222,14 @@ function HouseCreate() {
 
   // Handle save - navigate to ImportJobCreate with housing details
   const handleSave = () => {
-    const roundTo2 = (v: unknown): number | null => {
-      if (v == null) return null;
-      const n = typeof v === "number" ? v : parseFloat(String(v));
-      if (!Number.isFinite(n)) return null;
-      return Math.round(n * 100) / 100;
-    };
-
     // Prepare cargo details (container_number removed for Air)
     // Keep payload stable; only round known numeric cargo fields to 2dp
     const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
       ...cargo,
-      gross_weight: roundTo2((cargo as any).gross_weight),
-      volume: roundTo2((cargo as any).volume),
-      chargeable_weight: roundTo2((cargo as any).chargeable_weight),
+      gross_weight: roundToDecimals((cargo as any).gross_weight) ?? null,
+      volume: roundToDecimals((cargo as any).volume) ?? null,
+      chargeable_weight:
+        roundToDecimals((cargo as any).chargeable_weight) ?? null,
     }));
 
     // Get current form values - ensure we're using the latest form state
@@ -2402,13 +2397,14 @@ function HouseCreate() {
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             no_of_unit: charge.no_of_unit ?? null,
-            roe: roundTo2(charge.roe),
-            amount_per_unit: roundTo2(charge.amount_per_unit),
-            amount: roundTo2(charge.amount),
-            sell_local_amount: roundTo2(charge.local_amount),
-            unit_cost: roundTo2(charge.cost_per_unit),
-            total_cost: roundTo2(charge.total_cost),
-            cost_local_amount: roundTo2(charge.cost_local_amount),
+            roe: roundToDecimals(charge.roe) ?? null,
+            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundToDecimals(charge.amount) ?? null,
+            sell_local_amount: roundToDecimals(charge.local_amount) ?? null,
+            unit_cost: roundToDecimals(charge.cost_per_unit) ?? null,
+            total_cost: roundToDecimals(charge.total_cost) ?? null,
+            cost_local_amount:
+              roundToDecimals(charge.cost_local_amount) ?? null,
             supplier_code: charge.supplier_code || null,
             supplier_name: charge.supplier_name || null,
           })),
