@@ -37,7 +37,11 @@ import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
-import { Dropdown, SearchableSelect, SingleDateInput } from "../../../components";
+import {
+  Dropdown,
+  SearchableSelect,
+  SingleDateInput,
+} from "../../../components";
 import { DateInput } from "@mantine/dates";
 import { ToastNotification } from "../../../components";
 import dayjs from "dayjs";
@@ -48,6 +52,7 @@ type ExportJobData = {
   id: number;
   service_id?: number;
   service: string;
+  is_direct?: boolean | string | number;
   agent_code: string | null;
   agent_name: string | null;
   origin_agent: string | null; // Deprecated, use agent_code
@@ -109,7 +114,7 @@ function ExportJobMaster() {
     string | null
   >(null);
   const [originDisplayValue, setOriginDisplayValue] = useState<string | null>(
-    null
+    null,
   );
   const [destinationDisplayValue, setDestinationDisplayValue] = useState<
     string | null
@@ -176,7 +181,7 @@ function ExportJobMaster() {
         const response = await apiCallProtected.post(
           URL.importJobFilter,
           { filters: { service: ["FCL", "LCL"], service_type: "Export" } },
-          API_HEADER
+          API_HEADER,
         );
         const result = response as unknown as {
           status: boolean;
@@ -224,7 +229,7 @@ function ExportJobMaster() {
         const response = await apiCallProtected.post(
           URL.importJobFilter,
           { filters: filterPayload },
-          API_HEADER
+          API_HEADER,
         );
         const result = response as unknown as {
           status: boolean;
@@ -511,7 +516,7 @@ function ExportJobMaster() {
         ),
       },
     ],
-    [navigate]
+    [navigate],
   );
 
   // Paginate data
@@ -917,7 +922,6 @@ function ExportJobMaster() {
                 }
               />
             </Grid.Col>
-
           </Grid>
 
           <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
@@ -1023,7 +1027,11 @@ function ExportJobMaster() {
             pt="md"
           >
             <Group gap="sm" align="center" wrap="nowrap">
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+              <Text
+                size="sm"
+                c="dimmed"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
                 Rows per page
               </Text>
               <Select
@@ -1045,7 +1053,11 @@ function ExportJobMaster() {
                   } as Record<string, unknown>
                 }
               />
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+              <Text
+                size="sm"
+                c="dimmed"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
                 {(() => {
                   const total = displayData.length || 0;
                   if (total === 0) return "0–0 of 0";
@@ -1065,10 +1077,18 @@ function ExportJobMaster() {
               >
                 <IconChevronLeft size={16} />
               </ActionIcon>
-              <Text size="sm" ta="center" style={{ width: 26, fontFamily: "Inter, sans-serif" }}>
+              <Text
+                size="sm"
+                ta="center"
+                style={{ width: 26, fontFamily: "Inter, sans-serif" }}
+              >
                 {currentPage}
               </Text>
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+              <Text
+                size="sm"
+                c="dimmed"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
                 of {Math.max(1, Math.ceil(displayData.length / pageSize))}
               </Text>
               <ActionIcon
@@ -1077,14 +1097,14 @@ function ExportJobMaster() {
                 onClick={() => {
                   const totalPages = Math.max(
                     1,
-                    Math.ceil(displayData.length / pageSize)
+                    Math.ceil(displayData.length / pageSize),
                   );
                   handlePageChange(Math.min(totalPages, currentPage + 1));
                 }}
                 disabled={(() => {
                   const totalPages = Math.max(
                     1,
-                    Math.ceil(displayData.length / pageSize)
+                    Math.ceil(displayData.length / pageSize),
                   );
                   return currentPage >= totalPages;
                 })()}

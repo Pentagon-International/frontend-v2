@@ -143,6 +143,43 @@ interface RoutingDetail {
   status: string;
 }
 
+type VesselSavedSchedulesResponse = {
+  success: boolean;
+  data: VesselSavedScheduleItem[];
+};
+
+type VesselSavedScheduleItem = {
+  schedule_id: number | string;
+  schedule: {
+    order_id?: number;
+    mode?: string;
+    vessel_name: string;
+    voyage_no: string;
+    carrier_code: string;
+    carrier_name: string;
+    origin_code: string;
+    origin_name: string;
+    etd: string;
+    destination_code: string;
+    destination_name: string;
+    eta: string;
+    service_name?: string;
+    service_code?: string;
+  };
+  routings: Array<{
+    order_id?: number;
+    mode: string;
+    origin_code: string;
+    origin_name: string;
+    etd: string;
+    destination_code: string;
+    destination_name: string;
+    eta: string;
+    carrier_code: string;
+    carrier_name: string;
+  }>;
+};
+
 interface FormValues {
   // Import Shipment fields
   customer_code: string;
@@ -366,11 +403,23 @@ const validationSchema = yup.object({
       volume: yup.number().nullable(),
       chargeable_volume: yup.number().nullable(),
       container_type_code: yup.string().nullable(),
-      container_no: yup.string().nullable().matches(/^[A-Za-z0-9]{11}$/, "Container No must be exactly 11 characters"),
+      container_no: yup
+        .string()
+        .nullable()
+        .matches(
+          /^[A-Za-z0-9]{11}$/,
+          "Container No must be exactly 11 characters",
+        ),
       no_of_containers: yup.number().nullable(),
       containers: yup.array().of(
         yup.object({
-          container_no: yup.string().nullable().matches(/^[A-Za-z0-9]{11}$/, "Container No must be exactly 11 characters"),
+          container_no: yup
+            .string()
+            .nullable()
+            .matches(
+              /^[A-Za-z0-9]{11}$/,
+              "Container No must be exactly 11 characters",
+            ),
           no_of_packages: yup.string().nullable(),
           gross_weight: yup.string().nullable(),
           volume: yup.string().nullable(),
@@ -573,6 +622,38 @@ const getTransportMode = (
   return undefined;
 };
 
+const toYMD = (date: Date | null | undefined) => {
+  if (!date) return "";
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const parseApiDateToDate = (value?: string | null) => {
+  if (!value) return null;
+  const str = String(value).trim();
+  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  const base = match ? match[1] : null;
+  // Prefer the YYYY-MM-DD base so JS date parsing behaves consistently.
+  return base ? new Date(base) : new Date(str);
+};
+
+const extractApiYMD = (value?: string | null) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : "";
+};
+
+const normalizeMoveType = (mode?: string | null) => {
+  if (!mode) return "SEA";
+  const m = String(mode).trim().toUpperCase();
+  if (m === "SEA" || m === "AIR" || m === "ROAD" || m === "RAIL") return m;
+  if (m === "VESSEL") return "SEA";
+  return "SEA";
+};
+
 const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   onStepChange,
   onComplete,
@@ -608,6 +689,43 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     },
   ]);
   const [quotationId, setQuotationId] = useState("");
+
+  // Ocean schedule lookup (vessel-saved) - options + cached response
+  const [scheduleOptions, setScheduleOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const scheduleItemsRef = useRef<VesselSavedScheduleItem[]>([]);
+  const [isFetchingSchedules, setIsFetchingSchedules] = useState(false);
+  const scheduleRequestKeyRef = useRef<string>("");
+
+  // Query-ready fields: we only fetch after user has selected all three.
+  const [scheduleQueryOriginCode, setScheduleQueryOriginCode] =
+    useState<string>("");
+  const [scheduleQueryDestinationCode, setScheduleQueryDestinationCode] =
+    useState<string>("");
+  const [scheduleQueryEtdFrom, setScheduleQueryEtdFrom] = useState<string>("");
+
+  // Edit-flow behavior:
+  // - First fetch after mounting should NOT overwrite the already-saved schedule/routings values.
+  // - Any subsequent fetch triggered by user-changing origin/destination/date should overwrite (or clear if API returns empty).
+  const isInitialScheduleFetchRef = useRef<boolean>(true);
+
+  const initialScheduleQueryRef = useRef<{
+    originCode: string;
+    destinationCode: string;
+    etdFrom: string;
+  } | null>(null);
+
+  // Memoized props to prevent unnecessary extra API calls in SearchableSelect
+  // (SearchableSelect depends on function/object identity for its internal effects).
+  const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
+  const portDisplayFormat = useCallback(
+    (item: Record<string, unknown>) => ({
+      value: String(item.port_code),
+      label: `${String(item.port_name)} (${String(item.port_code)})`,
+    }),
+    [],
+  );
 
   // State for display values
   const [pickupFromDisplayName, setPickupFromDisplayName] = useState<
@@ -1348,6 +1466,225 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       ...(initialData ? mapInitialDataToFormValues(initialData) : {}),
     },
   });
+
+  const emptyRoutingDetailRow = useMemo<RoutingDetail>(
+    () => ({
+      move_type: "",
+      from_location_code: "",
+      to_location_code: "",
+      from_location_name: "",
+      to_location_name: "",
+      carrier_code: "",
+      carrier_name: "",
+      etd: null,
+      eta: null,
+      flight_no: null,
+      status: "Active",
+    }),
+    [],
+  );
+
+  const applyScheduleSelection = useCallback(
+    (selectedScheduleId: string) => {
+      const items = scheduleItemsRef.current;
+      const selected = items.find(
+        (i) => String(i.schedule_id) === String(selectedScheduleId),
+      );
+      if (!selected) return;
+
+      const s = selected.schedule;
+
+      form.setFieldValue("schedule_id", String(selected.schedule_id || ""));
+      form.setFieldValue("carrier_code", s.carrier_code || "");
+      form.setFieldValue("carrier_name", s.carrier_name || "");
+      form.setFieldValue("vessel_name", s.vessel_name || "");
+      form.setFieldValue("voyage_no", s.voyage_no || "");
+      form.setFieldValue("etd", parseApiDateToDate(s.etd));
+      form.setFieldValue("eta", parseApiDateToDate(s.eta));
+
+      const apiRoutings = Array.isArray(selected.routings)
+        ? selected.routings
+        : [];
+
+      const mappedRoutingDetails =
+        apiRoutings.length > 0
+          ? apiRoutings.map((r) => ({
+              move_type: normalizeMoveType(r.mode),
+              from_location_code: r.origin_code || "",
+              to_location_code: r.destination_code || "",
+              from_location_name: r.origin_name || "",
+              to_location_name: r.destination_name || "",
+              etd: parseApiDateToDate(r.etd),
+              eta: parseApiDateToDate(r.eta),
+              carrier_code: r.carrier_code || "",
+              carrier_name: r.carrier_name || "",
+              flight_no: null, // user-entered transport number (voyage/flight/etc.)
+              status: "Active",
+            }))
+          : [emptyRoutingDetailRow];
+
+      form.setFieldValue("routingDetails", mappedRoutingDetails);
+    },
+    [form, emptyRoutingDetailRow],
+  );
+
+  // Initialize schedule query values on mount so the schedules endpoint can run
+  // immediately in create-from-quotation/edit flows (when origin/destination are already present).
+  useEffect(() => {
+    setScheduleQueryOriginCode(form.values.origin_code || "");
+    setScheduleQueryDestinationCode(form.values.destination_code || "");
+    const etdFrom = toYMD(form.values.date || null);
+    setScheduleQueryEtdFrom(etdFrom);
+    initialScheduleQueryRef.current = {
+      originCode: form.values.origin_code || "",
+      destinationCode: form.values.destination_code || "",
+      etdFrom,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fetch vessel schedules only when all query fields are explicitly selected.
+  useEffect(() => {
+    const originCode = scheduleQueryOriginCode;
+    const destinationCode = scheduleQueryDestinationCode;
+    const etdFrom = scheduleQueryEtdFrom;
+
+    if (!originCode || !destinationCode || !etdFrom) {
+      scheduleRequestKeyRef.current = "";
+      scheduleItemsRef.current = [];
+      setScheduleOptions([]);
+      if (!isEditMode) {
+        form.setFieldValue("schedule_id", "");
+        form.setFieldValue("carrier_code", "");
+        form.setFieldValue("carrier_name", "");
+        form.setFieldValue("vessel_name", "");
+        form.setFieldValue("voyage_no", "");
+        form.setFieldValue("etd", null);
+        form.setFieldValue("eta", null);
+        form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+      }
+      return;
+    }
+
+    const requestKey = `${originCode}|${destinationCode}|${etdFrom}`;
+    if (scheduleRequestKeyRef.current === requestKey) return;
+    scheduleRequestKeyRef.current = requestKey;
+
+    const existingScheduleId = form.values.schedule_id;
+
+    const preserveSaved =
+      isEditMode &&
+      isInitialScheduleFetchRef.current &&
+      initialScheduleQueryRef.current != null &&
+      initialScheduleQueryRef.current.originCode === originCode &&
+      initialScheduleQueryRef.current.destinationCode === destinationCode &&
+      initialScheduleQueryRef.current.etdFrom === etdFrom;
+
+    (async () => {
+      setIsFetchingSchedules(true);
+      scheduleItemsRef.current = [];
+      setScheduleOptions([]);
+
+      // In edit mode, preserve saved schedule/routings only for the first mount fetch.
+      // For any user-changed query (or create mode), we clear and re-populate from the API.
+      if (!preserveSaved) {
+        form.setFieldValue("schedule_id", "");
+        form.setFieldValue("carrier_code", "");
+        form.setFieldValue("carrier_name", "");
+        form.setFieldValue("vessel_name", "");
+        form.setFieldValue("voyage_no", "");
+        form.setFieldValue("etd", null);
+        form.setFieldValue("eta", null);
+        form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+      }
+
+      try {
+        const payload = {
+          origin_code: originCode,
+          destination_code: destinationCode,
+          etd_from: etdFrom,
+        };
+
+        const res = (await postAPICall(
+          URL.vesselSavedSchedules,
+          payload,
+          API_HEADER,
+        )) as VesselSavedSchedulesResponse;
+
+        const items = Array.isArray(res?.data) ? res.data : [];
+        scheduleItemsRef.current = items;
+        const options = items.map((item) => ({
+          value: String(item.schedule_id),
+          label: `${String(item.schedule_id)}/${String(
+            item.schedule?.carrier_code ?? "",
+          )}/${extractApiYMD(item.schedule?.etd)}/${extractApiYMD(
+            item.schedule?.eta,
+          )}`,
+        }));
+
+        // Ensure the saved schedule_id shows up in dropdown options during the initial edit fetch.
+        if (preserveSaved && existingScheduleId) {
+          const existingValue = String(existingScheduleId);
+          const hasExistingOption = options.some(
+            (o) => o.value === existingValue,
+          );
+          if (!hasExistingOption) {
+            options.unshift({
+              value: existingValue,
+              label: `${existingValue}/${form.values.carrier_code || ""}/${toYMD(
+                form.values.etd || null,
+              )}/${toYMD(form.values.eta || null)}`,
+            });
+          }
+        }
+
+        setScheduleOptions(options);
+
+        if (!preserveSaved) {
+          if (items.length > 0) {
+            const hasExisting = existingScheduleId
+              ? items.some(
+                  (i) => String(i.schedule_id) === String(existingScheduleId),
+                )
+              : false;
+
+            const selectedId = hasExisting
+              ? String(existingScheduleId)
+              : String(items[0].schedule_id);
+
+            applyScheduleSelection(selectedId);
+          } else {
+            // API returned empty: clear schedule + routings.
+            form.setFieldValue("schedule_id", "");
+            form.setFieldValue("carrier_code", "");
+            form.setFieldValue("carrier_name", "");
+            form.setFieldValue("vessel_name", "");
+            form.setFieldValue("voyage_no", "");
+            form.setFieldValue("etd", null);
+            form.setFieldValue("eta", null);
+            form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch vessel schedules:", e);
+        ToastNotification({
+          type: "error",
+          message: "Failed to fetch schedules for the selected route/date.",
+        });
+      } finally {
+        setIsFetchingSchedules(false);
+        if (isInitialScheduleFetchRef.current) {
+          isInitialScheduleFetchRef.current = false;
+        }
+      }
+    })();
+  }, [
+    scheduleQueryOriginCode,
+    scheduleQueryDestinationCode,
+    scheduleQueryEtdFrom,
+    applyScheduleSelection,
+    emptyRoutingDetailRow,
+  ]);
 
   // Events, Documents, Trigger Updates – form-based handlers (mirroring export booking)
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
@@ -2779,23 +3116,34 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         events: form.values.events,
         trigger_updates: form.values.trigger_updates,
 
-        routing_details: form.values.routingDetails.map((route) => {
-          const routePayload: Record<string, unknown> = {
-            move_type: route.move_type,
-            from_location_code: route.from_location_code,
-            to_location_code: route.to_location_code,
-            etd: formatDate(route.etd),
-            eta: formatDate(route.eta),
-            carrier_code: route.carrier_code,
-            flight_no: route.flight_no,
-            status: route.status,
-          };
-          if (route.id != null && route.id !== undefined) {
-            routePayload.id =
-              typeof route.id === "number" ? route.id : Number(route.id);
-          }
-          return routePayload;
-        }),
+        routing_details: form.values.routingDetails
+          .filter(
+            (route) =>
+              route.move_type ||
+              route.from_location_code ||
+              route.to_location_code ||
+              route.carrier_code ||
+              route.etd ||
+              route.eta ||
+              route.flight_no,
+          )
+          .map((route) => {
+            const routePayload: Record<string, unknown> = {
+              move_type: route.move_type,
+              from_location_code: route.from_location_code || null,
+              to_location_code: route.to_location_code || null,
+              etd: formatDate(route.etd),
+              eta: formatDate(route.eta),
+              carrier_code: route.carrier_code || null,
+              flight_no: route.flight_no,
+              status: route.status,
+            };
+            if (route.id != null && route.id !== undefined) {
+              routePayload.id =
+                typeof route.id === "number" ? route.id : Number(route.id);
+            }
+            return routePayload;
+          }),
 
         quotation_id: quotationId,
         rate_details: charges.map((charge) => {
@@ -3707,7 +4055,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     withAsterisk
                     value={form.values.date}
                     onChange={(date) => {
-                      form.setFieldValue("date", date || new Date());
+                      if (!date) {
+                        // Keep the required field stable, but mark schedule query as not-ready.
+                        setScheduleQueryEtdFrom("");
+                        form.setFieldValue("date", new Date());
+                        return;
+                      }
+                      form.setFieldValue("date", date);
+                      setScheduleQueryEtdFrom(toYMD(date));
                     }}
                     error={form.errors.date}
                   />
@@ -3719,10 +4074,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     apiEndpoint={URL.portMaster}
                     placeholder="Type origin code or name"
                     searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
+                    displayFormat={portDisplayFormat}
                     value={form.values.origin_code}
                     displayValue={
                       isEditMode &&
@@ -3732,7 +4084,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         : form.values.origin_name
                     }
                     onChange={(value, selectedData) => {
-                      form.setFieldValue("origin_code", value || "");
+                      const nextOriginCode = value || "";
+                      form.setFieldValue("origin_code", nextOriginCode);
+                      setScheduleQueryOriginCode(nextOriginCode);
                       form.setFieldValue(
                         "origin_name",
                         selectedData?.label
@@ -3742,7 +4096,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     }}
                     error={form.errors.origin_code as string}
                     minSearchLength={2}
-                    additionalParams={{ transport_mode: "SEA" }}
+                    additionalParams={seaTransportParams}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
@@ -3752,10 +4106,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     apiEndpoint={URL.portMaster}
                     placeholder="Type destination code or name"
                     searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
+                    displayFormat={portDisplayFormat}
                     value={form.values.destination_code}
                     displayValue={
                       isEditMode &&
@@ -3765,7 +4116,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         : form.values.destination_name
                     }
                     onChange={(value, selectedData) => {
-                      form.setFieldValue("destination_code", value || "");
+                      const nextDestinationCode = value || "";
+                      form.setFieldValue(
+                        "destination_code",
+                        nextDestinationCode,
+                      );
+                      setScheduleQueryDestinationCode(nextDestinationCode);
                       form.setFieldValue(
                         "destination_name",
                         selectedData?.label
@@ -3775,7 +4131,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     }}
                     error={form.errors.destination_code as string}
                     minSearchLength={2}
-                    additionalParams={{ transport_mode: "SEA" }}
+                    additionalParams={seaTransportParams}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
@@ -3959,10 +4315,34 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               </Text>
               <Grid mb="lg">
                 <Grid.Col span={4}>
-                  <FormTextInput
+                  <Dropdown
                     label="Schedule ID"
-                    placeholder="Enter schedule ID"
-                    {...form.getInputProps("schedule_id")}
+                    placeholder="Select schedule"
+                    searchable
+                    clearable
+                    data={scheduleOptions}
+                    value={form.values.schedule_id || null}
+                    rightSection={
+                      isFetchingSchedules ? <Loader size={14} /> : undefined
+                    }
+                    onChange={(value) => {
+                      const selectedId = value || "";
+                      if (!selectedId) {
+                        form.setFieldValue("schedule_id", "");
+                        form.setFieldValue("carrier_code", "");
+                        form.setFieldValue("carrier_name", "");
+                        form.setFieldValue("vessel_name", "");
+                        form.setFieldValue("voyage_no", "");
+                        form.setFieldValue("etd", null);
+                        form.setFieldValue("eta", null);
+                        form.setFieldValue("routingDetails", [
+                          emptyRoutingDetailRow,
+                        ]);
+                        return;
+                      }
+
+                      applyScheduleSelection(selectedId);
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
@@ -5674,8 +6054,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                         total +=
                                           parseFloat(
                                             String(
-                                              existing[i]
-                                                ?.gross_weight || "0",
+                                              existing[i]?.gross_weight || "0",
                                             ),
                                           ) || 0;
                                       }
@@ -5742,7 +6121,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                             {/* Container detail rows - always visible */}
                             {cargoItem.containers &&
                               cargoItem.containers.length > 0 && (
-                                <Box mt="md" pt={"md"} style={{borderTop: "1px solid #e0e0e0"}}>
+                                <Box
+                                  mt="md"
+                                  pt={"md"}
+                                  style={{ borderTop: "1px solid #e0e0e0" }}
+                                >
                                   <Grid
                                     gutter="sm"
                                     mb="sm"
@@ -5814,8 +6197,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                               `cargo_details.${cargoIndex}.containers.${cIdx}.gross_weight`,
                                             )}
                                             onChange={(e) => {
-                                              const val =
-                                                e.currentTarget.value;
+                                              const val = e.currentTarget.value;
                                               form.setFieldValue(
                                                 `cargo_details.${cargoIndex}.containers.${cIdx}.gross_weight`,
                                                 val,
@@ -5868,14 +6250,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                               `cargo_details.${cargoIndex}.containers.${cIdx}.volume`,
                                             )}
                                             onChange={(e) => {
-                                              const val =
-                                                e.currentTarget.value;
+                                              const val = e.currentTarget.value;
                                               form.setFieldValue(
                                                 `cargo_details.${cargoIndex}.containers.${cIdx}.volume`,
                                                 val,
                                               );
-                                              const vol =
-                                                parseFloat(val) || 0;
+                                              const vol = parseFloat(val) || 0;
                                               const rawGw =
                                                 parseFloat(
                                                   String(

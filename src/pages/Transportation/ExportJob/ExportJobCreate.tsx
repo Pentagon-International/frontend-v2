@@ -11,6 +11,7 @@ import {
   Card,
   Badge,
   ActionIcon,
+  Radio,
   Tooltip,
   Menu,
   Modal,
@@ -70,6 +71,7 @@ type MBLDetailsForm = {
   origin_name: string;
   destination_code: string;
   destination_name: string;
+  is_direct: boolean;
   etd: Date | null;
   eta: Date | null;
   atd: Date | null;
@@ -156,7 +158,34 @@ type InvoiceListItem = {
 // Validation schemas
 const mblDetailsSchema = yup.object({
   service: yup.string().required("Service is required"),
-  origin_agent: yup.string().required("Destination Agent is required"),
+  is_direct: yup.boolean().required(),
+  origin_agent: yup
+    .string()
+    // Custom test to make the conditional "required" behavior deterministic.
+    // We treat Direct as required only when is_direct === true.
+    .test(
+      "origin_agent-required-when-direct",
+      "Destination Agent is required",
+      function (value) {
+        const parent = this.parent as { is_direct?: boolean };
+        const isDirect = parent.is_direct === true;
+        if (!isDirect) return true;
+
+        if (value == null) {
+          return this.createError({
+            message: "Destination Agent is required",
+          });
+        }
+
+        if (String(value).trim() === "") {
+          return this.createError({
+            message: "Destination Agent is required",
+          });
+        }
+
+        return true;
+      },
+    ),
   origin_code: yup.string().required("Origin is required"),
   destination_code: yup.string().required("Destination is required"),
   etd: yup.date().required("ETD is required"),
@@ -293,6 +322,16 @@ const getTransportMode = (
   return undefined;
 };
 
+const parseBoolean = (value: unknown): boolean => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "y";
+  }
+  return false;
+};
+
 function ExportJobCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
@@ -415,6 +454,7 @@ function ExportJobCreate() {
       origin_name: "",
       destination_code: "",
       destination_name: "",
+      is_direct: false,
       etd: null,
       eta: null,
       atd: null,
@@ -530,6 +570,9 @@ function ExportJobCreate() {
 
         mblDetailsForm.setValues({
           service: mblData.service || "",
+          is_direct: parseBoolean(
+            (mblData as { is_direct?: unknown })?.is_direct,
+          ),
           origin_agent:
             mblData.agent_code ||
             mblData.origin_agent_code ||
@@ -610,7 +653,9 @@ function ExportJobCreate() {
                 : "",
               trade: house.trade ? String(house.trade) : "",
               agent_name: house.agent_name ? String(house.agent_name) : "",
-              agent_address: house.agent_address ? String(house.agent_address) : "",
+              agent_address: house.agent_address
+                ? String(house.agent_address)
+                : "",
               agent_email: house.agent_email ? String(house.agent_email) : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
@@ -632,18 +677,28 @@ function ExportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
-              notify_customer1_name: (house.notify1_customer_name ??
-                house.notify_customer1_name)
-                ? String(house.notify1_customer_name ?? house.notify_customer1_name)
-                : "",
-              notify_customer1_address: (house.notify1_customer_address ??
+              notify_customer1_name:
+                (house.notify1_customer_name ?? house.notify_customer1_name)
+                  ? String(
+                      house.notify1_customer_name ??
+                        house.notify_customer1_name,
+                    )
+                  : "",
+              notify_customer1_address:
+                (house.notify1_customer_address ??
                 house.notify_customer1_address)
-                ? String(house.notify1_customer_address ?? house.notify_customer1_address)
-                : "",
-              notify_customer1_email: (house.notify1_customer_email ??
-                house.notify_customer1_email)
-                ? String(house.notify1_customer_email ?? house.notify_customer1_email)
-                : "",
+                  ? String(
+                      house.notify1_customer_address ??
+                        house.notify_customer1_address,
+                    )
+                  : "",
+              notify_customer1_email:
+                (house.notify1_customer_email ?? house.notify_customer1_email)
+                  ? String(
+                      house.notify1_customer_email ??
+                        house.notify_customer1_email,
+                    )
+                  : "",
               notify2_customer_name: house.notify2_customer_name
                 ? String(house.notify2_customer_name)
                 : "",
@@ -1133,7 +1188,9 @@ function ExportJobCreate() {
             return Number.isNaN(n) ? null : n;
           };
           const normalizePpCc = (value: unknown): string => {
-            const raw = String(value ?? "").trim().toUpperCase();
+            const raw = String(value ?? "")
+              .trim()
+              .toUpperCase();
             if (raw === "PP" || raw === "PREPAID") return "Prepaid";
             if (raw === "CC" || raw === "COLLECT") return "Collect";
             return "";
@@ -1266,9 +1323,13 @@ function ExportJobCreate() {
         const mblDetails = location.state.mblDetails;
         mblDetailsForm.setValues({
           service: mblDetails.service || "",
+          is_direct: parseBoolean(
+            (mblDetails as { is_direct?: unknown })?.is_direct,
+          ),
           origin_agent: mblDetails.origin_agent || "",
           agent_name:
-            (mblDetails as { agent_name?: string } | undefined)?.agent_name || "",
+            (mblDetails as { agent_name?: string } | undefined)?.agent_name ||
+            "",
           agent_address:
             (mblDetails as { agent_address?: string } | undefined)
               ?.agent_address || "",
@@ -1949,8 +2010,11 @@ function ExportJobCreate() {
       if (!mblDetailsForm.values.service?.trim()) {
         missingFields.push("Service");
       }
-      if (!mblDetailsForm.values.origin_agent?.trim()) {
-        missingFields.push("Origin Agent");
+      if (
+        mblDetailsForm.values.is_direct &&
+        !mblDetailsForm.values.origin_agent?.trim()
+      ) {
+        missingFields.push("Destination Agent");
       }
       if (!mblDetailsForm.values.origin_code?.trim()) {
         missingFields.push("Origin");
@@ -1988,6 +2052,7 @@ function ExportJobCreate() {
           ...(jobData && { job: jobData }),
           mblDetails: {
             service: mblDetailsForm.values.service || "",
+            is_direct: mblDetailsForm.values.is_direct,
             origin_agent: mblDetailsForm.values.origin_agent || "",
             agent_name: mblDetailsForm.values.agent_name || "",
             agent_address: mblDetailsForm.values.agent_address || "",
@@ -2032,7 +2097,6 @@ function ExportJobCreate() {
     // Check MBL mandatory fields
     const mblFieldsValid =
       mblDetailsForm.values.service?.trim() &&
-      mblDetailsForm.values.origin_agent?.trim() &&
       mblDetailsForm.values.origin_code?.trim() &&
       mblDetailsForm.values.destination_code?.trim() &&
       mblDetailsForm.values.etd &&
@@ -2050,7 +2114,7 @@ function ExportJobCreate() {
     return mblFieldsValid && hasValidContainers && hasHousingDetails;
   }, [
     mblDetailsForm.values.service,
-    mblDetailsForm.values.origin_agent,
+    mblDetailsForm.values.is_direct,
     mblDetailsForm.values.origin_code,
     mblDetailsForm.values.destination_code,
     mblDetailsForm.values.etd,
@@ -2075,10 +2139,29 @@ function ExportJobCreate() {
     }
 
     // Validate MBL and Carrier details before submission
+    // When "Direct" is No, Destination Agent is not required.
+    // Clear any stale Yup error from a previous toggle so Update can proceed normally.
+    if (mblDetailsForm.values.is_direct !== true) {
+      mblDetailsForm.clearFieldError("origin_agent");
+    }
     const mblValidation = mblDetailsForm.validate();
     const carrierValidation = carrierDetailsForm.validate();
 
-    if (mblValidation.hasErrors || carrierValidation.hasErrors) {
+    // Extra safety: if Direct is No, ignore origin_agent errors entirely.
+    // This ensures we never block inline UI due to stale conditional validation.
+    if (mblDetailsForm.values.is_direct !== true) {
+      mblDetailsForm.clearFieldError("origin_agent");
+    }
+    const originAgentError = (
+      mblValidation.errors as Record<string, unknown> | undefined
+    )?.origin_agent;
+    const shouldIgnoreOriginAgent =
+      mblDetailsForm.values.is_direct !== true && !!originAgentError;
+
+    if (
+      (mblValidation.hasErrors && !shouldIgnoreOriginAgent) ||
+      carrierValidation.hasErrors
+    ) {
       ToastNotification({
         type: "error",
         message: "Please fill all required fields in MBL & Carrier Details",
@@ -2127,6 +2210,7 @@ function ExportJobCreate() {
             ? dayjs(mblDetailsForm.values.ata).format("YYYY-MM-DD")
             : null
           : null,
+        is_direct: mblDetailsForm.values.is_direct,
         carrier_code: carrierDetailsForm.values.carrier_code,
         vessel_name: carrierDetailsForm.values.vessel_name || null,
         voyage_number: carrierDetailsForm.values.voyage_number || null,
@@ -2228,7 +2312,9 @@ function ExportJobCreate() {
           notify1_customer_name:
             house.notify1_customer_name ?? house.notify_customer1_name ?? "",
           notify1_customer_address:
-            house.notify1_customer_address ?? house.notify_customer1_address ?? "",
+            house.notify1_customer_address ??
+            house.notify_customer1_address ??
+            "",
           notify1_customer_email:
             house.notify1_customer_email ?? house.notify_customer1_email ?? "",
           notify2_customer_name: house.notify2_customer_name ?? "",
@@ -2240,9 +2326,15 @@ function ExportJobCreate() {
           sub_item_no: house.sub_item_no || "",
           events: Array.isArray((house as { events?: unknown }).events)
             ? (
-                (house as {
-                  events?: Array<{ id?: number; type?: string; date?: string }>;
-                }).events ?? []
+                (
+                  house as {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                ).events ?? []
               ).map((e) => ({
                 ...(e.id != null && { id: Number(e.id) }),
                 type: String(e.type ?? ""),
@@ -2319,7 +2411,8 @@ function ExportJobCreate() {
               unit_cost:
                 charge.unit_cost != null
                   ? Number(charge.unit_cost)
-                  : (charge as { cost_per_unit?: unknown }).cost_per_unit != null
+                  : (charge as { cost_per_unit?: unknown }).cost_per_unit !=
+                      null
                     ? Number(
                         (charge as { cost_per_unit?: unknown }).cost_per_unit,
                       )
@@ -2665,8 +2758,7 @@ function ExportJobCreate() {
                             (house.charges ?? [])
                               .filter(
                                 (c) =>
-                                  String(c.pp_cc ?? "")
-                                    .trim() === "Collect",
+                                  String(c.pp_cc ?? "").trim() === "Collect",
                               )
                               .map((c) => ({
                                 ...c,
@@ -2842,7 +2934,7 @@ function ExportJobCreate() {
               <Grid.Col span={3}>
                 <SearchableSelect
                   label="Destination Agent"
-                  required
+                  required={mblDetailsForm.values.is_direct}
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
                   searchFields={["customer_name", "customer_code"]}
@@ -2856,7 +2948,10 @@ function ExportJobCreate() {
                     // Store customer_code as value (for API payload)
                     mblDetailsForm.setFieldValue("origin_agent", value || "");
                     // Store customer_name for display
-                    mblDetailsForm.setFieldValue("agent_name", selectedData?.label || "");
+                    mblDetailsForm.setFieldValue(
+                      "agent_name",
+                      selectedData?.label || "",
+                    );
 
                     // Extract address from addresses_data if available
                     if (
@@ -2882,10 +2977,7 @@ function ExportJobCreate() {
                           addressesData[0].address,
                         );
                       } else {
-                        mblDetailsForm.setFieldValue(
-                          "agent_address",
-                          "",
-                        );
+                        mblDetailsForm.setFieldValue("agent_address", "");
                       }
                     } else {
                       mblDetailsForm.setFieldValue("agent_address", "");
@@ -2972,7 +3064,7 @@ function ExportJobCreate() {
             </Grid>
 
             {/* Second row for ETD, ETA, ATD, ATA */}
-            <Grid mb="xl">
+            <Grid mb="sm">
               <Grid.Col span={3}>
                 <SingleDateInput
                   label="ETD"
@@ -3048,7 +3140,36 @@ function ExportJobCreate() {
               </Grid.Col>
             </Grid>
 
-            <Divider my="sm" />
+            {/* Direct */}
+            <Grid mb="sm">
+              <Grid.Col span={3}>
+                <Radio.Group
+                  label="Direct"
+                  value={mblDetailsForm.values.is_direct ? "true" : "false"}
+                  onChange={(value) => {
+                    const isDirect = value === "true";
+                    mblDetailsForm.setFieldValue("is_direct", isDirect);
+
+                    // If switching back to "No", clear any previously shown Destination Agent error
+                    // so Update doesn't look blocked.
+                    if (!isDirect) {
+                      mblDetailsForm.clearFieldError("origin_agent");
+                      // Also clear values to avoid any stale selected temp values.
+                      mblDetailsForm.setFieldValue("origin_agent", "");
+                      mblDetailsForm.setFieldValue("agent_name", "");
+                      mblDetailsForm.setFieldValue("agent_address", "");
+                    }
+                  }}
+                >
+                  <Group mt="xs">
+                    <Radio value="true" label="Yes" />
+                    <Radio value="false" label="No" />
+                  </Group>
+                </Radio.Group>
+              </Grid.Col>
+            </Grid>
+
+            <Divider my="md" />
 
             {/* Carrier Details Section */}
             <Group justify="space-between" align="center" mb="sm">
@@ -3775,7 +3896,8 @@ function ExportJobCreate() {
                         `containers.${index}.container_no`,
                       )}
                       value={
-                        containerDetailsForm.values.containers[index]?.container_no || ""
+                        containerDetailsForm.values.containers[index]
+                          ?.container_no || ""
                       }
                       onChange={(e) => {
                         const raw = e.currentTarget.value.toUpperCase();
@@ -3976,7 +4098,11 @@ function ExportJobCreate() {
                 Create PRQ
               </Button>
             </Group>
-            <EstimatesSection serviceType={["FCL", "LCL"]} form={estimatesForm} readOnly={isReadOnly} />
+            <EstimatesSection
+              serviceType={["FCL", "LCL"]}
+              form={estimatesForm}
+              readOnly={isReadOnly}
+            />
           </Box>
         </Tabs.Panel>
 
@@ -4955,9 +5081,7 @@ function ExportJobCreate() {
                                   color: "#424242",
                                 },
                               }}
-                              onClick={() =>
-                                handleProformaPreview(house.id)
-                              }
+                              onClick={() => handleProformaPreview(house.id)}
                             >
                               Proforma
                             </Menu.Item>
