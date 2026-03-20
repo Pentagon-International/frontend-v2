@@ -5058,10 +5058,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     maxRows={6}
                     value={form.values.commodity_description}
                     onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
                         "commodity_description",
-                        formattedValue,
+                        e.currentTarget.value,
                       );
                     }}
                     error={form.errors.commodity_description}

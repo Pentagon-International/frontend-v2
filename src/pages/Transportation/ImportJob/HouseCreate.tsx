@@ -3415,10 +3415,9 @@ function HouseCreate() {
                     placeholder="Enter Notify Customer Address"
                     value={form.values.notify1_customer_address}
                     onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
                         "notify1_customer_address",
-                        formattedValue,
+                        e.currentTarget.value,
                       );
                     }}
                     error={form.errors.notify1_customer_address}
@@ -3518,8 +3517,7 @@ function HouseCreate() {
                     placeholder="Enter Origin Agent Address"
                     value={form.values.agent_address}
                     onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue("agent_address", formattedValue);
+                      form.setFieldValue("agent_address", e.currentTarget.value);
                     }}
                     error={form.errors.agent_address}
                   />
@@ -3590,8 +3588,7 @@ function HouseCreate() {
                   minRows={2}
                   value={form.values.cha_address}
                   onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue("cha_address", formattedValue);
+                    form.setFieldValue("cha_address", e.currentTarget.value);
                   }}
                 />
               </Grid.Col>
@@ -3614,8 +3611,7 @@ function HouseCreate() {
                   minRows={3}
                   value={form.values.commodity_description}
                   onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue("commodity_description", formattedValue);
+                    form.setFieldValue("commodity_description", e.currentTarget.value);
                   }}
                   error={form.errors.commodity_description}
                 />

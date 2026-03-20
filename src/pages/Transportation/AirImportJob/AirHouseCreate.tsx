@@ -3752,8 +3752,7 @@ function HouseCreate() {
                   minRows={2}
                   value={form.values.cha_address}
                   onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue("cha_address", formattedValue);
+                    form.setFieldValue("cha_address", e.currentTarget.value);
                   }}
                 />
               </Grid.Col>
@@ -3775,8 +3774,7 @@ function HouseCreate() {
                   minRows={3}
                   value={form.values.commodity_description}
                   onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue("commodity_description", formattedValue);
+                    form.setFieldValue("commodity_description", e.currentTarget.value);
                   }}
                   error={form.errors.commodity_description}
                 />
@@ -3788,8 +3786,7 @@ function HouseCreate() {
                   minRows={3}
                   value={form.values.marks_no}
                   onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue("marks_no", formattedValue);
+                    form.setFieldValue("marks_no", e.currentTarget.value);
                   }}
                   error={form.errors.marks_no}
                 />
