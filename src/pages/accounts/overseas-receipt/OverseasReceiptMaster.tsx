@@ -212,7 +212,15 @@ export default function OverseasReceiptMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/overseas-receipt/view", { state: row.original })
+                      navigate("/overseas-receipt/view", {
+                        state: {
+                          ...(row.original as any),
+                          documents:
+                            (row.original as any)?.documents ??
+                            (row.original as any)?.supporting_documents ??
+                            [],
+                        },
+                      })
                     }
                   >
                     <Group gap="sm">
@@ -230,7 +238,15 @@ export default function OverseasReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/overseas-receipt/edit", { state: row.original })
+                        navigate("/overseas-receipt/edit", {
+                          state: {
+                            ...(row.original as any),
+                            documents:
+                              (row.original as any)?.documents ??
+                              (row.original as any)?.supporting_documents ??
+                              [],
+                          },
+                        })
                       }
                     >
                       <Group gap="sm">
@@ -250,7 +266,13 @@ export default function OverseasReceiptMaster() {
                     <UnstyledButton
                       onClick={() =>
                         navigate("/overseas-receipt/reversal/create", {
-                          state: row.original,
+                          state: {
+                            ...(row.original as any),
+                            documents:
+                              (row.original as any)?.documents ??
+                              (row.original as any)?.supporting_documents ??
+                              [],
+                          },
                         })
                       }
                     >

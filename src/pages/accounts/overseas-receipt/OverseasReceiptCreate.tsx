@@ -1,12 +1,14 @@
 import {
     Badge,
     Box,
+    ActionIcon,
     Button,
     Card,
     Checkbox,
     Grid,
     Group,
     Loader,
+    Menu,
     Modal,
     NumberInput,
     Stack,
@@ -14,11 +16,13 @@ import {
     Text,
     Textarea,
     TextInput,
+    UnstyledButton,
   } from "@mantine/core";
   import { useForm } from "@mantine/form";
   import {
     IconArrowLeft,
     IconChevronRight,
+    IconDotsVertical,
     IconPlus,
     IconTrash,
     IconFileInvoice,
@@ -1219,17 +1223,24 @@ import {
       const fd = new FormData();
       fd.append("reverse_receipt", JSON.stringify(payload));
 
-      let fileIndex = 0;
-      form.values.supporting_documents.forEach((doc) => {
+      // Keep indexes aligned with `supporting_documents`.
+      // Backend expects `document_id[i]` for unchanged documents and
+      // `document[i]` + `document_names[i]` for replacements/uploads.
+      form.values.supporting_documents.forEach((doc, docIndex) => {
+        const hasExistingDocId =
+          doc.document_id !== null && doc.document_id !== undefined;
+
         if (doc.file) {
-          if (doc.name) {
-            fd.append(`document_names[${fileIndex}]`, doc.name);
+          fd.append(
+            `document_names[${docIndex}]`,
+            (doc.name ?? "").toString(),
+          );
+          fd.append(`document[${docIndex}]`, doc.file);
+          if (hasExistingDocId) {
+            fd.append(`document_id[${docIndex}]`, String(doc.document_id));
           }
-          fd.append(`document[${fileIndex}]`, doc.file);
-          if (doc.document_id != null) {
-            fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
-          }
-          fileIndex++;
+        } else if (hasExistingDocId) {
+          fd.append(`document_id[${docIndex}]`, String(doc.document_id));
         }
       });
 
@@ -1245,17 +1256,24 @@ import {
       const fd = new FormData();
       fd.append("receipt", JSON.stringify(payload));
 
-      let fileIndex = 0;
-      form.values.supporting_documents.forEach((doc) => {
+      // Keep indexes aligned with `supporting_documents`.
+      // Backend expects `document_id[i]` for unchanged documents and
+      // `document[i]` + `document_names[i]` for replacements/uploads.
+      form.values.supporting_documents.forEach((doc, docIndex) => {
+        const hasExistingDocId =
+          doc.document_id !== null && doc.document_id !== undefined;
+
         if (doc.file) {
-          if (doc.name) {
-            fd.append(`document_names[${fileIndex}]`, doc.name);
+          fd.append(
+            `document_names[${docIndex}]`,
+            (doc.name ?? "").toString(),
+          );
+          fd.append(`document[${docIndex}]`, doc.file);
+          if (hasExistingDocId) {
+            fd.append(`document_id[${docIndex}]`, String(doc.document_id));
           }
-          fd.append(`document[${fileIndex}]`, doc.file);
-          if (doc.document_id != null) {
-            fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
-          }
-          fileIndex++;
+        } else if (hasExistingDocId) {
+          fd.append(`document_id[${docIndex}]`, String(doc.document_id));
         }
       });
 
@@ -1915,6 +1933,37 @@ import {
                     </Group>
                   </Group>
                 )}
+              {isViewRoute && (
+                <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+                  <Menu.Target>
+                    <ActionIcon variant="subtle" color="gray">
+                      <IconDotsVertical size={16} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Box px={10} py={5}>
+                      <UnstyledButton
+                        onClick={() => {
+                          openDocumentsModal();
+                        }}
+                      >
+                        <Group gap="sm">
+                          <IconDownload
+                            size={16}
+                            style={{ color: "#105476" }}
+                          />
+                          <Text
+                            size="sm"
+                            style={{ fontFamily: "Inter, sans-serif" }}
+                          >
+                            Document
+                          </Text>
+                        </Group>
+                      </UnstyledButton>
+                    </Box>
+                  </Menu.Dropdown>
+                </Menu>
+              )}
               <Button
                 variant="outline"
                 color="#105476"

@@ -212,7 +212,13 @@ export default function ReceiptReversalMaster() {
                   <UnstyledButton
                     onClick={() =>
                       navigate("/receipt/reversal/view", {
-                        state: row.original,
+                        state: {
+                          ...row.original,
+                          documents:
+                            (row.original as any)?.documents ??
+                            (row.original as any)?.supporting_documents ??
+                            [],
+                        },
                       })
                     }
                   >
@@ -229,7 +235,13 @@ export default function ReceiptReversalMaster() {
                     <UnstyledButton
                       onClick={() =>
                         navigate("/receipt/reversal/edit", {
-                          state: row.original,
+                        state: {
+                          ...row.original,
+                          documents:
+                            (row.original as any)?.documents ??
+                            (row.original as any)?.supporting_documents ??
+                            [],
+                        },
                         })
                       }
                     >

@@ -1,6 +1,5 @@
 import {
   ActionIcon,
-  Autocomplete,
   Badge,
   Box,
   Button,
@@ -44,7 +43,6 @@ import {
   SingleDateInput,
 } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
-import { commonSearchAPI } from "../../../service/searchApi";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
@@ -112,19 +110,6 @@ const fetchStateMaster = async () => {
   try {
     const response = await getAPICall(`${URL.state}`, API_HEADER);
     return (response as { data?: unknown[] })?.data ?? response ?? [];
-  } catch {
-    return [];
-  }
-};
-
-const fetchChartOfAccounts = async () => {
-  try {
-    const response = await postAPICall(
-      (URL as any).chartOfAccountsFilter,
-      { filters: {} },
-      API_HEADER,
-    );
-    return (response as { data?: unknown[] })?.data ?? [];
   } catch {
     return [];
   }
@@ -292,7 +277,7 @@ const PAID_TO_TYPE_OPTIONS = [
   { value: "supplier", label: "Supplier" },
   { value: "agent", label: "Agent" },
   { value: "customer", label: "Customer" },
-  { value: "staff", label: "Staff" },
+  // { value: "staff", label: "Staff" },
 ];
 
 const APPROVED_OPTIONS = [
@@ -306,6 +291,41 @@ const CN_R_OPTIONS = [
   { value: "N", label: "N" },
   { value: "R", label: "R" },
 ];
+
+function resolveAccountNameEndpointByPaidToType(paidToType: string): string {
+  const type = (paidToType ?? "").trim().toLowerCase();
+  if (type === "supplier") return URL.supplierByType;
+  if (type === "agent") return URL.agent;
+  if (type === "customer") return URL.customer;
+  if (type === "staff") return URL.customer;
+  return "";
+}
+
+function resolveVoucherTypeFromServiceType(serviceType: unknown): string {
+  // Air Export Job flow
+  if (typeof serviceType === "string") {
+    const normalized = serviceType.trim().toUpperCase();
+    if (normalized === "AIR") return "AIR EXPORTS";
+  }
+
+  // Export Job (sea) flow typically passes ["FCL", "LCL"]
+  if (Array.isArray(serviceType)) {
+    const normalizedList = serviceType.map((item) =>
+      String(item ?? "")
+        .trim()
+        .toUpperCase(),
+    );
+    if (
+      normalizedList.includes("FCL") ||
+      normalizedList.includes("LCL") ||
+      normalizedList.includes("SEA")
+    ) {
+      return "SEA EXPORTS";
+    }
+  }
+
+  return "";
+}
 
 const emptyCharge = (): ChargeItem => ({
   charge_id: null,
@@ -389,6 +409,7 @@ function PaymentRequest( serviceType: string  ) {
     (location.state as { job?: { service_id?: number } } | null)?.job?.service_id ?? 0;
 
   const shouldApproveRef = useRef(false);
+  const shouldRejectRef = useRef(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sacCodeLoadingByIndex, setSacCodeLoadingByIndex] = useState<Record<number, boolean>>({});
@@ -422,10 +443,9 @@ function PaymentRequest( serviceType: string  ) {
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
   >({});
-  const [paidToDisplayName, setPaidToDisplayName] = useState<string | null>(null);
-  const [paidToSuggestions, setPaidToSuggestions] = useState<Array<{ code: string; name: string }>>([]);
-  const [paidToFetching, setPaidToFetching] = useState(false);
-  const paidToDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [accountNameDisplay, setAccountNameDisplay] = useState<string | null>(
+    null,
+  );
   const [isReferenceInfoOpen, setIsReferenceInfoOpen] = useState(true);
 
   // isUpdate: driven by saveResponse.id OR requestId in URL
@@ -467,12 +487,6 @@ function PaymentRequest( serviceType: string  ) {
   const { data: unitData = [] } = useQuery({
     queryKey: ["unitMaster", "AIR"],
     queryFn: fetchUnitMaster(location.state?.serviceType),
-    staleTime: Infinity,
-  });
-
-  const { data: chartOfAccountsData = [] } = useQuery({
-    queryKey: ["chartOfAccounts"],
-    queryFn: fetchChartOfAccounts,
     staleTime: Infinity,
   });
 
@@ -546,27 +560,17 @@ function PaymentRequest( serviceType: string  ) {
     }));
   }, [unitData]);
 
-  const accountOptions = useMemo(() => {
-    const data = chartOfAccountsData as Array<{
-      id?: number;
-      gl_account_code?: string;
-      account_name?: string;
-    }>;
-    if (!Array.isArray(data)) return [];
-    return data
-      .map((item) => ({
-        value: item.id != null ? String(item.id) : "",
-        label: item.account_name ?? item.gl_account_code ?? "",
-      }))
-      .filter((o) => o.value);
-  }, [chartOfAccountsData]);
-
   // ─── Prefill from Air Export Job (Create PR) ───────────────────────────────
   // Use initialValues from location.state so charges are set on first render (no useEffect timing)
   const prefillFromState = useMemo(() => {
     if (requestId) return null;
     return mapChargesFromState(location.state);
   }, [location.state, requestId]);
+
+  const defaultVoucherTypeFromSource = useMemo(
+    () => resolveVoucherTypeFromServiceType((location.state as any)?.serviceType),
+    [location.state],
+  );
 
   // ─── Form ─────────────────────────────────────────────────────────────────
 
@@ -581,7 +585,7 @@ function PaymentRequest( serviceType: string  ) {
       proforma_invoice_no_1: "",
       proforma_invoice_no_2: "",
       payment_type: "",
-      voucher_type: "",
+      voucher_type: defaultVoucherTypeFromSource,
       cinv: false,
       actual_invoice_no: "",
       account_id: "",
@@ -614,6 +618,19 @@ function PaymentRequest( serviceType: string  ) {
       paid_to: (v) => (!v?.trim() ? "Paid To is required" : null),
     },
   });
+
+  useEffect(() => {
+    // In create flow, if voucher type is empty, auto-fill from source screen.
+    if (isEditOrViewMode) return;
+    if (!defaultVoucherTypeFromSource) return;
+    if ((form.values.voucher_type ?? "").trim() !== "") return;
+    form.setFieldValue("voucher_type", defaultVoucherTypeFromSource);
+  }, [
+    isEditOrViewMode,
+    defaultVoucherTypeFromSource,
+    form.values.voucher_type,
+    form,
+  ]);
 
   // ─── Batch-fetch SAC codes for charges prefilled from location.state ─────
   useEffect(() => {
@@ -652,9 +669,18 @@ function PaymentRequest( serviceType: string  ) {
     await handleSubmit(form.values);
   };
 
+  const handleReject = async () => {
+    const validation = form.validate();
+    if (validation.hasErrors) return;
+    shouldRejectRef.current = true;
+    await handleSubmit(form.values);
+  };
+
   const handleSubmit = async (values: PaymentRequestFormData) => {
     const isApproveAction = shouldApproveRef.current;
+    const isRejectAction = shouldRejectRef.current;
     shouldApproveRef.current = false;
+    shouldRejectRef.current = false;
     setIsSubmitting(true);
     try {
       const formatDate = (d: Date | null) =>
@@ -713,6 +739,9 @@ function PaymentRequest( serviceType: string  ) {
 
       if (isApproveAction) {
         payload.status = "Approved";
+      }
+      else if (isRejectAction) {
+        payload.status = "Rejected";
       }
       else if(values.approved) {
         payload.status = values.approved;
@@ -784,6 +813,9 @@ function PaymentRequest( serviceType: string  ) {
               request_no: d.request_no ?? "",
               status: d.status,
             });
+            setAccountNameDisplay(
+              ((d as any).account_name ?? d.account_code ?? "").toString() || null,
+            );
 
             // Populate the form with all saved values so the screen is in edit mode
             form.setValues({
@@ -886,9 +918,9 @@ function PaymentRequest( serviceType: string  ) {
       status: d.status,
     });
 
-    if (d.paid_to) {
-      setPaidToDisplayName(d.paid_to ?? "");
-    }
+    setAccountNameDisplay(
+      ((d as any).account_name ?? d.account_code ?? "").toString() || null,
+    );
 
     form.setValues({
       request_no: d.request_no ?? "",
@@ -1420,6 +1452,11 @@ function PaymentRequest( serviceType: string  ) {
                       //   value: form.values.location_gst_no,
                       // },
                     ] as { label: string; value: string }[]
+                  ).filter(
+                    ({ value }) =>
+                      value != null &&
+                      String(value).trim() !== "" &&
+                      String(value) !== "—",
                   ).map(({ label, value }) => (
                     <Grid.Col key={label} span={4}>
                       <Box
@@ -1547,15 +1584,57 @@ function PaymentRequest( serviceType: string  ) {
             {/* ── Row 3 (2+2+2+2+4): Account Code | Subledger Code | Currency | Amount | CRJ Date ── */}
             <Grid.Col span={2}>
               <Dropdown
-                label="Account Name"
-                placeholder="Select account"
-                data={accountOptions}
-                value={form.values.account_id || null}
+                label="Paid To Type"
+                placeholder="Select paid to type"
+                data={PAID_TO_TYPE_OPTIONS}
+                value={form.values.paid_to_type || null}
                 onChange={(value) => {
-                  form.setFieldValue("account_id", value ?? "");
+                  form.setFieldValue("paid_to_type", value ?? "");
+                  // Reset account selection when type changes to avoid mismatch.
+                  form.setFieldValue("account_id", "");
+                  setAccountNameDisplay(null);
                 }}
-                searchable
-                clearable
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2}>
+              <SearchableSelect
+                label="Account Name"
+                placeholder={
+                  form.values.paid_to_type
+                    ? "Type to search account name"
+                    : "Select paid to type first"
+                }
+                apiEndpoint={
+                  resolveAccountNameEndpointByPaidToType(
+                    form.values.paid_to_type,
+                  ) || undefined
+                }
+                searchFields={["customer_name", "customer_code", "id"]}
+                displayFormat={(item: Record<string, unknown>) => ({
+                  value: String(item.id ?? item.customer_code ?? ""),
+                  label: String(
+                    item.customer_name ??
+                      item.name ??
+                      item.account_name ??
+                      item.customer_code ??
+                      "",
+                  ),
+                })}
+                value={form.values.account_id || null}
+                displayValue={accountNameDisplay}
+                onChange={(value, selectedData) => {
+                  form.setFieldValue("account_id", value ?? "");
+                  const selectedAccountName = selectedData?.label ?? "";
+                  setAccountNameDisplay(selectedAccountName || null);
+                  // Auto-fill Paid To from selected account name; user can edit later.
+                  form.setFieldValue("paid_to", selectedAccountName);
+                }}
+                minSearchLength={3}
+                dropdownZIndex={1000}
+                disabled={!form.values.paid_to_type || isReadOnly}
                 readOnly={isReadOnly}
                 styles={inputStyles}
               />
@@ -1577,7 +1656,7 @@ function PaymentRequest( serviceType: string  ) {
               />
             </Grid.Col>
 
-            <Grid.Col span={2}>
+            {/* <Grid.Col span={2}>
               <NumberInput
                 label="Amount"
                 placeholder="Enter amount"
@@ -1591,7 +1670,7 @@ function PaymentRequest( serviceType: string  ) {
                 readOnly={isReadOnly}
                 styles={inputStyles}
               />
-            </Grid.Col>
+            </Grid.Col> */}
 
             <Grid.Col span={2}>
               <SingleDateInput
@@ -1632,67 +1711,20 @@ function PaymentRequest( serviceType: string  ) {
 
 
             {/* ── Row 4 (2+4+2+2+2): Paid To Type | Paid To | Not Over | Approved | (spacer) ── */}
-            <Grid.Col span={2}>
-              <Dropdown
-                label="Paid To Type"
-                placeholder="Select paid to type"
-                data={PAID_TO_TYPE_OPTIONS}
-                value={form.values.paid_to_type || null}
-                onChange={(value) =>
-                  form.setFieldValue("paid_to_type", value ?? "")
-                }
-                readOnly={isReadOnly}
-                styles={inputStyles}
-              />
-            </Grid.Col>
+
 
             <Grid.Col span={3}>
-              <Autocomplete
+              <TextInput
                 label="Paid To"
-                placeholder="Type vendor / supplier name"
+                placeholder="Enter paid to"
                 withAsterisk
-                data={paidToSuggestions.map((s) => s.name)}
-                value={paidToDisplayName ?? ""}
-                onChange={(val) => {
-                  setPaidToDisplayName(val || null);
-                  form.setFieldValue("paid_to", val ?? "");
+                value={form.values.paid_to}
+                onChange={(e) => {
+                  form.setFieldValue("paid_to", e.target.value);
                   if (form.errors.paid_to) form.clearFieldError("paid_to");
-
-                  // Debounced API suggestion fetch
-                  if (paidToDebounceRef.current) clearTimeout(paidToDebounceRef.current);
-                  if (!isReadOnly && val.trim().length >= 2) {
-                    setPaidToFetching(true);
-                    paidToDebounceRef.current = setTimeout(async () => {
-                      try {
-                        const res = await commonSearchAPI({
-                          endpoint: URL.supplierByType,
-                          query: val,
-                        });
-                        if (Array.isArray(res)) {
-                          setPaidToSuggestions(
-                            res.map((item: any) => ({
-                              code: String(item.customer_code ?? item.id ?? ""),
-                              name: String(item.customer_name ?? ""),
-                            })),
-                          );
-                        } else {
-                          setPaidToSuggestions([]);
-                        }
-                      } catch {
-                        setPaidToSuggestions([]);
-                      } finally {
-                        setPaidToFetching(false);
-                      }
-                    }, 600);
-                  } else {
-                    setPaidToSuggestions([]);
-                    setPaidToFetching(false);
-                  }
                 }}
                 readOnly={isReadOnly}
                 error={form.errors.paid_to ? String(form.errors.paid_to) : undefined}
-                rightSection={paidToFetching ? <Loader size="xs" color="#105476" /> : null}
-                comboboxProps={{ zIndex: 1000 }}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -1784,33 +1816,38 @@ function PaymentRequest( serviceType: string  ) {
               />
             </Grid.Col>
 
-            <Grid.Col span={3}>
-              <Textarea
-                label="Rejected Note"
-                placeholder="Enter rejected note"
-                value={form.values.rejected_note}
-                onChange={(e) =>
-                  form.setFieldValue("rejected_note", e.target.value)
-                }
-                readOnly={isReadOnly}
-                rows={3}
-                styles={textareaStyles}
-              />
-            </Grid.Col>
+            {/* Hide status-related notes on the initial "Save" (create) flow. */}
+            {saveResponse?.id ? (
+              <>
+                <Grid.Col span={3}>
+                  <Textarea
+                    label="Rejected Note"
+                    placeholder="Enter rejected note"
+                    value={form.values.rejected_note}
+                    onChange={(e) =>
+                      form.setFieldValue("rejected_note", e.target.value)
+                    }
+                    readOnly={isReadOnly}
+                    rows={3}
+                    styles={textareaStyles}
+                  />
+                </Grid.Col>
 
-            <Grid.Col span={3}>
-              <Textarea
-                label="On Hold Note"
-                placeholder="Enter on hold note"
-                value={form.values.on_hold_note}
-                onChange={(e) =>
-                  form.setFieldValue("on_hold_note", e.target.value)
-                }
-                readOnly={isReadOnly}
-                rows={3}
-                styles={textareaStyles}
-              />
-            </Grid.Col>
+                <Grid.Col span={3}>
+                  <Textarea
+                    label="On Hold Note"
+                    placeholder="Enter on hold note"
+                    value={form.values.on_hold_note}
+                    onChange={(e) =>
+                      form.setFieldValue("on_hold_note", e.target.value)
+                    }
+                    readOnly={isReadOnly}
+                    rows={3}
+                    styles={textareaStyles}
+                  />
+                </Grid.Col>
+              </>
+            ) : null}
           </Grid>
 
           {/* ── Charges Section ── */}
@@ -1834,7 +1871,7 @@ function PaymentRequest( serviceType: string  ) {
               {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Seg
               </Grid.Col> */}
-              <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+              <Grid.Col span={0.98} style={{ fontSize: "13px" }}>
                 Job Id
               </Grid.Col>
               {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
@@ -1843,16 +1880,16 @@ function PaymentRequest( serviceType: string  ) {
               <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 C/N/R
               </Grid.Col> */}
-              <Grid.Col span={1} style={{ fontSize: "13px" }}>
+              <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
                 Charge
               </Grid.Col>
-              <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+              <Grid.Col span={1} style={{ fontSize: "13px" }}>
                 Currency
               </Grid.Col>
               <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 ROE
               </Grid.Col>
-              <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+              <Grid.Col span={1} style={{ fontSize: "13px" }}>
                 Unit
               </Grid.Col>
               <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
@@ -1867,12 +1904,12 @@ function PaymentRequest( serviceType: string  ) {
               <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
                 Local Amt
               </Grid.Col>
-              <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+              <Grid.Col span={1} style={{ fontSize: "13px" }}>
                 SAC Code
               </Grid.Col>
-              <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+              {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Tax
-              </Grid.Col>
+              </Grid.Col> */}
               {!isReadOnly && (
                 <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                   Actions
@@ -1928,7 +1965,7 @@ function PaymentRequest( serviceType: string  ) {
                 </Grid.Col> */}
 
                 {/* Job No */}
-                <Grid.Col span={0.7}>
+                <Grid.Col span={0.98}>
                   <TextInput
                     placeholder="Job Id"
                     value={charge.job_no}
@@ -1995,7 +2032,7 @@ function PaymentRequest( serviceType: string  ) {
                 </Grid.Col> */}
 
                 {/* Charge */}
-                <Grid.Col span={1}>
+                <Grid.Col span={1.5}>
                   <SearchableSelect
                     placeholder="Type charge name"
                     apiEndpoint={(URL as any).chargeMaster}
@@ -2066,7 +2103,7 @@ function PaymentRequest( serviceType: string  ) {
                 </Grid.Col>
 
                 {/* Currency */}
-                <Grid.Col span={0.7}>
+                <Grid.Col span={1}>
                   <Dropdown
                     placeholder="Curr."
                     searchable
@@ -2146,7 +2183,7 @@ function PaymentRequest( serviceType: string  ) {
                 </Grid.Col>
 
                 {/* Unit */}
-                <Grid.Col span={0.8}>
+                <Grid.Col span={1}>
                   <Dropdown
                     placeholder="Unit"
                     searchable
@@ -2308,7 +2345,7 @@ function PaymentRequest( serviceType: string  ) {
                 </Grid.Col>
 
                 {/* SAC Code */}
-                <Grid.Col span={0.8}>
+                <Grid.Col span={1}>
                   <TextInput
                     placeholder="SAC Code"
                     value={charge.tax_code}
@@ -2330,7 +2367,7 @@ function PaymentRequest( serviceType: string  ) {
                 </Grid.Col>
 
                 {/* Tax */}
-                <Grid.Col span={0.5} style={{ justifyContent: "center", marginLeft: "10px", }}>
+                {/* <Grid.Col span={0.5} style={{ justifyContent: "center", marginLeft: "10px", }}>
                   <Box
                     style={{
                       display: "flex",
@@ -2355,7 +2392,7 @@ function PaymentRequest( serviceType: string  ) {
                       }}
                     />
                   </Box>
-                </Grid.Col>
+                </Grid.Col> */}
 
                 {/* Actions */}
                 {!isReadOnly && (
@@ -2496,7 +2533,28 @@ function PaymentRequest( serviceType: string  ) {
               )}
               {!isReadOnly && (
                 <>
-                  {isEditMode && (
+                  {saveResponse?.id && (
+                    <>
+                      <Button
+                        color="red"
+                        leftSection={<IconX size={16} />}
+                        loading={isSubmitting}
+                        onClick={handleReject}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        color="green"
+                        leftSection={<IconCheck size={16} />}
+                        loading={isSubmitting}
+                        onClick={handleApprove}
+                      >
+                        Approve
+                      </Button>
+                    </>
+                  )}
+                  {/* Keep this as a route-based fallback for existing edit flows. */}
+                  {!saveResponse?.id && isEditMode && (
                     <Button
                       color="green"
                       leftSection={<IconCheck size={16} />}
@@ -2513,8 +2571,8 @@ function PaymentRequest( serviceType: string  ) {
                     loading={isSubmitting}
                   >
                     {saveResponse?.id
-                      ? "Update Payment Request"
-                      : "Save Payment Request"}
+                      ? "Update"
+                      : "Save"}
                   </Button>
                 </>
               )}

@@ -212,7 +212,15 @@ export default function ReceiptMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/receipt/view", { state: row.original })
+                      navigate("/receipt/view", {
+                        state: {
+                          ...row.original,
+                          documents:
+                            (row.original as any)?.documents ??
+                            (row.original as any)?.supporting_documents ??
+                            [],
+                        },
+                      })
                     }
                   >
                     <Group gap="sm">
@@ -230,7 +238,15 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/edit", { state: row.original })
+                        navigate("/receipt/edit", {
+                          state: {
+                            ...row.original,
+                            documents:
+                              (row.original as any)?.documents ??
+                              (row.original as any)?.supporting_documents ??
+                              [],
+                          },
+                        })
                       }
                     >
                       <Group gap="sm">
@@ -250,7 +266,13 @@ export default function ReceiptMaster() {
                     <UnstyledButton
                       onClick={() =>
                         navigate("/receipt/reversal/create", {
-                          state: row.original,
+                          state: {
+                            ...row.original,
+                            documents:
+                              (row.original as any)?.documents ??
+                              (row.original as any)?.supporting_documents ??
+                              [],
+                          },
                         })
                       }
                     >

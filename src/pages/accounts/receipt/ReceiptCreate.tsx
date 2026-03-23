@@ -1,5 +1,7 @@
 import {
   Badge,
+  Menu,
+  ActionIcon,
   Box,
   Button,
   Card,
@@ -14,10 +16,12 @@ import {
   Text,
   Textarea,
   TextInput,
+  UnstyledButton,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
+  IconDotsVertical,
   IconChevronRight,
   IconPlus,
   IconTrash,
@@ -754,6 +758,33 @@ export default function ReceiptCreate({
         status: (receiptFromState.status ?? "UNPOSTED").toString(),
       });
     }
+
+    // Pass-through documents from ReceiptMaster list so view/edit can show downloads
+    const rawDocs =
+      (receiptFromState as any)?.documents ??
+      (receiptFromState as any)?.supporting_documents ??
+      [];
+    if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+      form.setFieldValue(
+        "supporting_documents",
+        rawDocs.map((doc: any) => ({
+          name:
+            (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+          file: null,
+          document_url:
+            doc.document_download_url ??
+            doc.document_url ??
+            doc.url ??
+            "",
+          document_id: doc.id ?? undefined,
+          original_document_name:
+            doc.original_document_name ??
+            doc.document_name ??
+            doc.file_name ??
+            "",
+        })),
+      );
+    }
   }, [
     receiptFromState?.id,
     localCurrency,
@@ -1201,15 +1232,19 @@ export default function ReceiptCreate({
   const buildReversalFormData = (payload: object): FormData => {
     const fd = new FormData();
     fd.append("reverse_receipt", JSON.stringify(payload));
-    let fileIndex = 0;
+    let docIndex = 0;
     form.values.supporting_documents.forEach((doc) => {
       if (doc.file) {
-        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
-        fd.append(`document[${fileIndex}]`, doc.file);
-        if (doc.document_id != null)
-          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
-        fileIndex++;
+        fd.append(`document_names[${docIndex}]`, (doc.name ?? "").toString());
+        fd.append(`document[${docIndex}]`, doc.file);
+        if (doc.document_id != null) {
+          fd.append(`document_id[${docIndex}]`, String(doc.document_id));
+        }
+      } else if (doc.document_id != null) {
+        // Existing document that is not being replaced: send its ID so backend retains it.
+        fd.append(`document_id[${docIndex}]`, String(doc.document_id));
       }
+      docIndex++;
     });
     return fd;
   };
@@ -1225,15 +1260,19 @@ export default function ReceiptCreate({
   const buildReceiptFormData = (payload: object): FormData => {
     const fd = new FormData();
     fd.append("receipt", JSON.stringify(payload));
-    let fileIndex = 0;
+    let docIndex = 0;
     form.values.supporting_documents.forEach((doc) => {
       if (doc.file) {
-        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
-        fd.append(`document[${fileIndex}]`, doc.file);
-        if (doc.document_id != null)
-          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
-        fileIndex++;
+        fd.append(`document_names[${docIndex}]`, (doc.name ?? "").toString());
+        fd.append(`document[${docIndex}]`, doc.file);
+        if (doc.document_id != null) {
+          fd.append(`document_id[${docIndex}]`, String(doc.document_id));
+        }
+      } else if (doc.document_id != null) {
+        // Existing document that is not being replaced: send its ID so backend retains it.
+        fd.append(`document_id[${docIndex}]`, String(doc.document_id));
       }
+      docIndex++;
     });
     return fd;
   };
@@ -1728,6 +1767,35 @@ payload.is_agent = false;
                   </Group>
                 </Group>
               )}
+            {isViewRoute && (
+              <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+                <Menu.Target>
+                  <ActionIcon variant="subtle" color="gray">
+                    <IconDotsVertical size={16} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Box px={10} py={5}>
+                    <UnstyledButton
+                      onClick={() => {
+                        // Show document details (download list) in view mode
+                        openDocumentsModal();
+                      }}
+                    >
+                      <Group gap="sm">
+                        <IconDownload size={16} style={{ color: "#105476" }} />
+                        <Text
+                          size="sm"
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          Document
+                        </Text>
+                      </Group>
+                    </UnstyledButton>
+                  </Box>
+                </Menu.Dropdown>
+              </Menu>
+            )}
             <Button
               variant="outline"
               color="#105476"
@@ -2620,17 +2688,16 @@ payload.is_agent = false;
             )}
           </Modal>
 
-          {/* Supporting Documents Modal - not shown in view flow */}
-          {!isViewRoute && (
-            <Modal
-              opened={documentsModalOpened}
-              onClose={closeDocumentsModal}
-              title="Attach Supporting Documents"
-              size="xl"
-              centered
-              style={{ fontFamily: "Inter" }}
-              styles={{ title: { fontWeight: 600, color: "#105476" } }}
-            >
+          {/* Supporting Documents Modal */}
+          <Modal
+            opened={documentsModalOpened}
+            onClose={closeDocumentsModal}
+            title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
+            size="xl"
+            centered
+            style={{ fontFamily: "Inter" }}
+            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+          >
               <Stack gap="xs">
                 {form.values.supporting_documents.map((doc, index) => (
                   <Grid key={index} columns={12} gutter="sm" align="flex-end">
@@ -2639,7 +2706,9 @@ payload.is_agent = false;
                         label="Document Name"
                         placeholder="Enter document name"
                         value={doc.name}
+                        disabled={isReadOnly}
                         onChange={(e) => {
+                          if (isReadOnly) return;
                           const updatedDocs = [
                             ...form.values.supporting_documents,
                           ];
@@ -2661,6 +2730,7 @@ payload.is_agent = false;
                         </Text>
                         <Dropzone
                           onDrop={(files: File[]) => {
+                            if (isReadOnly) return;
                             if (files.length === 0) return;
                             const file = files[0];
                             if (fileErrors[index]) {
@@ -2685,18 +2755,18 @@ payload.is_agent = false;
                               ...updatedDocs[index],
                               file,
                               document_url: undefined,
-                              document_id: undefined,
                             };
                             form.setFieldValue(
                               "supporting_documents",
                               updatedDocs,
                             );
                           }}
-                          onReject={(files: { errors: { code: string }[] }[]) => {
-                            const rejection = files[0];
+                          onReject={(fileRejections: any[]) => {
+                            if (isReadOnly) return;
+                            const rejection = fileRejections[0];
                             if (
                               rejection?.errors?.some(
-                                (e) => e.code === "file-too-large",
+                                (e: any) => e.code === "file-too-large",
                               )
                             ) {
                               const newErrors = { ...fileErrors };
@@ -2800,7 +2870,7 @@ payload.is_agent = false;
                                 </>
                               )}
                             </Group>
-                            {(doc.file || doc.document_url) && (
+                            {!isReadOnly && (doc.file || doc.document_url) && (
                               <Button
                                 variant="subtle"
                                 color="red"
@@ -2841,66 +2911,76 @@ payload.is_agent = false;
                         )}
                       </Box>
                     </Grid.Col>
-                    <Grid.Col span={1}>
-                      <Button
-                        variant="light"
-                        color="red"
-                        onClick={() => {
-                          if (fileErrors[index]) {
-                            const newErrors = { ...fileErrors };
-                            delete newErrors[index];
-                            setFileErrors(newErrors);
-                          }
-                          if (form.values.supporting_documents.length === 1) {
-                            form.setFieldValue("supporting_documents", [
-                              { name: "", file: null },
-                            ]);
-                          } else {
-                            const updatedDocs =
-                              form.values.supporting_documents.filter(
-                                (_, i) => i !== index,
-                              );
-                            form.setFieldValue(
-                              "supporting_documents",
-                              updatedDocs,
-                            );
-                            const newErrors: { [key: number]: string } = {};
-                            Object.keys(fileErrors).forEach((key) => {
-                              const keyNum = parseInt(key);
-                              if (keyNum < index) {
-                                newErrors[keyNum] = fileErrors[keyNum];
-                              } else if (keyNum > index) {
-                                newErrors[keyNum - 1] = fileErrors[keyNum];
-                              }
-                            });
-                            setFileErrors(newErrors);
-                          }
-                        }}
-                      >
-                        <IconTrash size={16} />
-                      </Button>
-                    </Grid.Col>
-                    <Grid.Col span={1} offset={11}>
-                      {index ===
-                        form.values.supporting_documents.length - 1 && (
+                    {!isReadOnly && (
+                      <Grid.Col span={1}>
                         <Button
                           variant="light"
-                          color="#105476"
+                          color="red"
                           onClick={() => {
-                            form.setFieldValue("supporting_documents", [
-                              ...form.values.supporting_documents,
-                              { name: "", file: null },
-                            ]);
+                            if (fileErrors[index]) {
+                              const newErrors = { ...fileErrors };
+                              delete newErrors[index];
+                              setFileErrors(newErrors);
+                            }
+                            if (
+                              form.values.supporting_documents.length === 1
+                            ) {
+                              form.setFieldValue("supporting_documents", [
+                                { name: "", file: null },
+                              ]);
+                            } else {
+                              const updatedDocs =
+                                form.values.supporting_documents.filter(
+                                  (_, i) => i !== index,
+                                );
+                              form.setFieldValue(
+                                "supporting_documents",
+                                updatedDocs,
+                              );
+                              const newErrors: {
+                                [key: number]: string;
+                              } = {};
+                              Object.keys(fileErrors).forEach((key) => {
+                                const keyNum = parseInt(key);
+                                if (keyNum < index) {
+                                  newErrors[keyNum] = fileErrors[keyNum];
+                                } else if (keyNum > index) {
+                                  newErrors[keyNum - 1] =
+                                    fileErrors[keyNum];
+                                }
+                              });
+                              setFileErrors(newErrors);
+                            }
                           }}
                         >
-                          <IconPlus size={16} />
+                          <IconTrash size={16} />
                         </Button>
-                      )}
-                    </Grid.Col>
+                      </Grid.Col>
+                    )}
+                    {!isReadOnly && (
+                      <Grid.Col span={1} offset={11}>
+                        {index ===
+                          form.values.supporting_documents.length - 1 && (
+                            <Button
+                              variant="light"
+                              color="#105476"
+                              onClick={() => {
+                                form.setFieldValue("supporting_documents", [
+                                  ...form.values.supporting_documents,
+                                  { name: "", file: null },
+                                ]);
+                              }}
+                            >
+                              <IconPlus size={16} />
+                            </Button>
+                          )}
+                      </Grid.Col>
+                    )}
                   </Grid>
                 ))}
 
-                {form.values.supporting_documents.length === 0 && (
+                {!isReadOnly &&
+                  form.values.supporting_documents.length === 0 && (
                   <Button
                     variant="light"
                     color="#105476"
@@ -2914,7 +2994,7 @@ payload.is_agent = false;
                   >
                     Add Document
                   </Button>
-                )}
+                  )}
 
                 <Group justify="flex-end" mt="md">
                   <Button variant="outline" onClick={closeDocumentsModal}>
@@ -2922,8 +3002,7 @@ payload.is_agent = false;
                   </Button>
                 </Group>
               </Stack>
-            </Modal>
-          )}
+          </Modal>
 
           {/* Action Buttons */}
           <Group justify="flex-end" mt="xl">
