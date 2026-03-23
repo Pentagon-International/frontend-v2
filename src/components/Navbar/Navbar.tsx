@@ -768,7 +768,28 @@ const Navbar = ({
                 }}
               />
             </Stack>
-
+  {/* Workflow */}
+           
+            <Stack mt={!opened ? 4 : 16} gap={4}>
+              {opened ? (
+                <SectionTitle title="Workflow" />
+              ) : (
+                <Divider my="xs" color="#D5D5D5" size="sm" />
+              )}
+              <SimpleNavLink
+                label="Jobcreation"
+                key={"Jobcreation"}
+                icon={IconPercentage}
+                path="/hbl-document-manager"
+                collapsibles={{
+                  setIsSalesOpen,
+                  setIsTariffOpen,
+                  setIsCustomerServiceOpen,
+                }}
+             
+             
+              />
+            </Stack>
             {/* System Section */}
             <Stack mt={!opened ? 4 : 16} gap={4}>
               {opened ? (
