@@ -299,7 +299,7 @@ const mapApiDocumentsToSupportingDocuments = (
         : d?.id != null
           ? Number(d.id)
           : undefined,
-    document_url: (d?.document_download_url ?? d?.file_name ?? d?.document_url ?? "")
+    document_url: ( d?.document_url ?? "")
       .toString()
       .trim() || undefined,
     original_document_name:

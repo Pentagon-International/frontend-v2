@@ -784,7 +784,6 @@ export default function OverseasPaymentCreate({
           name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
           file: null as File | null,
           document_url:
-            doc.document_download_url ??
             doc.document_url ??
             doc.url ??
             "",
@@ -1332,7 +1331,6 @@ export default function OverseasPaymentCreate({
                   name: (doc.document_name ?? doc.file_name ?? "").toString(),
                   file: null,
                   document_url:
-                    doc.document_download_url ??
                     doc.document_url ??
                     doc.url ??
                     "",
@@ -1377,7 +1375,6 @@ export default function OverseasPaymentCreate({
                   name: (doc.document_name ?? doc.file_name ?? "").toString(),
                   file: null,
                   document_url:
-                    doc.document_download_url ??
                     doc.document_url ??
                     doc.url ??
                     "",
@@ -1454,7 +1451,6 @@ payload.is_agent = true;
                   (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
                 file: null,
                 document_url:
-                  doc.document_download_url ??
                   doc.document_url ??
                   doc.url ??
                   "",
@@ -1515,7 +1511,6 @@ payload.is_agent = true;
                   (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
                 file: null,
                 document_url:
-                  doc.document_download_url ??
                   doc.document_url ??
                   doc.url ??
                   "",
@@ -1585,7 +1580,6 @@ payload.is_agent = true;
                 name: (doc.document_name ?? doc.file_name ?? "").toString(),
                 file: null,
                 document_url:
-                  doc.document_download_url ??
                   doc.document_url ??
                   doc.url ??
                   "",
@@ -1653,7 +1647,6 @@ payload.is_agent = true;
                 (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
               file: null,
               document_url:
-                doc.document_download_url ??
                 doc.document_url ??
                 doc.url ??
                 "",

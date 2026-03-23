@@ -768,7 +768,7 @@ import {
             name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
             file: null as File | null,
             document_url:
-              doc.document_download_url ?? doc.document_url ?? doc.url ?? "",
+               doc.document_url ?? doc.url ?? "",
             document_id: doc.id ?? undefined,
             original_document_name:
               (doc.original_document_name ??
@@ -1376,7 +1376,6 @@ import {
                       (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
                     file: null,
                     document_url:
-                      doc.document_download_url ??
                       doc.document_url ??
                       doc.url ??
                       "",
@@ -1428,7 +1427,7 @@ import {
                       (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
                     file: null,
                     document_url:
-                      doc.document_download_url ??
+                     
                       doc.document_url ??
                       doc.url ??
                       "",
@@ -1510,7 +1509,6 @@ import {
                     (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
                   file: null,
                   document_url:
-                    doc.document_download_url ??
                     doc.document_url ??
                     doc.url ??
                     "",
@@ -1554,7 +1552,6 @@ import {
                     (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
                   file: null,
                   document_url:
-                    doc.document_download_url ??
                     doc.document_url ??
                     doc.url ??
                     "",
@@ -1651,7 +1648,6 @@ import {
                   (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
                 file: null,
                 document_url:
-                  doc.document_download_url ??
                   doc.document_url ??
                   doc.url ??
                   "",
@@ -1720,7 +1716,6 @@ import {
                   (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
                 file: null,
                 document_url:
-                  doc.document_download_url ??
                   doc.document_url ??
                   doc.url ??
                   "",

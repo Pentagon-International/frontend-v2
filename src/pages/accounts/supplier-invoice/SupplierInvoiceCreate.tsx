@@ -958,7 +958,6 @@ export default function SupplierInvoiceCreate({
     if (!Array.isArray(docs) || docs.length === 0) return [];
     return docs.map((doc) => {
       const downloadUrl =
-        doc.document_download_url ??
         doc.document_url ??
         doc.url ??
         "";

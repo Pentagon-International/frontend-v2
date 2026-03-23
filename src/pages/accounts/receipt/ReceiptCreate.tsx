@@ -772,7 +772,6 @@ export default function ReceiptCreate({
             (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
           file: null,
           document_url:
-            doc.document_download_url ??
             doc.document_url ??
             doc.url ??
             "",
