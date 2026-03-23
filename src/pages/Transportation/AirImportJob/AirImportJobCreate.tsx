@@ -67,6 +67,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -2254,30 +2255,30 @@ function AirImportJobCreate() {
                     ? Number(charge.currency)
                     : null,
               no_of_unit:
-                charge.no_of_unit != null ? Number(charge.no_of_unit) : null,
-              roe: charge.roe != null ? Number(charge.roe) : null,
+                charge.no_of_unit != null ? roundToDecimals(charge.no_of_unit) : null,
+              roe: charge.roe != null ? roundToDecimals(charge.roe) : null,
               amount_per_unit:
                 charge.amount_per_unit != null
-                  ? Number(charge.amount_per_unit)
+                  ? roundToDecimals(charge.amount_per_unit)
                   : null,
-              amount: charge.amount != null ? Number(charge.amount) : null,
+              amount: charge.amount != null ? roundToDecimals(charge.amount) : null,
               sell_local_amount:
                 charge.sell_local_amount != null
-                  ? Number(charge.sell_local_amount)
+                  ? roundToDecimals(charge.sell_local_amount)
                   : charge.local_amount != null
-                    ? Number(charge.local_amount)
+                    ? roundToDecimals(charge.local_amount)
                     : null,
               unit_cost:
                 charge.unit_cost != null
-                  ? Number(charge.unit_cost)
+                  ? roundToDecimals(charge.unit_cost)
                   : charge.cost_per_unit != null
-                    ? Number(charge.cost_per_unit)
+                    ? roundToDecimals(charge.cost_per_unit)
                     : null,
               total_cost:
-                charge.total_cost != null ? Number(charge.total_cost) : null,
+                charge.total_cost != null ? roundToDecimals(charge.total_cost) : null,
               cost_local_amount:
                 charge.cost_local_amount != null
-                  ? Number(charge.cost_local_amount)
+                  ? roundToDecimals(charge.cost_local_amount)
                   : null,
             }));
           })(),
@@ -2310,11 +2311,11 @@ function AirImportJobCreate() {
             charge_id: e.charge_id,
             pp_cc: e.pp_cc || "",
             unit_id: e.unit_id ? Number(e.unit_id) : null,
-            no_of_unit: e.no_of_unit ?? null,
+            no_of_unit: roundToDecimals(e.no_of_unit) ?? null,
             currency_id: e.currency_id ? Number(e.currency_id) : null,
-            roe: e.roe ?? null,
-            cost_per_unit: e.cost_per_unit ?? null,
-            total_cost: e.total_cost ?? null,
+            roe: roundToDecimals(e.roe) ?? null,
+            cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
+            total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
       };

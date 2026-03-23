@@ -67,6 +67,7 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -2070,17 +2071,17 @@ function AirExportJobCreate() {
                     : null,
                 pp_cc: charge.pp_cc || "",
                 unit_id: charge.unit_id ? String(charge.unit_id) : "",
-                no_of_unit: charge.no_of_unit || null,
+                no_of_unit: roundToDecimals(charge.no_of_unit) || null,
                 currency_id: charge.currency_id
                   ? String(charge.currency_id)
                   : "",
-                roe: charge.roe || null,
-                amount_per_unit: charge.amount_per_unit || null,
-                amount: charge.amount || null,
-                sell_local_amount: charge.sell_local_amount ?? charge.local_amount ?? null,
-                unit_cost: charge.unit_cost ?? charge.cost_per_unit ?? null,
-                total_cost: charge.total_cost ?? null,
-                cost_local_amount: charge.cost_local_amount ?? null,
+                roe: roundToDecimals(charge.roe) || null,
+                amount_per_unit: roundToDecimals(charge.amount_per_unit) || null,
+                amount: roundToDecimals(charge.amount) || null,
+                sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? roundToDecimals(charge.local_amount) ?? null,
+                unit_cost: roundToDecimals(charge.unit_cost) ?? roundToDecimals(charge.cost_per_unit) ?? null,
+                total_cost: roundToDecimals(charge.total_cost) ?? null,
+                cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
               }))
             : [],
         })),
@@ -2110,11 +2111,11 @@ function AirExportJobCreate() {
             charge_id: e.charge_id,
             pp_cc: e.pp_cc || "",
             unit_id: e.unit_id ? Number(e.unit_id) : null,
-            no_of_unit: e.no_of_unit ?? null,
+            no_of_unit: roundToDecimals(e.no_of_unit) ?? null,
             currency_id: e.currency_id ? Number(e.currency_id) : null,
-            roe: e.roe ?? null,
-            cost_per_unit: e.cost_per_unit ?? null,
-            total_cost: e.total_cost ?? null,
+            roe: roundToDecimals(e.roe) ?? null,
+            cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
+            total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
       };

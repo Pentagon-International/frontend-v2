@@ -1,59 +1,118 @@
-import { Box, Container, Flex } from "@mantine/core";
+import { Box, Button, Container, Flex, Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import { useNavigate } from "react-router-dom";
+import { IconArrowLeft } from "@tabler/icons-react";
 import AuthImage from "./Components/AuthImage";
-import forgotPrimeIdImg from "../../assets/images/forgot-page.png";
 import ForgotPrimeIdForm from "./Components/ForgotPrimeIdForm";
+import forgotPrimeIdImg from "../../assets/images/forgot-page.png";
+import ForgotImage1 from "../../assets/images/ForgotPage-Image-1.jpg";
+import ForgotImage2 from "../../assets/images/ForgotPage-Image-2.jpg";
 
 function ForgotPrimeId() {
+  const isMobile = useMediaQuery("(max-width: 767px)");
+  const isTablet = useMediaQuery("(max-width: 1024px)");
+  const navigate = useNavigate();
+
   return (
     <Container
       fluid
       className="outfit"
       style={{
-        width: "100%",
+        width: "100vw",
         minHeight: "100vh",
         padding: 0,
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
+        overflow: "hidden",
       }}
     >
       <Flex
-        justify="space-around"
-        align="center"
-        sx={(theme) => ({
-          margin: "0",
+        style={{
           width: "100%",
-          height: "100%",
-          [`@media (max-width: ${theme.breakpoints.md})`]: {
-            flexDirection: "column",
-            padding: "28px",
-            gap: "40px",
-          },
-        })}
+          minHeight: "100vh",
+        }}
       >
+        {/* ── Form Section ── */}
         <Box
           style={{
-            padding: 0,
+            flex: isMobile ? "1 1 100%" : "1 1 0",
+            minWidth: 0,
+            minHeight: "100vh",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <AuthImage image={forgotPrimeIdImg} altText="Forgot-prime ID image" imageHeaderText={{
-              heading: "Welcome to Pulse",
-              text: "Your Gateway to Effortless Management",
-            }} />
+          <Box
+            style={{
+              width: "100%",
+              padding: "0 32px",
+              minHeight: "100vh",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+            }}
+          >
+            {/* Back to Login button */}
+            <Button
+              variant="subtle"
+              color="#555555"
+              onClick={() => navigate("/")}
+              style={{
+                position: "absolute",
+                top: "2rem",
+                left: "2.5rem",
+              }}
+            >
+              <IconArrowLeft size={16} />
+              <Text ml="sm">Back to Login</Text>
+            </Button>
+
+            <ForgotPrimeIdForm />
+          </Box>
         </Box>
-        <Box
-          style={{
-            padding: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <ForgotPrimeIdForm />
-        </Box>
+
+        {/* ── Image Section — hidden on mobile ── */}
+        {!isMobile && (
+          <Box
+            style={{
+              flex: isTablet ? "1 1 0" : "1.5 1 0",
+              minWidth: 0,
+              minHeight: "100vh",
+              position: "sticky",
+              top: 0,
+            }}
+          >
+            <AuthImage
+              slides={[
+                {
+                  image: ForgotImage1,
+                  altText: "Forgot Prime ID image",
+                  footerText: {
+                    heading: "Forgot Your Pulse ID?",
+                    text: "No worries — recovering your Pulse ID is quick and easy. Get back to managing your freight in seconds.",
+                  },
+                },
+                {
+                  image: ForgotImage2,
+                  altText: "Forgot Prime ID image",
+                  footerText: {
+                    heading: "Forgot Your Pulse ID?",
+                    text: "No worries — recovering your Pulse ID is quick and easy. Get back to managing your freight in seconds.",
+                  },
+                },
+                {
+                  image: forgotPrimeIdImg,
+                  altText: "Forgot Prime ID image",
+                  footerText: {
+                    heading: "Forgot Your Pulse ID?",
+                    text: "No worries — recovering your Pulse ID is quick and easy. Get back to managing your freight in seconds.",
+                  },
+                },
+              ]}
+              interval={4000}
+            />
+          </Box>
+        )}
       </Flex>
     </Container>
   );

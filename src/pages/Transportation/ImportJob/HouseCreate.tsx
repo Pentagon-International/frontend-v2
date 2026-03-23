@@ -1995,7 +1995,7 @@ function HouseCreate() {
       unit_code: charge.unit_code,
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
-      no_of_unit: charge.no_of_unit,
+      no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
       roe: roundToDecimals(charge.roe) ?? null,
       amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
       amount: roundToDecimals(charge.amount) ?? null,
@@ -4208,6 +4208,7 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
+                      decimalScale={0}
                       hideControls
                       value={
                         chargesForm.values.charges[index].no_of_unit ??

@@ -1,4 +1,4 @@
-import { Button, Input, PasswordInput, Text, TextInput } from "@mantine/core";
+import { Button, Input, Loader, PasswordInput, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconCheck } from "@tabler/icons-react";
 import axios from "axios";
@@ -55,7 +55,9 @@ function SignUpForm() {
       <Text
         size="lg"
         style={{
-          fontSize: "16px",
+          fontSize: "18px",
+          fontWeight: 500,
+          color: "#333333",
         }}
       >
         Sign up with your credentials
@@ -126,10 +128,14 @@ function SignUpForm() {
           mt="lg"
           color="#105476"
           size="md"
-        style={{display:"flex", alignItems:"center",justifyContent:"center"}}
-                >
-                  <Text mr="xs">Submit</Text>
-                  {isLoading ? <Loader size={20} color="white"/> :<IconCheck size={20} stroke={2} /> }
+          style={{
+            display: "flex",
+            alignItems: "base",
+            justifyContent: "center",
+          }}
+        >
+          <Text mr="xs">{isLoading ? "Registering..." : "Register"}</Text>
+          {isLoading ? <Loader size={20} color="white"/> :<IconCheck size={16} stroke={3} /> }
         </Button>
       </form>
     </>

@@ -1951,14 +1951,14 @@ function HouseCreate() {
       unit_code: charge.unit_code,
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
-      no_of_unit: charge.no_of_unit,
-      roe: charge.roe,
-      amount_per_unit: charge.amount_per_unit,
-      amount: charge.amount,
-      sell_local_amount: charge.sell_local_amount ?? null,
-      unit_cost: charge.unit_cost ?? null,
-      total_cost: charge.total_cost ?? null,
-      cost_local_amount: charge.cost_local_amount ?? null,
+      no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
+      roe: roundToDecimals(charge.roe) ?? null,
+      amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+      amount: roundToDecimals(charge.amount) ?? null,
+      sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
+      unit_cost: roundToDecimals(charge.unit_cost) ?? null,
+      total_cost: roundToDecimals(charge.total_cost) ?? null,
+      cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
       supplier_code: charge.supplier_code || null,
       supplier_name: charge.supplier_name ?? null,
     }));
@@ -4329,6 +4329,7 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
+                      decimalScale={0}
                       hideControls
                       value={
                         chargesForm.values.charges[index].no_of_unit ??

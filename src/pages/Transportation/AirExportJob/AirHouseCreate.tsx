@@ -2152,7 +2152,7 @@ function HouseCreate() {
             pp_cc: charge.pp_cc || "",
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
-            no_of_unit: charge.no_of_unit ?? null,
+            no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
             roe: roundToDecimals(charge.roe) ?? null,
             amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
             amount: roundToDecimals(charge.amount) ?? null,
@@ -4106,6 +4106,7 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
+                      decimalScale={0}
                       hideControls
                       {...(() => {
                         const inputProps = chargesForm.getInputProps(
