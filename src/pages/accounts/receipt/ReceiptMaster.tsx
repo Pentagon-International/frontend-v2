@@ -264,17 +264,16 @@ export default function ReceiptMaster() {
                 {isPosted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
+                      onClick={() => {
+                        const {
+                          documents: _documents,
+                          supporting_documents: _supportingDocuments,
+                          ...receiptDataWithoutDocuments
+                        } = (row.original as any) ?? {};
                         navigate("/receipt/reversal/create", {
-                          state: {
-                            ...row.original,
-                            documents:
-                              (row.original as any)?.documents ??
-                              (row.original as any)?.supporting_documents ??
-                              [],
-                          },
-                        })
-                      }
+                          state: receiptDataWithoutDocuments,
+                        });
+                      }}
                     >
                       <Group gap="sm">
                         <IconReceiptRefund

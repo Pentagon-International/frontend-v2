@@ -212,11 +212,16 @@ export default function PaymentReversalMaster() {
               <Menu.Dropdown>
                 <Box px={10} py={5}>
                   <UnstyledButton
-                    onClick={() =>
+                    onClick={() => {
+                      const {
+                        documents: _documents,
+                        supporting_documents: _supportingDocuments,
+                        ...paymentReversalDataWithoutDocuments
+                      } = (row.original as any) ?? {};
                       navigate("/payment/reversal/view", {
-                        state: row.original,
-                      })
-                    }
+                        state: paymentReversalDataWithoutDocuments,
+                      });
+                    }}
                   >
                     <Group gap="sm">
                       <IconEye size={16} style={{ color: "#105476" }} />
@@ -232,11 +237,16 @@ export default function PaymentReversalMaster() {
                 {isUnposted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
+                      onClick={() => {
+                        const {
+                          documents: _documents,
+                          supporting_documents: _supportingDocuments,
+                          ...paymentReversalDataWithoutDocuments
+                        } = (row.original as any) ?? {};
                         navigate("/payment/reversal/edit", {
-                          state: row.original,
-                        })
-                      }
+                          state: paymentReversalDataWithoutDocuments,
+                        });
+                      }}
                     >
                       <Group gap="sm">
                         <IconEdit size={16} style={{ color: "#105476" }} />
