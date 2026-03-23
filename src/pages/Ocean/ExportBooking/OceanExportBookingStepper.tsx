@@ -54,6 +54,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../../store/authStore";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { commonSearchAPI } from "../../../service/searchApi";
 
 interface ExportShipmentStepperProps {
@@ -92,6 +93,43 @@ interface RoutingDetail {
   flight_no: string | null;
   status: string;
 }
+
+type VesselSavedSchedulesResponse = {
+  success: boolean;
+  data: VesselSavedScheduleItem[];
+};
+
+type VesselSavedScheduleItem = {
+  schedule_id: number | string;
+  schedule: {
+    order_id?: number;
+    mode?: string;
+    vessel_name: string;
+    voyage_no: string;
+    carrier_code: string;
+    carrier_name: string;
+    origin_code: string;
+    origin_name: string;
+    etd: string;
+    destination_code: string;
+    destination_name: string;
+    eta: string;
+    service_name?: string;
+    service_code?: string;
+  };
+  routings: Array<{
+    order_id?: number;
+    mode: string;
+    origin_code: string;
+    origin_name: string;
+    etd: string;
+    destination_code: string;
+    destination_name: string;
+    eta: string;
+    carrier_code: string;
+    carrier_name: string;
+  }>;
+};
 
 interface CargoDetail {
   // Common fields
@@ -285,18 +323,28 @@ const validationSchema = yup.object({
   forwarder_address_id: yup.number(),
   forwarder_email: yup.string().email("Invalid email format"),
   destination_agent_code: yup.string(),
-  destination_agent_address_id: yup
-      .number()
-      .nullable(),
-  destination_agent_email: yup.string().email("Invalid email format").nullable().notRequired(),
+  destination_agent_address_id: yup.number().nullable(),
+  destination_agent_email: yup
+    .string()
+    .email("Invalid email format")
+    .nullable()
+    .notRequired(),
   billing_customer_code: yup.string(),
   billing_customer_address_id: yup.number(),
   notify1_customer_name: yup.string(),
   notify1_customer_address: yup.string(),
-  notify1_customer_email: yup.string().email("Invalid email format").nullable().notRequired(),
+  notify1_customer_email: yup
+    .string()
+    .email("Invalid email format")
+    .nullable()
+    .notRequired(),
   notify2_customer_name: yup.string(),
   notify2_customer_address: yup.string(),
-  notify2_customer_email: yup.string().email("Invalid email format").nullable().notRequired(),
+  notify2_customer_email: yup
+    .string()
+    .email("Invalid email format")
+    .nullable()
+    .notRequired(),
   cha_code: yup.string(),
   cha_address_id: yup.number(),
 
@@ -510,6 +558,38 @@ const getTransportMode = (
   return undefined;
 };
 
+const toYMD = (date: Date | null | undefined) => {
+  if (!date) return "";
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const parseApiDateToDate = (value?: string | null) => {
+  if (!value) return null;
+  const str = String(value).trim();
+  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  const base = match ? match[1] : null;
+  // Prefer the YYYY-MM-DD base so JS date parsing behaves consistently.
+  return base ? new Date(base) : new Date(str);
+};
+
+const extractApiYMD = (value?: string | null) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : "";
+};
+
+const normalizeMoveType = (mode?: string | null) => {
+  if (!mode) return "SEA";
+  const m = String(mode).trim().toUpperCase();
+  if (m === "SEA" || m === "AIR" || m === "ROAD" || m === "RAIL") return m;
+  if (m === "VESSEL") return "SEA";
+  return "SEA";
+};
+
 const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   onStepChange,
   onComplete,
@@ -547,6 +627,44 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     },
   ]);
   const [quotationId, setQuotationId] = useState("");
+
+  // Ocean schedule lookup (vessel-saved) - options + cached response
+  const [scheduleOptions, setScheduleOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const scheduleItemsRef = useRef<VesselSavedScheduleItem[]>([]);
+  const [isFetchingSchedules, setIsFetchingSchedules] = useState(false);
+  const scheduleRequestKeyRef = useRef<string>("");
+
+  // Query-ready fields: we only fetch after user has selected all three.
+  const [scheduleQueryOriginCode, setScheduleQueryOriginCode] =
+    useState<string>("");
+  const [scheduleQueryDestinationCode, setScheduleQueryDestinationCode] =
+    useState<string>("");
+  const [scheduleQueryEtdFrom, setScheduleQueryEtdFrom] = useState<string>("");
+
+  // Edit-flow behavior:
+  // - First fetch after mounting should NOT overwrite the already-saved schedule/routings values.
+  // - Any subsequent fetch triggered by user-changing origin/destination/date should overwrite (or clear if API returns empty).
+  const isInitialScheduleFetchRef = useRef<boolean>(true);
+  const initialScheduleQueryRef = useRef<{
+    originCode: string;
+    destinationCode: string;
+    etdFrom: string;
+  } | null>(null);
+
+  // Memoized props to prevent unnecessary extra API calls in SearchableSelect.
+  const seaTransportParams = useMemo(
+    () => ({ transport_mode: "SEA" }),
+    [],
+  );
+  const portDisplayFormat = useCallback(
+    (item: Record<string, unknown>) => ({
+      value: String(item.port_code),
+      label: `${String(item.port_name)} (${String(item.port_code)})`,
+    }),
+    [],
+  );
 
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
@@ -616,8 +734,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [notifyCustomerIsSearching, setNotifyCustomerIsSearching] =
     useState(false);
   const [notifyCustomerSelectedId, setNotifyCustomerSelectedId] = useState("");
-  const notifyCustomerDataRef =
-    useRef<Record<string, Record<string, unknown>>>({});
+  const notifyCustomerDataRef = useRef<Record<string, Record<string, unknown>>>(
+    {},
+  );
 
   // Notify Customer 2 (shipment-party) - same pattern as Consignee
   const [notify2CustomerSearch, setNotify2CustomerSearch] = useState("");
@@ -629,9 +748,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   >(null);
   const [notify2CustomerIsSearching, setNotify2CustomerIsSearching] =
     useState(false);
-  const [notify2CustomerSelectedId, setNotify2CustomerSelectedId] = useState("");
-  const notify2CustomerDataRef =
-    useRef<Record<string, Record<string, unknown>>>({});
+  const [notify2CustomerSelectedId, setNotify2CustomerSelectedId] =
+    useState("");
+  const notify2CustomerDataRef = useRef<
+    Record<string, Record<string, unknown>>
+  >({});
 
   // Consignee (shipment-party) - same pattern as Air Export
   const [consigneeSearch, setConsigneeSearch] = useState("");
@@ -654,9 +775,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const consigneeUseTextInput =
     consigneeHasResults === false && consigneeSearch.trim().length >= 2;
   const notify1UseTextInput =
-    notifyCustomerHasResults === false && notifyCustomerSearch.trim().length >= 2;
+    notifyCustomerHasResults === false &&
+    notifyCustomerSearch.trim().length >= 2;
   const notify2UseTextInput =
-    notify2CustomerHasResults === false && notify2CustomerSearch.trim().length >= 2;
+    notify2CustomerHasResults === false &&
+    notify2CustomerSearch.trim().length >= 2;
 
   const focusSoon = (el: HTMLInputElement | null) => {
     if (!el) return;
@@ -665,18 +788,24 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   useEffect(() => {
     focusSoon(
-      consigneeUseTextInput ? consigneeTextRef.current : consigneeSelectRef.current,
+      consigneeUseTextInput
+        ? consigneeTextRef.current
+        : consigneeSelectRef.current,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consigneeUseTextInput]);
 
   useEffect(() => {
-    focusSoon(notify1UseTextInput ? notify1TextRef.current : notify1SelectRef.current);
+    focusSoon(
+      notify1UseTextInput ? notify1TextRef.current : notify1SelectRef.current,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notify1UseTextInput]);
 
   useEffect(() => {
-    focusSoon(notify2UseTextInput ? notify2TextRef.current : notify2SelectRef.current);
+    focusSoon(
+      notify2UseTextInput ? notify2TextRef.current : notify2SelectRef.current,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notify2UseTextInput]);
 
@@ -1276,6 +1405,225 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       : "Not in edit mode",
   );
 
+  const emptyRoutingDetailRow = useMemo<RoutingDetail>(
+    () => ({
+      move_type: "",
+      from_location_code: "",
+      to_location_code: "",
+      from_location_name: "",
+      to_location_name: "",
+      carrier_code: "",
+      carrier_name: "",
+      etd: null,
+      eta: null,
+      flight_no: null,
+      status: "Active",
+    }),
+    [],
+  );
+
+  const applyScheduleSelection = useCallback(
+    (selectedScheduleId: string) => {
+      const items = scheduleItemsRef.current;
+      const selected = items.find(
+        (i) => String(i.schedule_id) === String(selectedScheduleId),
+      );
+      if (!selected) return;
+
+      const s = selected.schedule;
+
+      form.setFieldValue("schedule_id", String(selected.schedule_id || ""));
+      form.setFieldValue("carrier_code", s.carrier_code || "");
+      form.setFieldValue("carrier_name", s.carrier_name || "");
+      form.setFieldValue("vessel_name", s.vessel_name || "");
+      form.setFieldValue("voyage_no", s.voyage_no || "");
+      form.setFieldValue("etd", parseApiDateToDate(s.etd));
+      form.setFieldValue("eta", parseApiDateToDate(s.eta));
+
+      const apiRoutings = Array.isArray(selected.routings)
+        ? selected.routings
+        : [];
+
+      const mappedRoutingDetails =
+        apiRoutings.length > 0
+          ? apiRoutings.map((r) => ({
+              move_type: normalizeMoveType(r.mode),
+              from_location_code: r.origin_code || "",
+              to_location_code: r.destination_code || "",
+              from_location_name: r.origin_name || "",
+              to_location_name: r.destination_name || "",
+              etd: parseApiDateToDate(r.etd),
+              eta: parseApiDateToDate(r.eta),
+              carrier_code: r.carrier_code || "",
+              carrier_name: r.carrier_name || "",
+              flight_no: null,
+              status: "Active",
+            }))
+          : [emptyRoutingDetailRow];
+
+      form.setFieldValue("routingDetails", mappedRoutingDetails);
+    },
+    [form, emptyRoutingDetailRow],
+  );
+
+  // Initialize schedule query values on mount so the schedules endpoint can run
+  // immediately when origin/destination are already present.
+  useEffect(() => {
+    setScheduleQueryOriginCode(form.values.origin_code || "");
+    setScheduleQueryDestinationCode(form.values.destination_code || "");
+    const etdFrom = toYMD(form.values.date || null);
+    setScheduleQueryEtdFrom(etdFrom);
+    initialScheduleQueryRef.current = {
+      originCode: form.values.origin_code || "",
+      destinationCode: form.values.destination_code || "",
+      etdFrom,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fetch vessel schedules only when all query fields are explicitly selected.
+  useEffect(() => {
+    const originCode = scheduleQueryOriginCode;
+    const destinationCode = scheduleQueryDestinationCode;
+    const etdFrom = scheduleQueryEtdFrom;
+
+    if (!originCode || !destinationCode || !etdFrom) {
+      scheduleRequestKeyRef.current = "";
+      scheduleItemsRef.current = [];
+      setScheduleOptions([]);
+      if (!isEditMode) {
+        form.setFieldValue("schedule_id", "");
+        form.setFieldValue("carrier_code", "");
+        form.setFieldValue("carrier_name", "");
+        form.setFieldValue("vessel_name", "");
+        form.setFieldValue("voyage_no", "");
+        form.setFieldValue("etd", null);
+        form.setFieldValue("eta", null);
+        form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+      }
+      return;
+    }
+
+    const requestKey = `${originCode}|${destinationCode}|${etdFrom}`;
+    if (scheduleRequestKeyRef.current === requestKey) return;
+    scheduleRequestKeyRef.current = requestKey;
+
+    const existingScheduleId = form.values.schedule_id;
+
+    const preserveSaved =
+      isEditMode &&
+      isInitialScheduleFetchRef.current &&
+      initialScheduleQueryRef.current != null &&
+      initialScheduleQueryRef.current.originCode === originCode &&
+      initialScheduleQueryRef.current.destinationCode === destinationCode &&
+      initialScheduleQueryRef.current.etdFrom === etdFrom;
+
+    (async () => {
+      setIsFetchingSchedules(true);
+      scheduleItemsRef.current = [];
+      setScheduleOptions([]);
+
+      // In edit mode, keep the saved schedule/routings values visible.
+      if (!preserveSaved) {
+        // Clear schedule/routings while fetching new options
+        form.setFieldValue("schedule_id", "");
+        form.setFieldValue("carrier_code", "");
+        form.setFieldValue("carrier_name", "");
+        form.setFieldValue("vessel_name", "");
+        form.setFieldValue("voyage_no", "");
+        form.setFieldValue("etd", null);
+        form.setFieldValue("eta", null);
+        form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+      }
+
+      try {
+        const payload = {
+          origin_code: originCode,
+          destination_code: destinationCode,
+          etd_from: etdFrom,
+        };
+
+        const res = (await postAPICall(
+          URL.vesselSavedSchedules,
+          payload,
+          API_HEADER,
+        )) as VesselSavedSchedulesResponse;
+
+        const items = Array.isArray(res?.data) ? res.data : [];
+        scheduleItemsRef.current = items;
+        const options = items.map((item) => ({
+          value: String(item.schedule_id),
+          label: `${String(item.schedule_id)}/${String(
+            item.schedule?.carrier_code ?? "",
+          )}/${extractApiYMD(item.schedule?.etd)}/${extractApiYMD(
+            item.schedule?.eta,
+          )}`,
+        }));
+
+        // Ensure the saved schedule_id shows up in dropdown options for the initial edit fetch.
+        if (preserveSaved && existingScheduleId) {
+          const existingValue = String(existingScheduleId);
+          const hasExistingOption = options.some(
+            (o) => o.value === existingValue,
+          );
+          if (!hasExistingOption) {
+            options.unshift({
+              value: existingValue,
+              label: `${existingValue}/${form.values.carrier_code || ""}/${toYMD(
+                form.values.etd || null,
+              )}/${toYMD(form.values.eta || null)}`,
+            });
+          }
+        }
+
+        setScheduleOptions(options);
+
+        if (!preserveSaved) {
+          if (items.length > 0) {
+            const hasExisting = existingScheduleId
+              ? items.some(
+                  (i) => String(i.schedule_id) === String(existingScheduleId),
+                )
+              : false;
+
+            const selectedId = hasExisting
+              ? String(existingScheduleId)
+              : String(items[0].schedule_id);
+
+            applyScheduleSelection(selectedId);
+          } else {
+            // API returned empty: clear schedule + routings.
+            form.setFieldValue("schedule_id", "");
+            form.setFieldValue("carrier_code", "");
+            form.setFieldValue("carrier_name", "");
+            form.setFieldValue("vessel_name", "");
+            form.setFieldValue("voyage_no", "");
+            form.setFieldValue("etd", null);
+            form.setFieldValue("eta", null);
+            form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch vessel schedules:", e);
+        ToastNotification({
+          type: "error",
+          message: "Failed to fetch schedules for the selected route/date.",
+        });
+      } finally {
+        setIsFetchingSchedules(false);
+        if (isInitialScheduleFetchRef.current) {
+          isInitialScheduleFetchRef.current = false;
+        }
+      }
+    })();
+  }, [
+    scheduleQueryOriginCode,
+    scheduleQueryDestinationCode,
+    scheduleQueryEtdFrom,
+    applyScheduleSelection,
+    emptyRoutingDetailRow,
+  ]);
+
   // Events, Documents, Trigger Updates – form-based handlers
   const addEventRow = () => {
     form.insertListItem("event_modal_rows", {
@@ -1595,8 +1943,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           }))
         : [];
 
-    if (assignedToDisplayFromCustomer && assignedToDisplayFromCustomer.trim() !== "") {
-      const exists = options.some((opt) => opt.value === assignedToDisplayFromCustomer);
+    if (
+      assignedToDisplayFromCustomer &&
+      assignedToDisplayFromCustomer.trim() !== ""
+    ) {
+      const exists = options.some(
+        (opt) => opt.value === assignedToDisplayFromCustomer,
+      );
       if (!exists) {
         options.unshift({
           value: assignedToDisplayFromCustomer,
@@ -1622,7 +1975,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     }
 
     return options;
-  }, [rawSalespersonsData, assignedToDisplayFromCustomer, isEditMode, user?.full_name]);
+  }, [
+    rawSalespersonsData,
+    assignedToDisplayFromCustomer,
+    isEditMode,
+    user?.full_name,
+  ]);
 
   // Unit master query - fetch with empty payload
   const { data: unitDataRaw = [] } = useQuery({
@@ -1755,57 +2113,60 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   }, [isFromQuotationFlow, quotationsData, onQuotationAlreadyBooked]);
 
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
-  const debouncedConsigneeSearch = useDebouncedCallback(async (term: string) => {
-    const query = term.trim();
-    if (!query || query.length < 2) {
-      setConsigneeOptions([]);
-      setConsigneeHasResults(null);
-      setConsigneeIsSearching(false);
-      consigneeDataRef.current = {};
-      return;
-    }
-    try {
-      setConsigneeIsSearching(true);
-      setConsigneeHasResults(null);
-      const results = await commonSearchAPI({
-        endpoint: URL.shipmentParty,
-        query,
-      });
-      const arr = Array.isArray(results)
-        ? (results as Record<string, unknown>[])
-        : [];
-      if (!arr.length) {
+  const debouncedConsigneeSearch = useDebouncedCallback(
+    async (term: string) => {
+      const query = term.trim();
+      if (!query || query.length < 2) {
         setConsigneeOptions([]);
-        setConsigneeHasResults(false);
-        form.setFieldValue("consignee_name", toTitleCase(query));
-        form.setFieldValue("consignee_code", "");
-        form.setFieldValue("consignee_address", "");
-        form.setFieldValue("consignee_address_id", 0);
-        form.setFieldValue("consignee_email", "");
+        setConsigneeHasResults(null);
+        setConsigneeIsSearching(false);
         consigneeDataRef.current = {};
         return;
       }
-      const map: Record<string, Record<string, unknown>> = {};
-      const opts = arr.map((item) => {
-        const id = String(item.id ?? "");
-        map[id] = item;
-        return {
-          value: id,
-          label: String(item.customer_name || ""),
-        };
-      });
-      consigneeDataRef.current = map;
-      setConsigneeOptions(opts);
-      setConsigneeHasResults(true);
-    } catch (error) {
-      console.error("Consignee shipment-party search failed:", error);
-      setConsigneeOptions([]);
-      setConsigneeHasResults(null);
-      consigneeDataRef.current = {};
-    } finally {
-      setConsigneeIsSearching(false);
-    }
-  }, 300);
+      try {
+        setConsigneeIsSearching(true);
+        setConsigneeHasResults(null);
+        const results = await commonSearchAPI({
+          endpoint: URL.shipmentParty,
+          query,
+        });
+        const arr = Array.isArray(results)
+          ? (results as Record<string, unknown>[])
+          : [];
+        if (!arr.length) {
+          setConsigneeOptions([]);
+          setConsigneeHasResults(false);
+          form.setFieldValue("consignee_name", toTitleCase(query));
+          form.setFieldValue("consignee_code", "");
+          form.setFieldValue("consignee_address", "");
+          form.setFieldValue("consignee_address_id", 0);
+          form.setFieldValue("consignee_email", "");
+          consigneeDataRef.current = {};
+          return;
+        }
+        const map: Record<string, Record<string, unknown>> = {};
+        const opts = arr.map((item) => {
+          const id = String(item.id ?? "");
+          map[id] = item;
+          return {
+            value: id,
+            label: String(item.customer_name || ""),
+          };
+        });
+        consigneeDataRef.current = map;
+        setConsigneeOptions(opts);
+        setConsigneeHasResults(true);
+      } catch (error) {
+        console.error("Consignee shipment-party search failed:", error);
+        setConsigneeOptions([]);
+        setConsigneeHasResults(null);
+        consigneeDataRef.current = {};
+      } finally {
+        setConsigneeIsSearching(false);
+      }
+    },
+    300,
+  );
 
   const debouncedNotifyCustomerSearch = useDebouncedCallback(
     async (term: string) => {
@@ -1953,7 +2314,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       setNotifyCustomerSearch(name);
       setNotifyCustomerAddressOptions(
         jobData.notify1_customer_address
-          ? [{ value: String(jobData.notify1_customer_address), label: String(jobData.notify1_customer_address) }]
+          ? [
+              {
+                value: String(jobData.notify1_customer_address),
+                label: String(jobData.notify1_customer_address),
+              },
+            ]
           : [],
       );
     } else if (jobData.notify_customer_name) {
@@ -1970,7 +2336,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       setNotify2CustomerSearch(name);
       setNotify2CustomerAddressOptions(
         jobData.notify2_customer_address
-          ? [{ value: String(jobData.notify2_customer_address), label: String(jobData.notify2_customer_address) }]
+          ? [
+              {
+                value: String(jobData.notify2_customer_address),
+                label: String(jobData.notify2_customer_address),
+              },
+            ]
           : [],
       );
     }
@@ -2050,10 +2421,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         },
       ]);
     }
-    if (
-      jobData.notify1_customer_address &&
-      !jobData.notify1_customer_name
-    ) {
+    if (jobData.notify1_customer_address && !jobData.notify1_customer_name) {
       setNotifyCustomerAddressOptions([
         {
           value: String(jobData.notify1_customer_address),
@@ -2366,37 +2734,37 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (chargesData) {
       const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
         (charge: Record<string, unknown>) => {
-          const nestedCharge = charge.charge as Record<string, unknown> | undefined;
+          const nestedCharge = charge.charge as
+            | Record<string, unknown>
+            | undefined;
           const chargeName =
-            charge.charge_name ||
-            nestedCharge?.charge_name ||
-            "";
+            charge.charge_name || nestedCharge?.charge_name || "";
           return {
-          id:
-            charge.id != null
-              ? typeof charge.id === "number"
-                ? charge.id
-                : Number(charge.id)
-              : undefined,
-          charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
-          charge_name: String(chargeName),
-          pp_cc: String(charge.pp_cc ?? "Prepaid"),
-          currency_country_code: String(
-            charge.currency_country_code || charge.currency || "",
-          ),
-          roe: charge.roe ? String(charge.roe) : "",
-          unit: String(charge.unit || ""),
-          no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
-          sell_per_unit: charge.sell_per_unit
-            ? String(charge.sell_per_unit)
-            : "",
-          min_sell: charge.min_sell ? String(charge.min_sell) : "",
-          cost_per_unit: charge.cost_per_unit
-            ? String(charge.cost_per_unit)
-            : "",
-          total_cost: charge.total_cost ? String(charge.total_cost) : "",
-          total_sell: charge.total_sell ? String(charge.total_sell) : "",
-        };
+            id:
+              charge.id != null
+                ? typeof charge.id === "number"
+                  ? charge.id
+                  : Number(charge.id)
+                : undefined,
+            charge_id: charge.charge_id != null ? String(charge.charge_id) : "",
+            charge_name: String(chargeName),
+            pp_cc: String(charge.pp_cc ?? "Prepaid"),
+            currency_country_code: String(
+              charge.currency_country_code || charge.currency || "",
+            ),
+            roe: charge.roe ? String(charge.roe) : "",
+            unit: String(charge.unit || ""),
+            no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
+            sell_per_unit: charge.sell_per_unit
+              ? String(charge.sell_per_unit)
+              : "",
+            min_sell: charge.min_sell ? String(charge.min_sell) : "",
+            cost_per_unit: charge.cost_per_unit
+              ? String(charge.cost_per_unit)
+              : "",
+            total_cost: charge.total_cost ? String(charge.total_cost) : "",
+            total_sell: charge.total_sell ? String(charge.total_sell) : "",
+          };
         },
       );
       setCharges(mappedCharges);
@@ -2405,7 +2773,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   // Set customer_service_name to logged-in user once in create mode (never when routed_by is selected)
   useEffect(() => {
-    if (isEditMode || !user?.full_name || customerServiceNameInitializedRef.current) return;
+    if (
+      isEditMode ||
+      !user?.full_name ||
+      customerServiceNameInitializedRef.current
+    )
+      return;
     if (form.values.customer_service_name !== "") return;
     form.setFieldValue("customer_service_name", user.full_name);
     customerServiceNameInitializedRef.current = true;
@@ -2414,14 +2787,24 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   // Create flow only: when Routed is "Self" and no customer selected, default Routed By to logged-in user (edit flow uses initialData).
   useEffect(() => {
-    if (isEditMode || form.values.routed !== "Self" || assignedToDisplayFromCustomer) return;
+    if (
+      isEditMode ||
+      form.values.routed !== "Self" ||
+      assignedToDisplayFromCustomer
+    )
+      return;
     if (!user?.full_name?.trim()) return;
     const name = user.full_name.trim();
     if (form.values.routed_by !== name) {
       form.setFieldValue("routed_by", name);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditMode, form.values.routed, assignedToDisplayFromCustomer, user?.full_name]);
+  }, [
+    isEditMode,
+    form.values.routed,
+    assignedToDisplayFromCustomer,
+    user?.full_name,
+  ]);
 
   // When user switches Routed to "Agent", clear routed_by (not on initial load).
   useEffect(() => {
@@ -2645,11 +3028,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         cargo_details: form.values.cargo_details.map((cargo) => {
           const cargoPayload: Record<string, unknown> = {
             no_of_packages: cargo.no_of_packages || null,
-            gross_weight: cargo.gross_weight || null,
-            volume_weight: cargo.volume_weight || null,
-            chargeable_weight: cargo.chargeable_weight || null,
-            volume: cargo.volume || null,
-            chargeable_volume: cargo.chargeable_volume || null,
+            gross_weight: roundToDecimals(cargo.gross_weight) || null,
+            volume_weight: roundToDecimals(cargo.volume_weight) || null,
+            chargeable_weight:
+              roundToDecimals(cargo.chargeable_weight) || null,
+            volume: roundToDecimals(cargo.volume) || null,
+            chargeable_volume:
+              roundToDecimals(cargo.chargeable_volume) || null,
             container_type_code: cargo.container_type_code || null,
             no_of_containers: cargo.no_of_containers || null,
           };
@@ -2679,23 +3064,34 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           ? formatDate(form.values.actual_delivery_date)
           : null,
 
-        routing_details: form.values.routingDetails.map((route) => {
-          const routePayload: Record<string, unknown> = {
-            move_type: route.move_type,
-            from_location_code: route.from_location_code || null,
-            to_location_code: route.to_location_code || null,
-            etd: formatDate(route.etd),
-            eta: formatDate(route.eta),
-            carrier_code: route.carrier_code || null,
-            flight_no: route.flight_no,
-            status: route.status,
-          };
-          if (route.id != null && route.id !== undefined) {
-            routePayload.id =
-              typeof route.id === "number" ? route.id : Number(route.id);
-          }
-          return routePayload;
-        }),
+        routing_details: form.values.routingDetails
+          .filter(
+            (route) =>
+              route.move_type ||
+              route.from_location_code ||
+              route.to_location_code ||
+              route.carrier_code ||
+              route.etd ||
+              route.eta ||
+              route.flight_no,
+          )
+          .map((route) => {
+            const routePayload: Record<string, unknown> = {
+              move_type: route.move_type,
+              from_location_code: route.from_location_code || null,
+              to_location_code: route.to_location_code || null,
+              etd: formatDate(route.etd),
+              eta: formatDate(route.eta),
+              carrier_code: route.carrier_code || null,
+              flight_no: route.flight_no,
+              status: route.status,
+            };
+            if (route.id != null && route.id !== undefined) {
+              routePayload.id =
+                typeof route.id === "number" ? route.id : Number(route.id);
+            }
+            return routePayload;
+          }),
 
         quotation_id: quotationId,
         document_ids: form.values.document_ids,
@@ -2707,14 +3103,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             // charge_name: charge.charge_name,
             pp_cc: charge.pp_cc || "",
             currency_country_code: charge.currency_country_code,
-            roe: parseFloat(charge.roe) || 1,
+            roe: roundToDecimals(parseFloat(charge.roe)) || 1,
             unit: charge.unit,
-            no_of_units: parseFloat(charge.no_of_units) || 0,
-            sell_per_unit: parseFloat(charge.sell_per_unit) || 0,
-            min_sell: parseFloat(charge.min_sell) || 0,
-            cost_per_unit: parseFloat(charge.cost_per_unit) || 0,
-            total_cost: parseFloat(charge.total_cost) || 0,
-            total_sell: parseFloat(charge.total_sell) || 0,
+            no_of_units: roundToDecimals(parseFloat(charge.no_of_units)) || 0,
+            sell_per_unit:
+              roundToDecimals(parseFloat(charge.sell_per_unit)) || 0,
+            min_sell: roundToDecimals(parseFloat(charge.min_sell)) || 0,
+            cost_per_unit:
+              roundToDecimals(parseFloat(charge.cost_per_unit)) || 0,
+            total_cost: roundToDecimals(parseFloat(charge.total_cost)) || 0,
+            total_sell:
+              roundToDecimals(parseFloat(charge.total_sell)) || 0,
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
@@ -3265,7 +3664,15 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         <Box style={{ padding: "24px 24px 32px" }}>
           <Group justify="space-between" mb="md">
             <Text size="md" fw={600} c="#105476">
-              {active === 0 ? "Export Booking" : active === 1 ? "Party Details" : active === 2 ? "Cargo Details" : active === 3 ? "Pickup & Delivery Details" : "Charges & Summary"}
+              {active === 0
+                ? "Export Booking"
+                : active === 1
+                  ? "Party Details"
+                  : active === 2
+                    ? "Cargo Details"
+                    : active === 3
+                      ? "Pickup & Delivery Details"
+                      : "Charges & Summary"}
             </Text>
             <Menu shadow="md" width={220} position="bottom-end">
               <Menu.Target>
@@ -3495,13 +3902,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       if (!newCode) {
                         setAssignedToDisplayFromCustomer(null);
                         if (form.values.routed === "Self") {
-                          form.setFieldValue("routed_by", user?.full_name?.trim() || "");
+                          form.setFieldValue(
+                            "routed_by",
+                            user?.full_name?.trim() || "",
+                          );
                         }
                         return;
                       }
-                      const assignedToDisplay = originalData?.assigned_to_display != null
-                        ? String(originalData.assigned_to_display).trim()
-                        : "";
+                      const assignedToDisplay =
+                        originalData?.assigned_to_display != null
+                          ? String(originalData.assigned_to_display).trim()
+                          : "";
                       if (assignedToDisplay) {
                         setAssignedToDisplayFromCustomer(assignedToDisplay);
                         if (form.values.routed === "Self") {
@@ -3510,7 +3921,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       } else {
                         setAssignedToDisplayFromCustomer(null);
                         if (form.values.routed === "Self") {
-                          form.setFieldValue("routed_by", user?.full_name?.trim() || "");
+                          form.setFieldValue(
+                            "routed_by",
+                            user?.full_name?.trim() || "",
+                          );
                         }
                       }
                     }}
@@ -3540,7 +3954,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     withAsterisk
                     value={form.values.date}
                     onChange={(date) => {
-                      form.setFieldValue("date", date || new Date());
+                      if (!date) {
+                        setScheduleQueryEtdFrom("");
+                        form.setFieldValue("date", new Date());
+                        return;
+                      }
+                      form.setFieldValue("date", date);
+                      setScheduleQueryEtdFrom(toYMD(date));
                     }}
                     error={form.errors.date}
                   />
@@ -3552,14 +3972,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     apiEndpoint={URL.portMaster}
                     placeholder="Type origin code or name"
                     searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
+                    displayFormat={portDisplayFormat}
                     value={form.values.origin_code}
                     displayValue={form.values.origin_name}
                     onChange={(value, selectedData) => {
-                      form.setFieldValue("origin_code", value || "");
+                      const nextOriginCode = value || "";
+                      form.setFieldValue("origin_code", nextOriginCode);
+                      setScheduleQueryOriginCode(nextOriginCode);
                       form.setFieldValue(
                         "origin_name",
                         selectedData?.label || "",
@@ -3567,7 +3986,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     }}
                     error={form.errors.origin_code as string}
                     minSearchLength={3}
-                    additionalParams={{ transport_mode: "SEA" }}
+                    additionalParams={seaTransportParams}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
@@ -3577,14 +3996,16 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     apiEndpoint={URL.portMaster}
                     placeholder="Type destination code or name"
                     searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
+                    displayFormat={portDisplayFormat}
                     value={form.values.destination_code}
                     displayValue={form.values.destination_name}
                     onChange={(value, selectedData) => {
-                      form.setFieldValue("destination_code", value || "");
+                      const nextDestinationCode = value || "";
+                      form.setFieldValue(
+                        "destination_code",
+                        nextDestinationCode,
+                      );
+                      setScheduleQueryDestinationCode(nextDestinationCode);
                       form.setFieldValue(
                         "destination_name",
                         selectedData?.label || "",
@@ -3592,7 +4013,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     }}
                     error={form.errors.destination_code as string}
                     minSearchLength={3}
-                    additionalParams={{ transport_mode: "SEA" }}
+                    additionalParams={seaTransportParams}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
@@ -3759,10 +4180,34 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Text>
               <Grid mb="lg">
                 <Grid.Col span={4}>
-                  <FormTextInput
+                  <Dropdown
                     label="Schedule ID"
-                    placeholder="Enter schedule ID"
-                    {...form.getInputProps("schedule_id")}
+                    placeholder="Select schedule"
+                    searchable
+                    clearable
+                    data={scheduleOptions}
+                    value={form.values.schedule_id || null}
+                    rightSection={
+                      isFetchingSchedules ? <Loader size={14} /> : undefined
+                    }
+                    onChange={(value) => {
+                      const selectedId = value || "";
+                      if (!selectedId) {
+                        form.setFieldValue("schedule_id", "");
+                        form.setFieldValue("carrier_code", "");
+                        form.setFieldValue("carrier_name", "");
+                        form.setFieldValue("vessel_name", "");
+                        form.setFieldValue("voyage_no", "");
+                        form.setFieldValue("etd", null);
+                        form.setFieldValue("eta", null);
+                        form.setFieldValue("routingDetails", [
+                          emptyRoutingDetailRow,
+                        ]);
+                        return;
+                      }
+
+                      applyScheduleSelection(selectedId);
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
@@ -4207,16 +4652,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         form.setFieldValue("shipper_name", selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -4226,17 +4673,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue("shipper_address_id", primary.id);
                           form.setFieldValue(
                             "shipper_address",
-                            primary.address ?? ""
+                            primary.address ?? "",
                           );
                           form.setFieldValue(
                             "shipper_email",
-                            primary.email ?? ""
+                            primary.email ?? "",
                           );
                         } else {
                           form.setFieldValue("shipper_address_id", 0);
@@ -4255,7 +4702,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Shipper E-mail ID"
                     placeholder="Enter email address"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("shipper_email")}
                   />
                 </Grid.Col>
@@ -4267,14 +4714,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     clearable
                     data={shipperAddressOptions}
                     value={
-                      shipperAddressOptions.length > 0 && form.values.shipper_address_id !== 0
+                      shipperAddressOptions.length > 0 &&
+                      form.values.shipper_address_id !== 0
                         ? String(form.values.shipper_address_id)
                         : ""
                     }
                     key={`shipper-${form.values.shipper_address_id}`}
                     onChange={(value) => {
-                      form.setFieldValue("shipper_address_id", value ? parseInt(value) || 0 : 0);
-                      const opt = shipperAddressOptions.find((o) => o.value === value);
+                      form.setFieldValue(
+                        "shipper_address_id",
+                        value ? parseInt(value) || 0 : 0,
+                      );
+                      const opt = shipperAddressOptions.find(
+                        (o) => o.value === value,
+                      );
                       form.setFieldValue("shipper_address", opt?.label ?? "");
                     }}
                     error={form.errors.shipper_address_id}
@@ -4386,7 +4839,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Consignee Email Id"
                     placeholder="Enter email address"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("consignee_email")}
                   />
                 </Grid.Col>
@@ -4437,16 +4890,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setForwarderDisplayName(selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -4456,16 +4911,16 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue(
                             "forwarder_address_id",
-                            primary.id
+                            primary.id,
                           );
                           form.setFieldValue(
                             "forwarder_email",
-                            primary.email ?? ""
+                            primary.email ?? "",
                           );
                         } else {
                           form.setFieldValue("forwarder_address_id", 0);
@@ -4482,7 +4937,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Forwarder Email Id"
                     placeholder="Enter email address"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("forwarder_email")}
                   />
                 </Grid.Col>
@@ -4494,17 +4949,22 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     clearable
                     data={forwarderAddressOptions}
                     key={
-                      form.values.forwarder_address_id && form.values.forwarder_address_id !== 0
+                      form.values.forwarder_address_id &&
+                      form.values.forwarder_address_id !== 0
                         ? String(form.values.forwarder_address_id)
                         : "forwarder-empty"
                     }
                     value={
-                      form.values.forwarder_address_id && form.values.forwarder_address_id !== 0
+                      form.values.forwarder_address_id &&
+                      form.values.forwarder_address_id !== 0
                         ? String(form.values.forwarder_address_id)
                         : ""
                     }
                     onChange={(value) => {
-                      form.setFieldValue("forwarder_address_id", value ? parseInt(value) : 0);
+                      form.setFieldValue(
+                        "forwarder_address_id",
+                        value ? parseInt(value) : 0,
+                      );
                     }}
                     error={form.errors.forwarder_address_id}
                     disabled={forwarderAddressOptions.length === 0}
@@ -4546,16 +5006,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setDestinationAgentDisplayName(selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -4565,26 +5027,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue(
                             "destination_agent_address_id",
-                            primary.id
+                            primary.id,
                           );
                           form.setFieldValue(
                             "destination_agent_email",
-                            primary.email ?? ""
+                            primary.email ?? "",
                           );
                         } else {
-                          form.setFieldValue(
-                            "destination_agent_address_id",
-                            0
-                          );
-                          form.setFieldValue(
-                            "destination_agent_email",
-                            ""
-                          );
+                          form.setFieldValue("destination_agent_address_id", 0);
+                          form.setFieldValue("destination_agent_email", "");
                         }
                       }
                     }}
@@ -4598,7 +5054,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Destination Agent Email Id"
                     placeholder="Enter email address"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("destination_agent_email")}
                   />
                 </Grid.Col>
@@ -4610,17 +5066,22 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     clearable
                     data={agentAddressOptions}
                     key={
-                      form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0
+                      form.values.destination_agent_address_id &&
+                      form.values.destination_agent_address_id !== 0
                         ? String(form.values.destination_agent_address_id)
                         : "agent-empty"
                     }
                     value={
-                      form.values.destination_agent_address_id && form.values.destination_agent_address_id !== 0
+                      form.values.destination_agent_address_id &&
+                      form.values.destination_agent_address_id !== 0
                         ? String(form.values.destination_agent_address_id)
                         : ""
                     }
                     onChange={(value) => {
-                      form.setFieldValue("destination_agent_address_id", value ? parseInt(value) : 0);
+                      form.setFieldValue(
+                        "destination_agent_address_id",
+                        value ? parseInt(value) : 0,
+                      );
                     }}
                     error={form.errors.destination_agent_address_id}
                     disabled={agentAddressOptions.length === 0}
@@ -4661,16 +5122,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setBillingCustomerDisplayName(selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -4680,18 +5143,15 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue(
                             "billing_customer_address_id",
-                            primary.id
+                            primary.id,
                           );
                         } else {
-                          form.setFieldValue(
-                            "billing_customer_address_id",
-                            0
-                          );
+                          form.setFieldValue("billing_customer_address_id", 0);
                         }
                       }
                     }}
@@ -4709,17 +5169,22 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     clearable
                     data={billingCustomerAddressOptions}
                     key={
-                      form.values.billing_customer_address_id && form.values.billing_customer_address_id !== 0
+                      form.values.billing_customer_address_id &&
+                      form.values.billing_customer_address_id !== 0
                         ? String(form.values.billing_customer_address_id)
                         : "billing-empty"
                     }
                     value={
-                      form.values.billing_customer_address_id && form.values.billing_customer_address_id !== 0
+                      form.values.billing_customer_address_id &&
+                      form.values.billing_customer_address_id !== 0
                         ? String(form.values.billing_customer_address_id)
                         : ""
                     }
                     onChange={(value) => {
-                      form.setFieldValue("billing_customer_address_id", value ? parseInt(value) : 0);
+                      form.setFieldValue(
+                        "billing_customer_address_id",
+                        value ? parseInt(value) : 0,
+                      );
                     }}
                     error={form.errors.billing_customer_address_id}
                     disabled={billingCustomerAddressOptions.length === 0}
@@ -4740,7 +5205,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       ref={notify1TextRef}
                       label="Notify Customer 1 Name"
                       placeholder="Enter notify customer name"
-                      value={notifyCustomerSearch || notifyCustomerDisplayName || ""}
+                      value={
+                        notifyCustomerSearch || notifyCustomerDisplayName || ""
+                      }
                       onChange={(e) => {
                         const v = toTitleCase(e.currentTarget.value);
                         setNotifyCustomerSearch(v);
@@ -4760,8 +5227,19 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       data={notifyCustomerOptions}
                       comboboxProps={{ zIndex: 10 }}
                       styles={{
-                        input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
-                        label: { fontSize: "13px", fontWeight: 500, color: "#424242", marginBottom: "4px", fontFamily: "Inter", fontStyle: "medium" },
+                        input: {
+                          fontSize: "13px",
+                          height: "36px",
+                          fontFamily: "Inter",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
                       }}
                       searchValue={notifyCustomerSearch}
                       onSearchChange={(value) => {
@@ -4785,23 +5263,48 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           setNotifyCustomerAddressOptions([]);
                           return;
                         }
-                        const original = notifyCustomerDataRef.current[value] || {};
-                        const name = String((original as any).customer_name || "");
-                        const customerEmail = String((original as any).customer_email || "");
-                        const addressesDataRaw = (original as any).addresses_data;
+                        const original =
+                          notifyCustomerDataRef.current[value] || {};
+                        const name = String(
+                          (original as any).customer_name || "",
+                        );
+                        const customerEmail = String(
+                          (original as any).customer_email || "",
+                        );
+                        const addressesDataRaw = (original as any)
+                          .addresses_data;
                         const addressesData = Array.isArray(addressesDataRaw)
-                          ? (addressesDataRaw as Array<{ address: string; email?: string; address_type?: string }>)
+                          ? (addressesDataRaw as Array<{
+                              address: string;
+                              email?: string;
+                              address_type?: string;
+                            }>)
                           : [];
-                        const addressOptions = addressesData.map((a) => ({
-                          value: a.address || "",
-                          label: a.address || "",
-                        })).filter((a) => a.value);
+                        const addressOptions = addressesData
+                          .map((a) => ({
+                            value: a.address || "",
+                            label: a.address || "",
+                          }))
+                          .filter((a) => a.value);
                         setNotifyCustomerAddressOptions(addressOptions);
-                        const primary = addressesData.find((a) => String(a.address_type || "").toUpperCase() === "PRIMARY");
+                        const primary = addressesData.find(
+                          (a) =>
+                            String(a.address_type || "").toUpperCase() ===
+                            "PRIMARY",
+                        );
                         const firstAddr = addressesData[0];
-                        form.setFieldValue("notify1_customer_name", toTitleCase(name));
-                        form.setFieldValue("notify1_customer_email", primary?.email ?? firstAddr?.email ?? customerEmail);
-                        form.setFieldValue("notify1_customer_address", primary?.address ?? firstAddr?.address ?? "");
+                        form.setFieldValue(
+                          "notify1_customer_name",
+                          toTitleCase(name),
+                        );
+                        form.setFieldValue(
+                          "notify1_customer_email",
+                          primary?.email ?? firstAddr?.email ?? customerEmail,
+                        );
+                        form.setFieldValue(
+                          "notify1_customer_address",
+                          primary?.address ?? firstAddr?.address ?? "",
+                        );
                         setNotifyCustomerSearch(name);
                         setNotifyCustomerSelectedId(value);
                       }}
@@ -4826,14 +5329,24 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       clearable
                       data={notifyCustomerAddressOptions}
                       value={form.values.notify1_customer_address || ""}
-                      onChange={(value) => form.setFieldValue("notify1_customer_address", value ? toTitleCase(value) : "")}
+                      onChange={(value) =>
+                        form.setFieldValue(
+                          "notify1_customer_address",
+                          value ? toTitleCase(value) : "",
+                        )
+                      }
                     />
                   ) : (
                     <FormTextInput
                       label="Notify Customer 1 Address"
                       placeholder="Enter notify address"
                       value={form.values.notify1_customer_address}
-                      onChange={(e) => form.setFieldValue("notify1_customer_address", toTitleCase(e.currentTarget.value))}
+                      onChange={(e) =>
+                        form.setFieldValue(
+                          "notify1_customer_address",
+                          toTitleCase(e.currentTarget.value),
+                        )
+                      }
                     />
                   )}
                 </Grid.Col>
@@ -4852,7 +5365,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       ref={notify2TextRef}
                       label="Notify Customer 2 Name"
                       placeholder="Enter notify customer name"
-                      value={notify2CustomerSearch || notify2CustomerDisplayName || ""}
+                      value={
+                        notify2CustomerSearch ||
+                        notify2CustomerDisplayName ||
+                        ""
+                      }
                       onChange={(e) => {
                         const v = toTitleCase(e.currentTarget.value);
                         setNotify2CustomerSearch(v);
@@ -4872,8 +5389,19 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       data={notify2CustomerOptions}
                       comboboxProps={{ zIndex: 10 }}
                       styles={{
-                        input: { fontSize: "13px", height: "36px", fontFamily: "Inter" },
-                        label: { fontSize: "13px", fontWeight: 500, color: "#424242", marginBottom: "4px", fontFamily: "Inter", fontStyle: "medium" },
+                        input: {
+                          fontSize: "13px",
+                          height: "36px",
+                          fontFamily: "Inter",
+                        },
+                        label: {
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                          marginBottom: "4px",
+                          fontFamily: "Inter",
+                          fontStyle: "medium",
+                        },
                       }}
                       searchValue={notify2CustomerSearch}
                       onSearchChange={(value) => {
@@ -4897,23 +5425,48 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           setNotify2CustomerAddressOptions([]);
                           return;
                         }
-                        const original = notify2CustomerDataRef.current[value] || {};
-                        const name = String((original as any).customer_name || "");
-                        const customerEmail = String((original as any).customer_email || "");
-                        const addressesDataRaw = (original as any).addresses_data;
+                        const original =
+                          notify2CustomerDataRef.current[value] || {};
+                        const name = String(
+                          (original as any).customer_name || "",
+                        );
+                        const customerEmail = String(
+                          (original as any).customer_email || "",
+                        );
+                        const addressesDataRaw = (original as any)
+                          .addresses_data;
                         const addressesData = Array.isArray(addressesDataRaw)
-                          ? (addressesDataRaw as Array<{ address: string; email?: string; address_type?: string }>)
+                          ? (addressesDataRaw as Array<{
+                              address: string;
+                              email?: string;
+                              address_type?: string;
+                            }>)
                           : [];
-                        const addressOptions = addressesData.map((a) => ({
-                          value: a.address || "",
-                          label: a.address || "",
-                        })).filter((a) => a.value);
+                        const addressOptions = addressesData
+                          .map((a) => ({
+                            value: a.address || "",
+                            label: a.address || "",
+                          }))
+                          .filter((a) => a.value);
                         setNotify2CustomerAddressOptions(addressOptions);
-                        const primary = addressesData.find((a) => String(a.address_type || "").toUpperCase() === "PRIMARY");
+                        const primary = addressesData.find(
+                          (a) =>
+                            String(a.address_type || "").toUpperCase() ===
+                            "PRIMARY",
+                        );
                         const firstAddr = addressesData[0];
-                        form.setFieldValue("notify2_customer_name", toTitleCase(name));
-                        form.setFieldValue("notify2_customer_email", primary?.email ?? firstAddr?.email ?? customerEmail);
-                        form.setFieldValue("notify2_customer_address", primary?.address ?? firstAddr?.address ?? "");
+                        form.setFieldValue(
+                          "notify2_customer_name",
+                          toTitleCase(name),
+                        );
+                        form.setFieldValue(
+                          "notify2_customer_email",
+                          primary?.email ?? firstAddr?.email ?? customerEmail,
+                        );
+                        form.setFieldValue(
+                          "notify2_customer_address",
+                          primary?.address ?? firstAddr?.address ?? "",
+                        );
                         setNotify2CustomerSearch(name);
                         setNotify2CustomerSelectedId(value);
                       }}
@@ -4938,14 +5491,24 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       clearable
                       data={notify2CustomerAddressOptions}
                       value={form.values.notify2_customer_address || ""}
-                      onChange={(value) => form.setFieldValue("notify2_customer_address", value ? toTitleCase(value) : "")}
+                      onChange={(value) =>
+                        form.setFieldValue(
+                          "notify2_customer_address",
+                          value ? toTitleCase(value) : "",
+                        )
+                      }
                     />
                   ) : (
                     <FormTextInput
                       label="Notify Customer 2 Address"
                       placeholder="Enter notify address"
                       value={form.values.notify2_customer_address}
-                      onChange={(e) => form.setFieldValue("notify2_customer_address", toTitleCase(e.currentTarget.value))}
+                      onChange={(e) =>
+                        form.setFieldValue(
+                          "notify2_customer_address",
+                          toTitleCase(e.currentTarget.value),
+                        )
+                      }
                     />
                   )}
                 </Grid.Col>
@@ -4984,16 +5547,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setChaDisplayName(selectedData.label);
                       }
 
-                      if (originalData && (originalData as Record<string, unknown>).addresses_data) {
+                      if (
+                        originalData &&
+                        (originalData as Record<string, unknown>).addresses_data
+                      ) {
                         const addressesData = (
-                          (originalData as Record<string, unknown>)
-                            .addresses_data as Array<{
-                            id: number;
-                            address: string;
-                            email?: string;
-                            address_type?: string;
-                          }>
-                        );
+                          originalData as Record<string, unknown>
+                        ).addresses_data as Array<{
+                          id: number;
+                          address: string;
+                          email?: string;
+                          address_type?: string;
+                        }>;
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
@@ -5003,7 +5568,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         const primary = addressesData?.find(
                           (a) =>
                             String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY"
+                            "PRIMARY",
                         );
                         if (primary) {
                           form.setFieldValue("cha_address_id", primary.id);
@@ -5025,17 +5590,22 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     clearable
                     data={chaAddressOptions}
                     key={
-                      form.values.cha_address_id && form.values.cha_address_id !== 0
+                      form.values.cha_address_id &&
+                      form.values.cha_address_id !== 0
                         ? String(form.values.cha_address_id)
                         : "cha-empty"
                     }
                     value={
-                      form.values.cha_address_id && form.values.cha_address_id !== 0
+                      form.values.cha_address_id &&
+                      form.values.cha_address_id !== 0
                         ? String(form.values.cha_address_id)
                         : ""
                     }
                     onChange={(value) => {
-                      form.setFieldValue("cha_address_id", value ? parseInt(value) : 0);
+                      form.setFieldValue(
+                        "cha_address_id",
+                        value ? parseInt(value) : 0,
+                      );
                     }}
                     error={form.errors.cha_address_id}
                     disabled={chaAddressOptions.length === 0}
@@ -5058,10 +5628,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     maxRows={6}
                     value={form.values.commodity_description}
                     onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
                         "commodity_description",
-                        formattedValue,
+                        e.currentTarget.value,
                       );
                     }}
                     error={form.errors.commodity_description}
@@ -5253,7 +5822,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           <RequiredLabel label="Actions" required={false} />
                         </Grid.Col>
                       </Grid>
-                          <Stack gap="sm">
+                      <Stack gap="sm">
                         {form.values.cargo_details.map((_, cargoIndex) => (
                           <Box key={cargoIndex}>
                             <Grid gutter={"sm"}>
@@ -5488,7 +6057,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     label="Transporter Email Id"
                     placeholder="Enter transporter email"
                     type="email"
-                    format = "normal"
+                    format="normal"
                     {...form.getInputProps("transporter_email")}
                   />
                 </Grid.Col>
@@ -6037,12 +6606,18 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             Next
           </Button>
           <Button
-            rightSection={(isSubmitting ? <Loader size={16} /> : <IconCheck size={16} />)}
+            rightSection={
+              isSubmitting ? <Loader size={16} /> : <IconCheck size={16} />
+            }
             onClick={() => handleSubmit()}
             color="#105476"
             disabled={active === 4 && isSubmitting}
           >
-            {isSubmitting ? (isEditMode ? "Updating booking..." : "Creating booking...") : "Submit"}
+            {isSubmitting
+              ? isEditMode
+                ? "Updating booking..."
+                : "Creating booking..."
+              : "Submit"}
           </Button>
         </Group>
       </Box>

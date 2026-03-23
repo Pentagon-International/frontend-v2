@@ -150,6 +150,9 @@ export const URL = {
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",
 
+  // Ocean schedule lookup (vessel-saved)
+  vesselSavedSchedules: "searates/schedules/vessel-saved/",
+
   // Dashboard APIs
   dashboard: {
     outstandingSummary: "local-outstanding/salesman-summary/",

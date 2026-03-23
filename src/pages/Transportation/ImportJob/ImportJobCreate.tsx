@@ -58,6 +58,7 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 
@@ -2090,6 +2091,8 @@ function ImportJobCreate() {
       return;
     }
     try {
+      // Backend rejects numeric fields with more than 2 decimals.
+      // Round right before we build the final create/edit payload.
       const payload = {
         service: mblDetailsForm.values.service,
         service_type: "Import", // Based on the example payload
@@ -2250,9 +2253,9 @@ function ImportJobCreate() {
             ...(cargo.container_no && { container_no: cargo.container_no }),
             ...(cargo.container_id && { container_id: cargo.container_id }),
             no_of_packages: cargo.no_of_packages,
-            gross_weight: cargo.gross_weight,
-            volume: cargo.volume,
-            chargeable_weight: cargo.chargeable_weight,
+            gross_weight: roundToDecimals(cargo.gross_weight) ?? null,
+            volume: roundToDecimals(cargo.volume) ?? null,
+            chargeable_weight: roundToDecimals(cargo.chargeable_weight) ?? null,
             haz:
               cargo.haz !== null && cargo.haz !== undefined
                 ? typeof cargo.haz === "boolean"
@@ -2298,34 +2301,23 @@ function ImportJobCreate() {
                     : null,
               no_of_unit:
                 charge.no_of_unit != null ? Number(charge.no_of_unit) : null,
-              roe: charge.roe != null ? Number(charge.roe) : null,
-              amount_per_unit:
-                charge.amount_per_unit != null
-                  ? Number(charge.amount_per_unit)
-                  : null,
-              amount: charge.amount != null ? Number(charge.amount) : null,
-              sell_local_amount:
-                charge.sell_local_amount != null
-                  ? Number(charge.sell_local_amount)
-                  : (charge as { local_amount?: unknown }).local_amount != null
-                    ? Number(
-                        (charge as { local_amount?: unknown }).local_amount,
-                      )
-                    : null,
-              unit_cost:
-                charge.unit_cost != null
-                  ? Number(charge.unit_cost)
-                  : (charge as { cost_per_unit?: unknown }).cost_per_unit != null
-                    ? Number(
-                        (charge as { cost_per_unit?: unknown }).cost_per_unit,
-                      )
-                    : null,
-              total_cost:
-                charge.total_cost != null ? Number(charge.total_cost) : null,
-              cost_local_amount:
-                charge.cost_local_amount != null
-                  ? Number(charge.cost_local_amount)
-                  : null,
+            roe: roundToDecimals(charge.roe) ?? null,
+            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundToDecimals(charge.amount) ?? null,
+            sell_local_amount:
+              roundToDecimals(
+                  charge.sell_local_amount != null
+                    ? charge.sell_local_amount
+                    : (charge as { local_amount?: unknown }).local_amount,
+                ) ?? null,
+            unit_cost:
+              roundToDecimals(
+                  charge.unit_cost != null
+                    ? charge.unit_cost
+                    : (charge as { cost_per_unit?: unknown }).cost_per_unit,
+                ) ?? null,
+            total_cost: roundToDecimals(charge.total_cost) ?? null,
+            cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
             }));
           })(),
         })),
@@ -3782,6 +3774,18 @@ function ImportJobCreate() {
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.container_no`,
                       )}
+                      value={
+                        containerDetailsForm.values.containers[index]?.container_no || ""
+                      }
+                      onChange={(e) => {
+                        const raw = e.currentTarget.value.toUpperCase();
+                        const alnumOnly = raw.replace(/[^A-Z0-9]/g, "");
+                        const next = alnumOnly.slice(0, 11);
+                        containerDetailsForm.setFieldValue(
+                          `containers.${index}.container_no`,
+                          next,
+                        );
+                      }}
                       disabled={isReadOnly}
                       error={
                         containerDetailsForm.errors[

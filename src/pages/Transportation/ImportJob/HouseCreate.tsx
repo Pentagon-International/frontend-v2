@@ -53,6 +53,7 @@ import {
 } from "../../../components";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
@@ -1933,18 +1934,11 @@ function HouseCreate() {
           : haz === false || haz === "No" || String(haz).toLowerCase() === "no"
             ? false
             : null;
-
-      const roundTo2 = (v: unknown): number | null => {
-        if (v == null) return null;
-        const n = typeof v === "number" ? v : parseFloat(String(v));
-        if (!Number.isFinite(n)) return null;
-        return Math.round(n * 100) / 100;
-      };
       const basePayload: Record<string, unknown> = {
         no_of_packages: no_of_packages ?? null,
-        gross_weight: roundTo2(gross_weight),
-        volume: roundTo2(volume),
-        chargeable_weight: roundTo2(chargeable_weight),
+        gross_weight: roundToDecimals(gross_weight) ?? null,
+        volume: roundToDecimals(volume) ?? null,
+        chargeable_weight: roundToDecimals(chargeable_weight) ?? null,
         haz: hazValue,
       };
 
@@ -2002,13 +1996,13 @@ function HouseCreate() {
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
       no_of_unit: charge.no_of_unit,
-      roe: charge.roe,
-      amount_per_unit: charge.amount_per_unit,
-      amount: charge.amount,
-      sell_local_amount: charge.sell_local_amount ?? null,
-      unit_cost: charge.unit_cost ?? null,
-      total_cost: charge.total_cost ?? null,
-      cost_local_amount: charge.cost_local_amount ?? null,
+      roe: roundToDecimals(charge.roe) ?? null,
+      amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+      amount: roundToDecimals(charge.amount) ?? null,
+      sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
+      unit_cost: roundToDecimals(charge.unit_cost) ?? null,
+      total_cost: roundToDecimals(charge.total_cost) ?? null,
+      cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
       supplier_code: charge.supplier_code || null,
       supplier_name: charge.supplier_name ?? null,
     }));
@@ -2195,13 +2189,6 @@ function HouseCreate() {
 
   // Generate PDF preview from current form data
   const generatePDFPreview = () => {
-    const roundTo2 = (v: unknown): number | null => {
-      if (v == null) return null;
-      const n = typeof v === "number" ? v : parseFloat(String(v));
-      if (!Number.isFinite(n)) return null;
-      return Math.round(n * 100) / 100;
-    };
-
     try {
       setPreviewOpen(true);
 
@@ -2267,13 +2254,13 @@ function HouseCreate() {
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             currency: charge.currency,
             no_of_unit: charge.no_of_unit,
-            roe: roundTo2(charge.roe),
-            amount_per_unit: roundTo2(charge.amount_per_unit),
-            amount: roundTo2(charge.amount),
-            sell_local_amount: roundTo2(charge.sell_local_amount),
-            unit_cost: roundTo2(charge.unit_cost),
-            total_cost: roundTo2(charge.total_cost),
-            cost_local_amount: roundTo2(charge.cost_local_amount),
+            roe: roundToDecimals(charge.roe) ?? null,
+            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundToDecimals(charge.amount) ?? null,
+            sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
+            unit_cost: roundToDecimals(charge.unit_cost) ?? null,
+            total_cost: roundToDecimals(charge.total_cost) ?? null,
+            cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
             supplier_code: charge.supplier_code || null,
             supplier_name: charge.supplier_name || null,
           })),
@@ -3415,10 +3402,9 @@ function HouseCreate() {
                     placeholder="Enter Notify Customer Address"
                     value={form.values.notify1_customer_address}
                     onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
                       form.setFieldValue(
                         "notify1_customer_address",
-                        formattedValue,
+                        e.currentTarget.value,
                       );
                     }}
                     error={form.errors.notify1_customer_address}
@@ -3518,8 +3504,7 @@ function HouseCreate() {
                     placeholder="Enter Origin Agent Address"
                     value={form.values.agent_address}
                     onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue("agent_address", formattedValue);
+                      form.setFieldValue("agent_address", e.currentTarget.value);
                     }}
                     error={form.errors.agent_address}
                   />
@@ -3590,8 +3575,7 @@ function HouseCreate() {
                   minRows={2}
                   value={form.values.cha_address}
                   onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue("cha_address", formattedValue);
+                    form.setFieldValue("cha_address", e.currentTarget.value);
                   }}
                 />
               </Grid.Col>
@@ -3614,8 +3598,7 @@ function HouseCreate() {
                   minRows={3}
                   value={form.values.commodity_description}
                   onChange={(e) => {
-                    const formattedValue = toTitleCase(e.currentTarget.value);
-                    form.setFieldValue("commodity_description", formattedValue);
+                    form.setFieldValue("commodity_description", e.currentTarget.value);
                   }}
                   error={form.errors.commodity_description}
                 />

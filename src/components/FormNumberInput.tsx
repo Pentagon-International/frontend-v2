@@ -4,6 +4,7 @@ import React from "react";
 const FormNumberInput: React.FC<NumberInputProps> = (props) => {
   return (
     <NumberInput
+      decimalScale={2}   // default: restrict input to 2 decimal places
       {...props}
       styles={{
         label: {
