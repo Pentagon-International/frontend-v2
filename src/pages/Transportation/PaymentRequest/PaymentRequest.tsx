@@ -36,6 +36,7 @@ import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
+import { apiCallProtected } from "../../../api/axios";
 import {
   SearchableSelect,
   Dropdown,
@@ -45,7 +46,6 @@ import {
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
-import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -139,6 +139,7 @@ type ChargeItem = {
   charge_name: string;
   segment: string;
   job_no: string;
+  job_id?: string;
   sub_job: string;
   cn_r: string;
   currency: string;
@@ -238,6 +239,7 @@ type PaymentRequestFromApi = {
     charge_name?: string;
     segment?: string;
     job_no?: string;
+    job_id?: string;
     sub_job?: string;
     cn_r?: string;
     currency_code?: string;
@@ -252,6 +254,86 @@ type PaymentRequestFromApi = {
     sac_code?: string;
     tax?: boolean | string;
   }>;
+  documents?: Array<{
+    id?: number;
+    document_id?: number;
+    name?: string;
+    document_name?: string;
+    original_document_name?: string;
+    file_name?: string;
+    document_url?: string;
+    document_download_url?: string;
+  }>;
+  supporting_documents?: Array<{
+    id?: number;
+    document_id?: number;
+    name?: string;
+    document_name?: string;
+    original_document_name?: string;
+    file_name?: string;
+    document_url?: string;
+    document_download_url?: string;
+  }>;
+};
+
+type SupportingDocumentItem = {
+  name: string;
+  file: File | null;
+  document_url?: string;
+  document_id?: number;
+  original_document_name?: string;
+};
+
+const FORM_DATA_HEADERS = { "Content-Type": "multipart/form-data" } as const;
+
+const mapApiDocumentsToSupportingDocuments = (
+  docs: unknown,
+): SupportingDocumentItem[] => {
+  if (!Array.isArray(docs)) return [];
+  return docs.map((d: any) => ({
+    name: (d?.document_name ?? d?.name ?? "").toString(),
+    file: null,
+    document_id:
+      d?.document_id != null
+        ? Number(d.document_id)
+        : d?.id != null
+          ? Number(d.id)
+          : undefined,
+    document_url: (d?.document_download_url ?? d?.file_name ?? d?.document_url ?? "")
+      .toString()
+      .trim() || undefined,
+    original_document_name:
+      (d?.original_document_name ?? d?.document_name ?? d?.name ?? "")
+        .toString()
+        .trim() || undefined,
+  }));
+};
+
+const buildPaymentRequestFormData = (
+  payload: Record<string, unknown>,
+  supportingDocuments: SupportingDocumentItem[],
+) => {
+  const formData = new FormData();
+  formData.append("payment_request", JSON.stringify(payload));
+
+  let docIndex = 0;
+  supportingDocuments.forEach((doc) => {
+    if (doc.file) {
+      formData.append(`document_names[${docIndex}]`, (doc.name ?? "").toString());
+      formData.append(`document[${docIndex}]`, doc.file);
+      if (doc.document_id != null) {
+        formData.append(`document_id[${docIndex}]`, String(doc.document_id));
+      }
+      docIndex += 1;
+      return;
+    }
+    if (doc.document_id != null) {
+      formData.append(`document_id[${docIndex}]`, String(doc.document_id));
+      docIndex += 1;
+    }
+  });
+
+  return formData;
 };
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -420,13 +502,7 @@ function PaymentRequest( serviceType: string  ) {
   const [documentsModalOpened, { open: openDocumentsModal, close: closeDocumentsModal }] =
     useDisclosure(false);
   const [supportingDocuments, setSupportingDocuments] = useState<
-    Array<{
-      name: string;
-      file: File | null;
-      document_url?: string;
-      document_id?: number;
-      original_document_name?: string;
-    }>
+    SupportingDocumentItem[]
   >([]);
 
   const downloadFile = (url: string, fileName: string) => {
@@ -486,7 +562,7 @@ function PaymentRequest( serviceType: string  ) {
 
   const { data: unitData = [] } = useQuery({
     queryKey: ["unitMaster", "AIR"],
-    queryFn: fetchUnitMaster(location.state?.serviceType),
+    queryFn: () => fetchUnitMaster(location.state?.serviceType),
     staleTime: Infinity,
   });
 
@@ -618,6 +694,12 @@ function PaymentRequest( serviceType: string  ) {
       paid_to: (v) => (!v?.trim() ? "Paid To is required" : null),
     },
   });
+
+  const isApprovedStatus =
+    (saveResponse?.status ?? form.values.approved ?? "")
+      .toString()
+      .trim()
+      .toUpperCase() === "APPROVED";
 
   useEffect(() => {
     // In create flow, if voucher type is empty, auto-fill from source screen.
@@ -755,10 +837,16 @@ function PaymentRequest( serviceType: string  ) {
 
       if (isUpdate) {
         // PUT — update existing record (stays on same page)
-        const rawPut = (await putAPICall(
-          `${(URL as any).paymentRequest}`,
-          payload,
-          API_HEADER,
+        const updateId = saveResponse?.id ?? Number(requestId);
+        const rawPut = (await apiCallProtected.put(
+          `${(URL as any).paymentRequest}${updateId}/`,
+          buildPaymentRequestFormData(payload as Record<string, unknown>, supportingDocuments),
+          {
+            headers: {
+              ...FORM_DATA_HEADERS,
+              ...API_HEADER.headers,
+            },
+          },
         )) as any;
         if (rawPut) {
           // Handle wrapped response: { status, message, data: {...} } or unwrapped
@@ -775,6 +863,11 @@ function PaymentRequest( serviceType: string  ) {
           if (d.request_no) {
             form.setFieldValue("request_no", d.request_no);
           }
+          setSupportingDocuments(
+            mapApiDocumentsToSupportingDocuments(
+              (d as any).documents ?? (d as any).supporting_documents,
+            ),
+          );
 
           // Merge returned charge ids back into form
           const resCharges = d.charges;
@@ -797,10 +890,15 @@ function PaymentRequest( serviceType: string  ) {
         }
       } else {
         // POST — create new record, then switch to edit mode in-place
-        const rawResponse = (await postAPICall(
+        const rawResponse = (await apiCallProtected.post(
           (URL as any).paymentRequest,
-          payload,
-          API_HEADER,
+          buildPaymentRequestFormData(payload as Record<string, unknown>, supportingDocuments),
+          {
+            headers: {
+              ...FORM_DATA_HEADERS,
+              ...API_HEADER.headers,
+            },
+          },
         )) as any;
         if (rawResponse) {
           // Handle wrapped response: { status, message, data: {...} } or unwrapped
@@ -815,6 +913,11 @@ function PaymentRequest( serviceType: string  ) {
             });
             setAccountNameDisplay(
               ((d as any).account_name ?? d.account_code ?? "").toString() || null,
+            );
+            setSupportingDocuments(
+              mapApiDocumentsToSupportingDocuments(
+                (d as any).documents ?? (d as any).supporting_documents,
+              ),
             );
 
             // Populate the form with all saved values so the screen is in edit mode
@@ -920,6 +1023,11 @@ function PaymentRequest( serviceType: string  ) {
 
     setAccountNameDisplay(
       ((d as any).account_name ?? d.account_code ?? "").toString() || null,
+    );
+    setSupportingDocuments(
+      mapApiDocumentsToSupportingDocuments(
+        (d as any).documents ?? (d as any).supporting_documents,
+      ),
     );
 
     form.setValues({
@@ -1077,7 +1185,6 @@ function PaymentRequest( serviceType: string  ) {
                 <ActionIcon
                   variant="subtle"
                   color="#105476"
-                  disabled={isReadOnly}
                   size="lg"
                   styles={{
                     root: {
@@ -1105,7 +1212,7 @@ function PaymentRequest( serviceType: string  ) {
                 }}
               >
                 <Menu.Item
-                  disabled={isReadOnly}
+                  onClick={openDocumentsModal}
                   leftSection={
                     <Box
                       style={{
@@ -1625,12 +1732,49 @@ function PaymentRequest( serviceType: string  ) {
                 })}
                 value={form.values.account_id || null}
                 displayValue={accountNameDisplay}
-                onChange={(value, selectedData) => {
+                returnOriginalData
+                onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("account_id", value ?? "");
                   const selectedAccountName = selectedData?.label ?? "";
                   setAccountNameDisplay(selectedAccountName || null);
                   // Auto-fill Paid To from selected account name; user can edit later.
                   form.setFieldValue("paid_to", selectedAccountName);
+
+                  // Auto-fill State from PRIMARY address inside `addresses_data`.
+                  const addresses = (originalData as any)?.addresses_data as
+                    | Array<{ state_id?: number; state?: unknown; address_type?: string }>
+                    | undefined;
+                  const primaryAddress =
+                    Array.isArray(addresses) && addresses.length > 0
+                      ? addresses.find(
+                          (a) =>
+                            String(a?.address_type ?? "")
+                              .trim()
+                              .toUpperCase() === "PRIMARY",
+                        ) ?? addresses[0]
+                      : undefined;
+
+                  const stateCandidate =
+                    (primaryAddress as any)?.state_id ?? (primaryAddress as any)?.state;
+
+                  if (stateCandidate != null && String(stateCandidate).trim() !== "") {
+                    // If it's a numeric state_id, use it directly; otherwise try label match.
+                    const candidateStr = String(stateCandidate).trim();
+                    const numericMatch = candidateStr.match(/^\d+$/);
+                    const matchedState = numericMatch
+                      ? stateOptions.find((s) => String(s.value).trim() === candidateStr) ?? null
+                      : stateOptions.find(
+                          (s) =>
+                            String(s.label ?? "").trim().toLowerCase() ===
+                              candidateStr.toLowerCase(),
+                        ) ?? null;
+
+                    form.setFieldValue(
+                      "state_code_1",
+                      matchedState?.value ??
+                        (numericMatch ? candidateStr : String(stateCandidate).trim()),
+                    );
+                  }
                 }}
                 minSearchLength={3}
                 dropdownZIndex={1000}
@@ -2509,7 +2653,7 @@ function PaymentRequest( serviceType: string  ) {
               Cancel
             </Button>
             <Group gap="sm">
-              {!isReadOnly && (
+              {!isReadOnly && !isApprovedStatus && (
                 <Button
                   variant="outline"
                   color="#105476"
@@ -2531,7 +2675,7 @@ function PaymentRequest( serviceType: string  ) {
                   Attach Supporting Documents
                 </Button>
               )}
-              {!isReadOnly && (
+              {!isReadOnly && !isApprovedStatus && (
                 <>
                   {saveResponse?.id && (
                     <>
@@ -2585,7 +2729,7 @@ function PaymentRequest( serviceType: string  ) {
       <Modal
         opened={documentsModalOpened}
         onClose={closeDocumentsModal}
-        title="Attach Supporting Documents"
+        title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
         size="xl"
         centered
         style={{ fontFamily: "Inter" }}
@@ -2598,6 +2742,7 @@ function PaymentRequest( serviceType: string  ) {
                   label="Document Name"
                   placeholder="Enter document name"
                   value={doc.name}
+                  disabled={isReadOnly}
                   onChange={(e) => {
                     const updated = [...supportingDocuments];
                     updated[index] = { ...updated[index], name: e.target.value };
@@ -2612,6 +2757,7 @@ function PaymentRequest( serviceType: string  ) {
                   </Text>
                   <Dropzone
                     onDrop={(files: File[]) => {
+                      if (isReadOnly) return;
                       if (files.length === 0) return;
                       const file = files[0];
                       if (fileErrors[index]) {
@@ -2634,11 +2780,11 @@ function PaymentRequest( serviceType: string  ) {
                         ...updated[index],
                         file,
                         document_url: undefined,
-                        document_id: undefined,
                       };
                       setSupportingDocuments(updated);
                     }}
                     onReject={(files: any[]) => {
+                      if (isReadOnly) return;
                       const rejection = files[0];
                       if (rejection?.errors?.some((e: any) => e.code === "file-too-large")) {
                         const newErrors = { ...fileErrors };
@@ -2649,7 +2795,7 @@ function PaymentRequest( serviceType: string  ) {
                     maxSize={MAX_FILE_SIZE}
                     accept={undefined}
                     multiple={false}
-                    disabled={false}
+                    disabled={isReadOnly}
                     styles={{
                       root: {
                         border: "1px solid var(--mantine-color-gray-4)",
@@ -2716,7 +2862,7 @@ function PaymentRequest( serviceType: string  ) {
                           </>
                         )}
                       </Group>
-                      {(doc.file || doc.document_url) && (
+                      {!isReadOnly && (doc.file || doc.document_url) && (
                         <Button
                           variant="subtle"
                           color="red"
@@ -2756,7 +2902,9 @@ function PaymentRequest( serviceType: string  ) {
                 <Button
                   variant="light"
                   color="red"
+                  disabled={isReadOnly}
                   onClick={() => {
+                    if (isReadOnly) return;
                     if (fileErrors[index]) {
                       const newErrors = { ...fileErrors };
                       delete newErrors[index];
@@ -2781,7 +2929,7 @@ function PaymentRequest( serviceType: string  ) {
                 </Button>
               </Grid.Col>
               <Grid.Col span={1} offset={11}>
-                {index === supportingDocuments.length - 1 && (
+                {!isReadOnly && index === supportingDocuments.length - 1 && (
                   <Button
                     variant="light"
                     color="#105476"
@@ -2801,7 +2949,9 @@ function PaymentRequest( serviceType: string  ) {
               variant="light"
               color="#105476"
               leftSection={<IconPlus size={16} />}
+              disabled={isReadOnly}
               onClick={() => {
+                if (isReadOnly) return;
                 setSupportingDocuments([{ name: "", file: null }]);
               }}
               fullWidth
