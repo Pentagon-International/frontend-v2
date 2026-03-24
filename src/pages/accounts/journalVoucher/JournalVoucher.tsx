@@ -416,7 +416,7 @@ function JournalVoucher() {
         d.documents.map((doc: any) => ({
           name: doc.document_name ??  "",
           file: null,
-          document_url: doc.document_download_url ?? doc.document_url ?? "",
+          document_url:  doc.document_url ?? "",
           document_id: doc.id ?? undefined,
           original_document_name: doc.document_name ?? "",
         })),

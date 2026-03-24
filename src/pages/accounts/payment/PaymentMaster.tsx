@@ -248,11 +248,16 @@ export default function PaymentMaster() {
                 {isPosted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
+                      onClick={() => {
+                        const {
+                          documents: _documents,
+                          supporting_documents: _supportingDocuments,
+                          ...paymentDataWithoutDocuments
+                        } = (row.original as any) ?? {};
                         navigate("/payment/reversal/create", {
-                          state: row.original,
-                        })
-                      }
+                          state: paymentDataWithoutDocuments,
+                        });
+                      }}
                     >
                       <Group gap="sm">
                         <IconReceiptRefund

@@ -983,7 +983,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     });
   }, [unitDataRaw]);
 
-  const updateCharge = (index: number, field: string, value: string) => {
+  const updateCharge = (
+    index: number,
+    field: string,
+    value: string | number,
+  ) => {
     setCharges((prev) =>
       prev.map((charge, i) => {
         if (i === index) {
@@ -6795,17 +6799,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         />
                       </Grid.Col>
                       <Grid.Col span={0.8}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="ROE"
                           value={charge.roe}
-                          onChange={(event) =>
-                            updateCharge(
-                              index,
-                              "roe",
-                              event.currentTarget.value,
-                            )
+                          onChange={(val) =>
+                            updateCharge(index, "roe", val ?? "")
                           }
                           size="xs"
+                          decimalScale={2}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -6821,57 +6822,45 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         />
                       </Grid.Col>
                       <Grid.Col span={0.8}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="0"
+                          decimalScale={0}
                           value={charge.no_of_units}
-                          onChange={(event) =>
-                            updateCharge(
-                              index,
-                              "no_of_units",
-                              event.currentTarget.value,
-                            )
+                          onChange={(val) =>
+                            updateCharge(index, "no_of_units", val ?? "")
                           }
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="0.00"
                           value={charge.sell_per_unit}
-                          onChange={(event) =>
-                            updateCharge(
-                              index,
-                              "sell_per_unit",
-                              event.currentTarget.value,
-                            )
+                          decimalScale={2}
+                          onChange={(val) =>
+                            updateCharge(index, "sell_per_unit", val ?? "")
                           }
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="0.00"
                           value={charge.min_sell}
-                          onChange={(event) =>
-                            updateCharge(
-                              index,
-                              "min_sell",
-                              event.currentTarget.value,
-                            )
+                          decimalScale={2}
+                          onChange={(val) =>
+                            updateCharge(index, "min_sell", val ?? "")
                           }
                           size="xs"
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <FormTextInput
+                        <FormNumberInput
                           placeholder="0.00"
                           value={charge.cost_per_unit}
-                          onChange={(event) =>
-                            updateCharge(
-                              index,
-                              "cost_per_unit",
-                              event.currentTarget.value,
-                            )
+                          decimalScale={2}
+                          onChange={(val) =>
+                            updateCharge(index, "cost_per_unit", val ?? "")
                           }
                           size="xs"
                         />

@@ -25,13 +25,7 @@ function LoginRightPane() {
       className="login-form-container"
       sx={(theme) => ({
         width: "100%",
-        padding: "20px",
-        maxWidth: "500px",
         margin: 0,
-        [`@media (max-width: ${theme.breakpoints.md})`]: {
-          padding: "16px",
-          maxWidth: "600px",
-        },
       })}
     >
       <Image
@@ -40,7 +34,7 @@ function LoginRightPane() {
         h={50}
         w="auto"
         fit="contain"
-        my={"xs"}
+        mb={"md"}
         alt="Pulse Logo"
       />
       <Text
@@ -51,8 +45,11 @@ function LoginRightPane() {
           color: "#333333",
         }}
       >
-        Lorem, ipsum dolor sit amet consectetur adipisicing elit. Veniam dolorum
-        quam vero earum, fugit itaque voluptatum
+        {
+          formType === "signin"
+            ? "The world keeps moving — and so do you. Sign in to stay ahead of every shipment, every update, and every opportunity."
+            : "Every great journey starts with a single step. Create your account and join the crew that moves the world."
+        }
       </Text>
 
       <Space h="md" />
@@ -67,6 +64,7 @@ function LoginRightPane() {
         ]}
         radius={"md"}
         size="md"
+        p={0}
         color="#FFF"
         styles={{
           root: {

@@ -6045,6 +6045,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       <Grid.Col span={0.8}>
                         <FormNumberInput
                           placeholder="0"
+                          decimalScale={0}
                           value={charge.no_of_units}
                           onChange={(val) =>
                             updateCharge(index, "no_of_units", val || "")

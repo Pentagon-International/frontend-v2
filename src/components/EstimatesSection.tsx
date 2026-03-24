@@ -328,6 +328,7 @@ export function EstimatesSection({
             <FormNumberInput
               placeholder="Qty"
               min={0}
+              decimalScale={0}
               hideControls
               value={row.no_of_unit ?? undefined}
               onChange={(value) => {

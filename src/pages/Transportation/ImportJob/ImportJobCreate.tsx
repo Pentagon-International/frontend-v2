@@ -2300,7 +2300,7 @@ function ImportJobCreate() {
                     ? Number(charge.currency)
                     : null,
               no_of_unit:
-                charge.no_of_unit != null ? Number(charge.no_of_unit) : null,
+                charge.no_of_unit != null ? roundToDecimals(charge.no_of_unit) : null,
             roe: roundToDecimals(charge.roe) ?? null,
             amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
             amount: roundToDecimals(charge.amount) ?? null,
@@ -2371,11 +2371,11 @@ function ImportJobCreate() {
             charge_id: e.charge_id,
             pp_cc: e.pp_cc || "",
             unit_id: e.unit_id ? Number(e.unit_id) : null,
-            no_of_unit: e.no_of_unit ?? null,
+            no_of_unit: roundToDecimals(e.no_of_unit) ?? null,
             currency_id: e.currency_id ? Number(e.currency_id) : null,
-            roe: e.roe ?? null,
-            cost_per_unit: e.cost_per_unit ?? null,
-            total_cost: e.total_cost ?? null,
+            roe: roundToDecimals(e.roe) ?? null,
+            cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
+            total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
       };

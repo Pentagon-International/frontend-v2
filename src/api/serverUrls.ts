@@ -153,6 +153,9 @@ export const URL = {
   // Ocean schedule lookup (vessel-saved)
   vesselSavedSchedules: "searates/schedules/vessel-saved/",
 
+  // EDI download for jobs
+  edi: "edi/",
+
   // Dashboard APIs
   dashboard: {
     outstandingSummary: "local-outstanding/salesman-summary/",
