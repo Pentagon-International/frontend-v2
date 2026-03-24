@@ -258,6 +258,7 @@ type HousingDetail = {
   marks_no: string;
   item_no?: string;
   sub_item_no?: string;
+  shipment_terms_code?: string;
   cargo_details?: Array<{
     id?: number | string;
     container_no?: number | string;
@@ -296,10 +297,11 @@ const getTransportMode = (
   transportType: string | null | undefined,
 ): string | undefined => {
   if (!transportType) return undefined;
-  const type = transportType.trim();
-  if (type === "Air") return "AIR";
-  if (type === "Sea" || type === "FCL" || type === "LCL") return "SEA";
-  if (type === "Road") return "LAND";
+  const type = transportType.trim().toUpperCase();
+  if (type === "AIR") return "AIR";
+  if (type === "SEA" || type === "FCL" || type === "LCL" || type === "VESSEL")
+    return "SEA";
+  if (type === "ROAD") return "LAND";
   return undefined;
 };
 
@@ -564,11 +566,14 @@ function ImportJobCreate() {
             mblData.ata && dayjs(mblData.ata).isValid()
               ? dayjs(mblData.ata).toDate()
               : null,
-          igm_no: mblData.igm_no || "",
+          igm_no:
+            mblData.igm_no != null
+              ? String(mblData.igm_no)
+              : mblDetailsForm.values.igm_no || "",
           igm_date:
             mblData.igm_date && dayjs(mblData.igm_date).isValid()
               ? dayjs(mblData.igm_date).toDate()
-              : null,
+              : mblDetailsForm.values.igm_date || null,
         });
 
         // Populate Carrier Details using setValues
@@ -665,6 +670,11 @@ function ImportJobCreate() {
           marks_no: house.marks_no ? String(house.marks_no) : "",
           item_no: house.item_no ? String(house.item_no) : "",
           sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
+          shipment_terms_code: house.shipment_terms_code
+            ? String(house.shipment_terms_code)
+            : house.shipment_terms_name
+              ? String(house.shipment_terms_name)
+              : "",
           events: Array.isArray(
             (house as {
               events?: Array<{ id?: number; type?: string; date?: string }>;
@@ -1029,7 +1039,7 @@ function ImportJobCreate() {
                     : Number(routing.id)
                   : undefined,
                 transport_type: routing.transport_type
-                  ? String(routing.transport_type)
+                  ? String(routing.transport_type).toUpperCase()
                   : "",
                 from_code: routing.from_port_code
                   ? String(routing.from_port_code)
@@ -1267,32 +1277,31 @@ function ImportJobCreate() {
     // const isNavigatingBackFromHouseCreate = location.state?.housingDetails && Array.isArray(location.state.housingDetails) && location.state.housingDetails.length > 0;
     const isNavigatingBackFromHouseCreate =
       location.state?.fromHouseCreate === true;
-
-    if (
-      mode !== "create" ||
-      !(
-        isNavigatingBackFromHouseCreate ||
+    const hasStateToRestore =
+      !!(
         location.state?.mblDetails ||
         location.state?.carrierDetails ||
         location.state?.routings ||
-        location.state?.containerDetails
-      )
+        location.state?.containerDetails ||
+        location.state?.estimates
+      );
+
+    // Restore when coming back from HouseCreate in any mode.
+    // For create mode, also allow restoration when state exists.
+    if (
+      !isNavigatingBackFromHouseCreate &&
+      !(mode === "create" && hasStateToRestore)
     ) {
-      return; // Exit early → NO restore in edit mode
+      return;
     }
     // Restore form values when:
     // 1. We're navigating back from HouseCreate (has housingDetails) OR
     // 2. We're in create mode and have form data in location.state
     // But skip if we're in initial edit load (has jobData but no housingDetails)
     const shouldRestore =
-      mode === "create" &&
-      (isNavigatingBackFromHouseCreate ||
-        location.state?.mblDetails ||
-        location.state?.carrierDetails ||
-        location.state?.routings ||
-        location.state?.containerDetails);
+      isNavigatingBackFromHouseCreate || (mode === "create" && hasStateToRestore);
 
-    if (mode === "create" && shouldRestore) {
+    if (shouldRestore) {
       // Restore MBL Details
       if (location.state?.mblDetails) {
         const mblDetails = location.state.mblDetails;
@@ -1312,8 +1321,14 @@ function ImportJobCreate() {
           eta: mblDetails.eta || null,
           atd: mblDetails.atd || null,
           ata: mblDetails.ata || null,
-          igm_no: mblDetails.igm_no || "",
-          igm_date: mblDetails.igm_date || null,
+          igm_no:
+            mblDetails.igm_no != null
+              ? String(mblDetails.igm_no)
+              : mblDetailsForm.values.igm_no || "",
+          igm_date:
+            mblDetails.igm_date && dayjs(mblDetails.igm_date).isValid()
+              ? dayjs(mblDetails.igm_date).toDate()
+              : mblDetailsForm.values.igm_date || null,
         });
       }
 
@@ -1345,8 +1360,7 @@ function ImportJobCreate() {
       // Restore Estimates (master-level) if present in location.state when coming back
       if (
         location.state?.estimates &&
-        Array.isArray(location.state.estimates) &&
-        location.state.estimates.length > 0
+        Array.isArray(location.state.estimates)
       ) {
         estimatesForm.setFieldValue(
           "estimates",
@@ -1366,6 +1380,7 @@ function ImportJobCreate() {
     location.state?.carrierDetails,
     location.state?.routings,
     location.state?.containerDetails,
+    location.state?.estimates,
     location.state?.housingDetails,
     mode,
     jobData,
@@ -1435,30 +1450,27 @@ function ImportJobCreate() {
   const validateStep2 = () => {
     for (const routing of routingsForm.values.routings) {
       // Check if any mandatory routing field has a non-empty value
-      const transportType = routing.transport_type?.trim() || "";
+      const transportType = routing.transport_type?.trim().toUpperCase() || "";
       const fromCode = routing.from_code?.trim() || "";
       const toCode = routing.to_code?.trim() || "";
       const carrierCode = routing.carrier_code?.trim() || "";
       const vessel = routing.vessel?.trim() || "";
       // Get the appropriate field value based on transport_type
       let flightVoyageNumber = "";
-      if (
-        transportType.toLowerCase() === "sea" ||
-        transportType.toLowerCase() === "vessel"
-      ) {
+      if (transportType === "SEA" || transportType === "VESSEL") {
         flightVoyageNumber =
           routing.voyage_number?.trim() ||
           routing.flight_voyage_number?.trim() ||
           "";
-      } else if (transportType.toLowerCase() === "air") {
+      } else if (transportType === "AIR") {
         flightVoyageNumber =
           routing.flight?.trim() || routing.flight_voyage_number?.trim() || "";
-      } else if (transportType.toLowerCase() === "road") {
+      } else if (transportType === "ROAD") {
         flightVoyageNumber =
           routing.truck_no?.trim() ||
           routing.flight_voyage_number?.trim() ||
           "";
-      } else if (transportType.toLowerCase() === "rail") {
+      } else if (transportType === "RAIL") {
         flightVoyageNumber =
           routing.rail_no?.trim() || routing.flight_voyage_number?.trim() || "";
       } else {
@@ -1527,7 +1539,7 @@ function ImportJobCreate() {
         }
 
         // Validate transport-type-specific required fields using correct field names
-        if (routing.transport_type === "Sea") {
+        if (routing.transport_type === "SEA") {
           const voyageNumber = routing.voyage_number?.trim() || "";
           if (vessel === "" || voyageNumber === "") {
             ToastNotification({
@@ -1537,7 +1549,7 @@ function ImportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Air") {
+        } else if (routing.transport_type === "AIR") {
           const flight = routing.flight?.trim() || "";
           if (carrierCode === "" || flight === "") {
             ToastNotification({
@@ -1546,7 +1558,7 @@ function ImportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Road") {
+        } else if (routing.transport_type === "ROAD") {
           const truckNo = routing.truck_no?.trim() || "";
           if (carrierCode === "" || truckNo === "") {
             ToastNotification({
@@ -1555,7 +1567,7 @@ function ImportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "Rail") {
+        } else if (routing.transport_type === "RAIL") {
           const railNo = routing.rail_no?.trim() || "";
           if (carrierCode === "" || railNo === "") {
             ToastNotification({
@@ -1831,6 +1843,8 @@ function ImportJobCreate() {
             eta: mblDetailsForm.values.eta || null,
             atd: mblDetailsForm.values.atd || null,
             ata: mblDetailsForm.values.ata || null,
+            igm_no: mblDetailsForm.values.igm_no || "",
+            igm_date: mblDetailsForm.values.igm_date || null,
           },
           carrierDetails: carrierDetailsForm.values,
           routings: routingsForm.values.routings,
@@ -2143,7 +2157,9 @@ function ImportJobCreate() {
             ...(routing.id !== undefined &&
               routing.id !== null &&
               routing.id !== "" && { id: Number(routing.id) }),
-            transport_type: routing.transport_type || null,
+            transport_type: routing.transport_type
+              ? routing.transport_type.toUpperCase()
+              : null,
             from_port_code: routing.from_code || null,
             to_port_code: routing.to_code || null,
             etd: routing.etd
@@ -2236,6 +2252,10 @@ function ImportJobCreate() {
           marks_no: house.marks_no || "",
           item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
+          ...(house.shipment_terms_code != null &&
+            house.shipment_terms_code !== "" && {
+              shipment_terms_code: house.shipment_terms_code,
+            }),
           events: Array.isArray((house as { events?: unknown }).events)
             ? (
                 (house as {
@@ -3018,7 +3038,10 @@ function ImportJobCreate() {
                 <FormTextInput
                   label="IGM Number"
                   placeholder="Enter IGM Number"
-                  {...mblDetailsForm.getInputProps("igm_no")}
+                  value={mblDetailsForm.values.igm_no}
+                  onChange={(e) =>
+                    mblDetailsForm.setFieldValue("igm_no", e.currentTarget.value)
+                  }
                   error={mblDetailsForm.errors.igm_no}
                 />
               </Grid.Col>
@@ -3026,16 +3049,11 @@ function ImportJobCreate() {
                 <SingleDateInput
                   label="IGM Date"
                   placeholder="YYYY-MM-DD"
-                  {...(() => {
-                    const inputProps = mblDetailsForm.getInputProps("igm_date");
-                    return {
-                      value: inputProps.value as Date | null,
-                      error: inputProps.error as string | undefined,
-                      onChange: (value: Date | null) => {
-                        mblDetailsForm.setFieldValue("igm_date", value);
-                      },
-                    };
-                  })()}
+                  value={mblDetailsForm.values.igm_date}
+                  onChange={(value: Date | null) => {
+                    mblDetailsForm.setFieldValue("igm_date", value);
+                  }}
+                  error={mblDetailsForm.errors.igm_date as string | undefined}
                   size="sm"
                 />
               </Grid.Col>
@@ -3164,7 +3182,7 @@ function ImportJobCreate() {
                         placeholder="Select Transport Type"
                         searchable
                         clearable
-                        data={["Air", "Sea", "Road", "Rail"]}
+                        data={["AIR", "SEA", "ROAD", "RAIL"]}
                         value={
                           routingsForm.values.routings[index]?.transport_type ||
                           null
@@ -3286,7 +3304,7 @@ function ImportJobCreate() {
                     </Grid.Col>
 
                     {/* Dynamic field labels based on transport type */}
-                    {routing.transport_type === "Sea" && (
+                    {routing.transport_type === "SEA" && (
                       <>
                         <Grid.Col span={2.4}>
                           <FormTextInput
@@ -3337,7 +3355,7 @@ function ImportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Air" && (
+                    {routing.transport_type === "AIR" && (
                       <>
                         <Grid.Col span={2.4}>
                           <SearchableSelect
@@ -3403,7 +3421,7 @@ function ImportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Road" && (
+                    {routing.transport_type === "ROAD" && (
                       <>
                         <Grid.Col span={2.4}>
                           <SearchableSelect
@@ -3469,7 +3487,7 @@ function ImportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "Rail" && (
+                    {routing.transport_type === "RAIL" && (
                       <>
                         <Grid.Col span={2.4}>
                           <FormTextInput
