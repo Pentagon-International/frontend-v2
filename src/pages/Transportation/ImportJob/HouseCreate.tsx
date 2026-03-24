@@ -147,6 +147,9 @@ type ChargeDetail = {
   supplier_name?: string;
 };
 
+type DoTypeOption = "carrier_agent" | "unstuff_place";
+type DoDeliverToOption = "consignee" | "notify" | "cha";
+
 // Reverse invoice item (from API reverse_invoices)
 type ReverseInvoiceItem = {
   id?: number;
@@ -353,6 +356,12 @@ function HouseCreate() {
   // Delivery Order preview state
   const [doPreviewOpen, setDoPreviewOpen] = useState(false);
   const [doPdfBlob, setDoPdfBlob] = useState<string | null>(null);
+  const [doConfigOpen, setDoConfigOpen] = useState(false);
+  const [doTypeSelection, setDoTypeSelection] = useState<DoTypeOption | null>(
+    null,
+  );
+  const [doDeliverToSelection, setDoDeliverToSelection] =
+    useState<DoDeliverToOption | null>(null);
 
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
@@ -780,17 +789,14 @@ function HouseCreate() {
       notify1_customer_name:
         (editData as { notify1_customer_name?: string })
           ?.notify1_customer_name ??
-        editData?.notify_customer1_name ??
         "",
       notify1_customer_address:
         (editData as { notify1_customer_address?: string })
           ?.notify1_customer_address ??
-        editData?.notify_customer1_address ??
         "",
       notify1_customer_email:
         (editData as { notify1_customer_email?: string })
           ?.notify1_customer_email ??
-        editData?.notify_customer1_email ??
         "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
@@ -2350,8 +2356,33 @@ function HouseCreate() {
     }
   };
 
+  const resolveDoAttentionTo = (type: DoTypeOption) => {
+    if (type === "carrier_agent") {
+      return location.state?.carrierDetails?.carrier_name || "";
+    }
+    const firstCfsName = (location.state?.containerDetails || []).find(
+      (container: { cfs_name?: string }) => (container.cfs_name || "").trim(),
+    )?.cfs_name;
+    return firstCfsName || "";
+  };
+
+  const resolveDoDeliverTo = (deliverTo: DoDeliverToOption) => {
+    if (deliverTo === "consignee") return form.values.consignee_name || "";
+    if (deliverTo === "notify") return form.values.notify1_customer_name || "";
+    return form.values.cha_name || "";
+  };
+
+  const openDoConfigModal = () => {
+    setDoTypeSelection(null);
+    setDoDeliverToSelection(null);
+    setDoConfigOpen(true);
+  };
+
   // Generate Delivery Order PDF Preview
-  const generateDeliveryOrderPDFPreview = async () => {
+  const generateDeliveryOrderPDFPreview = async (
+    type: DoTypeOption,
+    deliverTo: DoDeliverToOption,
+  ) => {
     try {
       setDoPreviewOpen(true);
 
@@ -2364,7 +2395,13 @@ function HouseCreate() {
         containerDetails: location.state?.containerDetails || [],
       };
 
-      const blobUrl = generateDeliveryOrderPDF(combinedData, form.values);
+      const doHousingData = {
+        ...form.values,
+        attention_to: resolveDoAttentionTo(type),
+        please_deliver_to: resolveDoDeliverTo(deliverTo),
+        do_heading: type === "carrier_agent" ? "DELIVERY ADVICE" : "DELIVERY ORDER",
+      };
+      const blobUrl = generateDeliveryOrderPDF(combinedData, doHousingData);
       setDoPdfBlob(blobUrl);
     } catch (error) {
       console.error("Error generating Delivery Order PDF:", error);
@@ -2383,6 +2420,24 @@ function HouseCreate() {
     if (doPdfBlob) {
       window.URL.revokeObjectURL(doPdfBlob);
     }
+  };
+
+  const handleCloseDoConfig = () => {
+    setDoConfigOpen(false);
+    setDoTypeSelection(null);
+    setDoDeliverToSelection(null);
+  };
+
+  const handleGenerateDeliveryOrderFromConfig = () => {
+    if (!doTypeSelection || !doDeliverToSelection) {
+      ToastNotification({
+        type: "error",
+        message: "Type and Deliver to are required",
+      });
+      return;
+    }
+    setDoConfigOpen(false);
+    generateDeliveryOrderPDFPreview(doTypeSelection, doDeliverToSelection);
   };
 
   // Handle download DO PDF
@@ -2658,7 +2713,7 @@ function HouseCreate() {
                     color: "#424242",
                   },
                 }}
-                onClick={generateDeliveryOrderPDFPreview}
+                onClick={openDoConfigModal}
               >
                 Delivery Order
               </Menu.Item>
@@ -3370,8 +3425,8 @@ function HouseCreate() {
                       : ""
                   }
                   displayValue={form.values.notify1_customer_name}
-                  onChange={(value, _selectedData, originalData) => {
-                    const newValue = value || "";
+                  onChange={(_value, _selectedData, originalData) => {
+                    const newValue = _selectedData?.label || "";
                     form.setFieldValue("notify1_customer_name", newValue);
 
                     if (
@@ -3471,8 +3526,8 @@ function HouseCreate() {
                   displayFormat={customerNameOnlyDisplayFormat}
                   value={form.values.agent_name}
                   displayValue={form.values.agent_name}
-                  onChange={(value, _selectedData, originalData) => {
-                    const newValue = value || "";
+                  onChange={(_value, _selectedData, originalData) => {
+                    const newValue = _value || "";
                     form.setFieldValue("agent_name", newValue);
 
                     if (
@@ -3566,8 +3621,8 @@ function HouseCreate() {
                   displayFormat={customerCodeNameDisplayFormat}
                   value={form.values.cha_code || null}
                   displayValue={form.values.cha_name}
-                  onChange={(value, _selectedData, originalData) => {
-                    const chaCode = value || "";
+                  onChange={(_value, _selectedData, originalData) => {
+                    const chaCode = _value || "";
                     const chaName =
                       (originalData as Record<string, unknown> | undefined)
                         ?.customer_name != null
@@ -5367,6 +5422,52 @@ function HouseCreate() {
               </Stack>
             </Center>
           )}
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={doConfigOpen}
+        onClose={handleCloseDoConfig}
+        title="Delivery Order Options"
+        centered
+        size="md"
+      >
+        <Stack>
+          <Dropdown
+            label="Type"
+            required
+            placeholder="Select Type"
+            dropdownZIndex={3000}
+            data={[
+              { value: "carrier_agent", label: "Carrier Agent" },
+              { value: "unstuff_place", label: "Unstuff Place" },
+            ]}
+            value={doTypeSelection}
+            onChange={(value) => setDoTypeSelection(value as DoTypeOption)}
+          />
+          <Dropdown
+            label="Deliver to"
+            required
+            placeholder="Select Deliver to"
+            dropdownZIndex={3000}
+            data={[
+              { value: "consignee", label: "Consignee" },
+              { value: "notify", label: "Notify" },
+              { value: "cha", label: "CHA" },
+            ]}
+            value={doDeliverToSelection}
+            onChange={(value) =>
+              setDoDeliverToSelection(value as DoDeliverToOption)
+            }
+          />
+          <Group justify="flex-end" mt="sm">
+            <Button variant="outline" onClick={handleCloseDoConfig}>
+              Cancel
+            </Button>
+            <Button color="#105476" onClick={handleGenerateDeliveryOrderFromConfig}>
+              Generate PDF
+            </Button>
+          </Group>
         </Stack>
       </Modal>
 

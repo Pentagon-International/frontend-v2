@@ -359,11 +359,12 @@ export const generateDeliveryOrderPDF = (
     const todayDate = formatDateForDisplay(new Date().toISOString());
 
     // Parties - from housing_details
+    const attentionTo = housingData?.attention_to || "";
     const pleaseDeliverTo = housingData?.please_deliver_to || housingData?.consignee_name || "";
     const consigneeName = housingData?.consignee_name || "";
     const importerCode = housingData?.importer_code || "";
     const importerType = housingData?.importer_type || "";
-    const notifyParty = housingData?.notify_customer1_name || "";
+    const notifyParty = housingData?.notify_customer1_name || housingData?.notify1_customer_name || "";
     const chaName = housingData?.cha_name || "";
 
     // Shipment Details - vessel and voyage from consol_details (jobData)
@@ -422,6 +423,8 @@ export const generateDeliveryOrderPDF = (
     const marksNo = housingData?.marks_no || "";
     const commodityDescription = housingData?.commodity_description || "";
 
+    const headingText = housingData?.do_heading || "DELIVERY ORDER";
+
     // Set document properties
     doc.setProperties({
       title: `Delivery Order - ${doNumber || ""}`,
@@ -450,7 +453,7 @@ export const generateDeliveryOrderPDF = (
       doNumber,
       todayDate,
       jobInfo,
-      "DELIVERY ORDER"
+      headingText
     );
     
     // Content starts inside the box
@@ -462,12 +465,19 @@ export const generateDeliveryOrderPDF = (
     // ===== TOP SECTION OF BOX: Attention to (left) and DO No/Date (right) =====
     // leftColumnX and rightColumnX already defined above
 
-    // Attention to (left side - always shown, empty with spacing)
+    // Attention to
     doc.setFontSize(7);
     doc.setFont("helvetica", "bold");
     doc.text("Attention to:", leftColumnX, boxContentY);
-    // Leave empty space for attention to (3 lines)
-    boxContentY += 10;
+    doc.setFont("helvetica", "normal");
+    const attentionToLines = doc.splitTextToSize(
+      attentionTo || "",
+      rightColumnX - leftColumnX - 5,
+    );
+    if (attentionToLines.length > 0) {
+      doc.text(attentionToLines, leftColumnX + 20, boxContentY);
+    }
+    boxContentY += Math.max(attentionToLines.length * 4, 10);
 
     // DO No and Date (right side)
     doc.setFont("helvetica", "bold");
@@ -639,7 +649,7 @@ export const generateDeliveryOrderPDF = (
     if (cargoDetails.length > 0 && needsNewPage(currentY, estimatedTableHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Create new page with layout
       doc.addPage();
-      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, "DELIVERY ORDER");
+      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
       currentY = newPageInfo.yPos;
       boxStartY = newPageInfo.boxStartY;
       boxX = newPageInfo.boxX;
@@ -744,7 +754,7 @@ export const generateDeliveryOrderPDF = (
               doNumber,
               todayDate,
               jobInfo,
-              "DELIVERY ORDER"
+              headingText
             );
           }
         },
@@ -768,7 +778,7 @@ export const generateDeliveryOrderPDF = (
     if (needsNewPage(currentY, marksDescHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Create new page with layout
       doc.addPage();
-      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, "DELIVERY ORDER");
+      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
       currentY = newPageInfo.yPos;
       boxStartY = newPageInfo.boxStartY;
       boxX = newPageInfo.boxX;
@@ -789,7 +799,7 @@ export const generateDeliveryOrderPDF = (
     if (needsNewPage(currentY, marksHeight + lineHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Create new page with layout
       doc.addPage();
-      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, "DELIVERY ORDER");
+      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
       currentY = newPageInfo.yPos;
       boxStartY = newPageInfo.boxStartY;
       boxX = newPageInfo.boxX;
@@ -814,7 +824,7 @@ export const generateDeliveryOrderPDF = (
     if (needsNewPage(currentY, descHeight + lineHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Create new page with layout
       doc.addPage();
-      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, "DELIVERY ORDER");
+      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
       currentY = newPageInfo.yPos;
       boxStartY = newPageInfo.boxStartY;
       boxX = newPageInfo.boxX;
@@ -830,7 +840,7 @@ export const generateDeliveryOrderPDF = (
       if (needsNewPage(currentY, 4, fixedBoxEndY, bottomBorderPadding)) {
         // Create new page with layout
         doc.addPage();
-        const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, "DELIVERY ORDER");
+        const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
         currentY = newPageInfo.yPos;
         boxStartY = newPageInfo.boxStartY;
         boxX = newPageInfo.boxX;
@@ -852,7 +862,7 @@ export const generateDeliveryOrderPDF = (
     if (needsNewPage(currentY, estimatedNotesHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Create new page with layout
       doc.addPage();
-      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, "DELIVERY ORDER");
+      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
       currentY = newPageInfo.yPos;
       boxStartY = newPageInfo.boxStartY;
       boxX = newPageInfo.boxX;
@@ -878,7 +888,7 @@ export const generateDeliveryOrderPDF = (
           if (needsNewPage(currentY, 4, fixedBoxEndY, bottomBorderPadding)) {
             // Create new page with layout
             doc.addPage();
-            const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, "DELIVERY ORDER");
+            const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
             currentY = newPageInfo.yPos;
             boxStartY = newPageInfo.boxStartY;
             boxX = newPageInfo.boxX;

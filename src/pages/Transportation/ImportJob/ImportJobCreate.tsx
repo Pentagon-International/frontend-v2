@@ -251,9 +251,9 @@ type HousingDetail = {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
-  notify_customer1_name: string;
-  notify_customer1_address: string;
-  notify_customer1_email: string;
+  notify1_customer_name: string;
+  notify1_customer_address: string;
+  notify1_customer_email: string;
   commodity_description: string;
   marks_no: string;
   item_no?: string;
@@ -291,6 +291,9 @@ type HousingDetail = {
   }>;
   mbl_charges?: Array<Record<string, unknown>>;
 };
+
+type DoTypeOption = "carrier_agent" | "unstuff_place";
+type DoDeliverToOption = "consignee" | "notify" | "cha";
 
 // Helper function to get transport_mode based on transport_type
 const getTransportMode = (
@@ -331,6 +334,14 @@ function ImportJobCreate() {
   const [doPdfBlob, setDoPdfBlob] = useState<string | null>(null);
   const [currentHousingForDoPreview, setCurrentHousingForDoPreview] =
     useState<HousingDetail | null>(null);
+  const [doConfigOpen, setDoConfigOpen] = useState(false);
+  const [pendingHousingForDo, setPendingHousingForDo] =
+    useState<HousingDetail | null>(null);
+  const [doTypeSelection, setDoTypeSelection] = useState<DoTypeOption | null>(
+    null,
+  );
+  const [doDeliverToSelection, setDoDeliverToSelection] =
+    useState<DoDeliverToOption | null>(null);
 
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
@@ -652,17 +663,16 @@ function ImportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
-              notify_customer1_name: (house.notify1_customer_name ??
-                house.notify_customer1_name)
-                ? String(house.notify1_customer_name ?? house.notify_customer1_name)
+              notify1_customer_name: (house.notify1_customer_name)
+                ? String(house.notify1_customer_name)
                 : "",
-              notify_customer1_address: (house.notify1_customer_address ??
-                house.notify_customer1_address)
-                ? String(house.notify1_customer_address ?? house.notify_customer1_address)
+              notify1_customer_address: (house.notify1_customer_address)
+                ? String(
+                    house.notify1_customer_address
+                  )
                 : "",
-              notify_customer1_email: (house.notify1_customer_email ??
-                house.notify_customer1_email)
-                ? String(house.notify1_customer_email ?? house.notify_customer1_email)
+              notify1_customer_email: (house.notify1_customer_email)
+                ? String(house.notify1_customer_email)
                 : "",
           commodity_description: house.commodity_description
             ? String(house.commodity_description)
@@ -1992,8 +2002,61 @@ function ImportJobCreate() {
     }
   };
 
+  const resolveDoAttentionTo = (type: DoTypeOption) => {
+    if (type === "carrier_agent") {
+      return carrierDetailsForm.values.carrier_name || "";
+    }
+    const firstCfsName = (containerDetailsForm.values.containers || []).find(
+      (container) => (container.cfs_name || "").trim(),
+    )?.cfs_name;
+    return firstCfsName || "";
+  };
+
+  const resolveDoDeliverTo = (
+    housing: HousingDetail,
+    deliverTo: DoDeliverToOption,
+  ) => {
+    if (deliverTo === "consignee") return housing.consignee_name || "";
+    if (deliverTo === "notify") {
+      return (
+        (housing as HousingDetail & { notify1_customer_name?: string })
+          .notify1_customer_name ||
+        housing.notify1_customer_name || housing.notify_customer1_name ||
+        ""
+      );
+    }
+    return (housing as HousingDetail & { cha_name?: string }).cha_name || "";
+  };
+
+  const openDoConfigModal = (housing: HousingDetail) => {
+    setPendingHousingForDo(housing);
+    setDoTypeSelection(null);
+    setDoDeliverToSelection(null);
+    setDoConfigOpen(true);
+  };
+
+  const handleGenerateDeliveryOrderFromConfig = () => {
+    if (!pendingHousingForDo || !doTypeSelection || !doDeliverToSelection) {
+      ToastNotification({
+        type: "error",
+        message: "Type and Deliver to are required",
+      });
+      return;
+    }
+    setDoConfigOpen(false);
+    generateDeliveryOrderPDFPreview(
+      pendingHousingForDo,
+      doTypeSelection,
+      doDeliverToSelection,
+    );
+  };
+
   // Generate Delivery Order PDF Preview
-  const generateDeliveryOrderPDFPreview = async (housing: HousingDetail) => {
+  const generateDeliveryOrderPDFPreview = async (
+    housing: HousingDetail,
+    type: DoTypeOption,
+    deliverTo: DoDeliverToOption,
+  ) => {
     try {
       setDoPreviewOpen(true);
       setCurrentHousingForDoPreview(housing);
@@ -2025,7 +2088,13 @@ function ImportJobCreate() {
         containerDetails: jobData?.containerDetails || [],
       };
 
-      const blobUrl = generateDeliveryOrderPDF(combinedData, housing);
+      const housingDataForDo = {
+        ...housing,
+        attention_to: resolveDoAttentionTo(type),
+        please_deliver_to: resolveDoDeliverTo(housing, deliverTo),
+        do_heading: type === "carrier_agent" ? "DELIVERY ADVICE" : "DELIVERY ORDER",
+      };
+      const blobUrl = generateDeliveryOrderPDF(combinedData, housingDataForDo);
       setDoPdfBlob(blobUrl);
     } catch (error) {
       console.error("Error generating Delivery Order PDF:", error);
@@ -2045,6 +2114,13 @@ function ImportJobCreate() {
     if (doPdfBlob) {
       window.URL.revokeObjectURL(doPdfBlob);
     }
+  };
+
+  const handleCloseDoConfig = () => {
+    setDoConfigOpen(false);
+    setPendingHousingForDo(null);
+    setDoTypeSelection(null);
+    setDoDeliverToSelection(null);
   };
 
   // Handle download DO PDF
@@ -2243,11 +2319,17 @@ function ImportJobCreate() {
           consignee_address: house.consignee_address || "",
           consignee_email: house.consignee_email || "",
           notify1_customer_name:
-            house.notify1_customer_name ?? house.notify_customer1_name ?? "",
+            (house as HousingDetail & { notify1_customer_name?: string })
+              .notify1_customer_name ??
+            "",
           notify1_customer_address:
-            house.notify1_customer_address ?? house.notify_customer1_address ?? "",
+            (house as HousingDetail & { notify1_customer_address?: string })
+              .notify1_customer_address ??
+            "",
           notify1_customer_email:
-            house.notify1_customer_email ?? house.notify_customer1_email ?? "",
+            (house as HousingDetail & { notify1_customer_email?: string })
+              .notify1_customer_email ??
+            "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
           item_no: house.item_no || "",
@@ -2320,24 +2402,33 @@ function ImportJobCreate() {
                     ? Number(charge.currency)
                     : null,
               no_of_unit:
-                charge.no_of_unit != null ? roundToDecimals(charge.no_of_unit) : null,
-            roe: roundToDecimals(charge.roe) ?? null,
-            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
-            amount: roundToDecimals(charge.amount) ?? null,
+                charge.no_of_unit != null
+                  ? roundToDecimals(charge.no_of_unit as number | string)
+                  : null,
+              roe: roundToDecimals(charge.roe as number | string) ?? null,
+              amount_per_unit:
+                roundToDecimals(charge.amount_per_unit as number | string) ??
+                null,
+              amount: roundToDecimals(charge.amount as number | string) ?? null,
             sell_local_amount:
               roundToDecimals(
-                  charge.sell_local_amount != null
-                    ? charge.sell_local_amount
-                    : (charge as { local_amount?: unknown }).local_amount,
-                ) ?? null,
+                (charge.sell_local_amount != null
+                  ? charge.sell_local_amount
+                  : (charge as { local_amount?: number | string }).local_amount) as
+                  | number
+                  | string,
+              ) ?? null,
             unit_cost:
               roundToDecimals(
-                  charge.unit_cost != null
-                    ? charge.unit_cost
-                    : (charge as { cost_per_unit?: unknown }).cost_per_unit,
-                ) ?? null,
-            total_cost: roundToDecimals(charge.total_cost) ?? null,
-            cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
+                (charge.unit_cost != null
+                  ? charge.unit_cost
+                  : (charge as { cost_per_unit?: number | string })
+                      .cost_per_unit) as number | string,
+              ) ?? null,
+              total_cost: roundToDecimals(charge.total_cost as number | string) ?? null,
+              cost_local_amount:
+                roundToDecimals(charge.cost_local_amount as number | string) ??
+                null,
             }));
           })(),
         })),
@@ -2597,7 +2688,7 @@ function ImportJobCreate() {
                           color: "#424242",
                         },
                       }}
-                      onClick={() => generateDeliveryOrderPDFPreview(housing)}
+                      onClick={() => openDoConfigModal(housing)}
                     >
                       Delivery Order - {housing.hbl_number || `HBL ${idx + 1}`}
                     </Menu.Item>
@@ -4900,9 +4991,7 @@ function ImportJobCreate() {
                                 color: "#424242",
                               },
                             }}
-                            onClick={() =>
-                              generateDeliveryOrderPDFPreview(house)
-                            }
+                            onClick={() => openDoConfigModal(house)}
                           >
                             Delivery Order
                           </Menu.Item>
@@ -5028,12 +5117,12 @@ function ImportJobCreate() {
                       Name
                     </Text>
                     <Text size="sm" mb="xs">
-                      {house.notify1_customer_name ?? house.notify_customer1_name ?? "-"}
+                      {house.notify1_customer_name ?? "-"}
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
                       Email
                     </Text>
-                    <Text size="sm">{house.notify1_customer_email ?? house.notify_customer1_email ?? "-"}</Text>
+                    <Text size="sm">{house.notify1_customer_email ?? "-"}</Text>
                   </Grid.Col> */}
                 </Grid>
               </Card>
@@ -5098,6 +5187,53 @@ function ImportJobCreate() {
               </Stack>
             </Center>
           )}
+        </Stack>
+      </Modal>
+
+      {/* Delivery Order PDF Preview Modal */}
+      <Modal
+        opened={doConfigOpen}
+        onClose={handleCloseDoConfig}
+        title="Delivery Order Options"
+        centered
+        size={"md"}
+      >
+        <Stack>
+          <Dropdown
+            label="Type"
+            required
+            placeholder="Select Type"
+            dropdownZIndex={3000}
+            data={[
+              { value: "carrier_agent", label: "Carrier Agent" },
+              { value: "unstuff_place", label: "Unstuff Place" },
+            ]}
+            value={doTypeSelection}
+            onChange={(value) => setDoTypeSelection(value as DoTypeOption)}
+          />
+          <Dropdown
+            label="Deliver to"
+            required
+            placeholder="Select Deliver to"
+            dropdownZIndex={3000}
+            data={[
+              { value: "consignee", label: "Consignee" },
+              { value: "notify", label: "Notify" },
+              { value: "cha", label: "CHA" },
+            ]}
+            value={doDeliverToSelection}
+            onChange={(value) =>
+              setDoDeliverToSelection(value as DoDeliverToOption)
+            }
+          />
+          <Group justify="flex-end" mt="sm">
+            <Button variant="outline" onClick={handleCloseDoConfig}>
+              Cancel
+            </Button>
+            <Button color="#105476" onClick={handleGenerateDeliveryOrderFromConfig}>
+              Generate PDF
+            </Button>
+          </Group>
         </Stack>
       </Modal>
 
