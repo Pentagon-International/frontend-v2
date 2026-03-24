@@ -212,7 +212,15 @@ export default function ReceiptMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/receipt/view", { state: row.original })
+                      navigate("/receipt/view", {
+                        state: {
+                          ...row.original,
+                          documents:
+                            (row.original as any)?.documents ??
+                            (row.original as any)?.supporting_documents ??
+                            [],
+                        },
+                      })
                     }
                   >
                     <Group gap="sm">
@@ -230,7 +238,15 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/receipt/edit", { state: row.original })
+                        navigate("/receipt/edit", {
+                          state: {
+                            ...row.original,
+                            documents:
+                              (row.original as any)?.documents ??
+                              (row.original as any)?.supporting_documents ??
+                              [],
+                          },
+                        })
                       }
                     >
                       <Group gap="sm">
@@ -248,11 +264,16 @@ export default function ReceiptMaster() {
                 {isPosted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
+                      onClick={() => {
+                        const {
+                          documents: _documents,
+                          supporting_documents: _supportingDocuments,
+                          ...receiptDataWithoutDocuments
+                        } = (row.original as any) ?? {};
                         navigate("/receipt/reversal/create", {
-                          state: row.original,
-                        })
-                      }
+                          state: receiptDataWithoutDocuments,
+                        });
+                      }}
                     >
                       <Group gap="sm">
                         <IconReceiptRefund

@@ -67,6 +67,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -2048,7 +2049,61 @@ function AirImportJobCreate() {
     }
   };
 
-  // Handle form submission
+  
+  const handleEdiFileDownload = async () => {
+    if (!jobData?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Job not found for EDI download",
+      });
+      return;
+    }
+
+    try {
+      const res = await getAPICall(
+        `${URL.edi}${jobData.id}/`,
+        {
+          ...API_HEADER,
+          // EDI endpoint returns plain text (.in content).
+          responseType: "text",
+        },
+      );
+
+      // getAPICall can return either axios response object or raw payload.
+      const payload =
+        res && typeof res === "object" && "data" in (res as Record<string, unknown>)
+          ? (res as { data?: unknown }).data
+          : res;
+
+      const ediText = typeof payload === "string" ? payload : String(payload ?? "");
+      if (!ediText.trim()) {
+        throw new Error("Empty EDI response");
+      }
+
+      const blob = new Blob([ediText], { type: "text/plain;charset=utf-8" });
+      const fileUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.download = `${(jobData as { job_id?: string }).job_id || `job-${jobData.id}`}.in`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(fileUrl);
+
+      ToastNotification({
+        type: "success",
+        message: "EDI file downloaded successfully",
+      });
+    } catch (error) {
+      console.error("Error downloading EDI file:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to download EDI file",
+      });
+    }
+  };
+ 
+ 
   const handleSubmit = async () => {
     setIsSubmitting(true);
 
@@ -2254,30 +2309,30 @@ function AirImportJobCreate() {
                     ? Number(charge.currency)
                     : null,
               no_of_unit:
-                charge.no_of_unit != null ? Number(charge.no_of_unit) : null,
-              roe: charge.roe != null ? Number(charge.roe) : null,
+                charge.no_of_unit != null ? roundToDecimals(charge.no_of_unit) : null,
+              roe: charge.roe != null ? roundToDecimals(charge.roe) : null,
               amount_per_unit:
                 charge.amount_per_unit != null
-                  ? Number(charge.amount_per_unit)
+                  ? roundToDecimals(charge.amount_per_unit)
                   : null,
-              amount: charge.amount != null ? Number(charge.amount) : null,
+              amount: charge.amount != null ? roundToDecimals(charge.amount) : null,
               sell_local_amount:
                 charge.sell_local_amount != null
-                  ? Number(charge.sell_local_amount)
+                  ? roundToDecimals(charge.sell_local_amount)
                   : charge.local_amount != null
-                    ? Number(charge.local_amount)
+                    ? roundToDecimals(charge.local_amount)
                     : null,
               unit_cost:
                 charge.unit_cost != null
-                  ? Number(charge.unit_cost)
+                  ? roundToDecimals(charge.unit_cost)
                   : charge.cost_per_unit != null
-                    ? Number(charge.cost_per_unit)
+                    ? roundToDecimals(charge.cost_per_unit)
                     : null,
               total_cost:
-                charge.total_cost != null ? Number(charge.total_cost) : null,
+                charge.total_cost != null ? roundToDecimals(charge.total_cost) : null,
               cost_local_amount:
                 charge.cost_local_amount != null
-                  ? Number(charge.cost_local_amount)
+                  ? roundToDecimals(charge.cost_local_amount)
                   : null,
             }));
           })(),
@@ -2310,11 +2365,11 @@ function AirImportJobCreate() {
             charge_id: e.charge_id,
             pp_cc: e.pp_cc || "",
             unit_id: e.unit_id ? Number(e.unit_id) : null,
-            no_of_unit: e.no_of_unit ?? null,
+            no_of_unit: roundToDecimals(e.no_of_unit) ?? null,
             currency_id: e.currency_id ? Number(e.currency_id) : null,
-            roe: e.roe ?? null,
-            cost_per_unit: e.cost_per_unit ?? null,
-            total_cost: e.total_cost ?? null,
+            roe: roundToDecimals(e.roe) ?? null,
+            cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
+            total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
       };
@@ -2629,6 +2684,47 @@ function AirImportJobCreate() {
                       }}
                     >
                       Create Invoice
+                    </Menu.Item>
+                  )}
+
+                  {jobData?.id != null && (
+                    <Menu.Item
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconDownload size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
+                      onClick={handleEdiFileDownload}
+                    >
+                      EDI file download
                     </Menu.Item>
                   )}
                 </Menu.Dropdown>

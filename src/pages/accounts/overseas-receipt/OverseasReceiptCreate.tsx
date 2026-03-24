@@ -1,12 +1,14 @@
 import {
     Badge,
     Box,
+    ActionIcon,
     Button,
     Card,
     Checkbox,
     Grid,
     Group,
     Loader,
+    Menu,
     Modal,
     NumberInput,
     Stack,
@@ -14,11 +16,13 @@ import {
     Text,
     Textarea,
     TextInput,
+    UnstyledButton,
   } from "@mantine/core";
   import { useForm } from "@mantine/form";
   import {
     IconArrowLeft,
     IconChevronRight,
+    IconDotsVertical,
     IconPlus,
     IconTrash,
     IconFileInvoice,
@@ -38,10 +42,10 @@ import {
     SingleDateInput,
     ToastNotification,
   } from "../../../components";
+  import { apiCallProtected } from "../../../api/axios";
   import { getAPICall } from "../../../service/getApiCall";
   import { API_HEADER } from "../../../store/storeKeys";
   import { postAPICall } from "../../../service/postApiCall";
-  import { putAPICall } from "../../../service/putApiCall";
   import useAuthStore from "../../../store/authStore";
   
   const RECEIPT_TYPE_OPTIONS = [
@@ -754,6 +758,26 @@ import {
           status: (receiptFromState.status ?? "UNPOSTED").toString(),
         });
       }
+
+      // Populate supporting documents for edit/view (list must provide `documents` in location.state)
+      const rawDocs = (receiptFromState as any)?.documents;
+      if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+        form.setFieldValue(
+          "supporting_documents",
+          rawDocs.map((doc: any) => ({
+            name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+            file: null as File | null,
+            document_url:
+               doc.document_url ?? doc.url ?? "",
+            document_id: doc.id ?? undefined,
+            original_document_name:
+              (doc.original_document_name ??
+                doc.document_name ??
+                doc.file_name ??
+                "").toString(),
+          })),
+        );
+      }
     }, [
       receiptFromState?.id,
       localCurrency,
@@ -1181,6 +1205,80 @@ import {
       }
       return base;
     };
+
+    const FORM_DATA_HEADERS = {
+      ...API_HEADER,
+      headers: {
+        ...API_HEADER.headers,
+        "Content-Type": "multipart/form-data",
+      },
+    };
+
+    /**
+     * Builds multipart/form-data for `URL.reverseReceipt`:
+     * - reverse_receipt: JSON payload
+     * - document_names[i], document[i], document_id[i]
+     */
+    const buildReversalFormData = (payload: object): FormData => {
+      const fd = new FormData();
+      fd.append("reverse_receipt", JSON.stringify(payload));
+
+      // Keep indexes aligned with `supporting_documents`.
+      // Backend expects `document_id[i]` for unchanged documents and
+      // `document[i]` + `document_names[i]` for replacements/uploads.
+      form.values.supporting_documents.forEach((doc, docIndex) => {
+        const hasExistingDocId =
+          doc.document_id !== null && doc.document_id !== undefined;
+
+        if (doc.file) {
+          fd.append(
+            `document_names[${docIndex}]`,
+            (doc.name ?? "").toString(),
+          );
+          fd.append(`document[${docIndex}]`, doc.file);
+          if (hasExistingDocId) {
+            fd.append(`document_id[${docIndex}]`, String(doc.document_id));
+          }
+        } else if (hasExistingDocId) {
+          fd.append(`document_id[${docIndex}]`, String(doc.document_id));
+        }
+      });
+
+      return fd;
+    };
+
+    /**
+     * Builds multipart/form-data for `URL.receipt`:
+     * - receipt: JSON payload
+     * - document_names[i], document[i], document_id[i]
+     */
+    const buildReceiptFormData = (payload: object): FormData => {
+      const fd = new FormData();
+      fd.append("receipt", JSON.stringify(payload));
+
+      // Keep indexes aligned with `supporting_documents`.
+      // Backend expects `document_id[i]` for unchanged documents and
+      // `document[i]` + `document_names[i]` for replacements/uploads.
+      form.values.supporting_documents.forEach((doc, docIndex) => {
+        const hasExistingDocId =
+          doc.document_id !== null && doc.document_id !== undefined;
+
+        if (doc.file) {
+          fd.append(
+            `document_names[${docIndex}]`,
+            (doc.name ?? "").toString(),
+          );
+          fd.append(`document[${docIndex}]`, doc.file);
+          if (hasExistingDocId) {
+            fd.append(`document_id[${docIndex}]`, String(doc.document_id));
+          }
+        } else if (hasExistingDocId) {
+          fd.append(`document_id[${docIndex}]`, String(doc.document_id));
+        }
+      });
+
+      return fd;
+    };
   
     const handleSubmit = async (values: ReceiptFormValues) => {
       // const partyLocalTotal =
@@ -1254,16 +1352,13 @@ import {
               detailsOverride: detailsForPayload,
             });
             payload.is_agent = true;
-            const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
-            const wrap = raw as {
-              data?: {
-                id?: number;
-                receipt_no?: string;
-                reverse_receipt_no?: string;
-                status?: string;
-              };
-            };
-            const res = wrap?.data;
+            const fd = buildReversalFormData(payload);
+            const raw = (await apiCallProtected.put(
+              `${URL.reverseReceipt}${reverseReceiptSaveResponse.id}/`,
+              fd,
+              FORM_DATA_HEADERS,
+            )) as any;
+            const res = raw?.data?.data ?? raw?.data ?? raw;
             if (res?.id != null) {
               setReverseReceiptSaveResponse((prev) => ({
                 id: prev!.id,
@@ -1272,6 +1367,28 @@ import {
                   res.reverse_receipt_no ?? prev?.reverse_receipt_no ?? "",
                 status: res.status != null ? String(res.status) : "UNPOSTED",
               }));
+
+              if (Array.isArray(res.documents) && res.documents.length > 0) {
+                form.setFieldValue(
+                  "supporting_documents",
+                  res.documents.map((doc: any) => ({
+                    name:
+                      (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                    file: null,
+                    document_url:
+                      doc.document_url ??
+                      doc.url ??
+                      "",
+                    document_id: doc.id ?? undefined,
+                    original_document_name:
+                      doc.original_document_name ??
+                      doc.document_name ??
+                      doc.file_name ??
+                      "",
+                  })),
+                );
+              }
+
               await queryClient.invalidateQueries({ queryKey: ["receipt"] });
               await queryClient.invalidateQueries({
                 queryKey: ["receipt-reversal"],
@@ -1287,22 +1404,13 @@ import {
             });
             payload.is_agent = true;
             // Create receipt reversal: POST
-            const raw = await postAPICall(
+            const fd = buildReversalFormData(payload);
+            const raw = (await apiCallProtected.post(
               URL.reverseReceipt,
-              payload,
-              API_HEADER,
-            );
-            const wrap = raw as {
-              data?: {
-                id?: number;
-                receipt_no?: string;
-                reverse_receipt_no?: string;
-                status?: string;
-                parties?: Array<{ id?: number }>;
-                allocations?: Array<{ id?: number }>;
-              };
-            };
-            const data = wrap?.data;
+              fd,
+              FORM_DATA_HEADERS,
+            )) as any;
+            const data = raw?.data?.data ?? raw?.data ?? raw;
             if (data?.id != null) {
               setReverseReceiptSaveResponse({
                 id: Number(data.id),
@@ -1310,6 +1418,29 @@ import {
                 reverse_receipt_no: data.reverse_receipt_no ?? "",
                 status: data.status != null ? String(data.status) : "UNPOSTED",
               });
+
+              if (Array.isArray(data.documents) && data.documents.length > 0) {
+                form.setFieldValue(
+                  "supporting_documents",
+                  data.documents.map((doc: any) => ({
+                    name:
+                      (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                    file: null,
+                    document_url:
+                     
+                      doc.document_url ??
+                      doc.url ??
+                      "",
+                    document_id: doc.id ?? undefined,
+                    original_document_name:
+                      doc.original_document_name ??
+                      doc.document_name ??
+                      doc.file_name ??
+                      "",
+                  })),
+                );
+              }
+
               if (
                 data.parties &&
                 Array.isArray(data.parties) &&
@@ -1354,29 +1485,43 @@ import {
           : buildReceiptPayload(values);
         payload.is_agent = true;
         if (isUpdate) {
-          const raw = await putAPICall(URL.receipt, payload, API_HEADER);
-          const response =
-            (
-              raw as {
-                data?: {
-                  id?: number;
-                  receipt_no?: string;
-                  status?: string | number;
-                };
-              }
-            )?.data ?? raw;
-          const res = response as {
-            id?: number;
-            receipt_no?: string;
-            status?: string | number;
-          };
+          const fd = buildReceiptFormData(payload);
+          const raw = (await apiCallProtected.put(
+            `${URL.receipt}${saveResponse!.id}/`,
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const res = raw?.data?.data ?? raw?.data ?? raw;
           if (res?.id != null) {
             setSaveResponse({
-              id: res.id ?? saveResponse.id,
-              receipt_no: res.receipt_no ?? saveResponse.receipt_no ?? "",
-              document_no: saveResponse.document_no ?? "",
-              status: res.status != null ? String(res.status) : "UNPOSTED",
+              id: res.id ?? saveResponse!.id,
+              receipt_no: res.receipt_no ?? saveResponse!.receipt_no ?? "",
+              document_no: saveResponse!.document_no ?? "",
+              status:
+                res.status != null ? String(res.status) : ("UNPOSTED" as string),
             });
+
+            if (Array.isArray(res.documents) && res.documents.length > 0) {
+              form.setFieldValue(
+                "supporting_documents",
+                res.documents.map((doc: any) => ({
+                  name:
+                    (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                  file: null,
+                  document_url:
+                    doc.document_url ??
+                    doc.url ??
+                    "",
+                  document_id: doc.id ?? undefined,
+                  original_document_name:
+                    doc.original_document_name ??
+                    doc.document_name ??
+                    doc.file_name ??
+                    "",
+                })),
+              );
+            }
+
             await queryClient.invalidateQueries({ queryKey: ["receipt"] });
             ToastNotification({
               type: "success",
@@ -1384,17 +1529,13 @@ import {
             });
           }
         } else {
-          const raw = await postAPICall(URL.receipt, payload, API_HEADER);
-          const wrap = raw as {
-            data?: {
-              id?: number;
-              receipt_no?: string;
-              status?: string | number;
-              parties?: Array<{ id?: number; subledger_code?: string }>;
-              allocations?: Array<{ id?: number }>;
-            };
-          };
-          const data = wrap?.data;
+          const fd = buildReceiptFormData(payload);
+          const raw = (await apiCallProtected.post(
+            URL.receipt,
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const data = raw?.data?.data ?? raw?.data ?? raw;
           if (data?.id != null) {
             setSaveResponse({
               id: data.id,
@@ -1402,6 +1543,28 @@ import {
               document_no: data.receipt_no ?? "",
               status: data.status != null ? String(data.status) : "UNPOSTED",
             });
+
+            if (Array.isArray(data.documents) && data.documents.length > 0) {
+              form.setFieldValue(
+                "supporting_documents",
+                data.documents.map((doc: any) => ({
+                  name:
+                    (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                  file: null,
+                  document_url:
+                    doc.document_url ??
+                    doc.url ??
+                    "",
+                  document_id: doc.id ?? undefined,
+                  original_document_name:
+                    doc.original_document_name ??
+                    doc.document_name ??
+                    doc.file_name ??
+                    "",
+                })),
+              );
+            }
+
             // Merge party and allocation ids from response into form for future updates
             if (
               data.parties &&
@@ -1461,16 +1624,13 @@ import {
           status: "POSTED",
         });
         payload.is_agent = true;
-        const raw = await putAPICall(URL.reverseReceipt, payload, API_HEADER);
-        const wrap = raw as {
-          data?: {
-            id?: number;
-            receipt_no?: string;
-            reverse_receipt_no?: string;
-            status?: string;
-          };
-        };
-        const res = wrap?.data;
+        const fd = buildReversalFormData(payload);
+        const raw = (await apiCallProtected.put(
+          `${URL.reverseReceipt}${reverseReceiptSaveResponse.id}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const res = raw?.data?.data ?? raw?.data ?? raw;
         if (res?.id != null) {
           setReverseReceiptSaveResponse((prev) => ({
             ...prev!,
@@ -1479,6 +1639,27 @@ import {
               res.reverse_receipt_no ?? prev?.reverse_receipt_no ?? "",
             status: res.status != null ? String(res.status) : "POSTED",
           }));
+
+          if (Array.isArray(res.documents) && res.documents.length > 0) {
+            form.setFieldValue(
+              "supporting_documents",
+              res.documents.map((doc: any) => ({
+                name:
+                  (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                file: null,
+                document_url:
+                  doc.document_url ??
+                  doc.url ??
+                  "",
+                document_id: doc.id ?? undefined,
+                original_document_name:
+                  doc.original_document_name ??
+                  doc.document_name ??
+                  doc.file_name ??
+                  "",
+              })),
+            );
+          }
           await queryClient.invalidateQueries({ queryKey: ["receipt"] });
           await queryClient.invalidateQueries({ queryKey: ["receipt-reversal"] });
           ToastNotification({
@@ -1511,22 +1692,13 @@ import {
       try {
         const payload = buildReceiptPayload(form.values, { status: "POSTED" });
         payload.is_agent = true;
-        const raw = await putAPICall(URL.receipt, payload, API_HEADER);
-        const response =
-          (
-            raw as {
-              data?: {
-                id?: number;
-                receipt_no?: string;
-                status?: string | number;
-              };
-            }
-          )?.data ?? raw;
-        const res = response as {
-          id?: number;
-          receipt_no?: string;
-          status?: string | number;
-        };
+        const fd = buildReceiptFormData(payload);
+        const raw = (await apiCallProtected.put(
+          `${URL.receipt}${saveResponse.id}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const res = raw?.data?.data ?? raw?.data ?? raw;
         if (res?.id != null) {
           setSaveResponse((prev) => ({
             ...prev,
@@ -1535,6 +1707,27 @@ import {
             document_no: prev?.document_no ?? "",
             status: res.status != null ? String(res.status) : "POSTED",
           }));
+
+          if (Array.isArray(res.documents) && res.documents.length > 0) {
+            form.setFieldValue(
+              "supporting_documents",
+              res.documents.map((doc: any) => ({
+                name:
+                  (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                file: null,
+                document_url:
+                  doc.document_url ??
+                  doc.url ??
+                  "",
+                document_id: doc.id ?? undefined,
+                original_document_name:
+                  doc.original_document_name ??
+                  doc.document_name ??
+                  doc.file_name ??
+                  "",
+              })),
+            );
+          }
           await queryClient.invalidateQueries({ queryKey: ["receipt"] });
           ToastNotification({
             type: "success",
@@ -1735,6 +1928,37 @@ import {
                     </Group>
                   </Group>
                 )}
+              {isViewRoute && (
+                <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+                  <Menu.Target>
+                    <ActionIcon variant="subtle" color="gray">
+                      <IconDotsVertical size={16} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Box px={10} py={5}>
+                      <UnstyledButton
+                        onClick={() => {
+                          openDocumentsModal();
+                        }}
+                      >
+                        <Group gap="sm">
+                          <IconDownload
+                            size={16}
+                            style={{ color: "#105476" }}
+                          />
+                          <Text
+                            size="sm"
+                            style={{ fontFamily: "Inter, sans-serif" }}
+                          >
+                            Document
+                          </Text>
+                        </Group>
+                      </UnstyledButton>
+                    </Box>
+                  </Menu.Dropdown>
+                </Menu>
+              )}
               <Button
                 variant="outline"
                 color="#105476"
@@ -2613,12 +2837,11 @@ import {
               )}
             </Modal>
   
-            {/* Supporting Documents Modal - not shown in view flow */}
-            {!isViewRoute && (
+            {/* Supporting Documents Modal */}
               <Modal
                 opened={documentsModalOpened}
                 onClose={closeDocumentsModal}
-                title="Attach Supporting Documents"
+                title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
                 size="xl"
                 centered
                 style={{ fontFamily: "Inter" }}
@@ -2632,7 +2855,9 @@ import {
                           label="Document Name"
                           placeholder="Enter document name"
                           value={doc.name}
+                          disabled={isReadOnly}
                           onChange={(e) => {
+                            if (isReadOnly) return;
                             const updatedDocs = [
                               ...form.values.supporting_documents,
                             ];
@@ -2654,6 +2879,7 @@ import {
                           </Text>
                           <Dropzone
                             onDrop={(files: File[]) => {
+                              if (isReadOnly) return;
                               if (files.length === 0) return;
                               const file = files[0];
                               if (fileErrors[index]) {
@@ -2678,7 +2904,6 @@ import {
                                 ...updatedDocs[index],
                                 file,
                                 document_url: undefined,
-                                document_id: undefined,
                               };
                               form.setFieldValue(
                                 "supporting_documents",
@@ -2798,7 +3023,7 @@ import {
                                   </>
                                 )}
                               </Group>
-                              {(doc.file || doc.document_url) && (
+                              {!isReadOnly && (doc.file || doc.document_url) && (
                                 <Button
                                   variant="subtle"
                                   color="red"
@@ -2806,6 +3031,7 @@ import {
                                   p={4}
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    if (isReadOnly) return;
                                     if (fileErrors[index]) {
                                       const newErrors = { ...fileErrors };
                                       delete newErrors[index];
@@ -2839,8 +3065,9 @@ import {
                           )}
                         </Box>
                       </Grid.Col>
-                      <Grid.Col span={1}>
-                        <Button
+                      {!isReadOnly && (
+                        <Grid.Col span={1}>
+                          <Button
                           variant="light"
                           color="red"
                           onClick={() => {
@@ -2876,12 +3103,14 @@ import {
                               setFileErrors(newErrors);
                             }
                           }}
-                        >
-                          <IconTrash size={16} />
-                        </Button>
-                      </Grid.Col>
+                          >
+                            <IconTrash size={16} />
+                          </Button>
+                        </Grid.Col>
+                      )}
                       <Grid.Col span={1} offset={11}>
-                        {index ===
+                        {!isReadOnly &&
+                          index ===
                           form.values.supporting_documents.length - 1 && (
                           <Button
                             variant="light"
@@ -2900,7 +3129,7 @@ import {
                     </Grid>
                   ))}
 
-                  {form.values.supporting_documents.length === 0 && (
+                  {!isReadOnly && form.values.supporting_documents.length === 0 && (
                     <Button
                       variant="light"
                       color="#105476"
@@ -2923,42 +3152,39 @@ import {
                   </Group>
                 </Stack>
               </Modal>
-            )}
 
             {/* Action Buttons */}
             <Group justify="flex-end" mt="xl">
-              {!isViewRoute && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  styles={{
-                    root: {
-                      borderColor: "#105476",
-                      color: "#666",
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                  onClick={() => {
-                    if (form.values.supporting_documents.length === 0) {
-                      form.setFieldValue("supporting_documents", [
-                        { name: "", file: null },
-                      ]);
+              <Button
+                variant="outline"
+                size="sm"
+                styles={{
+                  root: {
+                    borderColor: "#105476",
+                    color: "#666",
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                  },
+                }}
+                onClick={() => {
+                  if (!isReadOnly && form.values.supporting_documents.length === 0) {
+                    form.setFieldValue("supporting_documents", [
+                      { name: "", file: null },
+                    ]);
+                  }
+                  const newErrors: { [key: number]: string } = {};
+                  form.values.supporting_documents.forEach((doc, idx) => {
+                    if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                      newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                     }
-                    const newErrors: { [key: number]: string } = {};
-                    form.values.supporting_documents.forEach((doc, idx) => {
-                      if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                        newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
-                      }
-                    });
-                    setFileErrors(newErrors);
-                    openDocumentsModal();
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Attach supporting document
-                </Button>
-              )}
+                  });
+                  setFileErrors(newErrors);
+                  openDocumentsModal();
+                }}
+                disabled={isSubmitting}
+              >
+                {isReadOnly ? "View supporting document(s)" : "Attach supporting document"}
+              </Button>
               <Button
                 variant="outline"
                 color="#105476"

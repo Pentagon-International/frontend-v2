@@ -781,7 +781,7 @@ export default function PaymentCreate({
         name: (doc.document_name ?? doc.file_name ?? "").toString(),
         file: null as File | null,
         document_url:
-          doc.document_download_url ?? doc.document_url ?? doc.document ?? "",
+           doc.document_url ?? doc.document ?? "",
         document_id: doc.id ?? undefined,
         original_document_name: (
           doc.document_name ??
@@ -1410,7 +1410,7 @@ payload.is_agent = false ;
                 name: (doc.document_name ?? doc.file_name ?? "").toString(),
                 file: null,
                 document_url:
-                  doc.document_download_url ?? doc.document_url ?? doc.document ?? "",
+                   doc.document_url ?? doc.document ?? "",
                 document_id: doc.id ?? undefined,
                 original_document_name: (doc.document_name ?? doc.file_name ?? "").toString(),
               })),
@@ -1467,7 +1467,7 @@ payload.is_agent = false ;
                 name: (doc.document_name ?? doc.file_name ?? "").toString(),
                 file: null,
                 document_url:
-                  doc.document_download_url ?? doc.document_url ?? doc.document ?? "",
+                   doc.document_url ?? doc.document ?? "",
                 document_id: doc.id ?? undefined,
                 original_document_name: (doc.document_name ?? doc.file_name ?? "").toString(),
               })),

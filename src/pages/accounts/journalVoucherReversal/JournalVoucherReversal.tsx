@@ -429,7 +429,7 @@ import {
           d.documents.map((doc: any) => ({
             name: doc.document_name ?? doc.name ?? "",
             file: null,
-            document_url: doc.document_download_url ?? doc.document_url ?? doc.url ?? "",
+            document_url:  doc.document_url ?? doc.url ?? "",
             document_id: doc.id ?? undefined,
             original_document_name: doc.original_document_name ?? doc.document_name ?? "",
           })),
