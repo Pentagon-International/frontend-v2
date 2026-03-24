@@ -2049,7 +2049,61 @@ function AirImportJobCreate() {
     }
   };
 
-  // Handle form submission
+  
+  const handleEdiFileDownload = async () => {
+    if (!jobData?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Job not found for EDI download",
+      });
+      return;
+    }
+
+    try {
+      const res = await getAPICall(
+        `${URL.edi}${jobData.id}/`,
+        {
+          ...API_HEADER,
+          // EDI endpoint returns plain text (.in content).
+          responseType: "text",
+        },
+      );
+
+      // getAPICall can return either axios response object or raw payload.
+      const payload =
+        res && typeof res === "object" && "data" in (res as Record<string, unknown>)
+          ? (res as { data?: unknown }).data
+          : res;
+
+      const ediText = typeof payload === "string" ? payload : String(payload ?? "");
+      if (!ediText.trim()) {
+        throw new Error("Empty EDI response");
+      }
+
+      const blob = new Blob([ediText], { type: "text/plain;charset=utf-8" });
+      const fileUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.download = `${(jobData as { job_id?: string }).job_id || `job-${jobData.id}`}.in`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(fileUrl);
+
+      ToastNotification({
+        type: "success",
+        message: "EDI file downloaded successfully",
+      });
+    } catch (error) {
+      console.error("Error downloading EDI file:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to download EDI file",
+      });
+    }
+  };
+ 
+ 
   const handleSubmit = async () => {
     setIsSubmitting(true);
 
@@ -2630,6 +2684,47 @@ function AirImportJobCreate() {
                       }}
                     >
                       Create Invoice
+                    </Menu.Item>
+                  )}
+
+                  {jobData?.id != null && (
+                    <Menu.Item
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconDownload size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
+                      onClick={handleEdiFileDownload}
+                    >
+                      EDI file download
                     </Menu.Item>
                   )}
                 </Menu.Dropdown>
