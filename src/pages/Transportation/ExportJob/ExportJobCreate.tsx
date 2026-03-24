@@ -280,6 +280,7 @@ type HousingDetail = {
   marks_no: string;
   item_no?: string;
   sub_item_no?: string;
+  shipment_terms_code?: string;
   cargo_details?: Array<{
     id?: number | string;
     container_no?: number | string;
@@ -318,7 +319,7 @@ const getTransportMode = (
   transportType: string | null | undefined,
 ): string | undefined => {
   if (!transportType) return undefined;
-  const type = transportType.trim();
+  const type = transportType.trim().toUpperCase();
   if (type === "AIR") return "AIR";
   if (type === "SEA" || type === "FCL" || type === "LCL") return "SEA";
   if (type === "ROAD") return "LAND";
@@ -715,6 +716,11 @@ function ExportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              shipment_terms_code: house.shipment_terms_code
+                ? String(house.shipment_terms_code)
+                : house.shipment_terms_name
+                  ? String(house.shipment_terms_name)
+                  : "",
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -1012,7 +1018,7 @@ function ExportJobCreate() {
               let voyage_number = "";
               let flightVoyageNumber = "";
 
-              if (transportType === "SEA" || transportType === "vessel") {
+              if (transportType === "SEA" || transportType === "VESSEL") {
                 voyage_number = routing.voyage_number
                   ? String(routing.voyage_number)
                   : routing.flight_voyage_number
@@ -1066,7 +1072,7 @@ function ExportJobCreate() {
                     : Number(routing.id)
                   : undefined,
                 transport_type: routing.transport_type
-                  ? String(routing.transport_type)
+                  ? String(routing.transport_type).toUpperCase()
                   : "",
                 from_code: routing.from_port_code
                   ? String(routing.from_port_code)
@@ -1401,6 +1407,22 @@ function ExportJobCreate() {
     jobData,
   ]);
 
+  // Restore estimates when coming back from HouseCreate (works for create/edit)
+  useEffect(() => {
+    if (
+      location.state?.fromHouseCreate === true &&
+      location.state?.estimates &&
+      Array.isArray(location.state.estimates) &&
+      location.state.estimates.length > 0
+    ) {
+      estimatesForm.setFieldValue(
+        "estimates",
+        location.state.estimates as typeof estimatesForm.values.estimates,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.fromHouseCreate, location.state?.estimates]);
+
   // Add new routing - Using insertListItem like charges form
   const addRouting = () => {
     routingsForm.insertListItem("routings", {
@@ -1463,30 +1485,27 @@ function ExportJobCreate() {
   const validateStep2 = () => {
     for (const routing of routingsForm.values.routings) {
       // Check if any mandatory routing field has a non-empty value
-      const transportType = routing.transport_type?.trim() || "";
+      const transportType = routing.transport_type?.trim().toUpperCase() || "";
       const fromCode = routing.from_code?.trim() || "";
       const toCode = routing.to_code?.trim() || "";
       const carrierCode = routing.carrier_code?.trim() || "";
       const vessel = routing.vessel?.trim() || "";
       // Get the appropriate field value based on transport_type
       let flightVoyageNumber = "";
-      if (
-        transportType.toLowerCase() === "sea" ||
-        transportType.toLowerCase() === "vessel"
-      ) {
+      if (transportType === "SEA" || transportType === "VESSEL") {
         flightVoyageNumber =
           routing.voyage_number?.trim() ||
           routing.flight_voyage_number?.trim() ||
           "";
-      } else if (transportType.toLowerCase() === "air") {
+      } else if (transportType === "AIR") {
         flightVoyageNumber =
           routing.flight?.trim() || routing.flight_voyage_number?.trim() || "";
-      } else if (transportType.toLowerCase() === "road") {
+      } else if (transportType === "ROAD") {
         flightVoyageNumber =
           routing.truck_no?.trim() ||
           routing.flight_voyage_number?.trim() ||
           "";
-      } else if (transportType.toLowerCase() === "rail") {
+      } else if (transportType === "RAIL") {
         flightVoyageNumber =
           routing.rail_no?.trim() || routing.flight_voyage_number?.trim() || "";
       } else {
@@ -2227,7 +2246,9 @@ function ExportJobCreate() {
             ...(routing.id !== undefined &&
               routing.id !== null &&
               routing.id !== "" && { id: Number(routing.id) }),
-            transport_type: routing.transport_type || null,
+            transport_type: routing.transport_type
+              ? routing.transport_type.toUpperCase()
+              : null,
             from_port_code: routing.from_code || null,
             to_port_code: routing.to_code || null,
             etd: routing.etd
@@ -2263,7 +2284,7 @@ function ExportJobCreate() {
             routing.transport_type || "",
           ).toLowerCase();
 
-          if (transportType === "SEA" || transportType === "vessel") {
+          if (transportType === "SEA" || transportType === "VESSEL") {
             routingPayload.vessel = routing.vessel || null;
             routingPayload.voyage_number = routing.voyage_number || null;
           } else if (transportType === "AIR") {
@@ -2324,6 +2345,10 @@ function ExportJobCreate() {
           marks_no: house.marks_no || "",
           item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
+          ...(house.shipment_terms_code != null &&
+            house.shipment_terms_code !== "" && {
+              shipment_terms_code: house.shipment_terms_code,
+            }),
           events: Array.isArray((house as { events?: unknown }).events)
             ? (
                 (

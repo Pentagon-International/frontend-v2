@@ -94,6 +94,7 @@ type CarrierDetailsForm = {
 };
 
 type RoutingDetail = {
+  id?: number;
   transport_type: string;
   from_code: string;
   from_name: string;
@@ -142,6 +143,7 @@ type HAWBDetail = {
   notify_customer1_email: string;
   commodity_description?: string;
   marks_no?: string;
+  shipment_terms_code?: string;
   cargo_details?: Array<{
     no_of_packages: number | null;
     gross_weight: number | null;
@@ -252,9 +254,10 @@ const getTransportMode = (
   transportType: string | null | undefined,
 ): string | undefined => {
   if (!transportType) return undefined;
-  const type = transportType.trim();
+  const type = transportType.trim().toUpperCase();
   if (type === "AIR") return "AIR";
-  if (type === "SEA" || type === "FCL" || type === "LCL") return "SEA";
+  if (type === "SEA" || type === "FCL" || type === "LCL" || type === "VESSEL")
+    return "SEA";
   if (type === "ROAD") return "LAND";
   return undefined;
 };
@@ -467,29 +470,26 @@ function AirExportJobCreate() {
   // Initialize with location.state.routings if available (for create mode restoration)
   const routingsForm = useForm<{ routings: RoutingDetail[] }>({
     initialValues: {
-      routings:
-        location.state?.routings && Array.isArray(location.state.routings)
-          ? location.state.routings
-          : [
-              {
-                transport_type: "",
-                from_code: "",
-                from_name: "",
-                to_code: "",
-                to_name: "",
-                etd: null,
-                eta: null,
-                atd: null,
-                ata: null,
-                carrier_code: "",
-                carrier_name: "",
-                vessel: "",
-                flight: "",
-                voyage_number: "",
-                truck_no: "",
-                rail_no: "",
-              },
-            ],
+      routings: [
+        {
+          transport_type: "",
+          from_code: "",
+          from_name: "",
+          to_code: "",
+          to_name: "",
+          etd: null,
+          eta: null,
+          atd: null,
+          ata: null,
+          carrier_code: "",
+          carrier_name: "",
+          vessel: "",
+          flight: "",
+          voyage_number: "",
+          truck_no: "",
+          rail_no: "",
+        },
+      ],
     },
   });
 
@@ -562,11 +562,6 @@ function AirExportJobCreate() {
   // Load job data if in edit or view mode - Only initialize once from jobData
   // This effect runs FIRST to ensure forms are initialized before restoration logic
   useEffect(() => {
-    // Skip if forms have already been initialized
-    if (formsInitializedFromJobDataRef.current) {
-      return;
-    }
-
     // Only proceed if we have jobData and are in edit/view mode
     if (jobData && (mode === "edit" || mode === "view")) {
       try {
@@ -761,6 +756,11 @@ function AirExportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              shipment_terms_code: house.shipment_terms_code
+                ? String(house.shipment_terms_code)
+                : house.shipment_terms_name
+                  ? String(house.shipment_terms_name)
+                  : "",
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -873,11 +873,12 @@ function AirExportJobCreate() {
           const mappedRoutings = jobData.ocean_routings.map(
             (routing: Record<string, unknown>) => {
               return {
-                transport_type: routing.transport_type || "",
-                from_code: routing.from_port_code || routing.from_code || "",
-                from_name: routing.from_port_name || routing.from_name || "",
-                to_code: routing.to_port_code || routing.to_code || "",
-                to_name: routing.to_port_name || routing.to_name || "",
+                ...(routing.id != null && { id: Number(routing.id) }),
+                transport_type: String(routing.transport_type ?? "").toUpperCase(),
+                from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
+                from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+                to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
+                to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
                 etd:
                   routing.etd && dayjs(routing.etd as string | Date).isValid()
                     ? dayjs(routing.etd as string | Date).toDate()
@@ -894,9 +895,9 @@ function AirExportJobCreate() {
                   routing.ata && dayjs(routing.ata as string | Date).isValid()
                     ? dayjs(routing.ata as string | Date).toDate()
                     : null,
-                carrier_code: routing.carrier_code || "",
-                carrier_name: routing.carrier_name || "",
-                vessel: routing.vessel || "",
+                carrier_code: String(routing.carrier_code ?? ""),
+                carrier_name: String(routing.carrier_name ?? ""),
+                vessel: String(routing.vessel ?? ""),
                 flight: routing.flight ? String(routing.flight) : "",
                 voyage_number: routing.voyage_number
                   ? String(routing.voyage_number)
@@ -916,11 +917,12 @@ function AirExportJobCreate() {
           const mappedRoutings = jobData.routings.map(
             (routing: Record<string, unknown>) => {
               return {
-                transport_type: routing.transport_type || "",
-                from_code: routing.from_port_code || routing.from_code || "",
-                from_name: routing.from_port_name || routing.from_name || "",
-                to_code: routing.to_port_code || routing.to_code || "",
-                to_name: routing.to_port_name || routing.to_name || "",
+                ...(routing.id != null && { id: Number(routing.id) }),
+                transport_type: String(routing.transport_type ?? "").toUpperCase(),
+                from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
+                from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+                to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
+                to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
                 etd:
                   routing.etd && dayjs(routing.etd as string | Date).isValid()
                     ? dayjs(routing.etd as string | Date).toDate()
@@ -937,9 +939,9 @@ function AirExportJobCreate() {
                   routing.ata && dayjs(routing.ata as string | Date).isValid()
                     ? dayjs(routing.ata as string | Date).toDate()
                     : null,
-                carrier_code: routing.carrier_code || "",
-                carrier_name: routing.carrier_name || "",
-                vessel: routing.vessel || "",
+                carrier_code: String(routing.carrier_code ?? ""),
+                carrier_name: String(routing.carrier_name ?? ""),
+                vessel: String(routing.vessel ?? ""),
                 flight: routing.flight ? String(routing.flight) : "",
                 voyage_number: routing.voyage_number
                   ? String(routing.voyage_number)
@@ -952,7 +954,7 @@ function AirExportJobCreate() {
           routingsForm.setValues({ routings: mappedRoutings });
           routingStateInitializedRef.current = true;
         }
-
+        console.log("✅ Routings initialized - Form values after setValues:", routingsForm.values);
         // Note: Container Details are not used for Air Export Jobs
 
         // Populate Estimates (master level) from jobData if exists
@@ -1042,8 +1044,6 @@ function AirExportJobCreate() {
           lastJobMappedEstimatesRef.current =
             sanitizedEstimates as unknown as typeof estimatesForm.values.estimates;
         }
-        formsInitializedFromJobDataRef.current = true;
-
         // Force re-render of SearchableSelect components after all values are set
         // Use a small delay to ensure setValues has completed
         setTimeout(() => {
@@ -1124,8 +1124,11 @@ function AirExportJobCreate() {
   // If all routing fields are empty, allow proceeding without validation (skip entirely)
   const validateStep2 = () => {
     for (const routing of routingsForm.values.routings) {
+      const normalizedTransportType = String(
+        routing.transport_type || "",
+      ).toUpperCase();
       // Check if any mandatory routing field has a non-empty value
-      const transportType = routing.transport_type?.trim() || "";
+      const transportType = normalizedTransportType.trim();
       const fromCode = routing.from_code?.trim() || "";
       const toCode = routing.to_code?.trim() || "";
       const carrierCode = routing.carrier_code?.trim() || "";
@@ -1200,7 +1203,7 @@ function AirExportJobCreate() {
         }
 
         // Validate transport-type-specific required fields
-        if (routing.transport_type === "SEA") {
+        if (normalizedTransportType === "SEA") {
           if (vessel === "" || voyageNumber === "") {
             ToastNotification({
               type: "error",
@@ -1209,7 +1212,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "AIR") {
+        } else if (normalizedTransportType === "AIR") {
           if (carrierCode === "" || flight === "") {
             ToastNotification({
               type: "error",
@@ -1217,7 +1220,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "ROAD") {
+        } else if (normalizedTransportType === "ROAD") {
           if (carrierCode === "" || truckNo === "") {
             ToastNotification({
               type: "error",
@@ -1225,7 +1228,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "RAIL") {
+        } else if (normalizedTransportType === "RAIL") {
           const carrierName = routing.carrier_name?.trim() || "";
           if (carrierName === "" || railNo === "") {
             ToastNotification({
@@ -1539,11 +1542,61 @@ function AirExportJobCreate() {
       if (
         hasMawbDetailsInState &&
         location.state?.routings &&
-        Array.isArray(location.state.routings)
+        Array.isArray(location.state.routings) &&
+        location.state.routings.length > 0
       ) {
-        routingsForm.setValues({ routings: location.state.routings });
+        const mappedRoutingsFromState = location.state.routings.map(
+          (routing: Record<string, unknown>) => ({
+            ...(routing.id != null && { id: Number(routing.id) }),
+            transport_type: String(routing.transport_type ?? "").toUpperCase(),
+            from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
+            from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+            to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
+            to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
+            etd:
+              routing.etd && dayjs(routing.etd as string | Date).isValid()
+                ? dayjs(routing.etd as string | Date).toDate()
+                : null,
+            eta:
+              routing.eta && dayjs(routing.eta as string | Date).isValid()
+                ? dayjs(routing.eta as string | Date).toDate()
+                : null,
+            atd:
+              routing.atd && dayjs(routing.atd as string | Date).isValid()
+                ? dayjs(routing.atd as string | Date).toDate()
+                : null,
+            ata:
+              routing.ata && dayjs(routing.ata as string | Date).isValid()
+                ? dayjs(routing.ata as string | Date).toDate()
+                : null,
+            carrier_code: String(routing.carrier_code ?? ""),
+            carrier_name: String(routing.carrier_name ?? ""),
+            vessel: String(routing.vessel ?? ""),
+            flight: routing.flight ? String(routing.flight) : "",
+            voyage_number: routing.voyage_number
+              ? String(routing.voyage_number)
+              : "",
+            truck_no: routing.truck_no ? String(routing.truck_no) : "",
+            rail_no: routing.rail_no ? String(routing.rail_no) : "",
+          }),
+        );
+        routingsForm.setValues({ routings: mappedRoutingsFromState });
+        routingStateInitializedRef.current = true;
         // Reset routingStateInitializedRef to allow restoration on next navigation back from HAWB
-        routingStateInitializedRef.current = false;
+        // routingStateInitializedRef.current = false;
+      }
+
+      // Restore estimates when coming back from HAWB screen
+      if (
+        hasMawbDetailsInState &&
+        location.state?.estimates &&
+        Array.isArray(location.state.estimates) &&
+        location.state.estimates.length > 0
+      ) {
+        estimatesForm.setFieldValue(
+          "estimates",
+          location.state.estimates as typeof estimatesForm.values.estimates,
+        );
       }
     } catch (error) {
       console.error("Error restoring form state:", error);
@@ -1555,6 +1608,7 @@ function AirExportJobCreate() {
     location.state?.mawbDetails,
     location.state?.carrierDetails,
     location.state?.routings,
+    location.state?.estimates,
     active, // Add active to dependencies to restore when navigating back to step 0
     mode, // Add mode to dependencies
   ]);
@@ -1615,6 +1669,7 @@ function AirExportJobCreate() {
       formStateRestoredRef.current = false;
       // Reset last restored ref to allow restoration when coming back from HAWB
       lastRestoredMawbDetailsRef.current = null;
+      routingStateInitializedRef.current = false;
 
       // Prepare MAWB details with ALL current form values including origin_name and destination_name
       const mawbDetailsToPass = {
@@ -1949,9 +2004,16 @@ function AirExportJobCreate() {
         flightno: carrierDetailsForm.values.flight_number || null,
         mawb_no: carrierDetailsForm.values.mawb_number || null,
         ocean_routings: routingsForm.values.routings.map((routing) => {
+          const normalizedTransportType = String(
+            routing.transport_type || "",
+          ).toUpperCase();
           // New format: all fields are nullable
           const routingPayload: Record<string, unknown> = {
-            transport_type: routing.transport_type || null,
+            // Include id if it exists (for edit mode) - handle id === 0 as valid
+            ...(routing.id !== undefined &&
+              routing.id !== null &&
+              routing.id !== ("" as unknown) && { id: Number(routing.id) }),
+            transport_type: normalizedTransportType || null,
             from_port_code: routing.from_code || null,
             to_port_code: routing.to_code || null,
             etd: routing.etd
@@ -1983,17 +2045,17 @@ function AirExportJobCreate() {
           };
 
           // Map fields based on transport type
-          if (routing.transport_type === "SEA") {
+          if (normalizedTransportType === "SEA") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.vessel = routing.vessel || null;
             routingPayload.voyage_number = routing.voyage_number || null;
-          } else if (routing.transport_type === "AIR") {
+          } else if (normalizedTransportType === "AIR") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.flight = routing.flight || null;
-          } else if (routing.transport_type === "ROAD") {
+          } else if (normalizedTransportType === "ROAD") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.truck_no = routing.truck_no || null;
-          } else if (routing.transport_type === "RAIL") {
+          } else if (normalizedTransportType === "RAIL") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.rail_no = routing.rail_no || null;
           } else {
@@ -2042,6 +2104,10 @@ function AirExportJobCreate() {
           marks_no: hawb.marks_no || null,
           item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
+          ...(hawb.shipment_terms_code != null &&
+            hawb.shipment_terms_code !== "" && {
+              shipment_terms_code: hawb.shipment_terms_code,
+            }),
           events: Array.isArray((hawb as { events?: unknown }).events)
             ? (
                 (
@@ -2785,8 +2851,12 @@ function AirExportJobCreate() {
             </Text>
 
             <Stack gap="xl">
-              {routingsForm.values.routings.map((routing, index) => (
-                <Box key={index}>
+              {routingsForm.values.routings.map((routing, index) => {
+                const routingTransportType = String(
+                  routing.transport_type || "",
+                ).toUpperCase();
+                return (
+                <Box key={`${index}-${formInitializedKey}`}>
                   <Grid>
                     <Grid.Col span={2.5}>
                       <Dropdown
@@ -2886,10 +2956,10 @@ function AirExportJobCreate() {
                         }}
                         minSearchLength={2}
                         additionalParams={
-                          getTransportMode(routing.transport_type)
+                          getTransportMode(routingTransportType)
                             ? {
                                 transport_mode: getTransportMode(
-                                  routing.transport_type,
+                                  routingTransportType,
                                 )!,
                               }
                             : undefined
@@ -2935,10 +3005,10 @@ function AirExportJobCreate() {
                         }}
                         minSearchLength={2}
                         additionalParams={
-                          getTransportMode(routing.transport_type)
+                          getTransportMode(routingTransportType)
                             ? {
                                 transport_mode: getTransportMode(
-                                  routing.transport_type,
+                                  routingTransportType,
                                 )!,
                               }
                             : undefined
@@ -2947,7 +3017,7 @@ function AirExportJobCreate() {
                     </Grid.Col>
 
                     {/* Dynamic field labels based on transport type */}
-                    {routing.transport_type === "SEA" && (
+                    {routingTransportType === "SEA" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -2974,10 +3044,10 @@ function AirExportJobCreate() {
                             }}
                             minSearchLength={2}
                             additionalParams={
-                              getTransportMode(routing.transport_type)
+                              getTransportMode(routingTransportType)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type,
+                                      routingTransportType,
                                     )!,
                                   }
                                 : undefined
@@ -3020,7 +3090,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "AIR" && (
+                    {routingTransportType === "AIR" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -3047,10 +3117,10 @@ function AirExportJobCreate() {
                             }}
                             minSearchLength={2}
                             additionalParams={
-                              getTransportMode(routing.transport_type)
+                              getTransportMode(routingTransportType)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type,
+                                      routingTransportType,
                                     )!,
                                   }
                                 : undefined
@@ -3070,7 +3140,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "ROAD" && (
+                    {routingTransportType === "ROAD" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -3097,10 +3167,10 @@ function AirExportJobCreate() {
                             }}
                             minSearchLength={2}
                             additionalParams={
-                              getTransportMode(routing.transport_type)
+                              getTransportMode(routingTransportType)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type,
+                                      routingTransportType,
                                     )!,
                                   }
                                 : undefined
@@ -3120,7 +3190,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "RAIL" && (
+                    {routingTransportType === "RAIL" && (
                       <>
                         <Grid.Col span={2}>
                           <FormTextInput
@@ -3292,7 +3362,7 @@ function AirExportJobCreate() {
                     <Divider my="xl" />
                   )}
                 </Box>
-              ))}
+              )})}
             </Stack>
           </Box>
         </Tabs.Panel>

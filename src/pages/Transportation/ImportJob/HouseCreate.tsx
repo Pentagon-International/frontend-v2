@@ -68,6 +68,8 @@ import FormNumberInput from "../../../components/FormNumberInput";
 // Type definitions
 type HouseDetailsForm = {
   hbl_number: string;
+  shipment_terms_code: string;
+  shipment_terms_name: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -245,6 +247,11 @@ const fetchEventMaster = async () => {
   }
 };
 
+const fetchTermsOfShipment = async () => {
+  const response = await getAPICall(`${URL.termsOfShipment}`, API_HEADER);
+  return response;
+};
+
 // Validation handled in validateStep1 and validateStep2 functions
 
 const normalizePpCc = (value: unknown): string => {
@@ -360,6 +367,22 @@ function HouseCreate() {
     queryFn: fetchEventMaster,
     staleTime: 5 * 60 * 1000,
   });
+  const { data: termsOfShipment = [] } = useQuery({
+    queryKey: ["termsOfShipment"],
+    queryFn: fetchTermsOfShipment,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const shipmentOptions = useMemo(() => {
+    if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
+    return termsOfShipment.map((item: { tos_code?: string; tos_name?: string }) => ({
+      value: item.tos_code ? String(item.tos_code) : "",
+      label: `${String(item.tos_name || "")} (${String(item.tos_code || "")})`,
+    }));
+  }, [termsOfShipment]);
 
   const eventTypeOptions = useMemo(() => {
     const list = eventMasterData as Array<{ name?: string }>;
@@ -706,6 +729,8 @@ function HouseCreate() {
   const form = useForm<HouseDetailsForm>({
     initialValues: {
       hbl_number: editData?.hbl_number || "",
+      shipment_terms_code: editData?.shipment_terms_code || "",
+      shipment_terms_name: editData?.shipment_terms_name || "",
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -1709,6 +1734,9 @@ function HouseCreate() {
     if (!form.values.trade?.trim()) {
       errors.trade = "Trade is required";
     }
+    if (!form.values.shipment_terms_code?.trim()) {
+      errors.shipment_terms_code = "Shipment Terms is required";
+    }
     if (!form.values.routed?.trim()) {
       errors.routed = "Routed is required";
     }
@@ -2018,6 +2046,8 @@ function HouseCreate() {
       ...(isEditMode &&
         editData?.shipment_id && { shipment_id: editData.shipment_id }),
       hbl_number: form.values.hbl_number,
+      shipment_terms_code: form.values.shipment_terms_code,
+      shipment_terms_name: form.values.shipment_terms_name,
       routed: form.values.routed,
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
@@ -2126,6 +2156,8 @@ function HouseCreate() {
     const v = form.values;
     return {
       hbl_number: v.hbl_number,
+      shipment_terms_code: v.shipment_terms_code,
+      shipment_terms_name: v.shipment_terms_name,
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -2972,6 +3004,18 @@ function HouseCreate() {
 
               <Grid.Col span={4}>
                 <Dropdown
+                  label="Shipment Terms"
+                  required
+                  placeholder="Select Shipment Terms"
+                  searchable
+                  data={shipmentOptions}
+                  {...form.getInputProps("shipment_terms_code")}
+                  error={form.errors.shipment_terms_code}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
                   label="Routed"
                   required
                   placeholder="Select Routed"
@@ -3319,7 +3363,7 @@ function HouseCreate() {
                   apiEndpoint={URL.consignee}
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
-                  displayFormat={customerNameOnlyDisplayFormat}
+                  displayFormat={customerCodeNameDisplayFormat}
                   value={
                     form.values.notify1_customer_name
                       ? String(form.values.notify1_customer_name)
@@ -5200,6 +5244,10 @@ function HouseCreate() {
                 }),
                 ...(location.state?.containerDetails && {
                   containerDetails: location.state.containerDetails,
+                }),
+                // Preserve master-level estimates so all estimates stepper fields are retained
+                ...(location.state?.estimates && {
+                  estimates: location.state.estimates,
                 }),
               },
             });

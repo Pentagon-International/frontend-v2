@@ -67,6 +67,8 @@ import { commonSearchAPI } from "../../../service/searchApi";
 // Type definitions
 type HAWBDetailsForm = {
   hawb_number: string;
+  shipment_terms_code: string;
+  shipment_terms_name: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -238,6 +240,11 @@ const fetchEventMaster = async () => {
     console.error("Error fetching event master:", error);
     return [];
   }
+};
+
+const fetchTermsOfShipment = async () => {
+  const response = await getAPICall(`${URL.termsOfShipment}`, API_HEADER);
+  return response;
 };
 
 // Validation handled in validateStep1 and validateStep2 functions
@@ -431,6 +438,8 @@ function HouseCreate() {
   const form = useForm<HAWBDetailsForm>({
     initialValues: {
       hawb_number: editData?.hawb_number || editData?.hbl_number || "",
+      shipment_terms_code: editData?.shipment_terms_code || "",
+      shipment_terms_name: editData?.shipment_terms_name || "",
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -599,6 +608,22 @@ function HouseCreate() {
     queryFn: fetchEventMaster,
     staleTime: 5 * 60 * 1000,
   });
+  const { data: termsOfShipment = [] } = useQuery({
+    queryKey: ["termsOfShipment"],
+    queryFn: fetchTermsOfShipment,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const shipmentOptions = useMemo(() => {
+    if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
+    return termsOfShipment.map((item: { tos_code?: string; tos_name?: string }) => ({
+      value: item.tos_code ? String(item.tos_code) : "",
+      label: `${String(item.tos_name || "")} (${String(item.tos_code || "")})`,
+    }));
+  }, [termsOfShipment]);
 
   const eventTypeOptions = useMemo(() => {
     const list = eventMasterData as Array<{ name?: string }>;
@@ -1741,6 +1766,9 @@ function HouseCreate() {
     if (!form.values.trade?.trim()) {
       errors.trade = "Trade is required";
     }
+    if (!form.values.shipment_terms_code?.trim()) {
+      errors.shipment_terms_code = "Shipment Terms is required";
+    }
     if (!form.values.routed?.trim()) {
       errors.routed = "Routed is required";
     }
@@ -1922,6 +1950,8 @@ function HouseCreate() {
     const v = form.values;
     return {
       hawb_number: v.hawb_number,
+      shipment_terms_code: v.shipment_terms_code,
+      shipment_terms_name: v.shipment_terms_name,
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -2010,6 +2040,8 @@ function HouseCreate() {
     // Prepare housing detail object - use current form values
     const housingDetail = {
       hawb_number: currentFormValues.hawb_number,
+      shipment_terms_code: currentFormValues.shipment_terms_code,
+      shipment_terms_name: currentFormValues.shipment_terms_name,
       routed: currentFormValues.routed,
       routed_by: currentFormValues.routed_by,
       origin_code: currentFormValues.origin_code,
@@ -2725,6 +2757,18 @@ function HouseCreate() {
                     form.setFieldValue("trade", "Re Export");
                   }}
                   error={form.errors.trade}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="Shipment Terms"
+                  required
+                  placeholder="Select Shipment Terms"
+                  searchable
+                  data={shipmentOptions}
+                  {...form.getInputProps("shipment_terms_code")}
+                  error={form.errors.shipment_terms_code}
                 />
               </Grid.Col>
 
@@ -5064,6 +5108,9 @@ function HouseCreate() {
                 }),
                 ...(location.state?.routings && {
                   routings: location.state.routings,
+                }),
+                ...(location.state?.estimates && {
+                  estimates: location.state.estimates,
                 }),
               },
             });
