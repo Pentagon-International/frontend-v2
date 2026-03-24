@@ -719,15 +719,15 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
       <Sec icon="📄" title="Document Header">
         <div className="fgrid c4">
           <FF label="MBL Number" val={p.mbl_number ?? p.bl_number} cls="mono" />
-          <FF label="Document Type" val={p.document_type} span={2} />
+          {/* <FF label="Document Type" val={p.document_type} span={2} /> */}
           <FF label="Carrier Code" val={p.carrier_code} cls="mono" />
           <FF label="Service" val={p.service} />
           <FF label="Service Type" val={p.service_type} />
           <FF label="Freight Terms" val={p.freight_terms} />
-          <FF label="No. of Original Waybills" val={p.number_of_original_waybills} />
-          <FF label="Signed By" val={(p as any).signed_by} span={4} />
-          <FF label="Carrier Full Name" val={p.carrier_full_name} span={3} />
-          <FF label="Head Office" val={p.carrier_head_office} span={4} />
+          {/* <FF label="No. of Original Waybills" val={p.number_of_original_waybills} /> */}
+          {/* <FF label="Signed By" val={(p as any).signed_by} span={4} /> */}
+          {/* <FF label="Carrier Full Name" val={p.carrier_full_name} span={3} /> */}
+          {/* <FF label="Head Office" val={p.carrier_head_office} span={4} /> */}
         </div>
       </Sec>
 
@@ -735,7 +735,7 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
         <div className="fgrid c4">
           <FF label="Port of Loading" val={p.port_of_loading} />
           <FF label="Port of Discharge" val={p.port_of_discharge} />
-          <FF label="Place of Receipt" val={p.place_of_receipt} />
+          {/* <FF label="Place of Receipt" val={p.place_of_receipt} /> */}
           <FF label="Place of Delivery" val={p.place_of_delivery} />
           <FF label="Origin Code" val={p.origin_code} cls="mono" />
           <FF label="Destination Code" val={p.destination_code} cls="mono" />
@@ -769,8 +769,9 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
           <table className="ctable">
             <thead>
               <tr>
-                <th>Container No.</th><th>Type</th><th>Seal No.</th><th>Pkgs</th>
-                <th>Pkg Type</th><th>Gross Wt (KG)</th><th>Tare Wt (KG)</th><th>Volume (CBM)</th>
+                <th>Container No.</th><th>Type</th><th>Seal No.</th>
+                {/* <th>Pkgs</th> */}
+                {/* <th>Pkg Type</th><th>Gross Wt (KG)</th><th>Tare Wt (KG)</th><th>Volume (CBM)</th> */}
               </tr>
             </thead>
             <tbody>
@@ -779,11 +780,11 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
                   <td>{c.container_no ?? "—"}</td>
                   <td>{c.container_type_input ?? c.container_type ?? "—"}</td>
                   <td>{c.actual_seal_no ?? c.seal_no ?? "—"}</td>
-                  <td>{c.no_of_packages ?? "—"}</td>
+                  {/* <td>{c.no_of_packages ?? "—"}</td>
                   <td>{c.package_type ?? "—"}</td>
                   <td>{c.gross_weight_kgs ?? c.gross_weight ?? "—"}</td>
                   <td>{c.tare_weight_kgs ?? "—"}</td>
-                  <td>{c.volume_cbm ?? c.volume ?? "—"}</td>
+                  <td>{c.volume_cbm ?? c.volume ?? "—"}</td> */}
                 </tr>
               ))}
             </tbody>
@@ -814,26 +815,26 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
                 <FF label="Trade" val={hd.trade} />
                 <FF label="Routed" val={hd.routed} />
                 <FF label="Freight Terms" val={hd.freight_terms} />
-                <FF label="HS Code" val={hd.hs_code} cls="mono" />
+                {/* <FF label="HS Code" val={hd.hs_code} cls="mono" /> */}
                 <FF label="Marks No" val={hd.marks_no} />
                 <FF label="Origin Code" val={hd.origin_code} cls="mono" />
                 <FF label="Destination Code" val={hd.destination_code} cls="mono" />
                 <FF label="Invoice No" val={hd.invoice_no} cls="mono" />
-                <FF label="Invoice Date" val={hd.invoice_date} />
-                <FF label="PO No" val={hd.po_no} cls="mono" />
+                {/* <FF label="Invoice Date" val={hd.invoice_date} /> */}
+                {/* <FF label="PO No" val={hd.po_no} cls="mono" />
                 <FF label="PI No" val={hd.pi_no} cls="mono" />
                 <FF label="LC Number" val={hd.lc_number} cls="mono" />
-                <FF label="LC Date" val={hd.lc_date} />
+                <FF label="LC Date" val={hd.lc_date} /> */}
                 <FF label="Date of Issue" val={hd.date_of_issue} />
-                <FF label="On Board Date" val={hd.on_board_date ?? hd.shipped_on_board_date} />
-                <FF label="No. of Originals" val={hd.no_of_originals ?? hd.number_of_originals} />
-                <FF label="Place of Issue" val={hd.place_of_issue} />
-                <FF label="Place of Acceptance" val={hd.place_of_acceptance} />
-                <FF label="Place of Delivery" val={hd.place_of_delivery} />
+                {/* <FF label="On Board Date" val={hd.on_board_date ?? hd.shipped_on_board_date} /> */}
+                {/* <FF label="No. of Originals" val={hd.no_of_originals ?? hd.number_of_originals} /> */}
+                {/* <FF label="Place of Issue" val={hd.place_of_issue} /> */}
+                {/* <FF label="Place of Acceptance" val={hd.place_of_acceptance} /> */}
+                {/* <FF label="Place of Delivery" val={hd.place_of_delivery} />
                 <FF label="Shipment Terms" val={hd.shipment_terms_code} />
                 <FF label="Shipment Ref No" val={hd.shipment_reference_no} cls="mono" />
                 <FF label="Free Time at Dest." val={hd.free_time_at_destination} />
-                <FF label="Package Type" val={hd.package_type} />
+                <FF label="Package Type" val={hd.package_type} /> */}
               </div>
 
               {(hd.total_packages || hd.total_volume_cbm || hd.total_gross_weight_kgs) && (
@@ -860,7 +861,7 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
                   <FF label="Name" val={hd.consignee_name} span={4} />
                   <FF label="Address" val={hd.consignee_address} span={4} />
                   <FF label="GST" val={hd.consignee_gst ?? hd.gst_no_consignee} cls="mono" />
-                  <FF label="IEC" val={hd.consignee_iec ?? hd.iec_no} cls="mono" />
+                  {/* <FF label="IEC" val={hd.consignee_iec ?? hd.iec_no} cls="mono" /> */}
                   <FF label="PAN" val={hd.consignee_pan ?? hd.pan_no} cls="mono" />
                   <FF label="Email" val={hd.consignee_email} />
                 </div>
