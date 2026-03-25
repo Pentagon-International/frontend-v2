@@ -6,6 +6,7 @@ import {
   Stack,
   Tabs,
   Table,
+  Radio,
   Text,
   TextInput,
   Divider,
@@ -72,6 +73,7 @@ import { roundToDecimals } from "../../../utils/numberInputUtils";
 // Type definitions
 type MAWBDetailsForm = {
   service: string;
+  is_direct: boolean;
   agent_code: string; // Stores agent_code (code) for API payload
   agent_name: string; // Stores agent_name (name) for display
   origin_code: string;
@@ -212,7 +214,33 @@ type InvoiceListItem = {
 // Validation schemas
 const mawbDetailsSchema = yup.object({
   service: yup.string().required("Service is required"),
-  agent_code: yup.string().required("Destination Agent is required"),
+  is_direct: yup.boolean().required(),
+  // Destination Agent is required when "Direct" is No (false).
+  // When "Direct" is Yes (true), Destination Agent becomes optional.
+  agent_code: yup.string().test(
+    "agent_code-required-when-direct-false",
+    "Destination Agent is required",
+    function (value) {
+      const parent = this.parent as { is_direct?: boolean };
+      const isDirect = parent.is_direct === true;
+
+      if (isDirect) return true;
+
+      if (value == null) {
+        return this.createError({
+          message: "Destination Agent is required",
+        });
+      }
+
+      if (String(value).trim() === "") {
+        return this.createError({
+          message: "Destination Agent is required",
+        });
+      }
+
+      return true;
+    },
+  ),
   origin_code: yup.string().required("Origin is required"),
   destination_code: yup.string().required("Destination is required"),
   etd: yup.date().required("ETD is required"),
@@ -260,6 +288,16 @@ const getTransportMode = (
     return "SEA";
   if (type === "ROAD") return "LAND";
   return undefined;
+};
+
+const parseBoolean = (value: unknown): boolean => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "y";
+  }
+  return false;
 };
 
 function AirExportJobCreate() {
@@ -387,6 +425,9 @@ function AirExportJobCreate() {
     initialValues: {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
+      is_direct: parseBoolean(
+        jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
+      ) || false,
       agent_code:
         jobData?.agent_code ||
         jobData?.origin_agent ||
@@ -579,6 +620,7 @@ function AirExportJobCreate() {
         // Populate MAWB Details using setValues - ensure all fields are set
         const mawbInitialValues = {
           service: jobData.service || "AIR",
+          is_direct: parseBoolean(jobData.is_direct) || false,
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
           agent_code: jobData.agent_code || jobData.origin_agent || "",
           agent_name: jobData.agent_name || jobData.origin_agent_name || "",
@@ -607,6 +649,37 @@ function AirExportJobCreate() {
         console.log("🔧 Setting MAWB form values:", mawbInitialValues);
         // Use setValues to update all fields at once
         mawbDetailsForm.setValues(mawbInitialValues);
+
+        // If we are coming back from AirHouseCreate, preserve the edited MAWB
+        // master fields from location.state (e.g., is_direct) instead of
+        // letting the API response overwrite them.
+        const savedMawbDetailsFromState = location.state?.mawbDetails;
+        if (savedMawbDetailsFromState) {
+          mawbDetailsForm.setValues({
+            service: savedMawbDetailsFromState.service || "AIR",
+            is_direct: parseBoolean(savedMawbDetailsFromState.is_direct),
+            agent_code: savedMawbDetailsFromState.agent_code || "",
+            agent_name: savedMawbDetailsFromState.agent_name || "",
+            origin_code: savedMawbDetailsFromState.origin_code || "",
+            origin_name: savedMawbDetailsFromState.origin_name || "",
+            destination_code:
+              savedMawbDetailsFromState.destination_code || "",
+            destination_name:
+              savedMawbDetailsFromState.destination_name || "",
+            etd: savedMawbDetailsFromState.etd || null,
+            eta: savedMawbDetailsFromState.eta || null,
+            atd: savedMawbDetailsFromState.atd || null,
+            ata: savedMawbDetailsFromState.ata || null,
+          });
+
+          if (savedMawbDetailsFromState.agent_data) {
+            originAgentDataRef.current =
+              savedMawbDetailsFromState.agent_data as Record<
+                string,
+                unknown
+              >;
+          }
+        }
 
         console.log(
           "✅ MAWB Details initialized - Form values after setValues:",
@@ -1046,6 +1119,7 @@ function AirExportJobCreate() {
         }
         // Force re-render of SearchableSelect components after all values are set
         // Use a small delay to ensure setValues has completed
+        formsInitializedFromJobDataRef.current = true;
         setTimeout(() => {
           setFormInitializedKey((prev) => prev + 1);
         }, 50);
@@ -1059,6 +1133,7 @@ function AirExportJobCreate() {
     } else {
       // Reset the ref when not in edit/view mode or jobData changes
       hawbDetailsLoadedRef.current = false;
+      formsInitializedFromJobDataRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData, mode]);
@@ -1256,6 +1331,7 @@ function AirExportJobCreate() {
             // Save current MAWB form values
             mawbDetails: {
               service: mawbDetailsForm.values.service || "AIR",
+              is_direct: mawbDetailsForm.values.is_direct,
               agent_code: mawbDetailsForm.values.agent_code || "",
               agent_name: mawbDetailsForm.values.agent_name || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1296,6 +1372,7 @@ function AirExportJobCreate() {
             // Save current MAWB form values
             mawbDetails: {
               service: mawbDetailsForm.values.service || "AIR",
+              is_direct: mawbDetailsForm.values.is_direct,
               agent_code: mawbDetailsForm.values.agent_code || "",
               agent_name: mawbDetailsForm.values.agent_name || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1333,6 +1410,7 @@ function AirExportJobCreate() {
           ...location.state,
           mawbDetails: {
             service: mawbDetailsForm.values.service || "AIR",
+            is_direct: mawbDetailsForm.values.is_direct,
             agent_code: mawbDetailsForm.values.agent_code || "",
             agent_name: mawbDetailsForm.values.agent_name || "",
             origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1372,6 +1450,7 @@ function AirExportJobCreate() {
           // Save current MAWB form values
           mawbDetails: {
             service: mawbDetailsForm.values.service || "AIR",
+            is_direct: mawbDetailsForm.values.is_direct,
             agent_code: mawbDetailsForm.values.agent_code || "",
             agent_name: mawbDetailsForm.values.agent_name || "",
             origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1471,6 +1550,7 @@ function AirExportJobCreate() {
         const mawbDetailsKey = savedMawbDetails
           ? JSON.stringify({
               service: savedMawbDetails.service,
+              is_direct: savedMawbDetails.is_direct,
               agent_code: savedMawbDetails.agent_code,
               origin_code: savedMawbDetails.origin_code,
               destination_code: savedMawbDetails.destination_code,
@@ -1488,6 +1568,7 @@ function AirExportJobCreate() {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
             service: savedMawbDetails.service || "AIR",
+            is_direct: parseBoolean(savedMawbDetails.is_direct),
             agent_code: savedMawbDetails.agent_code || "",
             agent_name: savedMawbDetails.agent_name || "",
             origin_code: savedMawbDetails.origin_code || "",
@@ -1636,7 +1717,10 @@ function AirExportJobCreate() {
       if (!mawbDetailsForm.values.service?.trim()) {
         missingFields.push("Service");
       }
-      if (!mawbDetailsForm.values.agent_code?.trim()) {
+      if (
+        !mawbDetailsForm.values.is_direct &&
+        !mawbDetailsForm.values.agent_code?.trim()
+      ) {
         missingFields.push("Origin Agent");
       }
       if (!mawbDetailsForm.values.origin_code?.trim()) {
@@ -1674,6 +1758,7 @@ function AirExportJobCreate() {
       // Prepare MAWB details with ALL current form values including origin_name and destination_name
       const mawbDetailsToPass = {
         service: mawbDetailsForm.values.service || "AIR",
+        is_direct: mawbDetailsForm.values.is_direct,
         agent_code: mawbDetailsForm.values.agent_code || "",
         agent_name: mawbDetailsForm.values.agent_name || "",
         origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1838,9 +1923,13 @@ function AirExportJobCreate() {
   // Check if all requirements are met for Create button
   const canCreateJob = useMemo(() => {
     // Check MAWB mandatory fields
+    const destinationAgentValid = mawbDetailsForm.values.is_direct
+      ? true
+      : !!mawbDetailsForm.values.agent_code?.trim();
+
     const mawbFieldsValid =
       mawbDetailsForm.values.service?.trim() &&
-      mawbDetailsForm.values.agent_code?.trim() &&
+      destinationAgentValid &&
       mawbDetailsForm.values.origin_code?.trim() &&
       mawbDetailsForm.values.destination_code?.trim() &&
       mawbDetailsForm.values.etd &&
@@ -1852,6 +1941,7 @@ function AirExportJobCreate() {
     return mawbFieldsValid && hasHawbDetails;
   }, [
     mawbDetailsForm.values.service,
+    mawbDetailsForm.values.is_direct,
     mawbDetailsForm.values.agent_code,
     mawbDetailsForm.values.origin_code,
     mawbDetailsForm.values.destination_code,
@@ -1942,6 +2032,9 @@ function AirExportJobCreate() {
     }
 
     // Validate MAWB and Carrier details before submission
+    if (mawbDetailsForm.values.is_direct) {
+      mawbDetailsForm.clearFieldError("agent_code");
+    }
     const mawbValidation = mawbDetailsForm.validate();
     const carrierValidation = carrierDetailsForm.validate();
 
@@ -1962,8 +2055,11 @@ function AirExportJobCreate() {
     try {
       const payload = {
         service: mawbDetailsForm.values.service,
+        is_direct: mawbDetailsForm.values.is_direct,
         service_type: "Export",
-        agent: mawbDetailsForm.values.agent_code || null,
+        agent: mawbDetailsForm.values.is_direct
+          ? null
+          : mawbDetailsForm.values.agent_code || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
         etd: mawbDetailsForm.values.etd
@@ -2588,7 +2684,7 @@ function AirExportJobCreate() {
                 <SearchableSelect
                   key={`origin-agent-${formInitializedKey}`}
                   label="Destination Agent"
-                  required
+                  required={!mawbDetailsForm.values.is_direct}
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
                   searchFields={["customer_name", "customer_code"]}
@@ -2754,6 +2850,35 @@ function AirExportJobCreate() {
                   error={mawbDetailsForm.errors.ata as string}
                   size="sm"
                 />
+              </Grid.Col>
+              
+              <Grid.Col span={3}>
+                <Radio.Group
+                  label="Direct"
+                  value={mawbDetailsForm.values.is_direct ? "true" : "false"}
+                  onChange={(value) => {
+                    const isDirect = value === "true";
+                    const previousIsDirect = mawbDetailsForm.values.is_direct;
+                    mawbDetailsForm.setFieldValue("is_direct", isDirect);
+
+                    // If switching to "Yes" (Direct=true), Destination Agent becomes optional.
+                    // Clear any previously entered/selected Destination Agent value.
+                    if (isDirect && !previousIsDirect) {
+                      mawbDetailsForm.clearFieldError("agent_code");
+                      mawbDetailsForm.setFieldValue("agent_code", "");
+                      mawbDetailsForm.setFieldValue("agent_name", "");
+                      originAgentDataRef.current = null;
+                    } else if (isDirect) {
+                      // Even if value doesn't change, ensure the select isn't blocked by stale errors.
+                      mawbDetailsForm.clearFieldError("agent_code");
+                    }
+                  }}
+                >
+                  <Group mt="xs">
+                    <Radio value="true" label="Yes" />
+                    <Radio value="false" label="No" />
+                  </Group>
+                </Radio.Group>
               </Grid.Col>
             </Grid>
 
