@@ -165,6 +165,7 @@ import CallEntryCalendar from "../pages/dashboard/CallEntryCalendar";
 import Pipeline from "../pages/dashboard/Pipeline";
 import PipelineCreate from "../pages/dashboard/PipelineCreate";
 import useAuthStore from "../store/authStore";
+import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -347,6 +348,7 @@ const NavigationRoutes = () => {
         <Route path="/journal-voucher-reversal/create" element={<JournalVoucherReversal />} />
         <Route path="/journal-voucher-reversal/edit/:id" element={<JournalVoucherReversal />} />
         <Route path="/journal-voucher-reversal/view/:id" element={<JournalVoucherReversal />} />
+        <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />

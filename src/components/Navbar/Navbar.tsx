@@ -35,6 +35,7 @@ import {
   IconCircleCheck,
   IconGitBranch,
   IconReceiptTax,
+  IconSearch,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -77,7 +78,8 @@ const Navbar = ({
       location.pathname.startsWith("/supplier-invoice") ||
       location.pathname.startsWith("/overseas-receipt") ||
       location.pathname.startsWith("/journal-voucher") ||
-      location.pathname.startsWith("/journal-voucher-reversal")
+      location.pathname.startsWith("/journal-voucher-reversal") ||
+      location.pathname.startsWith("/subledger-enquiry")
     ) {
       setIsAccountsOpen(true);
     }
@@ -729,6 +731,19 @@ const Navbar = ({
                     label="JournalVoucherReversal"
                     icon={IconReceiptTax}
                     path="/journal-voucher-reversal"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Accounts"
+                    label="Subledger Enquiry"
+                    icon={IconSearch}
+                    path="/subledger-enquiry"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,

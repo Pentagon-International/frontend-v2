@@ -146,6 +146,7 @@ export const URL = {
   journalVoucherFilter: "filter/journal_voucher/",
   journalVoucherReversal: "reverse_voucher/",
   journalVoucherReversalFilter: "filter/reverse_voucher/",
+  subledgerEnquiry: "filter/subledger_enquiry/",
 
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",
