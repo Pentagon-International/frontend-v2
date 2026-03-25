@@ -2712,19 +2712,8 @@ function ImportJobCreate() {
                       onClick={() =>
                         navigate("/job-ledger", {
                           state: {
-                            ...(jobData && { job: jobData }),
-                            ...(location.state?.mblDetails && {
-                              mblDetails: location.state.mblDetails,
-                            }),
-                            ...(location.state?.carrierDetails && {
-                              carrierDetails: location.state.carrierDetails,
-                            }),
-                            ...(location.state?.routings && {
-                              routings: location.state.routings,
-                            }),
-                            housingDetails,
-                            hawbDetails: housingDetails,
-                            serviceType: ["FCL", "LCL"],
+                            jobId:
+                              jobData?.job_id ,
                           },
                         })
                       }

@@ -2401,19 +2401,8 @@ function AirExportJobCreate() {
                     onClick={() => {
                       navigate("/job-ledger", {
                         state: {
-                          ...(jobData && { job: jobData }),
-                          ...(location.state?.mawbDetails && {
-                            mawbDetails: location.state.mawbDetails,
-                          }),
-                          ...(location.state?.carrierDetails && {
-                            carrierDetails: location.state.carrierDetails,
-                          }),
-                          ...(location.state?.routings && {
-                            routings: location.state.routings,
-                          }),
-                          hawbDetails,
-                          housingDetails: hawbDetails,
-                          serviceType: "AIR",
+                          jobId:
+                            jobData?.job_id,
                         },
                       });
                     }}

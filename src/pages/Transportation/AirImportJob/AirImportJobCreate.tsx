@@ -2665,7 +2665,14 @@ function AirImportJobCreate() {
                           color: "#424242",
                         },
                       }}
-                      onClick={() => navigate("/job-ledger")}
+                      onClick={() =>
+                        navigate("/job-ledger", {
+                          state: {
+                            jobId:
+                              jobData?.job_id,
+                          },
+                        })
+                      }
                     >
                       Job Ledger
                     </Menu.Item>

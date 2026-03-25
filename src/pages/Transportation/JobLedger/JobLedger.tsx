@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Paper,
   Box,
@@ -19,11 +19,14 @@ import {
   useMantineReactTable,
 } from "mantine-react-table";
 import { 
-  IconSearch, 
   IconFilter, 
-  IconDownload, 
+  IconChevronLeft,
   IconX,
 } from "@tabler/icons-react";
+import { apiCallProtected } from "../../../api/axios";
+import { API_HEADER } from "../../../store/storeKeys";
+import { useLocation, useNavigate } from "react-router-dom";
+import { URL } from "../../../api/serverUrls";
 
 interface JobLedgerData {
   id: number;
@@ -46,259 +49,103 @@ interface JobLedgerProps {}
 type FilterState = {
   segmentCode: string | null;
   jobNo: string | null;
+  location: string | null;
   subjobNo: string | null;
   hblHawbNo: string | null;
   withAutoEntry: string | null;
-  types: string | null;
   status: string | null;
+};
+
+type JobLedgerSummary = {
+  total_debit?: number | null;
+  total_credit?: number | null;
+  total_revence?: number | null;
+  total_cost?: number | null;
+  total_neutral?: number | null;
+  net_profit_Credit_Debit?: number | null;
+  net_profit_revenue_cost?: number | null;
+};
+
+type JobLedgerApiRow = {
+  sno?: number;
+  service?: string;
+  job_id?: string;
+  location?: string;
+  branch_name?: string;
+  hbl_hawb_no?: string;
+  day_book_code?: string;
+  day_book_name?: string;
+  document_type?: string;
+  document_no?: string;
+  date?: string;
+  debit_local_amount?: number | null;
+  credit_local_amount?: number | null;
+  revence?: number | null;
+  cost?: number | null;
+  neutral?: number | null;
+};
+
+type JobLedgerApiResponse = {
+  job_id?: string;
+  total?: number;
+  summary?: JobLedgerSummary;
+  data?: JobLedgerApiRow[];
+};
+
+type JobLedgerRequestFilters = {
+  job_id: string;
+  location: string;
+  segment_code: string;
+};
+
+type ServiceMasterRow = {
+  service_code?: string | number | null;
+  service_name?: string | null;
 };
 
 const JobLedger: React.FC<JobLedgerProps> = () => {
   const [activeTab, setActiveTab] = useState<string | null>("document");
-  const [searchValue, setSearchValue] = useState("");
-  const [filterType, setFilterType] = useState<string | null>("all");
-  const [filterStatus, setFilterStatus] = useState<string | null>("all");
   const [showFilters, setShowFilters] = useState(false);
+
+  const navigate = useNavigate();
+  const routerLocation = useLocation();
+  const navState = (routerLocation.state ?? {}) as any;
+
+  const inferredJobIdFinal: string | null =
+    (navState?.jobId as string | number | null)?.toString?.() ??
+    (navState?.job_id as string | number | null)?.toString?.() ??
+    (navState?.id as string | number | null)?.toString?.() ??
+    null;
+
+  const inferredLocationFinal: string | null =
+    (navState?.location as string | null) ?? null;
+
+  const inferredSegmentCodeFinal: string | null =
+    (navState?.segment_code as string | null) ??
+    (navState?.segmentCode as string | null) ??
+    null;
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
-    segmentCode: null,
-    jobNo: null,
+    segmentCode: inferredSegmentCodeFinal,
+    jobNo: inferredJobIdFinal,
+    location: inferredLocationFinal,
     subjobNo: null,
     hblHawbNo: null,
     withAutoEntry: null,
-    types: null,
     status: null,
   });
 
-  // Mock data for the table
-  const tableData = useMemo(() => [
-    {
-      id: 1,
-      segment: "AIR",
-      job: "JOB001",
-      subjob: "SUB001",
-      daybookCode: "DB001",
-      daybookName: "Sales Daybook",
-      documentNo: "DOC001",
-      date: "2024-03-24",
-      debit: 1500.00,
-      credit: 0.00,
-      revenue: 1500.00,
-      actualCost: 1200.00,
-      neutral: 300.00,
-    },
-    {
-      id: 2,
-      segment: "SEA",
-      job: "JOB002",
-      subjob: "SUB002",
-      daybookCode: "DB002",
-      daybookName: "Purchase Daybook",
-      documentNo: "DOC002",
-      date: "2024-03-23",
-      debit: 0.00,
-      credit: 500.00,
-      revenue: 800.00,
-      actualCost: 600.00,
-      neutral: 200.00,
-    },
-    {
-      id: 3,
-      segment: "AIR",
-      job: "JOB003",
-      subjob: "SUB003",
-      daybookCode: "DB003",
-      daybookName: "Journal Daybook",
-      documentNo: "DOC003",
-      date: "2024-03-22",
-      debit: 200.00,
-      credit: 0.00,
-      revenue: 200.00,
-      actualCost: 150.00,
-      neutral: 50.00,
-    },
-     {
-      id: 1,
-      segment: "AIR",
-      job: "JOB001",
-      subjob: "SUB001",
-      daybookCode: "DB001",
-      daybookName: "Sales Daybook",
-      documentNo: "DOC001",
-      date: "2024-03-24",
-      debit: 1500.00,
-      credit: 0.00,
-      revenue: 1500.00,
-      actualCost: 1200.00,
-      neutral: 300.00,
-    },
-    {
-      id: 2,
-      segment: "SEA",
-      job: "JOB002",
-      subjob: "SUB002",
-      daybookCode: "DB002",
-      daybookName: "Purchase Daybook",
-      documentNo: "DOC002",
-      date: "2024-03-23",
-      debit: 0.00,
-      credit: 500.00,
-      revenue: 800.00,
-      actualCost: 600.00,
-      neutral: 200.00,
-    },
-    {
-      id: 3,
-      segment: "AIR",
-      job: "JOB003",
-      subjob: "SUB003",
-      daybookCode: "DB003",
-      daybookName: "Journal Daybook",
-      documentNo: "DOC003",
-      date: "2024-03-22",
-      debit: 200.00,
-      credit: 0.00,
-      revenue: 200.00,
-      actualCost: 150.00,
-      neutral: 50.00,
-    },
-     {
-      id: 1,
-      segment: "AIR",
-      job: "JOB001",
-      subjob: "SUB001",
-      daybookCode: "DB001",
-      daybookName: "Sales Daybook",
-      documentNo: "DOC001",
-      date: "2024-03-24",
-      debit: 1500.00,
-      credit: 0.00,
-      revenue: 1500.00,
-      actualCost: 1200.00,
-      neutral: 300.00,
-    },
-    {
-      id: 2,
-      segment: "SEA",
-      job: "JOB002",
-      subjob: "SUB002",
-      daybookCode: "DB002",
-      daybookName: "Purchase Daybook",
-      documentNo: "DOC002",
-      date: "2024-03-23",
-      debit: 0.00,
-      credit: 500.00,
-      revenue: 800.00,
-      actualCost: 600.00,
-      neutral: 200.00,
-    },
-    {
-      id: 3,
-      segment: "AIR",
-      job: "JOB003",
-      subjob: "SUB003",
-      daybookCode: "DB003",
-      daybookName: "Journal Daybook",
-      documentNo: "DOC003",
-      date: "2024-03-22",
-      debit: 200.00,
-      credit: 0.00,
-      revenue: 200.00,
-      actualCost: 150.00,
-      neutral: 50.00,
-    },
-     {
-      id: 1,
-      segment: "AIR",
-      job: "JOB001",
-      subjob: "SUB001",
-      daybookCode: "DB001",
-      daybookName: "Sales Daybook",
-      documentNo: "DOC001",
-      date: "2024-03-24",
-      debit: 1500.00,
-      credit: 0.00,
-      revenue: 1500.00,
-      actualCost: 1200.00,
-      neutral: 300.00,
-    },
-    {
-      id: 2,
-      segment: "SEA",
-      job: "JOB002",
-      subjob: "SUB002",
-      daybookCode: "DB002",
-      daybookName: "Purchase Daybook",
-      documentNo: "DOC002",
-      date: "2024-03-23",
-      debit: 0.00,
-      credit: 500.00,
-      revenue: 800.00,
-      actualCost: 600.00,
-      neutral: 200.00,
-    },
-    {
-      id: 3,
-      segment: "AIR",
-      job: "JOB003",
-      subjob: "SUB003",
-      daybookCode: "DB003",
-      daybookName: "Journal Daybook",
-      documentNo: "DOC003",
-      date: "2024-03-22",
-      debit: 200.00,
-      credit: 0.00,
-      revenue: 200.00,
-      actualCost: 150.00,
-      neutral: 50.00,
-    },
-     {
-      id: 1,
-      segment: "AIR",
-      job: "JOB001",
-      subjob: "SUB001",
-      daybookCode: "DB001",
-      daybookName: "Sales Daybook",
-      documentNo: "DOC001",
-      date: "2024-03-24",
-      debit: 1500.00,
-      credit: 0.00,
-      revenue: 1500.00,
-      actualCost: 1200.00,
-      neutral: 300.00,
-    },
-    {
-      id: 2,
-      segment: "SEA",
-      job: "JOB002",
-      subjob: "SUB002",
-      daybookCode: "DB002",
-      daybookName: "Purchase Daybook",
-      documentNo: "DOC002",
-      date: "2024-03-23",
-      debit: 0.00,
-      credit: 500.00,
-      revenue: 800.00,
-      actualCost: 600.00,
-      neutral: 200.00,
-    },
-    {
-      id: 3,
-      segment: "AIR",
-      job: "JOB003",
-      subjob: "SUB003",
-      daybookCode: "DB003",
-      daybookName: "Journal Daybook",
-      documentNo: "DOC003",
-      date: "2024-03-22",
-      debit: 200.00,
-      credit: 0.00,
-      revenue: 200.00,
-      actualCost: 150.00,
-      neutral: 50.00,
-    },
-  ], []);
+  // Real data (loaded from API)
+  const [tableData, setTableData] = useState<JobLedgerData[]>([]);
+  const [jobLedgerSummary, setJobLedgerSummary] = useState<JobLedgerSummary | null>(null);
+  const [jobLedgerLoading, setJobLedgerLoading] = useState<boolean>(false);
+  const [jobLedgerError, setJobLedgerError] = useState<string | null>(null);
+  const [apiFilters, setApiFilters] = useState<JobLedgerRequestFilters | null>(null);
+  const [segmentOptions, setSegmentOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [segmentOptionsLoading, setSegmentOptionsLoading] = useState(false);
 
   // Filter functions
   const toggleFilters = () => {
@@ -313,20 +160,171 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   };
 
   const clearAllFilters = () => {
+    // setFilters({
+    //   segmentCode: null,
+    //   jobNo: null,
+    //   location: null,
+    //   subjobNo: null,
+    //   hblHawbNo: null,
+    //   withAutoEntry: null,
+    //   status: null,
+    // });
     setFilters({
       segmentCode: null,
-      jobNo: null,
+      jobNo: inferredJobIdFinal,
+      location: null,
       subjobNo: null,
       hblHawbNo: null,
       withAutoEntry: null,
-      types: null,
       status: null,
     });
+    setApiFilters(null);
+    setTableData([]);
+    setJobLedgerSummary(null);
+    setJobLedgerError(null);
     setShowFilters(false);
   };
 
-  // Calculate totals
+  const toNumber = (v: unknown): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const buildJobLedgerFiltersFromUI = (
+    uiFilters: FilterState,
+  ): JobLedgerRequestFilters => {
+    return {
+      job_id: (uiFilters.jobNo ?? "").toString().trim(),
+      location: (uiFilters.location ?? "").toString().trim(),
+      segment_code: (uiFilters.segmentCode ?? "").toString().trim(),
+    };
+  };
+
+  const fetchJobLedger = async (requestFilters: JobLedgerRequestFilters) => {
+    setJobLedgerLoading(true);
+    setJobLedgerError(null);
+    setTableData([]);
+    setJobLedgerSummary(null);
+    try {
+      const response = await apiCallProtected.post(
+        `${URL.jobLedger}`,
+        { filters: requestFilters },
+        API_HEADER,
+      );
+      const result = response as JobLedgerApiResponse;
+      const apiRows = Array.isArray(result?.data) ? result.data : [];
+      console.log("LLLLL: ",apiRows);
+      setJobLedgerSummary(result?.summary ?? null);
+      setTableData(
+        apiRows.map((d, idx) => {
+          const id = Number(d?.sno ?? idx + 1);
+          return {
+            id: Number.isFinite(id) ? id : idx + 1,
+            segment: (d?.service ?? "").toString(),
+            job: (d?.job_id ?? "").toString(),
+            // Response doesn't have "subjob" like the UI. Using HBL/AWB as a closest match.
+            subjob: (d?.hbl_hawb_no ?? "").toString(),
+            daybookCode: (d?.day_book_code ?? "").toString(),
+            daybookName: (d?.day_book_name ?? "").toString(),
+            documentNo: (d?.document_no ?? "").toString(),
+            date: (d?.date ?? "").toString(),
+            debit: toNumber(d?.debit_local_amount),
+            credit: toNumber(d?.credit_local_amount),
+            revenue: toNumber(d?.revence),
+            actualCost: toNumber(d?.cost),
+            neutral: toNumber(d?.neutral),
+          };
+        }),
+      );
+    } catch (err) {
+      setJobLedgerError("Failed to load Job Ledger. Please try again.");
+      setTableData([]);
+      setJobLedgerSummary(null);
+      // eslint-disable-next-line no-console
+      console.error("JobLedger fetch error:", err);
+    } finally {
+      setJobLedgerLoading(false);
+    }
+  };
+
+  const handleApplyFilters = () => {
+    const built = buildJobLedgerFiltersFromUI(filters);
+    setJobLedgerError(null);
+    setApiFilters(built);
+    fetchJobLedger(built);
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchServiceMaster() {
+      setSegmentOptionsLoading(true);
+      try {
+        const res = await apiCallProtected.get(`${URL.serviceMaster}`, API_HEADER);
+        const rows = (res?.data ?? res) as ServiceMasterRow[];
+        const list = Array.isArray(rows) ? rows : [];
+
+        const options = list
+          .map((r) => ({
+            value: (r?.service_code ?? "").toString(),
+            label: (r?.service_name ?? "").toString(),
+          }))
+          .filter((o) => o.value && o.label);
+
+        if (!isMounted) return;
+        setSegmentOptions(options);
+      } catch (e) {
+        if (!isMounted) return;
+        setSegmentOptions([]);
+      } finally {
+        if (!isMounted) return;
+        setSegmentOptionsLoading(false);
+      }
+    }
+
+    fetchServiceMaster();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Always hit API when screen opens (even if some filters are blank).
+  const didInitialFetchRef = useRef(false);
+  useEffect(() => {
+    if (didInitialFetchRef.current) return;
+    didInitialFetchRef.current = true;
+
+    const requestFilters: JobLedgerRequestFilters = {
+      job_id: (filters.jobNo ?? inferredJobIdFinal ?? "").toString().trim(),
+      location: (filters.location ?? inferredLocationFinal ?? "").toString().trim(),
+      segment_code: (filters.segmentCode ?? inferredSegmentCodeFinal ?? "").toString().trim(),
+    };
+
+    fetchJobLedger(requestFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep existing flow where changing `apiFilters` triggers a fetch too.
+  useEffect(() => {
+    if (!apiFilters) return;
+    fetchJobLedger(apiFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiFilters]);
+
+  // Calculate totals from API summary (fallback to calculated totals)
   const totals = useMemo(() => {
+    // Use API summary if available, otherwise calculate from table data
+    if (jobLedgerSummary) {
+      return {
+        totalDebit: toNumber(jobLedgerSummary.total_debit),
+        totalCredit: toNumber(jobLedgerSummary.total_credit),
+        totalRevenue: toNumber(jobLedgerSummary.total_revence),
+        totalActualCost: toNumber(jobLedgerSummary.total_cost),
+        totalNeutral: toNumber(jobLedgerSummary.total_neutral),
+      };
+    }
+    
+    // Fallback to calculating from table data
     const totalDebit = tableData.reduce((sum, row) => sum + row.debit, 0);
     const totalCredit = tableData.reduce((sum, row) => sum + row.credit, 0);
     const totalRevenue = tableData.reduce((sum, row) => sum + row.revenue, 0);
@@ -340,7 +338,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       totalActualCost,
       totalNeutral,
     };
-  }, [tableData]);
+  }, [jobLedgerSummary, tableData]);
 
   // Columns definition for MantineReactTable
   const columns = useMemo<MRT_ColumnDef<JobLedgerData>[]>(
@@ -663,6 +661,18 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
               <Grid.Col span={2}>
                 <TextInput
+                  label="Location"
+                  placeholder="Enter Location"
+                  size="xs"
+                  value={filters.location || ""}
+                  onChange={(e) =>
+                    updateFilter("location", e.target.value || null)
+                  }
+                />
+              </Grid.Col>
+
+              <Grid.Col span={2}>
+                <TextInput
                   label="Subjob No"
                   placeholder="Enter Subjob No"
                   size="xs"
@@ -701,22 +711,6 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
               <Grid.Col span={2}>
                 <Select
-                  label="Types"
-                  placeholder="Select type"
-                  size="xs"
-                  data={[
-                    { value: "invoice", label: "Invoice" },
-                    { value: "receipt", label: "Receipt" },
-                    { value: "journal", label: "Journal" },
-                    { value: "payment", label: "Payment" },
-                  ]}
-                  value={filters.types}
-                  onChange={updateFilter.bind(null, "types")}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={2}>
-                <Select
                   label="Status"
                   placeholder="Select status"
                   size="xs"
@@ -748,6 +742,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   </Button>
                   <Button
                     size="xs"
+                    onClick={handleApplyFilters}
                     variant="filled"
                     style={{
                       backgroundColor: "#105476",
@@ -844,6 +839,27 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             >
               {/* Filters */}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              leftSection={<IconChevronLeft size={16} />}
+              onClick={() => navigate(-1)}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  color: "#105476",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontStyle: "semibold",
+                  border: "1px solid #105476",
+                  "&:hover": {
+                    backgroundColor: "#E0F5FF",
+                  },
+                },
+              }}
+            >
+              Back
+            </Button>
             {/* <Button
               variant="outline"
               size="sm"
@@ -888,14 +904,16 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
             <Grid gutter="sm" px="md" pt="xs" pb="sm">
               <Grid.Col span={2}>
-                <TextInput
-                  label="Segment Code"
-                  placeholder="Enter Segment Code"
+                <Select
+                  label="service_name"
+                  placeholder="Select Segment Code"
                   size="xs"
+                  searchable
+                  clearable
+                  data={segmentOptions}
                   value={filters.segmentCode || ""}
-                  onChange={(e) =>
-                    updateFilter("segmentCode", e.target.value || null)
-                  }
+                  onChange={(value) => updateFilter("segmentCode", value || null)}
+                  disabled={segmentOptionsLoading}
                 />
               </Grid.Col>
 
@@ -913,6 +931,18 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
               <Grid.Col span={2}>
                 <TextInput
+                  label="Location"
+                  placeholder="Enter Location"
+                  size="xs"
+                  value={filters.location || ""}
+                  onChange={(e) =>
+                    updateFilter("location", e.target.value || null)
+                  }
+                />
+              </Grid.Col>
+
+              {/* <Grid.Col span={2}>
+                <TextInput
                   label="Subjob No"
                   placeholder="Enter Subjob No"
                   size="xs"
@@ -921,7 +951,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                     updateFilter("subjobNo", e.target.value || null)
                   }
                 />
-              </Grid.Col>
+              </Grid.Col> */}
 
               <Grid.Col span={2}>
                 <TextInput
@@ -935,7 +965,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                 />
               </Grid.Col>
 
-              <Grid.Col span={2}>
+              {/* <Grid.Col span={2}>
                 <Select
                   label="With Auto Entry"
                   placeholder="Select option"
@@ -947,25 +977,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   value={filters.withAutoEntry}
                   onChange={updateFilter.bind(null, "withAutoEntry")}
                 />
-              </Grid.Col>
+              </Grid.Col> */}
 
-              <Grid.Col span={2}>
-                <Select
-                  label="Types"
-                  placeholder="Select type"
-                  size="xs"
-                  data={[
-                    { value: "invoice", label: "Invoice" },
-                    { value: "receipt", label: "Receipt" },
-                    { value: "journal", label: "Journal" },
-                    { value: "payment", label: "Payment" },
-                  ]}
-                  value={filters.types}
-                  onChange={updateFilter.bind(null, "types")}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={2}>
+              {/* <Grid.Col span={2}>
                 <Select
                   label="Status"
                   placeholder="Select status"
@@ -979,7 +993,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   value={filters.status}
                   onChange={updateFilter.bind(null, "status")}
                 />
-              </Grid.Col>
+              </Grid.Col> */}
 
               <Grid.Col span={4}>
                 <Group gap="sm" mt="lg">
@@ -998,6 +1012,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   </Button>
                   <Button
                     size="xs"
+                    onClick={handleApplyFilters}
                     variant="filled"
                     style={{
                       backgroundColor: "#105476",
@@ -1033,6 +1048,16 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
               {/* Totals Section */}
               <Divider my="md" />
+              {jobLedgerLoading && (
+                <Text size="sm" c="dimmed" mb="sm">
+                  Loading job ledger...
+                </Text>
+              )}
+              {jobLedgerError && (
+                <Text size="sm" c="red" mb="sm">
+                  {jobLedgerError}
+                </Text>
+              )}
               <Box>
                 <Grid gutter="md">
                   <Grid.Col span={{ base: 12, sm: 6, md: 2.4 }}>
