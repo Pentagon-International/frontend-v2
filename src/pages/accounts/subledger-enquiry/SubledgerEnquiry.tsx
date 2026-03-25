@@ -11,6 +11,9 @@ import {
   TextInput,
 } from "@mantine/core";
 import { IconInfoCircle, IconSearch } from "@tabler/icons-react";
+import { useForm } from "@mantine/form";
+import * as yup from "yup";
+import { yupResolver } from "mantine-form-yup-resolver";
 import {
   Dropdown,
   SearchableSelect,
@@ -70,9 +73,9 @@ const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "document_no", label: "Doc No", span: 1.25 },
   { key: "date_document", label: "Doc Date", span: 0.9 },
   { key: "due_date", label: "Due Date", span: 0.9 },
-  { key: "shipment_no", label: "Shipment No", span: 1.0 },
   { key: "service", label: "Service", span: 0.55 },
   { key: "job_id", label: "Job Id", span: 0.95 },
+  { key: "shipment_no", label: "Shipment No", span: 1.0 },
   { key: "debit_local_amount", label: "Debit", span: 0.75 },
   { key: "credit_local_amount", label: "Credit", span: 0.75 },
   { key: "narration", label: "Narration", span: 1 },
@@ -133,13 +136,24 @@ const readOnlyInputStyles = {
   },
 };
 
+type FilterFormValues = {
+  fromDate: Date | null;
+  toDate: Date | null;
+  accountId: string | null;
+  accountCode: string | null; // derived from selected account (gl_account_code)
+  location: string | null | undefined;
+};
+
+const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
+  fromDate: yup.date().nullable().required("From date is required"),
+  toDate: yup.date().nullable().required("To date is required"),
+  accountId: yup.string().nullable().required("Account is required"),
+  accountCode: yup.string().nullable().required("Account is required"),
+  location: yup.string().nullable().optional(),
+});
+
 export default function SubledgerEnquiry() {
-  const [fromDate, setFromDate] = useState<Date | null>(null);
-  const [toDate, setToDate] = useState<Date | null>(null);
-  const [accountCode, setAccountCode] = useState<string | null>(null);
-  const [accountId, setAccountId] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<CoaItem | null>(null);
-  const [location, setLocation] = useState<string | null>(null);
   const [rows, setRows] = useState<SubledgerEntryRow[]>([]);
   const [enquirySummary, setEnquirySummary] = useState<{
     opening_balance: number | null;
@@ -148,12 +162,25 @@ export default function SubledgerEnquiry() {
   const [isFetchingRows, setIsFetchingRows] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
-  const isFormValid = Boolean(fromDate && toDate && accountCode);
+  const form = useForm<FilterFormValues>({
+    initialValues: {
+      fromDate: null,
+      toDate: null,
+      accountId: null,
+      accountCode: null,
+      location: null,
+    },
+    validate: yupResolver(filterSchema),
+    validateInputOnBlur: true,
+  });
 
   const selectedGlAccountCode = selectedAccount?.gl_account_code ?? "";
   const selectedSlCode = selectedAccount?.sl_code ?? "";
 
   const { user } = useAuthStore();
+
+  const asStringError = (v: unknown): string | undefined =>
+    typeof v === "string" ? v : undefined;
 
   const locationOptions = useMemo(() => {
     const branches = (user?.branches ?? []) as Array<{
@@ -206,22 +233,17 @@ export default function SubledgerEnquiry() {
     });
   }, [user]);
 
-  const handleSearch = async () => {
-    if (!isFormValid) {
-      setFetchError("Please fill From, To, and Account fields.");
-      return;
-    }
-
+  const handleSearch = form.onSubmit(async (values) => {
     setFetchError("");
     setIsFetchingRows(true);
 
     try {
-      const trimmedLocation = location?.trim();
+      const trimmedLocation = values.location?.trim();
       const payload = {
         filters: {
-          date_from: formatDateYYYYMMDD(fromDate),
-          date_to: formatDateYYYYMMDD(toDate),
-          account_code: String(accountCode),
+          date_from: formatDateYYYYMMDD(values.fromDate),
+          date_to: formatDateYYYYMMDD(values.toDate),
+          account_code: String(values.accountCode),
           ...(trimmedLocation ? { location: trimmedLocation } : {}),
         },
       };
@@ -251,7 +273,7 @@ export default function SubledgerEnquiry() {
     } finally {
       setIsFetchingRows(false);
     }
-  };
+  });
 
   const openingBalanceLabel =
     enquirySummary && typeof enquirySummary.opening_balance === "number"
@@ -266,12 +288,14 @@ export default function SubledgerEnquiry() {
         </Text>
       </Group>
 
-      <Grid gutter="md" align="flex-end">
+      <form onSubmit={handleSearch}>
+        <Grid gutter="md" align="flex-start">
         <Grid.Col span={{ base: 12, md: 3 }}>
           <SingleDateInput
             label="From"
-            value={fromDate}
-            onChange={setFromDate}
+            value={form.values.fromDate}
+            onChange={(d) => form.setFieldValue("fromDate", d)}
+            error={asStringError(form.errors.fromDate)}
             withAsterisk
           />
         </Grid.Col>
@@ -279,8 +303,9 @@ export default function SubledgerEnquiry() {
         <Grid.Col span={{ base: 12, md: 3 }}>
           <SingleDateInput
             label="To"
-            value={toDate}
-            onChange={setToDate}
+            value={form.values.toDate}
+            onChange={(d) => form.setFieldValue("toDate", d)}
+            error={asStringError(form.errors.toDate)}
             withAsterisk
           />
         </Grid.Col>
@@ -289,10 +314,9 @@ export default function SubledgerEnquiry() {
           <SearchableSelect
             label="Account"
             apiEndpoint={URL.chartOfAccounts}
-            value={accountId}
+            value={form.values.accountId}
             dropdownZIndex={1100}
-            placeholder="Search by GL code or account name"
-            required
+            placeholder="Search by account name"
             withAsterisk
             minSearchLength={1}
             searchFields={["gl_account_code", "account_name", "id"]}
@@ -308,9 +332,9 @@ export default function SubledgerEnquiry() {
             displayValue={selectedAccount?.account_name ?? ""}
             returnOriginalData
             onChange={(value, _selectedData, originalData) => {
-              setAccountId(value);
               if (!value || !originalData) {
-                setAccountCode(null);
+                form.setFieldValue("accountId", null);
+                form.setFieldValue("accountCode", null);
                 setSelectedAccount(null);
                 return;
               }
@@ -319,7 +343,9 @@ export default function SubledgerEnquiry() {
               const nextSl = originalData.sl_code;
               const nextName = originalData.account_name;
 
-              setAccountCode(
+              form.setFieldValue("accountId", value);
+              form.setFieldValue(
+                "accountCode",
                 nextGl !== undefined && nextGl !== null ? String(nextGl) : null,
               );
               setSelectedAccount({
@@ -341,6 +367,7 @@ export default function SubledgerEnquiry() {
                     : undefined,
               });
             }}
+            error={asStringError(form.errors.accountId)}
           />
         </Grid.Col>
 
@@ -351,31 +378,34 @@ export default function SubledgerEnquiry() {
               locationOptions.length > 0 ? "Select location" : "No locations"
             }
             data={locationOptions}
-            value={location}
+            value={form.values.location}
             dropdownZIndex={1100}
             searchable={false}
-            onChange={(value) => setLocation(value)}
+            onChange={(value) => form.setFieldValue("location", value)}
           />
         </Grid.Col>
 
         <Grid.Col span={{ md: 1 }}>
-          <Button
-            leftSection={
-              isFetchingRows ? (
-                <Loader size={14} color="white" />
-              ) : (
-                <IconSearch size={16} />
-              )
-            }
-            onClick={handleSearch}
-            fullWidth
-            size="xs"
-            style={{ height: 32 }}
-          >
-            Search
-          </Button>
+          <Box pt={30}>
+            <Button
+              leftSection={
+                isFetchingRows ? (
+                  <Loader size={14} color="white" />
+                ) : (
+                  <IconSearch size={16} />
+                )
+              }
+              type="submit"
+              fullWidth
+              size="xs"
+              style={{ height: 32 }}
+            >
+              Search
+            </Button>
+          </Box>
         </Grid.Col>
       </Grid>
+      </form>
 
       {/* Keep filter inputs aligned; show GL/SL under Account in a second row */}
       {selectedAccount && (
@@ -383,8 +413,8 @@ export default function SubledgerEnquiry() {
           <Grid.Col span={{ md: 6 }} />
           <Grid.Col span={{ md: 3 }}>
             <Text size="12px" style={{ fontFamily: "Inter" }}>
-              {/* GL: {selectedGlAccountCode || "—"}{" "}
-              <span style={{ margin: "0 8px" }}>|</span> */}
+              GL: {selectedGlAccountCode || "—"}{" "}
+              <span style={{ margin: "0 8px" }}>|</span>
               SL: {selectedSlCode || "—"}
             </Text>
           </Grid.Col>
@@ -404,41 +434,67 @@ export default function SubledgerEnquiry() {
       )}
 
       <Box mt={"sm"}>
-        {enquirySummary !== null && (
-          <Grid align="flex-end" mb="sm">
-            <Grid.Col span={{ md: 9.5 }} />
-            <Grid.Col span={{ md: 2 }}>
-              <Box
-                style={{
-                  border: "1px solid #dbe5ef",
-                  borderRadius: 6,
-                  padding: "10px 12px",
-                  backgroundColor: "#f8fbff",
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
-                }}
-              >
-                <Text
-                  fw={700}
-                  size="sm"
-                  c="#105476"
-                  style={{
-                    fontFamily: "Inter",
-                    display: "flex",
-                    // justifyContent: "flex-end",
-                    gap: 6,
-                  }}
-                >
-                  <span>Opening Bal:</span>
-                  <span>{openingBalanceLabel ?? "—"}</span>
-                </Text>
-              </Box>
-            </Grid.Col>
-            <Grid.Col span={0.5} />
-          </Grid>
-        )}
-
         <ScrollArea type="scroll" offsetScrollbars>
           <Box style={{ minWidth: 1100 }}>
+            {enquirySummary !== null && (
+              <Grid
+                w="100%"
+                gutter="xs"
+                mb={4}
+                style={{ flexWrap: "nowrap" }}
+              >
+                {ENTRY_COLUMNS.map((col) => {
+                  if (col.key === "amount") {
+                    const closingSpan =
+                      ENTRY_COLUMNS.find((c) => c.key === "closing_balance")
+                        ?.span ?? 0;
+                    return (
+                      <Grid.Col
+                        key={`ob-${col.key}`}
+                        span={col.span + closingSpan}
+                      >
+                        <Box
+                          style={{
+                            border: "1px solid #d0e2f2",
+                            backgroundColor: "#f2f7ff",
+                            borderRadius: 6,
+                            padding: "6px 8px",
+                            height: 30,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <Text
+                            size="12px"
+                            fw={800}
+                            c="#0b3b5b"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            Opening Bal
+                          </Text>
+                          <Text
+                            size="12px"
+                            fw={800}
+                            c="#0b3b5b"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            {openingBalanceLabel ?? "—"}
+                          </Text>
+                        </Box>
+                      </Grid.Col>
+                    );
+                  }
+                  if (col.key === "closing_balance") return null;
+                  return (
+                    <Grid.Col key={`ob-${col.key}`} span={col.span}>
+                      <Box style={{ height: 18 }} />
+                    </Grid.Col>
+                  );
+                })}
+              </Grid>
+            )}
+
             <Grid
               w="100%"
               py="sm"
