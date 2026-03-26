@@ -93,6 +93,7 @@ type JVChargeRow = {
   cn_r: string;
   charge_id: number | null;
   charge_name: string;
+  account_id: number | null;
   account_code: string;
   account_name: string;
   subledger_code: string;
@@ -133,6 +134,7 @@ const emptyRow = (): JVChargeRow => ({
   cn_r: "",
   charge_id: null,
   charge_name: "",
+  account_id: null,
   account_code: "",
   account_name: "",
   subledger_code: "",
@@ -293,6 +295,7 @@ function JournalVoucher() {
 
   const coaOptions = useMemo(() => {
     const data = coaData as {
+      id?: number;
       gl_account_code?: string;
       account_name?: string;
       sl_code?: string;
@@ -300,8 +303,10 @@ function JournalVoucher() {
     if (!Array.isArray(data)) return [];
     return data
       .map((item) => ({
-        value: String(item.gl_account_code ?? ""),
-        label: item.account_name ?? item.gl_account_code ?? "",
+        value: String(item.id ?? ""),
+        id: item.id ?? "",
+        gl_account_code: item.gl_account_code ?? "",
+        label: item.account_name ??  "",
         sl_code: item.sl_code ?? "",
         account_name: item.account_name ?? "",
       }))
@@ -379,6 +384,7 @@ function JournalVoucher() {
             cn_r: c.c_r_n ?? "",
             charge_id: c.charge_id != null ? Number(c.charge_id) : null,
             charge_name: "",
+            account_id: null,
             account_code: c.code ?? "",
             account_name: c.account_name ?? "",
             subledger_code: c.subledger ?? "",
@@ -486,6 +492,7 @@ function JournalVoucher() {
         ...(c.id != null ? { id: c.id } : {}),
         charge_id: c.charge_id ?? null,
         currency_id: c.currency_id ? Number(c.currency_id) : null,
+        // NOTE: we intentionally do NOT send `account_id` to backend
         account_name: c.account_name ?? "",
         subledger: c.subledger_code ?? "",
         code: c.code ?? "",
@@ -1324,26 +1331,59 @@ function JournalVoucher() {
 
                         {/* Account Code */}
                         <td style={cellStyle}>
-                          <Dropdown
-                            placeholder="Account"
-                            data={coaOptions}
-                            value={row.account_code || null}
-                            onChange={(v) => {
-                              const code = v ?? "";
-                              form.setFieldValue(`charges.${index}.account_code`, code);
-                              const opt = coaOptions.find((o) => o.value === code) as
-                                | { sl_code?: string; account_name?: string }
-                                | undefined;
+                          <SearchableSelect
+                            placeholder="Search by account name"
+                            apiEndpoint={URL.chartOfAccounts}
+                            value={row.account_id != null ? String(row.account_id) : null}
+                            dropdownZIndex={1100}
+                            minSearchLength={1}
+                            searchFields={["gl_account_code", "account_name", "id"]}
+                            displayFormat={(item: Record<string, unknown>) => {
+                              const id = String(item.id ?? "").trim();
+                              const gl = String(item.gl_account_code ?? "").trim();
+                              const name = String(item.account_name ?? "").trim();
+                              return {
+                                value: id,
+                                label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                              };
+                            }}
+                            displayValue={
+                              row.account_name
+                                ? `${row.account_name}${
+                                    row.account_code ? ` - ${row.account_code}` : ""
+                                  }`
+                                : row.account_code || undefined
+                            }
+                            returnOriginalData
+                            onChange={(value, _selectedData, originalData) => {
+                              if (!value || !originalData) {
+                                form.setFieldValue(`charges.${index}.account_code`, "");
+                                form.setFieldValue(`charges.${index}.subledger_code`, "");
+                                form.setFieldValue(`charges.${index}.account_name`, "");
+                                return;
+                              }
+                              form.setFieldValue(
+                                `charges.${index}.account_code`,
+                                originalData.gl_account_code !== undefined &&
+                                  originalData.gl_account_code !== null
+                                  ? String(originalData.gl_account_code)
+                                  : "",
+                              );
                               form.setFieldValue(
                                 `charges.${index}.subledger_code`,
-                                opt?.sl_code ?? "",
+                                originalData.sl_code !== undefined &&
+                                  originalData.sl_code !== null
+                                  ? String(originalData.sl_code)
+                                  : "",
                               );
                               form.setFieldValue(
                                 `charges.${index}.account_name`,
-                                opt?.account_name ?? "",
+                                originalData.account_name !== undefined &&
+                                  originalData.account_name !== null
+                                  ? String(originalData.account_name)
+                                  : "",
                               );
                             }}
-                            searchable
                             readOnly={isReadOnly}
                             styles={inputCell}
                           />
