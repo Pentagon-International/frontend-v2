@@ -13,6 +13,7 @@ type Props = {
     setIsTariffOpen?: (v: boolean) => void;
     setIsAirOpen?: (v: boolean) => void;
     setIsSeaExportOpen?: (v: boolean) => void;
+    setIsAccountsOpen?: (v: boolean) => void;
   };
 };
 
@@ -73,12 +74,14 @@ export const SimpleNavLink = ({
     collapsibles?.setIsTariffOpen?.(false);
     collapsibles?.setIsAirOpen?.(false);
     collapsibles?.setIsSeaExportOpen?.(false);
+    collapsibles?.setIsAccountsOpen?.(false);
     // Also close in layout store for collapsed mode
     setOpenCollapsible("Sales", false);
     setOpenCollapsible("Air", false);
     setOpenCollapsible("Ocean", false);
     setOpenCollapsible("Customer Service", false);
     setOpenCollapsible("Tariff", false);
+    setOpenCollapsible("Accounts", false);
   };
   const isActive = activeNav === label;
   const iconColor = sectionIconColors[label] || "white";

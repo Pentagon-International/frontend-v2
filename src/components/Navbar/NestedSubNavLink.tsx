@@ -14,8 +14,9 @@ type Props = {
     setIsSalesOpen?: (v: boolean) => void;
     setIsAirOpen?: (v: boolean) => void;
     setIsSeaExportOpen?: (v: boolean) => void;
+    setIsAccountsOpen?: (v: boolean) => void;
   };
-  icon?: React.ComponentType<{ size?: number; [key: string]: unknown }>;
+  icon?: React.ComponentType<any>;
 };
 
 export const NestedSubNavLink = ({

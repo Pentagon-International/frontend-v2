@@ -36,6 +36,7 @@ import {
   IconGitBranch,
   IconReceiptTax,
   IconSearch,
+  IconFileText,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -69,6 +70,7 @@ const Navbar = ({
   const [isSeaExportOpen, setIsSeaExportOpen] = useState(false);
   const [isAirOpen, setIsAirOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+  const [isReportsOpen, setIsReportsOpen] = useState(false);
 
   // Keep Accounts expanded when on receipt, payment, overseas-receipt or supplier-invoice routes
   useEffect(() => {
@@ -82,6 +84,13 @@ const Navbar = ({
       location.pathname.startsWith("/subledger-enquiry")
     ) {
       setIsAccountsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Keep Reports expanded when on reports routes
+  useEffect(() => {
+    if (location.pathname.startsWith("/reports")) {
+      setIsReportsOpen(true);
     }
   }, [location.pathname]);
 
@@ -207,7 +216,7 @@ const Navbar = ({
                   label="Sales"
                   openedLocal={isSalesOpen}
                   setOpenedLocal={setIsSalesOpen}
-                  icon={IconRosetteDiscount}
+                  icon={IconRosetteDiscount as any}
                 >
                   <SubNavLink
                     parent="Sales"
@@ -271,7 +280,7 @@ const Navbar = ({
                     openedLocal={isTariffOpen}
                     setOpenedLocal={setIsTariffOpen}
                     label="Tariff"
-                    icon={IconFileSettings}
+                    icon={IconFileSettings as any}
                     parent="Sales"
                   >
                     <NestedSubNavLink
@@ -279,14 +288,13 @@ const Navbar = ({
                       subParent="Tariff"
                       label="Freight"
                       path="/tariff/freight"
-                      icon={IconPackage}
+                      icon={IconPackage as any}
                       collapsibles={{
                         setIsCustomerServiceOpen,
                         setIsTariffOpen,
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
-                        setIsAccountsOpen,
                       }}
                     />
                     <NestedSubNavLink
@@ -294,14 +302,13 @@ const Navbar = ({
                       subParent="Tariff"
                       label="Origin"
                       path="/tariff/origin"
-                      icon={IconMapPin}
+                      icon={IconMapPin as any}
                       collapsibles={{
                         setIsCustomerServiceOpen,
                         setIsTariffOpen,
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
-                        setIsAccountsOpen,
                       }}
                     />
                     <NestedSubNavLink
@@ -309,14 +316,13 @@ const Navbar = ({
                       subParent="Tariff"
                       label="Destination"
                       path="/tariff/destination"
-                      icon={IconMapPinFilled}
+                      icon={IconMapPinFilled as any}
                       collapsibles={{
                         setIsCustomerServiceOpen,
                         setIsTariffOpen,
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
-                        setIsAccountsOpen,
                       }}
                     />
                   </CollapsibleNav>
@@ -397,7 +403,7 @@ const Navbar = ({
                   label="Air"
                   openedLocal={isAirOpen}
                   setOpenedLocal={setIsAirOpen}
-                  icon={IconPlane}
+                  icon={IconPlane as any}
                 >
                   <SubNavLink
                     parent="Transportation"
@@ -484,7 +490,7 @@ const Navbar = ({
                   label="Ocean"
                   openedLocal={isSeaExportOpen}
                   setOpenedLocal={setIsSeaExportOpen}
-                  icon={IconShip}
+                  icon={IconShip as any}
                 >
                   <SubNavLink
                     parent="Transportation"
@@ -594,7 +600,7 @@ const Navbar = ({
                   key="Accounts"
                   openedLocal={isAccountsOpen}
                   setOpenedLocal={setIsAccountsOpen}
-                  icon={IconPercentage}
+                  icon={IconPercentage as any}
                 >
                   <SubNavLink
                     parent="Accounts"
@@ -765,7 +771,6 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
-                  setIsAccountsOpen,
                 }}
               />
               <SimpleNavLink
@@ -779,7 +784,6 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
-                  setIsAccountsOpen,
                 }}
               />
             </Stack>
@@ -812,19 +816,29 @@ const Navbar = ({
               ) : (
                 <Divider my="xs" color="#D5D5D5" size="sm" />
               )}
-              <SimpleNavLink
-                label="Reports"
-                icon={IconFileAnalytics}
-                path="/reports"
-                collapsibles={{
-                  setIsSalesOpen,
-                  setIsTariffOpen,
-                  setIsCustomerServiceOpen,
-                  setIsAirOpen,
-                  setIsSeaExportOpen,
-                  setIsAccountsOpen,
-                }}
-              />
+              <Box>
+                <CollapsibleNav
+                  label="Reports"
+                  openedLocal={isReportsOpen}
+                  setOpenedLocal={setIsReportsOpen}
+                  icon={IconFileAnalytics as any}
+                >
+                  <SubNavLink
+                    parent="Reports"
+                    label="Job Profit"
+                    icon={IconFileText}
+                    path="/reports/job-profit"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
+                  />
+                </CollapsibleNav>
+              </Box>
               <SimpleNavLink
                 label="Help"
                 icon={IconHelpCircle}
@@ -835,7 +849,6 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
-                  setIsAccountsOpen,
                 }}
               />
             </Stack>
