@@ -153,6 +153,7 @@ export const URL = {
 
   // Ocean schedule lookup (vessel-saved)
   vesselSavedSchedules: "searates/schedules/vessel-saved/",
+  jobLedger: "filter/job_ledger/",
 
   // EDI download for jobs
   edi: "edi/",

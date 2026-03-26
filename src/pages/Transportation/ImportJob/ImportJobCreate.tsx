@@ -2784,6 +2784,54 @@ function ImportJobCreate() {
                       Create Invoice
                     </Menu.Item>
                   )}
+
+                  {jobData?.id != null && (
+                    <Menu.Item
+                      leftSection={
+                        <Box
+                          style={{
+                            backgroundColor: "#E7F5FF",
+                            borderRadius: "6px",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <IconFileInvoice size={16} color="#105476" />
+                        </Box>
+                      }
+                      styles={{
+                        item: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          borderRadius: "6px",
+                          padding: "10px 12px",
+                          marginBottom: "4px",
+                          "&:hover": {
+                            backgroundColor: "#F8F9FA",
+                          },
+                        },
+                        itemLabel: {
+                          fontFamily: "Inter",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: "#424242",
+                        },
+                      }}
+                      onClick={() =>
+                        navigate("/job-ledger", {
+                          state: {
+                            jobId:
+                              jobData?.job_id ,
+                          },
+                        })
+                      }
+                    >
+                      Job Ledger
+                    </Menu.Item>
+                  )}
                 </Menu.Dropdown>
               </Menu>
             )}

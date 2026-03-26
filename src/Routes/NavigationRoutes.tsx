@@ -144,8 +144,6 @@ import PaymentMaster from "../pages/accounts/payment/PaymentMaster";
 import PaymentCreate from "../pages/accounts/payment/PaymentCreate";
 import PaymentReversal from "../pages/accounts/reverse-payment/PaymentReversal";
 import PaymentReversalMaster from "../pages/accounts/reverse-payment/PaymentReversalMaster";
-import OverseasPaymentMaster from "../pages/accounts/overseasPayment/OverseasPaymentMaster";
-import OverseasPaymentCreate from "../pages/accounts/overseasPayment/OverseasPaymentCreate";
 import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
 import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
@@ -157,6 +155,9 @@ import JournalVoucherReversalMaster from "../pages/accounts/journalVoucherRevers
 import QuotationMaster, {
   QuotationApprovalMaster,
 } from "../pages/dashboard/QuotationMaster";
+import OverseasPaymentMaster from "../pages/accounts/overseasPayment/OverseasPaymentMaster";
+import OverseasPaymentCreate from "../pages/accounts/overseasPayment/OverseasPaymentCreate";
+import JobLedger from "../pages/Transportation/JobLedger/JobLedger";
 import { usePageTitleSync } from "../hooks/usePageTitle";
 import TariffBulkUpload from "../pages/call-entry/TariffBulkUpload";
 import OriginCreate from "../pages/call-entry/tariff/OriginCreate";
@@ -293,6 +294,7 @@ const NavigationRoutes = () => {
         </Route>
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />
+        <Route path="/job-ledger" element={<JobLedger />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/receipt" element={<ReceiptMaster />} />
         <Route path="/receipt/view" element={<ReceiptCreate />} />
