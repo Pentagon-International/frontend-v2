@@ -47,6 +47,7 @@ const pathTitleMap: Record<string, string> = {
   "/payment/reversal/edit": "Payment Reversal",
   "/payment/reversal/create": "Payment Reversal",
   "/payment/reversal": "Payment Reversal List",
+  "/subledger-enquiry": "Subledger Enquiry",
   "/master": "Masters",
   "/reports": "Reports",
   "/help": "Help",

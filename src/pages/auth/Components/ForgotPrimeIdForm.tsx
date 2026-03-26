@@ -29,18 +29,13 @@ function ForgotPrimeIdForm() {
     <Container
       sx={(theme) => ({
         width: "100%",
+        height:"100%",
         padding: "20px",
-        maxWidth: "500px",
-        minHeight: "40vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         flexDirection: "column",
         margin: 0,
-        [`@media (max-width: ${theme.breakpoints.md})`]: {
-          padding: "16px",
-          maxWidth: "600px",
-        },
       })}
     >
       <Flex align="center" justify="flex-start" style={{ width: "100%" }}>
@@ -78,10 +73,14 @@ function ForgotPrimeIdForm() {
             // console.log("Submit check=", values);
           })}
         >
-          <Text style={{
-          fontSize:"16px",
-          fontWeight:400,
-          }}>
+          <Text 
+            size="lg"
+            style={{
+              fontSize: "18px",
+              fontWeight: 500,
+              color: "#333333",
+            }}
+          >
             Forgot Pulse ID?
           </Text>
 
@@ -102,15 +101,23 @@ function ForgotPrimeIdForm() {
 
           <Button
             type="submit"
-            radius="md"
+            radius={"md"}
             fullWidth
-            mt="md"
+            mt="20px"
             color="#105476"
-            rightSection={
-              <IconArrowRight size={16} stroke={2} style={{ marginLeft: 4 }} />
-            }
+            size="md"
+            style={{
+              display: "flex",
+              alignItems: "base",
+              justifyContent: "center",
+            }}
           >
-            Get a link
+            <Text mr="xs">{"Get a Link"}</Text>
+            {/* {isLoading ? (
+              <Loader size={20} color="white" />
+            ) : (
+              <IconCheck size={16} stroke={3} />
+            )} */}
           </Button>
         </form>
       </Stack>

@@ -2,6 +2,7 @@ import {
   Anchor,
   Box,
   Button,
+  Checkbox,
   Group,
   Input,
   Loader,
@@ -79,6 +80,7 @@ const schema = yup.object().shape({
 
 function LoginForm() {
   const pulseIdRef = useRef<HTMLInputElement>(null);
+  const [isChecked, setIsChecked] = useState(false);
 
   useEffect(() => {
     pulseIdRef.current?.focus();
@@ -163,7 +165,7 @@ function LoginForm() {
         size="lg"
         style={{
           fontSize: "18px",
-          fontWeight: 400,
+          fontWeight: 500,
           color: "#333333",
         }}
       >
@@ -219,21 +221,21 @@ function LoginForm() {
           </label>
         </div>
 
-        <Stack mt="16px" gap="xs">
+        <Stack mt="18.55px" gap="xs">
           <Box
             style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
-            <IconCheckbox style={{ color: "#105476" }} />
-            <Space w="xs" />
-            <Text
-              size="sm"
-              style={{
-                fontSize: "13px",
-                fontWeight: 500,
-              }}
-            >
-              Remember me
-            </Text>
+            <Checkbox 
+              checked={isChecked} 
+              color={"#105476"} 
+              styles={{
+                root: { cursor: "pointer" },
+                label: { cursor: "pointer" },
+                input: { cursor: "pointer" },
+              }} 
+              onChange={() => {setIsChecked(!isChecked)}} 
+              label="Remember Me" 
+            />
           </Box>
 
           <Group justify="space-between" mt={"sm"}>
@@ -268,20 +270,20 @@ function LoginForm() {
           type="submit"
           radius={"md"}
           fullWidth
-          mt="lg"
+          mt="20px"
           color="#105476"
           size="md"
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: "base",
             justifyContent: "center",
           }}
         >
-          <Text mr="xs">Submit</Text>
+          <Text mr="xs">{isLoading ? "Logging in..." : "Login"}</Text>
           {isLoading ? (
             <Loader size={20} color="white" />
           ) : (
-            <IconCheck size={20} stroke={2} />
+            <IconCheck size={16} stroke={3} />
           )}
         </Button>
       </form>

@@ -35,6 +35,7 @@ import {
   IconCircleCheck,
   IconGitBranch,
   IconReceiptTax,
+  IconSearch,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -77,7 +78,8 @@ const Navbar = ({
       location.pathname.startsWith("/supplier-invoice") ||
       location.pathname.startsWith("/overseas-receipt") ||
       location.pathname.startsWith("/journal-voucher") ||
-      location.pathname.startsWith("/journal-voucher-reversal")
+      location.pathname.startsWith("/journal-voucher-reversal") ||
+      location.pathname.startsWith("/subledger-enquiry")
     ) {
       setIsAccountsOpen(true);
     }
@@ -737,6 +739,19 @@ const Navbar = ({
                       setIsSeaExportOpen,
                     }}
                   />
+                  <SubNavLink
+                    parent="Accounts"
+                    label="Subledger Enquiry"
+                    icon={IconSearch}
+                    path="/subledger-enquiry"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
                 </CollapsibleNav>
               </Box>
               <SimpleNavLink
@@ -768,7 +783,28 @@ const Navbar = ({
                 }}
               />
             </Stack>
-
+  {/* Workflow */}
+           
+            <Stack mt={!opened ? 4 : 16} gap={4}>
+              {opened ? (
+                <SectionTitle title="Workflow" />
+              ) : (
+                <Divider my="xs" color="#D5D5D5" size="sm" />
+              )}
+              <SimpleNavLink
+                label="Jobcreation"
+                key={"Jobcreation"}
+                icon={IconPercentage}
+                path="/hbl-document-manager"
+                collapsibles={{
+                  setIsSalesOpen,
+                  setIsTariffOpen,
+                  setIsCustomerServiceOpen,
+                }}
+             
+             
+              />
+            </Stack>
             {/* System Section */}
             <Stack mt={!opened ? 4 : 16} gap={4}>
               {opened ? (

@@ -126,6 +126,7 @@ import {
   OceanImportBookingMaster,
   OceanImportBookingCreate,
   OceanImportToExportBooking,
+  HBLDocumentManager
 } from "../pages";
 import Road from "../pages/dashboard/Road";
 import DemoPage from "../pages/dashboard/DemoPage";
@@ -165,6 +166,7 @@ import CallEntryCalendar from "../pages/dashboard/CallEntryCalendar";
 import Pipeline from "../pages/dashboard/Pipeline";
 import PipelineCreate from "../pages/dashboard/PipelineCreate";
 import useAuthStore from "../store/authStore";
+import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -348,6 +350,7 @@ const NavigationRoutes = () => {
         <Route path="/journal-voucher-reversal/create" element={<JournalVoucherReversal />} />
         <Route path="/journal-voucher-reversal/edit/:id" element={<JournalVoucherReversal />} />
         <Route path="/journal-voucher-reversal/view/:id" element={<JournalVoucherReversal />} />
+        <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />
@@ -404,6 +407,7 @@ const NavigationRoutes = () => {
         </Route>
         <Route path="/tariff-create" element={<TariffCreate />} />
         <Route path="/tariff-bulk-upload" element={<TariffBulkUpload />} />
+        <Route path="/hbl-document-manager" element={<HBLDocumentManager />} />
         <Route path="master" element={<MastersPage />}>
           <Route path="group-company" element={<GroupCompany />} />
           <Route path="group-company-new" element={<NewGroupCompany />} />

@@ -67,6 +67,8 @@ import FormNumberInput from "../../../components/FormNumberInput";
 // Type definitions
 type HouseDetailsForm = {
   hbl_number: string;
+  shipment_terms_code: string;
+  shipment_terms_name: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -245,6 +247,11 @@ const fetchEventMaster = async () => {
   }
 };
 
+const fetchTermsOfShipment = async () => {
+  const response = await getAPICall(`${URL.termsOfShipment}`, API_HEADER);
+  return response;
+};
+
 // Validation handled in validateStep1 and validateStep2 functions
 
 const normalizePpCc = (value: unknown): string => {
@@ -389,6 +396,22 @@ function HouseCreate() {
     queryFn: fetchEventMaster,
     staleTime: 5 * 60 * 1000,
   });
+  const { data: termsOfShipment = [] } = useQuery({
+    queryKey: ["termsOfShipment"],
+    queryFn: fetchTermsOfShipment,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const shipmentOptions = useMemo(() => {
+    if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
+    return termsOfShipment.map((item: { tos_code?: string; tos_name?: string }) => ({
+      value: item.tos_code ? String(item.tos_code) : "",
+      label: `${String(item.tos_name || "")} (${String(item.tos_code || "")})`,
+    }));
+  }, [termsOfShipment]);
 
   const eventTypeOptions = useMemo(() => {
     const list = eventMasterData as Array<{ name?: string }>;
@@ -961,6 +984,8 @@ function HouseCreate() {
   const form = useForm<HouseDetailsForm>({
     initialValues: {
       hbl_number: editData?.hbl_number || "",
+      shipment_terms_code: editData?.shipment_terms_code || "",
+      shipment_terms_name: editData?.shipment_terms_name || "",
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -1673,6 +1698,9 @@ function HouseCreate() {
     if (!form.values.trade?.trim()) {
       errors.trade = "Trade is required";
     }
+    if (!form.values.shipment_terms_code?.trim()) {
+      errors.shipment_terms_code = "Shipment Terms is required";
+    }
     if (!form.values.routed?.trim()) {
       errors.routed = "Routed is required";
     }
@@ -1951,14 +1979,14 @@ function HouseCreate() {
       unit_code: charge.unit_code,
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
-      no_of_unit: charge.no_of_unit,
-      roe: charge.roe,
-      amount_per_unit: charge.amount_per_unit,
-      amount: charge.amount,
-      sell_local_amount: charge.sell_local_amount ?? null,
-      unit_cost: charge.unit_cost ?? null,
-      total_cost: charge.total_cost ?? null,
-      cost_local_amount: charge.cost_local_amount ?? null,
+      no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
+      roe: roundToDecimals(charge.roe) ?? null,
+      amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+      amount: roundToDecimals(charge.amount) ?? null,
+      sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
+      unit_cost: roundToDecimals(charge.unit_cost) ?? null,
+      total_cost: roundToDecimals(charge.total_cost) ?? null,
+      cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
       supplier_code: charge.supplier_code || null,
       supplier_name: charge.supplier_name ?? null,
     }));
@@ -1974,6 +2002,8 @@ function HouseCreate() {
       ...(isEditMode &&
         editData?.shipment_id && { shipment_id: editData.shipment_id }),
       hbl_number: form.values.hbl_number,
+      shipment_terms_code: form.values.shipment_terms_code,
+      shipment_terms_name: form.values.shipment_terms_name,
       routed: form.values.routed,
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
@@ -2085,6 +2115,8 @@ function HouseCreate() {
     const v = form.values;
     return {
       hbl_number: v.hbl_number,
+      shipment_terms_code: v.shipment_terms_code,
+      shipment_terms_name: v.shipment_terms_name,
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -2873,6 +2905,18 @@ function HouseCreate() {
                     },
                   }}
                   error={form.errors.trade}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="Shipment Terms"
+                  required
+                  placeholder="Select Shipment Terms"
+                  searchable
+                  data={shipmentOptions}
+                  {...form.getInputProps("shipment_terms_code")}
+                  error={form.errors.shipment_terms_code}
                 />
               </Grid.Col>
 
@@ -4329,6 +4373,7 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
+                      decimalScale={0}
                       hideControls
                       value={
                         chargesForm.values.charges[index].no_of_unit ??
@@ -5328,6 +5373,9 @@ function HouseCreate() {
                 }),
                 ...(location.state?.containerDetails && {
                   containerDetails: location.state.containerDetails,
+                }),
+                ...(location.state?.estimates && {
+                  estimates: location.state.estimates,
                 }),
               },
             });

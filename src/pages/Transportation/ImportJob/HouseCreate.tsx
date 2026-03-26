@@ -68,6 +68,8 @@ import FormNumberInput from "../../../components/FormNumberInput";
 // Type definitions
 type HouseDetailsForm = {
   hbl_number: string;
+  shipment_terms_code: string;
+  shipment_terms_name: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -144,6 +146,9 @@ type ChargeDetail = {
   supplier_code?: string;
   supplier_name?: string;
 };
+
+type DoTypeOption = "carrier_agent" | "unstuff_place";
+type DoDeliverToOption = "consignee" | "notify" | "cha";
 
 // Reverse invoice item (from API reverse_invoices)
 type ReverseInvoiceItem = {
@@ -243,6 +248,11 @@ const fetchEventMaster = async () => {
     console.error("Error fetching event master:", error);
     return [];
   }
+};
+
+const fetchTermsOfShipment = async () => {
+  const response = await getAPICall(`${URL.termsOfShipment}`, API_HEADER);
+  return response;
 };
 
 // Validation handled in validateStep1 and validateStep2 functions
@@ -346,6 +356,12 @@ function HouseCreate() {
   // Delivery Order preview state
   const [doPreviewOpen, setDoPreviewOpen] = useState(false);
   const [doPdfBlob, setDoPdfBlob] = useState<string | null>(null);
+  const [doConfigOpen, setDoConfigOpen] = useState(false);
+  const [doTypeSelection, setDoTypeSelection] = useState<DoTypeOption | null>(
+    null,
+  );
+  const [doDeliverToSelection, setDoDeliverToSelection] =
+    useState<DoDeliverToOption | null>(null);
 
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
@@ -360,6 +376,22 @@ function HouseCreate() {
     queryFn: fetchEventMaster,
     staleTime: 5 * 60 * 1000,
   });
+  const { data: termsOfShipment = [] } = useQuery({
+    queryKey: ["termsOfShipment"],
+    queryFn: fetchTermsOfShipment,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const shipmentOptions = useMemo(() => {
+    if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
+    return termsOfShipment.map((item: { tos_code?: string; tos_name?: string }) => ({
+      value: item.tos_code ? String(item.tos_code) : "",
+      label: `${String(item.tos_name || "")} (${String(item.tos_code || "")})`,
+    }));
+  }, [termsOfShipment]);
 
   const eventTypeOptions = useMemo(() => {
     const list = eventMasterData as Array<{ name?: string }>;
@@ -706,6 +738,8 @@ function HouseCreate() {
   const form = useForm<HouseDetailsForm>({
     initialValues: {
       hbl_number: editData?.hbl_number || "",
+      shipment_terms_code: editData?.shipment_terms_code || "",
+      shipment_terms_name: editData?.shipment_terms_name || "",
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -755,17 +789,14 @@ function HouseCreate() {
       notify1_customer_name:
         (editData as { notify1_customer_name?: string })
           ?.notify1_customer_name ??
-        editData?.notify_customer1_name ??
         "",
       notify1_customer_address:
         (editData as { notify1_customer_address?: string })
           ?.notify1_customer_address ??
-        editData?.notify_customer1_address ??
         "",
       notify1_customer_email:
         (editData as { notify1_customer_email?: string })
           ?.notify1_customer_email ??
-        editData?.notify_customer1_email ??
         "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
@@ -1709,6 +1740,9 @@ function HouseCreate() {
     if (!form.values.trade?.trim()) {
       errors.trade = "Trade is required";
     }
+    if (!form.values.shipment_terms_code?.trim()) {
+      errors.shipment_terms_code = "Shipment Terms is required";
+    }
     if (!form.values.routed?.trim()) {
       errors.routed = "Routed is required";
     }
@@ -1995,7 +2029,7 @@ function HouseCreate() {
       unit_code: charge.unit_code,
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
-      no_of_unit: charge.no_of_unit,
+      no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
       roe: roundToDecimals(charge.roe) ?? null,
       amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
       amount: roundToDecimals(charge.amount) ?? null,
@@ -2018,6 +2052,8 @@ function HouseCreate() {
       ...(isEditMode &&
         editData?.shipment_id && { shipment_id: editData.shipment_id }),
       hbl_number: form.values.hbl_number,
+      shipment_terms_code: form.values.shipment_terms_code,
+      shipment_terms_name: form.values.shipment_terms_name,
       routed: form.values.routed,
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
@@ -2126,6 +2162,8 @@ function HouseCreate() {
     const v = form.values;
     return {
       hbl_number: v.hbl_number,
+      shipment_terms_code: v.shipment_terms_code,
+      shipment_terms_name: v.shipment_terms_name,
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -2318,8 +2356,33 @@ function HouseCreate() {
     }
   };
 
+  const resolveDoAttentionTo = (type: DoTypeOption) => {
+    if (type === "carrier_agent") {
+      return location.state?.carrierDetails?.carrier_name || "";
+    }
+    const firstCfsName = (location.state?.containerDetails || []).find(
+      (container: { cfs_name?: string }) => (container.cfs_name || "").trim(),
+    )?.cfs_name;
+    return firstCfsName || "";
+  };
+
+  const resolveDoDeliverTo = (deliverTo: DoDeliverToOption) => {
+    if (deliverTo === "consignee") return form.values.consignee_name || "";
+    if (deliverTo === "notify") return form.values.notify1_customer_name || "";
+    return form.values.cha_name || "";
+  };
+
+  const openDoConfigModal = () => {
+    setDoTypeSelection(null);
+    setDoDeliverToSelection(null);
+    setDoConfigOpen(true);
+  };
+
   // Generate Delivery Order PDF Preview
-  const generateDeliveryOrderPDFPreview = async () => {
+  const generateDeliveryOrderPDFPreview = async (
+    type: DoTypeOption,
+    deliverTo: DoDeliverToOption,
+  ) => {
     try {
       setDoPreviewOpen(true);
 
@@ -2332,7 +2395,13 @@ function HouseCreate() {
         containerDetails: location.state?.containerDetails || [],
       };
 
-      const blobUrl = generateDeliveryOrderPDF(combinedData, form.values);
+      const doHousingData = {
+        ...form.values,
+        attention_to: resolveDoAttentionTo(type),
+        please_deliver_to: resolveDoDeliverTo(deliverTo),
+        do_heading: type === "carrier_agent" ? "DELIVERY ADVICE" : "DELIVERY ORDER",
+      };
+      const blobUrl = generateDeliveryOrderPDF(combinedData, doHousingData);
       setDoPdfBlob(blobUrl);
     } catch (error) {
       console.error("Error generating Delivery Order PDF:", error);
@@ -2351,6 +2420,24 @@ function HouseCreate() {
     if (doPdfBlob) {
       window.URL.revokeObjectURL(doPdfBlob);
     }
+  };
+
+  const handleCloseDoConfig = () => {
+    setDoConfigOpen(false);
+    setDoTypeSelection(null);
+    setDoDeliverToSelection(null);
+  };
+
+  const handleGenerateDeliveryOrderFromConfig = () => {
+    if (!doTypeSelection || !doDeliverToSelection) {
+      ToastNotification({
+        type: "error",
+        message: "Type and Deliver to are required",
+      });
+      return;
+    }
+    setDoConfigOpen(false);
+    generateDeliveryOrderPDFPreview(doTypeSelection, doDeliverToSelection);
   };
 
   // Handle download DO PDF
@@ -2626,7 +2713,7 @@ function HouseCreate() {
                     color: "#424242",
                   },
                 }}
-                onClick={generateDeliveryOrderPDFPreview}
+                onClick={openDoConfigModal}
               >
                 Delivery Order
               </Menu.Item>
@@ -2967,6 +3054,18 @@ function HouseCreate() {
                     );
                   }}
                   error={form.errors.trade}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="Shipment Terms"
+                  required
+                  placeholder="Select Shipment Terms"
+                  searchable
+                  data={shipmentOptions}
+                  {...form.getInputProps("shipment_terms_code")}
+                  error={form.errors.shipment_terms_code}
                 />
               </Grid.Col>
 
@@ -3319,15 +3418,15 @@ function HouseCreate() {
                   apiEndpoint={URL.consignee}
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
-                  displayFormat={customerNameOnlyDisplayFormat}
+                  displayFormat={customerCodeNameDisplayFormat}
                   value={
                     form.values.notify1_customer_name
                       ? String(form.values.notify1_customer_name)
                       : ""
                   }
                   displayValue={form.values.notify1_customer_name}
-                  onChange={(value, _selectedData, originalData) => {
-                    const newValue = value || "";
+                  onChange={(_value, _selectedData, originalData) => {
+                    const newValue = _selectedData?.label || "";
                     form.setFieldValue("notify1_customer_name", newValue);
 
                     if (
@@ -3427,8 +3526,8 @@ function HouseCreate() {
                   displayFormat={customerNameOnlyDisplayFormat}
                   value={form.values.agent_name}
                   displayValue={form.values.agent_name}
-                  onChange={(value, _selectedData, originalData) => {
-                    const newValue = value || "";
+                  onChange={(_value, _selectedData, originalData) => {
+                    const newValue = _value || "";
                     form.setFieldValue("agent_name", newValue);
 
                     if (
@@ -3522,8 +3621,8 @@ function HouseCreate() {
                   displayFormat={customerCodeNameDisplayFormat}
                   value={form.values.cha_code || null}
                   displayValue={form.values.cha_name}
-                  onChange={(value, _selectedData, originalData) => {
-                    const chaCode = value || "";
+                  onChange={(_value, _selectedData, originalData) => {
+                    const chaCode = _value || "";
                     const chaName =
                       (originalData as Record<string, unknown> | undefined)
                         ?.customer_name != null
@@ -4208,6 +4307,7 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
+                      decimalScale={0}
                       hideControls
                       value={
                         chargesForm.values.charges[index].no_of_unit ??
@@ -5200,6 +5300,10 @@ function HouseCreate() {
                 ...(location.state?.containerDetails && {
                   containerDetails: location.state.containerDetails,
                 }),
+                // Preserve master-level estimates so all estimates stepper fields are retained
+                ...(location.state?.estimates && {
+                  estimates: location.state.estimates,
+                }),
               },
             });
           }}
@@ -5318,6 +5422,52 @@ function HouseCreate() {
               </Stack>
             </Center>
           )}
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={doConfigOpen}
+        onClose={handleCloseDoConfig}
+        title="Delivery Order Options"
+        centered
+        size="md"
+      >
+        <Stack>
+          <Dropdown
+            label="Type"
+            required
+            placeholder="Select Type"
+            dropdownZIndex={3000}
+            data={[
+              { value: "carrier_agent", label: "Carrier Agent" },
+              { value: "unstuff_place", label: "Unstuff Place" },
+            ]}
+            value={doTypeSelection}
+            onChange={(value) => setDoTypeSelection(value as DoTypeOption)}
+          />
+          <Dropdown
+            label="Deliver to"
+            required
+            placeholder="Select Deliver to"
+            dropdownZIndex={3000}
+            data={[
+              { value: "consignee", label: "Consignee" },
+              { value: "notify", label: "Notify" },
+              { value: "cha", label: "CHA" },
+            ]}
+            value={doDeliverToSelection}
+            onChange={(value) =>
+              setDoDeliverToSelection(value as DoDeliverToOption)
+            }
+          />
+          <Group justify="flex-end" mt="sm">
+            <Button variant="outline" onClick={handleCloseDoConfig}>
+              Cancel
+            </Button>
+            <Button color="#105476" onClick={handleGenerateDeliveryOrderFromConfig}>
+              Generate PDF
+            </Button>
+          </Group>
         </Stack>
       </Modal>
 

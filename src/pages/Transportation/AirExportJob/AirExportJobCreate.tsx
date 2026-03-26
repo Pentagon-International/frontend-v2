@@ -6,6 +6,7 @@ import {
   Stack,
   Tabs,
   Table,
+  Radio,
   Text,
   TextInput,
   Divider,
@@ -67,10 +68,12 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
+import { roundToDecimals } from "../../../utils/numberInputUtils";
 
 // Type definitions
 type MAWBDetailsForm = {
   service: string;
+  is_direct: boolean;
   agent_code: string; // Stores agent_code (code) for API payload
   agent_name: string; // Stores agent_name (name) for display
   origin_code: string;
@@ -93,6 +96,7 @@ type CarrierDetailsForm = {
 };
 
 type RoutingDetail = {
+  id?: number;
   transport_type: string;
   from_code: string;
   from_name: string;
@@ -141,6 +145,7 @@ type HAWBDetail = {
   notify_customer1_email: string;
   commodity_description?: string;
   marks_no?: string;
+  shipment_terms_code?: string;
   cargo_details?: Array<{
     no_of_packages: number | null;
     gross_weight: number | null;
@@ -209,7 +214,33 @@ type InvoiceListItem = {
 // Validation schemas
 const mawbDetailsSchema = yup.object({
   service: yup.string().required("Service is required"),
-  agent_code: yup.string().required("Destination Agent is required"),
+  is_direct: yup.boolean().required(),
+  // Destination Agent is required when "Direct" is No (false).
+  // When "Direct" is Yes (true), Destination Agent becomes optional.
+  agent_code: yup.string().test(
+    "agent_code-required-when-direct-false",
+    "Destination Agent is required",
+    function (value) {
+      const parent = this.parent as { is_direct?: boolean };
+      const isDirect = parent.is_direct === true;
+
+      if (isDirect) return true;
+
+      if (value == null) {
+        return this.createError({
+          message: "Destination Agent is required",
+        });
+      }
+
+      if (String(value).trim() === "") {
+        return this.createError({
+          message: "Destination Agent is required",
+        });
+      }
+
+      return true;
+    },
+  ),
   origin_code: yup.string().required("Origin is required"),
   destination_code: yup.string().required("Destination is required"),
   etd: yup.date().required("ETD is required"),
@@ -251,11 +282,22 @@ const getTransportMode = (
   transportType: string | null | undefined,
 ): string | undefined => {
   if (!transportType) return undefined;
-  const type = transportType.trim();
+  const type = transportType.trim().toUpperCase();
   if (type === "AIR") return "AIR";
-  if (type === "SEA" || type === "FCL" || type === "LCL") return "SEA";
+  if (type === "SEA" || type === "FCL" || type === "LCL" || type === "VESSEL")
+    return "SEA";
   if (type === "ROAD") return "LAND";
   return undefined;
+};
+
+const parseBoolean = (value: unknown): boolean => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "y";
+  }
+  return false;
 };
 
 function AirExportJobCreate() {
@@ -383,6 +425,9 @@ function AirExportJobCreate() {
     initialValues: {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
+      is_direct: parseBoolean(
+        jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
+      ) || false,
       agent_code:
         jobData?.agent_code ||
         jobData?.origin_agent ||
@@ -466,29 +511,26 @@ function AirExportJobCreate() {
   // Initialize with location.state.routings if available (for create mode restoration)
   const routingsForm = useForm<{ routings: RoutingDetail[] }>({
     initialValues: {
-      routings:
-        location.state?.routings && Array.isArray(location.state.routings)
-          ? location.state.routings
-          : [
-              {
-                transport_type: "",
-                from_code: "",
-                from_name: "",
-                to_code: "",
-                to_name: "",
-                etd: null,
-                eta: null,
-                atd: null,
-                ata: null,
-                carrier_code: "",
-                carrier_name: "",
-                vessel: "",
-                flight: "",
-                voyage_number: "",
-                truck_no: "",
-                rail_no: "",
-              },
-            ],
+      routings: [
+        {
+          transport_type: "",
+          from_code: "",
+          from_name: "",
+          to_code: "",
+          to_name: "",
+          etd: null,
+          eta: null,
+          atd: null,
+          ata: null,
+          carrier_code: "",
+          carrier_name: "",
+          vessel: "",
+          flight: "",
+          voyage_number: "",
+          truck_no: "",
+          rail_no: "",
+        },
+      ],
     },
   });
 
@@ -561,11 +603,6 @@ function AirExportJobCreate() {
   // Load job data if in edit or view mode - Only initialize once from jobData
   // This effect runs FIRST to ensure forms are initialized before restoration logic
   useEffect(() => {
-    // Skip if forms have already been initialized
-    if (formsInitializedFromJobDataRef.current) {
-      return;
-    }
-
     // Only proceed if we have jobData and are in edit/view mode
     if (jobData && (mode === "edit" || mode === "view")) {
       try {
@@ -583,6 +620,7 @@ function AirExportJobCreate() {
         // Populate MAWB Details using setValues - ensure all fields are set
         const mawbInitialValues = {
           service: jobData.service || "AIR",
+          is_direct: parseBoolean(jobData.is_direct) || false,
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
           agent_code: jobData.agent_code || jobData.origin_agent || "",
           agent_name: jobData.agent_name || jobData.origin_agent_name || "",
@@ -611,6 +649,37 @@ function AirExportJobCreate() {
         console.log("🔧 Setting MAWB form values:", mawbInitialValues);
         // Use setValues to update all fields at once
         mawbDetailsForm.setValues(mawbInitialValues);
+
+        // If we are coming back from AirHouseCreate, preserve the edited MAWB
+        // master fields from location.state (e.g., is_direct) instead of
+        // letting the API response overwrite them.
+        const savedMawbDetailsFromState = location.state?.mawbDetails;
+        if (savedMawbDetailsFromState) {
+          mawbDetailsForm.setValues({
+            service: savedMawbDetailsFromState.service || "AIR",
+            is_direct: parseBoolean(savedMawbDetailsFromState.is_direct),
+            agent_code: savedMawbDetailsFromState.agent_code || "",
+            agent_name: savedMawbDetailsFromState.agent_name || "",
+            origin_code: savedMawbDetailsFromState.origin_code || "",
+            origin_name: savedMawbDetailsFromState.origin_name || "",
+            destination_code:
+              savedMawbDetailsFromState.destination_code || "",
+            destination_name:
+              savedMawbDetailsFromState.destination_name || "",
+            etd: savedMawbDetailsFromState.etd || null,
+            eta: savedMawbDetailsFromState.eta || null,
+            atd: savedMawbDetailsFromState.atd || null,
+            ata: savedMawbDetailsFromState.ata || null,
+          });
+
+          if (savedMawbDetailsFromState.agent_data) {
+            originAgentDataRef.current =
+              savedMawbDetailsFromState.agent_data as Record<
+                string,
+                unknown
+              >;
+          }
+        }
 
         console.log(
           "✅ MAWB Details initialized - Form values after setValues:",
@@ -760,6 +829,11 @@ function AirExportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              shipment_terms_code: house.shipment_terms_code
+                ? String(house.shipment_terms_code)
+                : house.shipment_terms_name
+                  ? String(house.shipment_terms_name)
+                  : "",
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -872,11 +946,12 @@ function AirExportJobCreate() {
           const mappedRoutings = jobData.ocean_routings.map(
             (routing: Record<string, unknown>) => {
               return {
-                transport_type: routing.transport_type || "",
-                from_code: routing.from_port_code || routing.from_code || "",
-                from_name: routing.from_port_name || routing.from_name || "",
-                to_code: routing.to_port_code || routing.to_code || "",
-                to_name: routing.to_port_name || routing.to_name || "",
+                ...(routing.id != null && { id: Number(routing.id) }),
+                transport_type: String(routing.transport_type ?? "").toUpperCase(),
+                from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
+                from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+                to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
+                to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
                 etd:
                   routing.etd && dayjs(routing.etd as string | Date).isValid()
                     ? dayjs(routing.etd as string | Date).toDate()
@@ -893,9 +968,9 @@ function AirExportJobCreate() {
                   routing.ata && dayjs(routing.ata as string | Date).isValid()
                     ? dayjs(routing.ata as string | Date).toDate()
                     : null,
-                carrier_code: routing.carrier_code || "",
-                carrier_name: routing.carrier_name || "",
-                vessel: routing.vessel || "",
+                carrier_code: String(routing.carrier_code ?? ""),
+                carrier_name: String(routing.carrier_name ?? ""),
+                vessel: String(routing.vessel ?? ""),
                 flight: routing.flight ? String(routing.flight) : "",
                 voyage_number: routing.voyage_number
                   ? String(routing.voyage_number)
@@ -915,11 +990,12 @@ function AirExportJobCreate() {
           const mappedRoutings = jobData.routings.map(
             (routing: Record<string, unknown>) => {
               return {
-                transport_type: routing.transport_type || "",
-                from_code: routing.from_port_code || routing.from_code || "",
-                from_name: routing.from_port_name || routing.from_name || "",
-                to_code: routing.to_port_code || routing.to_code || "",
-                to_name: routing.to_port_name || routing.to_name || "",
+                ...(routing.id != null && { id: Number(routing.id) }),
+                transport_type: String(routing.transport_type ?? "").toUpperCase(),
+                from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
+                from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+                to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
+                to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
                 etd:
                   routing.etd && dayjs(routing.etd as string | Date).isValid()
                     ? dayjs(routing.etd as string | Date).toDate()
@@ -936,9 +1012,9 @@ function AirExportJobCreate() {
                   routing.ata && dayjs(routing.ata as string | Date).isValid()
                     ? dayjs(routing.ata as string | Date).toDate()
                     : null,
-                carrier_code: routing.carrier_code || "",
-                carrier_name: routing.carrier_name || "",
-                vessel: routing.vessel || "",
+                carrier_code: String(routing.carrier_code ?? ""),
+                carrier_name: String(routing.carrier_name ?? ""),
+                vessel: String(routing.vessel ?? ""),
                 flight: routing.flight ? String(routing.flight) : "",
                 voyage_number: routing.voyage_number
                   ? String(routing.voyage_number)
@@ -951,7 +1027,7 @@ function AirExportJobCreate() {
           routingsForm.setValues({ routings: mappedRoutings });
           routingStateInitializedRef.current = true;
         }
-
+        console.log("✅ Routings initialized - Form values after setValues:", routingsForm.values);
         // Note: Container Details are not used for Air Export Jobs
 
         // Populate Estimates (master level) from jobData if exists
@@ -1041,10 +1117,9 @@ function AirExportJobCreate() {
           lastJobMappedEstimatesRef.current =
             sanitizedEstimates as unknown as typeof estimatesForm.values.estimates;
         }
-        formsInitializedFromJobDataRef.current = true;
-
         // Force re-render of SearchableSelect components after all values are set
         // Use a small delay to ensure setValues has completed
+        formsInitializedFromJobDataRef.current = true;
         setTimeout(() => {
           setFormInitializedKey((prev) => prev + 1);
         }, 50);
@@ -1058,6 +1133,7 @@ function AirExportJobCreate() {
     } else {
       // Reset the ref when not in edit/view mode or jobData changes
       hawbDetailsLoadedRef.current = false;
+      formsInitializedFromJobDataRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData, mode]);
@@ -1123,8 +1199,11 @@ function AirExportJobCreate() {
   // If all routing fields are empty, allow proceeding without validation (skip entirely)
   const validateStep2 = () => {
     for (const routing of routingsForm.values.routings) {
+      const normalizedTransportType = String(
+        routing.transport_type || "",
+      ).toUpperCase();
       // Check if any mandatory routing field has a non-empty value
-      const transportType = routing.transport_type?.trim() || "";
+      const transportType = normalizedTransportType.trim();
       const fromCode = routing.from_code?.trim() || "";
       const toCode = routing.to_code?.trim() || "";
       const carrierCode = routing.carrier_code?.trim() || "";
@@ -1199,7 +1278,7 @@ function AirExportJobCreate() {
         }
 
         // Validate transport-type-specific required fields
-        if (routing.transport_type === "SEA") {
+        if (normalizedTransportType === "SEA") {
           if (vessel === "" || voyageNumber === "") {
             ToastNotification({
               type: "error",
@@ -1208,7 +1287,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "AIR") {
+        } else if (normalizedTransportType === "AIR") {
           if (carrierCode === "" || flight === "") {
             ToastNotification({
               type: "error",
@@ -1216,7 +1295,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "ROAD") {
+        } else if (normalizedTransportType === "ROAD") {
           if (carrierCode === "" || truckNo === "") {
             ToastNotification({
               type: "error",
@@ -1224,7 +1303,7 @@ function AirExportJobCreate() {
             });
             return false;
           }
-        } else if (routing.transport_type === "RAIL") {
+        } else if (normalizedTransportType === "RAIL") {
           const carrierName = routing.carrier_name?.trim() || "";
           if (carrierName === "" || railNo === "") {
             ToastNotification({
@@ -1252,6 +1331,7 @@ function AirExportJobCreate() {
             // Save current MAWB form values
             mawbDetails: {
               service: mawbDetailsForm.values.service || "AIR",
+              is_direct: mawbDetailsForm.values.is_direct,
               agent_code: mawbDetailsForm.values.agent_code || "",
               agent_name: mawbDetailsForm.values.agent_name || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1292,6 +1372,7 @@ function AirExportJobCreate() {
             // Save current MAWB form values
             mawbDetails: {
               service: mawbDetailsForm.values.service || "AIR",
+              is_direct: mawbDetailsForm.values.is_direct,
               agent_code: mawbDetailsForm.values.agent_code || "",
               agent_name: mawbDetailsForm.values.agent_name || "",
               origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1329,6 +1410,7 @@ function AirExportJobCreate() {
           ...location.state,
           mawbDetails: {
             service: mawbDetailsForm.values.service || "AIR",
+            is_direct: mawbDetailsForm.values.is_direct,
             agent_code: mawbDetailsForm.values.agent_code || "",
             agent_name: mawbDetailsForm.values.agent_name || "",
             origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1368,6 +1450,7 @@ function AirExportJobCreate() {
           // Save current MAWB form values
           mawbDetails: {
             service: mawbDetailsForm.values.service || "AIR",
+            is_direct: mawbDetailsForm.values.is_direct,
             agent_code: mawbDetailsForm.values.agent_code || "",
             agent_name: mawbDetailsForm.values.agent_name || "",
             origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1467,6 +1550,7 @@ function AirExportJobCreate() {
         const mawbDetailsKey = savedMawbDetails
           ? JSON.stringify({
               service: savedMawbDetails.service,
+              is_direct: savedMawbDetails.is_direct,
               agent_code: savedMawbDetails.agent_code,
               origin_code: savedMawbDetails.origin_code,
               destination_code: savedMawbDetails.destination_code,
@@ -1484,6 +1568,7 @@ function AirExportJobCreate() {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
             service: savedMawbDetails.service || "AIR",
+            is_direct: parseBoolean(savedMawbDetails.is_direct),
             agent_code: savedMawbDetails.agent_code || "",
             agent_name: savedMawbDetails.agent_name || "",
             origin_code: savedMawbDetails.origin_code || "",
@@ -1538,11 +1623,61 @@ function AirExportJobCreate() {
       if (
         hasMawbDetailsInState &&
         location.state?.routings &&
-        Array.isArray(location.state.routings)
+        Array.isArray(location.state.routings) &&
+        location.state.routings.length > 0
       ) {
-        routingsForm.setValues({ routings: location.state.routings });
+        const mappedRoutingsFromState = location.state.routings.map(
+          (routing: Record<string, unknown>) => ({
+            ...(routing.id != null && { id: Number(routing.id) }),
+            transport_type: String(routing.transport_type ?? "").toUpperCase(),
+            from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
+            from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+            to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
+            to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
+            etd:
+              routing.etd && dayjs(routing.etd as string | Date).isValid()
+                ? dayjs(routing.etd as string | Date).toDate()
+                : null,
+            eta:
+              routing.eta && dayjs(routing.eta as string | Date).isValid()
+                ? dayjs(routing.eta as string | Date).toDate()
+                : null,
+            atd:
+              routing.atd && dayjs(routing.atd as string | Date).isValid()
+                ? dayjs(routing.atd as string | Date).toDate()
+                : null,
+            ata:
+              routing.ata && dayjs(routing.ata as string | Date).isValid()
+                ? dayjs(routing.ata as string | Date).toDate()
+                : null,
+            carrier_code: String(routing.carrier_code ?? ""),
+            carrier_name: String(routing.carrier_name ?? ""),
+            vessel: String(routing.vessel ?? ""),
+            flight: routing.flight ? String(routing.flight) : "",
+            voyage_number: routing.voyage_number
+              ? String(routing.voyage_number)
+              : "",
+            truck_no: routing.truck_no ? String(routing.truck_no) : "",
+            rail_no: routing.rail_no ? String(routing.rail_no) : "",
+          }),
+        );
+        routingsForm.setValues({ routings: mappedRoutingsFromState });
+        routingStateInitializedRef.current = true;
         // Reset routingStateInitializedRef to allow restoration on next navigation back from HAWB
-        routingStateInitializedRef.current = false;
+        // routingStateInitializedRef.current = false;
+      }
+
+      // Restore estimates when coming back from HAWB screen
+      if (
+        hasMawbDetailsInState &&
+        location.state?.estimates &&
+        Array.isArray(location.state.estimates) &&
+        location.state.estimates.length > 0
+      ) {
+        estimatesForm.setFieldValue(
+          "estimates",
+          location.state.estimates as typeof estimatesForm.values.estimates,
+        );
       }
     } catch (error) {
       console.error("Error restoring form state:", error);
@@ -1554,6 +1689,7 @@ function AirExportJobCreate() {
     location.state?.mawbDetails,
     location.state?.carrierDetails,
     location.state?.routings,
+    location.state?.estimates,
     active, // Add active to dependencies to restore when navigating back to step 0
     mode, // Add mode to dependencies
   ]);
@@ -1581,7 +1717,10 @@ function AirExportJobCreate() {
       if (!mawbDetailsForm.values.service?.trim()) {
         missingFields.push("Service");
       }
-      if (!mawbDetailsForm.values.agent_code?.trim()) {
+      if (
+        !mawbDetailsForm.values.is_direct &&
+        !mawbDetailsForm.values.agent_code?.trim()
+      ) {
         missingFields.push("Origin Agent");
       }
       if (!mawbDetailsForm.values.origin_code?.trim()) {
@@ -1614,10 +1753,12 @@ function AirExportJobCreate() {
       formStateRestoredRef.current = false;
       // Reset last restored ref to allow restoration when coming back from HAWB
       lastRestoredMawbDetailsRef.current = null;
+      routingStateInitializedRef.current = false;
 
       // Prepare MAWB details with ALL current form values including origin_name and destination_name
       const mawbDetailsToPass = {
         service: mawbDetailsForm.values.service || "AIR",
+        is_direct: mawbDetailsForm.values.is_direct,
         agent_code: mawbDetailsForm.values.agent_code || "",
         agent_name: mawbDetailsForm.values.agent_name || "",
         origin_code: mawbDetailsForm.values.origin_code || "",
@@ -1782,9 +1923,13 @@ function AirExportJobCreate() {
   // Check if all requirements are met for Create button
   const canCreateJob = useMemo(() => {
     // Check MAWB mandatory fields
+    const destinationAgentValid = mawbDetailsForm.values.is_direct
+      ? true
+      : !!mawbDetailsForm.values.agent_code?.trim();
+
     const mawbFieldsValid =
       mawbDetailsForm.values.service?.trim() &&
-      mawbDetailsForm.values.agent_code?.trim() &&
+      destinationAgentValid &&
       mawbDetailsForm.values.origin_code?.trim() &&
       mawbDetailsForm.values.destination_code?.trim() &&
       mawbDetailsForm.values.etd &&
@@ -1796,6 +1941,7 @@ function AirExportJobCreate() {
     return mawbFieldsValid && hasHawbDetails;
   }, [
     mawbDetailsForm.values.service,
+    mawbDetailsForm.values.is_direct,
     mawbDetailsForm.values.agent_code,
     mawbDetailsForm.values.origin_code,
     mawbDetailsForm.values.destination_code,
@@ -1886,6 +2032,9 @@ function AirExportJobCreate() {
     }
 
     // Validate MAWB and Carrier details before submission
+    if (mawbDetailsForm.values.is_direct) {
+      mawbDetailsForm.clearFieldError("agent_code");
+    }
     const mawbValidation = mawbDetailsForm.validate();
     const carrierValidation = carrierDetailsForm.validate();
 
@@ -1906,8 +2055,11 @@ function AirExportJobCreate() {
     try {
       const payload = {
         service: mawbDetailsForm.values.service,
+        is_direct: mawbDetailsForm.values.is_direct,
         service_type: "Export",
-        agent: mawbDetailsForm.values.agent_code || null,
+        agent: mawbDetailsForm.values.is_direct
+          ? null
+          : mawbDetailsForm.values.agent_code || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
         etd: mawbDetailsForm.values.etd
@@ -1948,9 +2100,16 @@ function AirExportJobCreate() {
         flightno: carrierDetailsForm.values.flight_number || null,
         mawb_no: carrierDetailsForm.values.mawb_number || null,
         ocean_routings: routingsForm.values.routings.map((routing) => {
+          const normalizedTransportType = String(
+            routing.transport_type || "",
+          ).toUpperCase();
           // New format: all fields are nullable
           const routingPayload: Record<string, unknown> = {
-            transport_type: routing.transport_type || null,
+            // Include id if it exists (for edit mode) - handle id === 0 as valid
+            ...(routing.id !== undefined &&
+              routing.id !== null &&
+              routing.id !== ("" as unknown) && { id: Number(routing.id) }),
+            transport_type: normalizedTransportType || null,
             from_port_code: routing.from_code || null,
             to_port_code: routing.to_code || null,
             etd: routing.etd
@@ -1982,17 +2141,17 @@ function AirExportJobCreate() {
           };
 
           // Map fields based on transport type
-          if (routing.transport_type === "SEA") {
+          if (normalizedTransportType === "SEA") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.vessel = routing.vessel || null;
             routingPayload.voyage_number = routing.voyage_number || null;
-          } else if (routing.transport_type === "AIR") {
+          } else if (normalizedTransportType === "AIR") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.flight = routing.flight || null;
-          } else if (routing.transport_type === "ROAD") {
+          } else if (normalizedTransportType === "ROAD") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.truck_no = routing.truck_no || null;
-          } else if (routing.transport_type === "RAIL") {
+          } else if (normalizedTransportType === "RAIL") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.rail_no = routing.rail_no || null;
           } else {
@@ -2041,6 +2200,10 @@ function AirExportJobCreate() {
           marks_no: hawb.marks_no || null,
           item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
+          ...(hawb.shipment_terms_code != null &&
+            hawb.shipment_terms_code !== "" && {
+              shipment_terms_code: hawb.shipment_terms_code,
+            }),
           events: Array.isArray((hawb as { events?: unknown }).events)
             ? (
                 (
@@ -2070,17 +2233,17 @@ function AirExportJobCreate() {
                     : null,
                 pp_cc: charge.pp_cc || "",
                 unit_id: charge.unit_id ? String(charge.unit_id) : "",
-                no_of_unit: charge.no_of_unit || null,
+                no_of_unit: roundToDecimals(charge.no_of_unit) || null,
                 currency_id: charge.currency_id
                   ? String(charge.currency_id)
                   : "",
-                roe: charge.roe || null,
-                amount_per_unit: charge.amount_per_unit || null,
-                amount: charge.amount || null,
-                sell_local_amount: charge.sell_local_amount ?? charge.local_amount ?? null,
-                unit_cost: charge.unit_cost ?? charge.cost_per_unit ?? null,
-                total_cost: charge.total_cost ?? null,
-                cost_local_amount: charge.cost_local_amount ?? null,
+                roe: roundToDecimals(charge.roe) || null,
+                amount_per_unit: roundToDecimals(charge.amount_per_unit) || null,
+                amount: roundToDecimals(charge.amount) || null,
+                sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? roundToDecimals(charge.local_amount) ?? null,
+                unit_cost: roundToDecimals(charge.unit_cost) ?? roundToDecimals(charge.cost_per_unit) ?? null,
+                total_cost: roundToDecimals(charge.total_cost) ?? null,
+                cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
               }))
             : [],
         })),
@@ -2110,11 +2273,11 @@ function AirExportJobCreate() {
             charge_id: e.charge_id,
             pp_cc: e.pp_cc || "",
             unit_id: e.unit_id ? Number(e.unit_id) : null,
-            no_of_unit: e.no_of_unit ?? null,
+            no_of_unit: roundToDecimals(e.no_of_unit) ?? null,
             currency_id: e.currency_id ? Number(e.currency_id) : null,
-            roe: e.roe ?? null,
-            cost_per_unit: e.cost_per_unit ?? null,
-            total_cost: e.total_cost ?? null,
+            roe: roundToDecimals(e.roe) ?? null,
+            cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
+            total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
       };
@@ -2567,7 +2730,7 @@ function AirExportJobCreate() {
                 <SearchableSelect
                   key={`origin-agent-${formInitializedKey}`}
                   label="Destination Agent"
-                  required
+                  required={!mawbDetailsForm.values.is_direct}
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
                   searchFields={["customer_name", "customer_code"]}
@@ -2734,6 +2897,35 @@ function AirExportJobCreate() {
                   size="sm"
                 />
               </Grid.Col>
+              
+              <Grid.Col span={3}>
+                <Radio.Group
+                  label="Direct"
+                  value={mawbDetailsForm.values.is_direct ? "true" : "false"}
+                  onChange={(value) => {
+                    const isDirect = value === "true";
+                    const previousIsDirect = mawbDetailsForm.values.is_direct;
+                    mawbDetailsForm.setFieldValue("is_direct", isDirect);
+
+                    // If switching to "Yes" (Direct=true), Destination Agent becomes optional.
+                    // Clear any previously entered/selected Destination Agent value.
+                    if (isDirect && !previousIsDirect) {
+                      mawbDetailsForm.clearFieldError("agent_code");
+                      mawbDetailsForm.setFieldValue("agent_code", "");
+                      mawbDetailsForm.setFieldValue("agent_name", "");
+                      originAgentDataRef.current = null;
+                    } else if (isDirect) {
+                      // Even if value doesn't change, ensure the select isn't blocked by stale errors.
+                      mawbDetailsForm.clearFieldError("agent_code");
+                    }
+                  }}
+                >
+                  <Group mt="xs">
+                    <Radio value="true" label="Yes" />
+                    <Radio value="false" label="No" />
+                  </Group>
+                </Radio.Group>
+              </Grid.Col>
             </Grid>
 
             <Divider my="sm" />
@@ -2830,8 +3022,12 @@ function AirExportJobCreate() {
             </Text>
 
             <Stack gap="xl">
-              {routingsForm.values.routings.map((routing, index) => (
-                <Box key={index}>
+              {routingsForm.values.routings.map((routing, index) => {
+                const routingTransportType = String(
+                  routing.transport_type || "",
+                ).toUpperCase();
+                return (
+                <Box key={`${index}-${formInitializedKey}`}>
                   <Grid>
                     <Grid.Col span={2.5}>
                       <Dropdown
@@ -2931,10 +3127,10 @@ function AirExportJobCreate() {
                         }}
                         minSearchLength={2}
                         additionalParams={
-                          getTransportMode(routing.transport_type)
+                          getTransportMode(routingTransportType)
                             ? {
                                 transport_mode: getTransportMode(
-                                  routing.transport_type,
+                                  routingTransportType,
                                 )!,
                               }
                             : undefined
@@ -2980,10 +3176,10 @@ function AirExportJobCreate() {
                         }}
                         minSearchLength={2}
                         additionalParams={
-                          getTransportMode(routing.transport_type)
+                          getTransportMode(routingTransportType)
                             ? {
                                 transport_mode: getTransportMode(
-                                  routing.transport_type,
+                                  routingTransportType,
                                 )!,
                               }
                             : undefined
@@ -2992,7 +3188,7 @@ function AirExportJobCreate() {
                     </Grid.Col>
 
                     {/* Dynamic field labels based on transport type */}
-                    {routing.transport_type === "SEA" && (
+                    {routingTransportType === "SEA" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -3019,10 +3215,10 @@ function AirExportJobCreate() {
                             }}
                             minSearchLength={2}
                             additionalParams={
-                              getTransportMode(routing.transport_type)
+                              getTransportMode(routingTransportType)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type,
+                                      routingTransportType,
                                     )!,
                                   }
                                 : undefined
@@ -3065,7 +3261,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "AIR" && (
+                    {routingTransportType === "AIR" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -3092,10 +3288,10 @@ function AirExportJobCreate() {
                             }}
                             minSearchLength={2}
                             additionalParams={
-                              getTransportMode(routing.transport_type)
+                              getTransportMode(routingTransportType)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type,
+                                      routingTransportType,
                                     )!,
                                   }
                                 : undefined
@@ -3115,7 +3311,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "ROAD" && (
+                    {routingTransportType === "ROAD" && (
                       <>
                         <Grid.Col span={2}>
                           <SearchableSelect
@@ -3142,10 +3338,10 @@ function AirExportJobCreate() {
                             }}
                             minSearchLength={2}
                             additionalParams={
-                              getTransportMode(routing.transport_type)
+                              getTransportMode(routingTransportType)
                                 ? {
                                     transport_mode: getTransportMode(
-                                      routing.transport_type,
+                                      routingTransportType,
                                     )!,
                                   }
                                 : undefined
@@ -3165,7 +3361,7 @@ function AirExportJobCreate() {
                       </>
                     )}
 
-                    {routing.transport_type === "RAIL" && (
+                    {routingTransportType === "RAIL" && (
                       <>
                         <Grid.Col span={2}>
                           <FormTextInput
@@ -3337,7 +3533,7 @@ function AirExportJobCreate() {
                     <Divider my="xl" />
                   )}
                 </Box>
-              ))}
+              )})}
             </Stack>
           </Box>
         </Tabs.Panel>
