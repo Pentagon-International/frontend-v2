@@ -12,6 +12,7 @@ import {
   Divider,
   Stack,
   ActionIcon,
+  Loader,
 } from "@mantine/core";
 import {
   MantineReactTable,
@@ -51,7 +52,7 @@ type FilterState = {
   jobNo: string | null;
   location: string | null;
   subjobNo: string | null;
-  hblHawbNo: string | null;
+  hbl_hawb_no: string | null;
   withAutoEntry: string | null;
   status: string | null;
 };
@@ -96,6 +97,7 @@ type JobLedgerRequestFilters = {
   job_id: string;
   location: string;
   segment_code: string;
+  hbl_hawb_no: string;
 };
 
 type ServiceMasterRow = {
@@ -131,7 +133,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     jobNo: inferredJobIdFinal,
     location: inferredLocationFinal,
     subjobNo: null,
-    hblHawbNo: null,
+    hbl_hawb_no: null,
     withAutoEntry: null,
     status: null,
   });
@@ -165,7 +167,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     //   jobNo: null,
     //   location: null,
     //   subjobNo: null,
-    //   hblHawbNo: null,
+    //   hbl_hawb_no: null,
     //   withAutoEntry: null,
     //   status: null,
     // });
@@ -174,7 +176,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       jobNo: inferredJobIdFinal,
       location: null,
       subjobNo: null,
-      hblHawbNo: null,
+      hbl_hawb_no: null,
       withAutoEntry: null,
       status: null,
     });
@@ -197,6 +199,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       job_id: (uiFilters.jobNo ?? "").toString().trim(),
       location: (uiFilters.location ?? "").toString().trim(),
       segment_code: (uiFilters.segmentCode ?? "").toString().trim(),
+      hbl_hawb_no: (uiFilters.hbl_hawb_no ?? "").toString().trim(),
     };
   };
 
@@ -298,6 +301,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       job_id: (filters.jobNo ?? inferredJobIdFinal ?? "").toString().trim(),
       location: (filters.location ?? inferredLocationFinal ?? "").toString().trim(),
       segment_code: (filters.segmentCode ?? inferredSegmentCodeFinal ?? "").toString().trim(),
+      hbl_hawb_no: (filters.hbl_hawb_no ?? "").toString().trim(),
     };
 
     fetchJobLedger(requestFilters);
@@ -359,8 +363,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       },
       {
         accessorKey: "subjob",
-        header: "Subjob",
-        size: 120,
+        header: "HBL/HAWB No.",
+        size: 150,
         enableColumnFilter: false,
         enableSorting: false,
       },
@@ -688,9 +692,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   label="HBL/HAWB No."
                   placeholder="Enter HBL/HAWB No"
                   size="xs"
-                  value={filters.hblHawbNo || ""}
+                  value={filters.hbl_hawb_no || ""}
                   onChange={(e) =>
-                    updateFilter("hblHawbNo", e.target.value || null)
+                    updateFilter("hbl_hawb_no", e.target.value || null)
                   }
                 />
               </Grid.Col>
@@ -905,7 +909,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             <Grid gutter="sm" px="md" pt="xs" pb="sm">
               <Grid.Col span={2}>
                 <Select
-                  label="service_name"
+                  label="Segment Code"
                   placeholder="Select Segment Code"
                   size="xs"
                   searchable
@@ -914,6 +918,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   value={filters.segmentCode || ""}
                   onChange={(value) => updateFilter("segmentCode", value || null)}
                   disabled={segmentOptionsLoading}
+                  rightSection={
+                    segmentOptionsLoading ? <Loader size={14} /> : undefined
+                  }
                 />
               </Grid.Col>
 
@@ -958,9 +965,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   label="HBL/HAWB No."
                   placeholder="Enter HBL/HAWB No"
                   size="xs"
-                  value={filters.hblHawbNo || ""}
+                  value={filters.hbl_hawb_no || ""}
                   onChange={(e) =>
-                    updateFilter("hblHawbNo", e.target.value || null)
+                    updateFilter("hbl_hawb_no", e.target.value || null)
                   }
                 />
               </Grid.Col>
@@ -1043,6 +1050,21 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             <Box style={{ height: "600px", display: "flex", flexDirection: "column" }}>
               {/* Table */}
               <Box style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                {jobLedgerLoading && (
+                  <Box
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      zIndex: 5,
+                      background: "rgba(255,255,255,0.6)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Loader size="md" color="#105476" />
+                  </Box>
+                )}
                 <MantineReactTable table={table} />
               </Box>
 
