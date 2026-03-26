@@ -33,6 +33,7 @@ interface JobLedgerData {
   id: number;
   segment: string;
   job: string;
+  sno: number;
   subjob: string;
   daybookCode: string;
   daybookName: string;
@@ -225,6 +226,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             id: Number.isFinite(id) ? id : idx + 1,
             segment: (d?.service ?? "").toString(),
             job: (d?.job_id ?? "").toString(),
+            sno:d?.sno ?? 0,
             // Response doesn't have "subjob" like the UI. Using HBL/AWB as a closest match.
             subjob: (d?.hbl_hawb_no ?? "").toString(),
             daybookCode: (d?.day_book_code ?? "").toString(),
@@ -347,138 +349,155 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   // Columns definition for MantineReactTable
   const columns = useMemo<MRT_ColumnDef<JobLedgerData>[]>(
     () => [
+      // {
+      //   accessorKey: "segment",
+      //   header: "Segment",
+      //   size: 100,
+      //   enableColumnFilter: false,
+      //   enableSorting: false,
+      // },
+      // {
+      //   accessorKey: "job",
+      //   header: "Job",
+      //   size: 120,
+      //   enableColumnFilter: false,
+      //   enableSorting: false,
+      // },
       {
-        accessorKey: "segment",
-        header: "Segment",
-        size: 100,
+        accessorKey: "sno",
+        header: "S.No",
+        size: 50,
         enableColumnFilter: false,
         enableSorting: false,
-      },
-      {
-        accessorKey: "job",
-        header: "Job",
-        size: 120,
-        enableColumnFilter: false,
-        enableSorting: false,
+        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },
       {
         accessorKey: "subjob",
         header: "HBL/HAWB No.",
-        size: 150,
+        size: 135,
         enableColumnFilter: false,
         enableSorting: false,
+        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },
       {
         accessorKey: "daybookCode",
         header: "Daybook Code",
-        size: 140,
+        size: 115,
         enableColumnFilter: false,
         enableSorting: false,
+        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },
-      {
-        accessorKey: "daybookName",
-        header: "Daybook Name",
-        size: 160,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
+      // {
+      //   accessorKey: "daybookName",
+      //   header: "Daybook Name",
+      //   size: 160,
+      //   enableColumnFilter: false,
+      //   enableSorting: false,
+      // },
       {
         accessorKey: "documentNo",
         header: "Document number",
-        size: 160,
+        size: 150,
         enableColumnFilter: false,
         enableSorting: false,
+        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },
       {
         accessorKey: "date",
         header: "Date",
-        size: 120,
+        size: 105,
         enableColumnFilter: false,
         enableSorting: false,
+        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },
       {
         accessorKey: "debit",
         header: "Debit",
-        size: 120,
+        size: 140,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return value > 0 ? `$${value.toFixed(2)}` : "-";
+          return value > 0 ? `${value.toFixed(2)}` : "-";
         },
         mantineTableBodyCellProps: {
-          style: {  backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: {  backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
         },
       },
       {
         accessorKey: "credit",
         header: "Credit",
-        size: 120,
+        size: 140,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return value > 0 ? `$${value.toFixed(2)}` : "-";
+          return value > 0 ? `${value.toFixed(2)}` : "-";
         },
         mantineTableBodyCellProps: {
-          style: {  backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
         },
       },
       {
         accessorKey: "revenue",
         header: "Revenue",
-        size: 120,
+        size: 140,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return `$${value.toFixed(2)}`;
+          return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: {  backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: {  backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
         },
       },
       {
         accessorKey: "actualCost",
         header: "Actual cost",
-        size: 120,
+        size: 150,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return `$${value.toFixed(2)}`;
+          return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: {  backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
         },
       },
       {
         accessorKey: "neutral",
         header: "Neutral",
-        size: 120,
+        size: 140,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return `$${value.toFixed(2)}`;
+          return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: {  backgroundColor: "#FBFBFB" },
+          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
         },
       },
     ],
@@ -521,17 +540,22 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     mantineTableBodyCellProps: {
       style: {
         width: "fit-content",
-        padding: "8px 16px",
+        padding: "4px 8px",
         fontSize: "14px",
         fontFamily: "Inter",
         color: "#333740",
         backgroundColor: "#ffffff",
       },
     },
+    mantineTableBodyRowProps: {
+      style: {
+        height: "40px",
+      },
+    },
     mantineTableHeadCellProps: {
       style: {
         width: "fit-content",
-        padding: "8px 16px",
+        padding: "6px 12px",
         fontSize: "14px",
         fontFamily: "Inter",
         color: "#444955",
@@ -820,7 +844,33 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           <Text size="lg" fw={600} c="#105476">
             Job Ledger
           </Text>
-          <Group>
+          <Group gap="md">
+            <Group gap={6} wrap="nowrap">
+              <Text
+                size="lg"
+                fw={600}
+                c="#105476"
+                style={{ fontFamily: "Inter" }}
+              >
+                Segment:
+              </Text>
+              <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" }}>
+                  {navState?.service_name}
+              </Text>
+            </Group>
+            <Group gap={6} wrap="nowrap">
+              <Text
+                size="lg"
+                fw={600}
+                c="#105476"
+                style={{ fontFamily: "Inter" }}
+              >
+                Job:
+              </Text>
+              <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" , }}>
+                {filters.jobNo || "-"}
+              </Text>
+            </Group>
             <Button
               variant={showFilters ? "filled" : "outline"}
               leftSection={<IconFilter size={16} />}
@@ -1088,7 +1138,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         Total Debit
                       </Text>
                       <Text size="lg" fw={600}>
-                        ${totals.totalDebit.toFixed(2)}
+                        {totals.totalDebit.toFixed(2)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -1098,7 +1148,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         Total Credit
                       </Text>
                       <Text size="lg" fw={600}>
-                        ${totals.totalCredit.toFixed(2)}
+                        {totals.totalCredit.toFixed(2)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -1108,7 +1158,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         Total Revenue
                       </Text>
                       <Text size="lg" fw={600}>
-                        ${totals.totalRevenue.toFixed(2)}
+                        {totals.totalRevenue.toFixed(2)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -1118,7 +1168,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         Total Actual Cost
                       </Text>
                       <Text size="lg" fw={600}>
-                        ${totals.totalActualCost.toFixed(2)}
+                        {totals.totalActualCost.toFixed(2)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -1128,7 +1178,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         Total Neutral
                       </Text>
                       <Text size="lg" fw={600} c="#105476">
-                        ${totals.totalNeutral.toFixed(2)}
+                        {totals.totalNeutral.toFixed(2)}
                       </Text>
                     </Stack>
                   </Grid.Col>

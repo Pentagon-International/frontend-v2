@@ -2729,6 +2729,7 @@ function AirImportJobCreate() {
                           state: {
                             jobId:
                               jobData?.job_id,
+                              service_name: "Air Import",
                           },
                         })
                       }

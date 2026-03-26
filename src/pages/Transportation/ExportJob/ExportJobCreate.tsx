@@ -2876,6 +2876,7 @@ function ExportJobCreate() {
                           state: {
                             jobId:
                               jobData?.job_id,
+                              service_name: "Ocean Export",
                           },
                         })
                       }

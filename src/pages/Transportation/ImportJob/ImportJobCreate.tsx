@@ -2825,6 +2825,7 @@ function ImportJobCreate() {
                           state: {
                             jobId:
                               jobData?.job_id ,
+                              service_name: "Ocean Import",
                           },
                         })
                       }
