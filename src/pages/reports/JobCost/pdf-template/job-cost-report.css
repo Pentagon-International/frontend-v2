@@ -1,0 +1,365 @@
+/* ============================================================
+   Job Cost Sheet — A4 Portrait (PDF/Print-first)
+   · Header: page 1 only (outside table, not repeated)
+   · Footer: every page bottom via CSS running element (@page)
+   · Dynamic page numbers via CSS counters
+   · Table: continuous; thead repeats automatically
+   ============================================================ */
+
+/* ── Page setup ──────────────────────────────────────────── */
+@page {
+  size: A4 portrait;
+  /* Match Job Profit PDF: maximize usable width */
+  margin: 1mm;
+
+  /* Running footer placed in the bottom margin of every page */
+  @bottom-left {
+    content: element(running-footer);
+    vertical-align: top;
+  }
+}
+
+/* ── Design tokens ───────────────────────────────────────── */
+:root {
+  --ink: #111827;
+  --muted: #4b5563;
+  --line: #e5e7eb;
+  --line-strong: #cbd5e1;
+  --bg: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  /* Match Job Profit preview canvas */
+  background: #f3f4f6;
+  color: var(--ink);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── Screen wrapper (visual A4 card preview) ─────────────── */
+.page-preview {
+  /* Match Job Profit "landscape sheet" preview size */
+  width: 297mm;
+  margin: 0 auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(17, 24, 39, 0.08);
+  overflow: visible;
+  padding-bottom: 0;
+  min-height: 210mm;
+}
+
+/* ══════════════════════════════════════════════════════════
+   HEADER — first page only
+   ══════════════════════════════════════════════════════════ */
+.report-header {
+  /* Reduce left/right padding like Job Profit */
+  padding: 10px 8px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.header-top {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.company h1 {
+  margin: 0;
+  font-size: 12.5px;
+  letter-spacing: 0.15px;
+  text-transform: uppercase;
+  line-height: 1.25;
+}
+
+.company p {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.chip {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.title-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+  align-items: center;
+}
+
+.title-left {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.title-center {
+  text-align: center;
+}
+
+.title-center h2 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.title-right {
+  text-align: right;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Meta table (top details) ────────────────────────────── */
+.meta-table-wrap {
+  /* Minimal left/right padding like Job Profit */
+  padding: 8px 0 0;
+}
+
+table.meta-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border: 1px solid var(--line-strong);
+}
+
+table.meta-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 4px 6px;
+  font-size: 9.5px;
+  vertical-align: top;
+}
+
+table.meta-table tr:last-child td {
+  border-bottom: none;
+}
+
+table.meta-table td.k {
+  width: 11%;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+table.meta-table td.v {
+  width: 14%;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ── Main table wrapper ─────────────────────────────────── */
+.table-wrap {
+  /* Charge section container (like Job Profit's table band) */
+  padding: 10px 8px 10px;
+  background: #f8fafc;
+}
+
+table.cost {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+thead {
+  display: table-header-group;
+}
+
+table.cost thead th {
+  overflow: hidden; /* keep header text inside cell */
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+table.cost thead tr.group th {
+  /* Match Job Profit header styling */
+  background: #eaf2f8;
+  border-bottom: 1px solid var(--line-strong);
+  font-weight: 900;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 5px 5px;
+  text-align: center;
+  color: #0b2230;
+}
+
+table.cost thead tr.sub th {
+  /* Match Job Profit header styling */
+  background: #f1f5f9;
+  border-bottom: 1px solid var(--line-strong);
+  font-weight: 800;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 5px 5px;
+  text-align: center;
+  line-height: 1.15;
+  color: #0b2230;
+}
+
+table.cost thead th.left {
+  text-align: left;
+}
+
+table.cost tbody td {
+  border-bottom: 1px solid var(--line);
+  padding: 5px 6px;
+  vertical-align: top;
+}
+
+td.num,
+th.num {
+  /* Center values under centered headers */
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+td.center,
+th.center {
+  text-align: center;
+}
+
+/* Keep first column (Charge Name) left-aligned */
+table.cost tbody td:first-child,
+table.cost thead th.left {
+  text-align: left;
+}
+
+.section-row td {
+  font-weight: 900;
+  color: #0b2230;
+  border-top: 1px solid var(--line-strong);
+}
+
+.total-row td {
+  font-weight: 900;
+  border-top: 1px solid var(--line-strong);
+}
+
+.grand-total td {
+  font-weight: 900;
+  border-top: 2px solid var(--line-strong);
+}
+
+/* Column widths */
+.c-charge { width: 26%; }
+.c-m1     { width: 9%; }
+.c-m2     { width: 9%; }
+.c-m3     { width: 9%; }
+.c-m4     { width: 7%; }
+.c-a1     { width: 9%; }
+.c-a2     { width: 9%; }
+.c-a3     { width: 7%; }
+.c-a4     { width: 7%; }
+.c-a5     { width: 8%; }
+
+/* ── Running footer ──────────────────────────────────────── */
+.running-footer {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 12px;
+  /* Minimal left/right padding like Job Profit */
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--line-strong);
+  margin-top: 14px;
+  background: var(--bg);
+}
+
+.footer-left {
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.footer-right {
+  text-align: right;
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.page-no {
+  font-weight: 900;
+  font-size: 9.5px;
+  color: var(--ink);
+  margin-top: 3px;
+}
+
+.page-no::after {
+  content: "Page " counter(page) " of " counter(pages);
+}
+
+/* ── Print overrides ─────────────────────────────────────── */
+@media print {
+  html,
+  body {
+    /* Match Job Profit "landscape sheet" print sizing */
+    width: 297mm;
+    height: 210mm;
+    background: var(--bg);
+  }
+
+  .page-preview {
+    width: 297mm;
+    margin: 0;
+    padding-bottom: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    min-height: 210mm;
+  }
+
+  .running-footer {
+    position: running(running-footer);
+    margin-top: 0;
+    padding-top: 5px;
+    border-top: 1px solid var(--line-strong);
+    width: 297mm;
+  }
+
+  table.cost tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  table.cost {
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
