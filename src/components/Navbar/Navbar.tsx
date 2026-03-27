@@ -85,6 +85,7 @@ const Navbar = ({
     }
   }, [location.pathname]);
 
+
   const handleLogoClick = () => {
     // Navigate to dashboard with reset flag if not already at base level
     if (location.pathname === "/") {
@@ -207,7 +208,7 @@ const Navbar = ({
                   label="Sales"
                   openedLocal={isSalesOpen}
                   setOpenedLocal={setIsSalesOpen}
-                  icon={IconRosetteDiscount}
+                  icon={IconRosetteDiscount as any}
                 >
                   <SubNavLink
                     parent="Sales"
@@ -271,7 +272,7 @@ const Navbar = ({
                     openedLocal={isTariffOpen}
                     setOpenedLocal={setIsTariffOpen}
                     label="Tariff"
-                    icon={IconFileSettings}
+                    icon={IconFileSettings as any}
                     parent="Sales"
                   >
                     <NestedSubNavLink
@@ -279,14 +280,13 @@ const Navbar = ({
                       subParent="Tariff"
                       label="Freight"
                       path="/tariff/freight"
-                      icon={IconPackage}
+                      icon={IconPackage as any}
                       collapsibles={{
                         setIsCustomerServiceOpen,
                         setIsTariffOpen,
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
-                        setIsAccountsOpen,
                       }}
                     />
                     <NestedSubNavLink
@@ -294,14 +294,13 @@ const Navbar = ({
                       subParent="Tariff"
                       label="Origin"
                       path="/tariff/origin"
-                      icon={IconMapPin}
+                      icon={IconMapPin as any}
                       collapsibles={{
                         setIsCustomerServiceOpen,
                         setIsTariffOpen,
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
-                        setIsAccountsOpen,
                       }}
                     />
                     <NestedSubNavLink
@@ -309,14 +308,13 @@ const Navbar = ({
                       subParent="Tariff"
                       label="Destination"
                       path="/tariff/destination"
-                      icon={IconMapPinFilled}
+                      icon={IconMapPinFilled as any}
                       collapsibles={{
                         setIsCustomerServiceOpen,
                         setIsTariffOpen,
                         setIsSalesOpen,
                         setIsAirOpen,
                         setIsSeaExportOpen,
-                        setIsAccountsOpen,
                       }}
                     />
                   </CollapsibleNav>
@@ -397,7 +395,7 @@ const Navbar = ({
                   label="Air"
                   openedLocal={isAirOpen}
                   setOpenedLocal={setIsAirOpen}
-                  icon={IconPlane}
+                  icon={IconPlane as any}
                 >
                   <SubNavLink
                     parent="Transportation"
@@ -484,7 +482,7 @@ const Navbar = ({
                   label="Ocean"
                   openedLocal={isSeaExportOpen}
                   setOpenedLocal={setIsSeaExportOpen}
-                  icon={IconShip}
+                  icon={IconShip as any}
                 >
                   <SubNavLink
                     parent="Transportation"
@@ -594,7 +592,7 @@ const Navbar = ({
                   key="Accounts"
                   openedLocal={isAccountsOpen}
                   setOpenedLocal={setIsAccountsOpen}
-                  icon={IconPercentage}
+                  icon={IconPercentage as any}
                 >
                   <SubNavLink
                     parent="Accounts"
@@ -765,7 +763,6 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
-                  setIsAccountsOpen,
                 }}
               />
               <SimpleNavLink
@@ -779,7 +776,6 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
-                  setIsAccountsOpen,
                 }}
               />
             </Stack>
@@ -837,7 +833,6 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
-                  setIsAccountsOpen,
                 }}
               />
               <SimpleNavLink
@@ -850,7 +845,6 @@ const Navbar = ({
                   setIsCustomerServiceOpen,
                   setIsAirOpen,
                   setIsSeaExportOpen,
-                  setIsAccountsOpen,
                 }}
               />
             </Stack>

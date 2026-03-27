@@ -32,6 +32,7 @@ import {
   IconUpload,
   IconX,
 } from "@tabler/icons-react";
+import type { FC } from "react";
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -475,7 +476,7 @@ const textareaStyles = {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-function PaymentRequest( serviceType: string  ) {
+function PaymentRequest() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id: requestId } = useParams<{ id: string }>();
@@ -2971,4 +2972,4 @@ function PaymentRequest( serviceType: string  ) {
   );
 }
 
-export default PaymentRequest;
+export default PaymentRequest as unknown as FC;

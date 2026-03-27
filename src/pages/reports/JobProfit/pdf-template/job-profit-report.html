@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<!--
+  Static PDF template (no scripts).
+  Format/style approach follows backend template:
+  C:/Pentagon-Prime-Git/Backend/backend/job_created/PDF/AIR/cargo-manifest.html
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Profit Report (Template)</title>
+  <link rel="stylesheet" href="job-profit-report.css" />
+</head>
+<body>
+
+  <!-- Optional print button (hidden on print) -->
+  <div class="toolbar no-print">
+    <button class="btn primary" type="button" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+
+  <div class="page">
+
+    <!-- =========================
+         PAGE 1
+    ========================== -->
+    <div class="sheet">
+      <header class="header">
+        <div class="header-top">
+          <div class="company">
+            <div class="logo" aria-hidden="true"></div>
+            <div>
+              <h1>PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED</h1>
+              <p>
+                204, Satellite Silver Co-Op Premises Soc., Ltd, Andheri Kurla Road,<br />
+                Marol Naka, Andheri-East, Mumbai, Maharashtra 400059
+              </p>
+            </div>
+          </div>
+
+          <div class="meta">
+            <div class="chip">Ref: R00152 · 25-Mar-2026 · PENUSER-MUMBAI</div>
+            <div class="chip">Currency: INR</div>
+          </div>
+        </div>
+
+        <div class="report-title">
+          <div>
+            <h2>Job Profit Report</h2>
+            <div class="subtitle">From (Job Date) 01-Apr-2025 to 10-Apr-2025</div>
+          </div>
+          <div class="location">
+            <div class="label">Job Location</div>
+            <div class="value">Mumbai</div>
+          </div>
+        </div>
+      </header>
+
+      <main class="table-wrap">
+        <table class="report" aria-label="Job Profit table">
+          <colgroup>
+            <col style="width:7.5%">
+            <col style="width:12%">
+            <col style="width:11%">
+            <col style="width:7.5%">
+            <col style="width:5.5%">
+            <col style="width:5.5%">
+            <col style="width:5.5%">
+            <col style="width:10.5%">
+            <col style="width:4.5%">
+            <col style="width:5.5%">
+            <col style="width:4%">
+            <col style="width:6.5%">
+            <col style="width:6.5%">
+            <col style="width:6%">
+            <col style="width:5.5%">
+            <col style="width:4%">
+            <col style="width:6.5%">
+            <col style="width:6.5%">
+            <col style="width:6%">
+          </colgroup>
+            <thead>
+            <tr class="group">
+              <th colspan="9">Shipment &amp; Parties</th>
+              <th colspan="5" class="center">Our Routed</th>
+              <th colspan="5" class="center">Agent Routed</th>
+            </tr>
+            <tr>
+              <th class="col-salesman">Salesman</th>
+              <th class="col-customer">Customer</th>
+              <th class="col-agent">Agent</th>
+              <th class="col-origin">Origin</th>
+              <th class="col-pol">POL</th>
+              <th class="col-pod">POD</th>
+              <th class="col-fdc">FDC</th>
+              <th class="col-jobproj">Job / Project</th>
+              <th class="col-ppcc center">PP/CC</th>
+
+              <th class="col-vw num">Vol Wt</th>
+              <th class="col-teu num">TEU</th>
+              <th class="col-rev num">Revenue</th>
+              <th class="col-cost num">Cost</th>
+              <th class="col-profit num">Profit</th>
+
+              <th class="col-vw num">Vol Wt</th>
+              <th class="col-teu num">TEU</th>
+              <th class="col-rev num">Revenue</th>
+              <th class="col-cost num">Cost</th>
+              <th class="col-profit num">Profit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 16 rows (page 1) - hardcoded -->
+            <tr>
+              <td>Keveen Doshi</td>
+              <td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td>
+              <td>Lodestar Sea &amp; Air Co. Ltd</td>
+              <td>VNH</td><td class="center">BOM</td><td class="center">ICN</td><td class="center">ICN</td>
+              <td>AE-250438210001-01</td><td class="center">CC</td>
+              <td class="num">10</td><td class="num">1</td><td class="num">10,135.00</td><td class="num">3,545.00</td><td class="num">6,590.00</td>
+              <td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td>
+            </tr>
+            <tr>
+              <td>Pritesh Waghela</td>
+              <td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td>
+              <td>Azelis (India) - Trade Canada Pvt Ltd</td>
+              <td>CN</td><td class="center">BOM</td><td class="center">YYZ</td><td class="center">YYZ</td>
+              <td>AE-250438210001-02</td><td class="center">PP</td>
+              <td class="num">27</td><td class="num">1</td><td class="num">23,440.00</td><td class="num">20,500.00</td><td class="num">2,940.00</td>
+              <td class="num">17</td><td class="num">0</td><td class="num">24,029.59</td><td class="num">8,942.68</td><td class="num">15,086.82</td>
+            </tr>
+            <tr>
+              <td>Sujeet Yadav</td>
+              <td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td>
+              <td>Deutsche Bank (Mumbai) Operations</td>
+              <td>IN</td><td class="center">BOM</td><td class="center">HAM</td><td class="center">HAM</td>
+              <td>AE-250438210001-03</td><td class="center">CC</td>
+              <td class="num">583</td><td class="num">1</td><td class="num">6,457.62</td><td class="num">4,039.62</td><td class="num">2,418.00</td>
+              <td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td>
+            </tr>
+            <tr>
+              <td>Nilesh Veire</td>
+              <td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td>
+              <td>Jordan Port and Co. - Corn Chips Division</td>
+              <td>HK</td><td class="center">BOM</td><td class="center">JDN</td><td class="center">JDN</td>
+              <td>AE-250438210001-04</td><td class="center">CC</td>
+              <td class="num">315</td><td class="num">1</td><td class="num">6,192.38</td><td class="num">4,052.38</td><td class="num">2,140.00</td>
+              <td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td>
+            </tr>
+            <tr>
+              <td>Jay Bhanushali</td>
+              <td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td>
+              <td>Sefar India Private Limited - JPN Tech Co. Ltd</td>
+              <td>BOM</td><td class="center">BOM</td><td class="center">BKK</td><td class="center">BKK</td>
+              <td>AE-250438210001-05</td><td class="center">PP</td>
+              <td class="num">100</td><td class="num">1</td><td class="num">72,350.26</td><td class="num">18,165.26</td><td class="num">54,185.00</td>
+              <td class="num">1</td><td class="num">0</td><td class="num">1,000.00</td><td class="num">200.00</td><td class="num">800.00</td>
+            </tr>
+            <!-- Repeat additional rows to fill page 1 -->
+            <tr><td>Keveen Doshi</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>BOM</td><td class="center">BOM</td><td class="center">DXB</td><td class="center">DXB</td><td>AE-250438210001-06</td><td class="center">CC</td><td class="num">236</td><td class="num">2</td><td class="num">52,504.24</td><td class="num">50,504.24</td><td class="num">2,000.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Pritesh Waghela</td><td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td><td>Azelis (India) - Trade Canada Pvt Ltd</td><td>CNSHA</td><td class="center">SHA</td><td class="center">INNSA</td><td class="center">INNSA</td><td>AE-250438210001-07</td><td class="center">CC</td><td class="num">68</td><td class="num">1</td><td class="num">501,574.00</td><td class="num">486,594.00</td><td class="num">14,980.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Sujeet Yadav</td><td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td><td>Deutsche Bank (Mumbai) Operations</td><td>CDG</td><td class="center">CDG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210001-08</td><td class="center">PP</td><td class="num">162</td><td class="num">0</td><td class="num">80,158.05</td><td class="num">63,168.09</td><td class="num">16,989.96</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Nilesh Veire</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Jordan Port and Co. - Corn Chips Division</td><td>HKG</td><td class="center">HKG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210001-09</td><td class="center">CC</td><td class="num">521</td><td class="num">1</td><td class="num">193,364.24</td><td class="num">172,273.02</td><td class="num">21,091.22</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Jay Bhanushali</td><td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td><td>Sefar India Private Limited - JPN Tech Co. Ltd</td><td>HKG</td><td class="center">HKG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210001-10</td><td class="center">CC</td><td class="num">469</td><td class="num">2</td><td class="num">105,845.97</td><td class="num">101,053.11</td><td class="num">4,792.86</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Keveen Doshi</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>SHEN</td><td class="center">EHU</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210001-11</td><td class="center">CC</td><td class="num">783</td><td class="num">1</td><td class="num">176,588.49</td><td class="num">159,263.42</td><td class="num">17,325.06</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Pritesh Waghela</td><td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td><td>Azelis (India) - Trade Canada Pvt Ltd</td><td>SHEN</td><td class="center">EHU</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210001-12</td><td class="center">CC</td><td class="num">100</td><td class="num">0</td><td class="num">5,936.28</td><td class="num">4,079.29</td><td class="num">1,856.91</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Sujeet Yadav</td><td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td><td>Deutsche Bank (Mumbai) Operations</td><td>YAI</td><td class="center">ICN</td><td class="center">BLR</td><td class="center">BLR</td><td>AE-250438210001-13</td><td class="center">CC</td><td class="num">301</td><td class="num">0</td><td class="num">81,754.99</td><td class="num">73,611.99</td><td class="num">8,142.90</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Nilesh Veire</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Jordan Port and Co. - Corn Chips Division</td><td>NITTSU</td><td class="center">OSA</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210001-14</td><td class="center">CC</td><td class="num">183</td><td class="num">0</td><td class="num">62,018.90</td><td class="num">43,030.04</td><td class="num">18,988.86</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Jay Bhanushali</td><td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td><td>Sefar India Private Limited - JPN Tech Co. Ltd</td><td>CONSOL</td><td class="center">SIN</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210001-15</td><td class="center">CC</td><td class="num">81</td><td class="num">0</td><td class="num">30,204.94</td><td class="num">18,044.56</td><td class="num">12,160.38</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Keveen Doshi</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>SEAR</td><td class="center">SIN</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210001-16</td><td class="center">CC</td><td class="num">317</td><td class="num">0</td><td class="num">60,418.56</td><td class="num">49,260.37</td><td class="num">11,158.19</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+          </tbody>
+        </table>
+      </main>
+
+      <footer class="footer">
+        <ol class="notes">
+          <li>Cost &amp; revenue for the jobs booked up to date were considered.</li>
+          <li>Amounts are in local currency.</li>
+          <li>Transhipment profit is included for both Import and Export jobs.</li>
+        </ol>
+        <div class="footer-right">
+          <div>Generated: 26-Mar-2026 11:30</div>
+          <div class="page-no">Page 1 of 3</div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- =========================
+         PAGE 2
+    ========================== -->
+    <div class="sheet page-break">
+      <header class="header">
+        <div class="header-top">
+          <div class="company">
+            <div class="logo" aria-hidden="true"></div>
+            <div>
+              <h1>PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED</h1>
+              <p>
+                204, Satellite Silver Co-Op Premises Soc., Ltd, Andheri Kurla Road,<br />
+                Marol Naka, Andheri-East, Mumbai, Maharashtra 400059
+              </p>
+            </div>
+          </div>
+          <div class="meta">
+            <div class="chip">Ref: R00152 · 25-Mar-2026 · PENUSER-MUMBAI</div>
+            <div class="chip">Currency: INR</div>
+          </div>
+        </div>
+        <div class="report-title">
+          <div>
+            <h2>Job Profit Report</h2>
+            <div class="subtitle">From (Job Date) 01-Apr-2025 to 10-Apr-2025</div>
+          </div>
+          <div class="location">
+            <div class="label">Job Location</div>
+            <div class="value">Mumbai</div>
+          </div>
+        </div>
+      </header>
+
+      <main class="table-wrap">
+        <table class="report" aria-label="Job Profit table">
+          <colgroup>
+            <col style="width:7.5%">
+            <col style="width:12%">
+            <col style="width:11%">
+            <col style="width:7.5%">
+            <col style="width:5.5%">
+            <col style="width:5.5%">
+            <col style="width:5.5%">
+            <col style="width:10.5%">
+            <col style="width:4.5%">
+            <col style="width:5.5%">
+            <col style="width:4%">
+            <col style="width:6.5%">
+            <col style="width:6.5%">
+            <col style="width:6%">
+            <col style="width:5.5%">
+            <col style="width:4%">
+            <col style="width:6.5%">
+            <col style="width:6.5%">
+            <col style="width:6%">
+          </colgroup>
+          <thead>
+            <tr class="group">
+              <th colspan="9">Shipment &amp; Parties</th>
+              <th colspan="5" class="center">Our Routed</th>
+              <th colspan="5" class="center">Agent Routed</th>
+            </tr>
+            <tr>
+              <th class="col-salesman">Salesman</th>
+              <th class="col-customer">Customer</th>
+              <th class="col-agent">Agent</th>
+              <th class="col-origin">Origin</th>
+              <th class="col-pol">POL</th>
+              <th class="col-pod">POD</th>
+              <th class="col-fdc">FDC</th>
+              <th class="col-jobproj">Job / Project</th>
+              <th class="col-ppcc center">PP/CC</th>
+              <th class="col-vw num">Vol Wt</th>
+              <th class="col-teu num">TEU</th>
+              <th class="col-rev num">Revenue</th>
+              <th class="col-cost num">Cost</th>
+              <th class="col-profit num">Profit</th>
+              <th class="col-vw num">Vol Wt</th>
+              <th class="col-teu num">TEU</th>
+              <th class="col-rev num">Revenue</th>
+              <th class="col-cost num">Cost</th>
+              <th class="col-profit num">Profit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 16 rows (page 2) - hardcoded -->
+            <tr><td>Mayur Gori</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Deutsche Bank (Mumbai) Operations</td><td>HKG</td><td class="center">HKG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210002-01</td><td class="center">CC</td><td class="num">521</td><td class="num">1</td><td class="num">193,364.24</td><td class="num">172,273.02</td><td class="num">21,091.22</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Keveen Doshi</td><td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>HKG</td><td class="center">HKG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210002-02</td><td class="center">CC</td><td class="num">469</td><td class="num">2</td><td class="num">105,845.97</td><td class="num">101,053.11</td><td class="num">4,792.86</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Paresh Bhanushali</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Jordan Port and Co. - Corn Chips Division</td><td>SHEN</td><td class="center">EHU</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210002-03</td><td class="center">CC</td><td class="num">783</td><td class="num">1</td><td class="num">176,588.49</td><td class="num">159,263.42</td><td class="num">17,325.06</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Keveen Doshi</td><td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td><td>Azelis (India) - Trade Canada Pvt Ltd</td><td>SHEN</td><td class="center">EHU</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210002-04</td><td class="center">CC</td><td class="num">100</td><td class="num">0</td><td class="num">5,936.28</td><td class="num">4,079.29</td><td class="num">1,856.91</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Megha Bharati</td><td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td><td>Deutsche Bank (Mumbai) Operations</td><td>YAI</td><td class="center">ICN</td><td class="center">BLR</td><td class="center">BLR</td><td>AE-250438210002-05</td><td class="center">CC</td><td class="num">301</td><td class="num">0</td><td class="num">81,754.99</td><td class="num">73,611.99</td><td class="num">8,142.90</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Satheesha Shetty</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Jordan Port and Co. - Corn Chips Division</td><td>NITTSU</td><td class="center">OSA</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210002-06</td><td class="center">CC</td><td class="num">183</td><td class="num">0</td><td class="num">62,018.90</td><td class="num">43,030.04</td><td class="num">18,988.86</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Bugal Bhanushali</td><td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td><td>Sefar India Private Limited - JPN Tech Co. Ltd</td><td>CONSOL</td><td class="center">SIN</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210002-07</td><td class="center">CC</td><td class="num">81</td><td class="num">0</td><td class="num">30,204.94</td><td class="num">18,044.56</td><td class="num">12,160.38</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Bugal Bhanushali</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>SEAR</td><td class="center">SIN</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210002-08</td><td class="center">CC</td><td class="num">317</td><td class="num">0</td><td class="num">60,418.56</td><td class="num">49,260.37</td><td class="num">11,158.19</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <!-- duplicate 8 more rows for page fullness -->
+            <tr><td>Keveen Doshi</td><td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td><td>Azelis (India) - Trade Canada Pvt Ltd</td><td>BOM</td><td class="center">BOM</td><td class="center">DXB</td><td class="center">DXB</td><td>AE-250438210002-09</td><td class="center">CC</td><td class="num">236</td><td class="num">2</td><td class="num">52,504.24</td><td class="num">50,504.24</td><td class="num">2,000.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Pritesh Waghela</td><td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td><td>Deutsche Bank (Mumbai) Operations</td><td>IN</td><td class="center">BOM</td><td class="center">HAM</td><td class="center">HAM</td><td>AE-250438210002-10</td><td class="center">CC</td><td class="num">583</td><td class="num">1</td><td class="num">6,457.62</td><td class="num">4,039.62</td><td class="num">2,418.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Sujeet Yadav</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Jordan Port and Co. - Corn Chips Division</td><td>HK</td><td class="center">BOM</td><td class="center">JDN</td><td class="center">JDN</td><td>AE-250438210002-11</td><td class="center">CC</td><td class="num">315</td><td class="num">1</td><td class="num">6,192.38</td><td class="num">4,052.38</td><td class="num">2,140.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Nilesh Veire</td><td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td><td>Sefar India Private Limited - JPN Tech Co. Ltd</td><td>BOM</td><td class="center">BOM</td><td class="center">BKK</td><td class="center">BKK</td><td>AE-250438210002-12</td><td class="center">PP</td><td class="num">100</td><td class="num">1</td><td class="num">72,350.26</td><td class="num">18,165.26</td><td class="num">54,185.00</td><td class="num">1</td><td class="num">0</td><td class="num">1,000.00</td><td class="num">200.00</td><td class="num">800.00</td></tr>
+            <tr><td>Jay Bhanushali</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>VNH</td><td class="center">BOM</td><td class="center">ICN</td><td class="center">ICN</td><td>AE-250438210002-13</td><td class="center">CC</td><td class="num">10</td><td class="num">1</td><td class="num">10,135.00</td><td class="num">3,545.00</td><td class="num">6,590.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Keveen Doshi</td><td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td><td>Azelis (India) - Trade Canada Pvt Ltd</td><td>CN</td><td class="center">BOM</td><td class="center">YYZ</td><td class="center">YYZ</td><td>AE-250438210002-14</td><td class="center">PP</td><td class="num">27</td><td class="num">1</td><td class="num">23,440.00</td><td class="num">20,500.00</td><td class="num">2,940.00</td><td class="num">17</td><td class="num">0</td><td class="num">24,029.59</td><td class="num">8,942.68</td><td class="num">15,086.82</td></tr>
+            <tr><td>Pritesh Waghela</td><td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td><td>Deutsche Bank (Mumbai) Operations</td><td>IN</td><td class="center">BOM</td><td class="center">HAM</td><td class="center">HAM</td><td>AE-250438210002-15</td><td class="center">CC</td><td class="num">583</td><td class="num">1</td><td class="num">6,457.62</td><td class="num">4,039.62</td><td class="num">2,418.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Sujeet Yadav</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Jordan Port and Co. - Corn Chips Division</td><td>HK</td><td class="center">BOM</td><td class="center">JDN</td><td class="center">JDN</td><td>AE-250438210002-16</td><td class="center">CC</td><td class="num">315</td><td class="num">1</td><td class="num">6,192.38</td><td class="num">4,052.38</td><td class="num">2,140.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+          </tbody>
+        </table>
+      </main>
+
+      <footer class="footer">
+        <ol class="notes">
+          <li>Cost &amp; revenue for the jobs booked up to date were considered.</li>
+          <li>Amounts are in local currency.</li>
+          <li>Transhipment profit is included for both Import and Export jobs.</li>
+        </ol>
+        <div class="footer-right">
+          <div>Generated: 26-Mar-2026 11:30</div>
+          <div class="page-no">Page 2 of 3</div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- =========================
+         PAGE 3
+    ========================== -->
+    <div class="sheet page-break">
+      <header class="header">
+        <div class="header-top">
+          <div class="company">
+            <div class="logo" aria-hidden="true"></div>
+            <div>
+              <h1>PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED</h1>
+              <p>
+                204, Satellite Silver Co-Op Premises Soc., Ltd, Andheri Kurla Road,<br />
+                Marol Naka, Andheri-East, Mumbai, Maharashtra 400059
+              </p>
+            </div>
+          </div>
+          <div class="meta">
+            <div class="chip">Ref: R00152 · 25-Mar-2026 · PENUSER-MUMBAI</div>
+            <div class="chip">Currency: INR</div>
+          </div>
+        </div>
+        <div class="report-title">
+          <div>
+            <h2>Job Profit Report</h2>
+            <div class="subtitle">From (Job Date) 01-Apr-2025 to 10-Apr-2025</div>
+          </div>
+          <div class="location">
+            <div class="label">Job Location</div>
+            <div class="value">Mumbai</div>
+          </div>
+        </div>
+      </header>
+
+      <main class="table-wrap">
+        <table class="report" aria-label="Job Profit table">
+          <colgroup>
+            <col style="width:7.5%">
+            <col style="width:12%">
+            <col style="width:11%">
+            <col style="width:7.5%">
+            <col style="width:5.5%">
+            <col style="width:5.5%">
+            <col style="width:5.5%">
+            <col style="width:10.5%">
+            <col style="width:4.5%">
+            <col style="width:5.5%">
+            <col style="width:4%">
+            <col style="width:6.5%">
+            <col style="width:6.5%">
+            <col style="width:6%">
+            <col style="width:5.5%">
+            <col style="width:4%">
+            <col style="width:6.5%">
+            <col style="width:6.5%">
+            <col style="width:6%">
+          </colgroup>
+          <thead>
+            <tr class="group">
+              <th colspan="9">Shipment &amp; Parties</th>
+              <th colspan="5" class="center">Our Routed</th>
+              <th colspan="5" class="center">Agent Routed</th>
+            </tr>
+            <tr>
+              <th class="col-salesman">Salesman</th>
+              <th class="col-customer">Customer</th>
+              <th class="col-agent">Agent</th>
+              <th class="col-origin">Origin</th>
+              <th class="col-pol">POL</th>
+              <th class="col-pod">POD</th>
+              <th class="col-fdc">FDC</th>
+              <th class="col-jobproj">Job / Project</th>
+              <th class="col-ppcc center">PP/CC</th>
+              <th class="col-vw num">Vol Wt</th>
+              <th class="col-teu num">TEU</th>
+              <th class="col-rev num">Revenue</th>
+              <th class="col-cost num">Cost</th>
+              <th class="col-profit num">Profit</th>
+              <th class="col-vw num">Vol Wt</th>
+              <th class="col-teu num">TEU</th>
+              <th class="col-rev num">Revenue</th>
+              <th class="col-cost num">Cost</th>
+              <th class="col-profit num">Profit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 16 rows (page 3) - hardcoded -->
+            <tr><td>Keveen Doshi</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>CDG</td><td class="center">CDG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-01</td><td class="center">CC</td><td class="num">162</td><td class="num">0</td><td class="num">80,158.05</td><td class="num">63,168.09</td><td class="num">16,989.96</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Jay Bhanushali</td><td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td><td>Azelis (India) - Trade Canada Pvt Ltd</td><td>HKG</td><td class="center">HKG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-02</td><td class="center">CC</td><td class="num">521</td><td class="num">1</td><td class="num">193,364.24</td><td class="num">172,273.02</td><td class="num">21,091.22</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Nilesh Veire</td><td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td><td>Deutsche Bank (Mumbai) Operations</td><td>SHEN</td><td class="center">EHU</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-03</td><td class="center">CC</td><td class="num">783</td><td class="num">1</td><td class="num">176,588.49</td><td class="num">159,263.42</td><td class="num">17,325.06</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Sujeet Yadav</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Jordan Port and Co. - Corn Chips Division</td><td>YAI</td><td class="center">ICN</td><td class="center">BLR</td><td class="center">BLR</td><td>AE-250438210003-04</td><td class="center">CC</td><td class="num">301</td><td class="num">0</td><td class="num">81,754.99</td><td class="num">73,611.99</td><td class="num">8,142.90</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Pritesh Waghela</td><td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td><td>Sefar India Private Limited - JPN Tech Co. Ltd</td><td>NITTSU</td><td class="center">OSA</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-05</td><td class="center">CC</td><td class="num">183</td><td class="num">0</td><td class="num">62,018.90</td><td class="num">43,030.04</td><td class="num">18,988.86</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <!-- repeat 11 more rows -->
+            <tr><td>Keveen Doshi</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>BOM</td><td class="center">BOM</td><td class="center">DXB</td><td class="center">DXB</td><td>AE-250438210003-06</td><td class="center">CC</td><td class="num">236</td><td class="num">2</td><td class="num">52,504.24</td><td class="num">50,504.24</td><td class="num">2,000.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Jay Bhanushali</td><td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td><td>Azelis (India) - Trade Canada Pvt Ltd</td><td>CN</td><td class="center">BOM</td><td class="center">YYZ</td><td class="center">YYZ</td><td>AE-250438210003-07</td><td class="center">PP</td><td class="num">27</td><td class="num">1</td><td class="num">23,440.00</td><td class="num">20,500.00</td><td class="num">2,940.00</td><td class="num">17</td><td class="num">0</td><td class="num">24,029.59</td><td class="num">8,942.68</td><td class="num">15,086.82</td></tr>
+            <tr><td>Nilesh Veire</td><td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td><td>Deutsche Bank (Mumbai) Operations</td><td>IN</td><td class="center">BOM</td><td class="center">HAM</td><td class="center">HAM</td><td>AE-250438210003-08</td><td class="center">CC</td><td class="num">583</td><td class="num">1</td><td class="num">6,457.62</td><td class="num">4,039.62</td><td class="num">2,418.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Sujeet Yadav</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Jordan Port and Co. - Corn Chips Division</td><td>HK</td><td class="center">BOM</td><td class="center">JDN</td><td class="center">JDN</td><td>AE-250438210003-09</td><td class="center">CC</td><td class="num">315</td><td class="num">1</td><td class="num">6,192.38</td><td class="num">4,052.38</td><td class="num">2,140.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Pritesh Waghela</td><td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td><td>Sefar India Private Limited - JPN Tech Co. Ltd</td><td>BOM</td><td class="center">BOM</td><td class="center">BKK</td><td class="center">BKK</td><td>AE-250438210003-10</td><td class="center">PP</td><td class="num">100</td><td class="num">1</td><td class="num">72,350.26</td><td class="num">18,165.26</td><td class="num">54,185.00</td><td class="num">1</td><td class="num">0</td><td class="num">1,000.00</td><td class="num">200.00</td><td class="num">800.00</td></tr>
+            <tr><td>Keveen Doshi</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>VNH</td><td class="center">BOM</td><td class="center">ICN</td><td class="center">ICN</td><td>AE-250438210003-11</td><td class="center">CC</td><td class="num">10</td><td class="num">1</td><td class="num">10,135.00</td><td class="num">3,545.00</td><td class="num">6,590.00</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Jay Bhanushali</td><td>SmartMeters Technologies Private Limited - Industrial Solutions Group</td><td>Azelis (India) - Trade Canada Pvt Ltd</td><td>CDG</td><td class="center">CDG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-12</td><td class="center">CC</td><td class="num">162</td><td class="num">0</td><td class="num">80,158.05</td><td class="num">63,168.09</td><td class="num">16,989.96</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Nilesh Veire</td><td>Ramgalo P. D Logistics Private Limited (Consolidation Dept.)</td><td>Deutsche Bank (Mumbai) Operations</td><td>SEAR</td><td class="center">SIN</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-13</td><td class="center">CC</td><td class="num">317</td><td class="num">0</td><td class="num">60,418.56</td><td class="num">49,260.37</td><td class="num">11,158.19</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Sujeet Yadav</td><td>Shree Krishna Huafeng Logistics Co. (China) - South Asia Desk</td><td>Jordan Port and Co. - Corn Chips Division</td><td>HKG</td><td class="center">HKG</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-14</td><td class="center">CC</td><td class="num">469</td><td class="num">2</td><td class="num">105,845.97</td><td class="num">101,053.11</td><td class="num">4,792.86</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Pritesh Waghela</td><td>Adinath Cargo Electronics (Huafeng Logistics Co.)</td><td>Sefar India Private Limited - JPN Tech Co. Ltd</td><td>CONSOL</td><td class="center">SIN</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-15</td><td class="center">CC</td><td class="num">81</td><td class="num">0</td><td class="num">30,204.94</td><td class="num">18,044.56</td><td class="num">12,160.38</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+            <tr><td>Keveen Doshi</td><td>Lodestar Sea &amp; Air Co. Ltd (Mumbai Branch) - International Logistics Division</td><td>Lodestar Sea &amp; Air Co. Ltd</td><td>SHEN</td><td class="center">EHU</td><td class="center">BOM</td><td class="center">BOM</td><td>AE-250438210003-16</td><td class="center">CC</td><td class="num">783</td><td class="num">1</td><td class="num">176,588.49</td><td class="num">159,263.42</td><td class="num">17,325.06</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+          </tbody>
+        </table>
+      </main>
+
+      <footer class="footer">
+        <ol class="notes">
+          <li>Cost &amp; revenue for the jobs booked up to date were considered.</li>
+          <li>Amounts are in local currency.</li>
+          <li>Transhipment profit is included for both Import and Export jobs.</li>
+        </ol>
+        <div class="footer-right">
+          <div>Generated: 26-Mar-2026 11:30</div>
+          <div class="page-no">Page 3 of 3</div>
+        </div>
+      </footer>
+    </div>
+
+  </div><!-- /.page -->
+</body>
+</html>
+

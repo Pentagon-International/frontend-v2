@@ -16,7 +16,7 @@ import {
 
 type Props = {
   label: string;
-  icon: React.ComponentType<{ size?: number; [key: string]: unknown }>;
+  icon: React.ComponentType<any>;
   parent?: string;
   children?: ReactNode;
   openedLocal: boolean;

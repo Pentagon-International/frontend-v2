@@ -1,0 +1,400 @@
+/* PDF/Print-first stylesheet for Job Profit Report */
+
+@page {
+  size: A4 portrait;
+  /* Keep margins small to maximize table width */
+  margin: 1mm;
+}
+
+:root {
+  --ink: #111827;
+  --muted: #4b5563;
+  --line: #e5e7eb;
+  --line-strong: #cbd5e1;
+  --brand: #0f5b7a;
+  --bg: #ffffff;
+  --zebra: #f9fafb;
+  --chip: #eef6fb;
+  --good: #0f766e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f3f4f6;
+  color: var(--ink);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.page {
+  background: var(--bg);
+  width: 297mm;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.sheet {
+  background: var(--bg);
+  width: 297mm;
+  min-height: 210mm;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(17, 24, 39, 0.08);
+}
+
+@media print {
+  html,
+  body {
+    width: 297mm;
+    height: 210mm;
+  }
+
+  body {
+    background: var(--bg);
+  }
+  .sheet {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .page {
+    width: 297mm;
+  }
+  .sheet {
+    width: 297mm;
+    min-height: 210mm;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+.sheet {
+  break-inside: avoid;
+}
+
+.page-break {
+  break-before: page;
+}
+
+/* Ensure table headers repeat on each printed page */
+thead {
+  display: table-header-group;
+}
+tfoot {
+  display: table-footer-group;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.btn {
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn.primary {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+
+.header {
+  /* Reduce left/right padding to free table space */
+  padding: 10px 8px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.header-top {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.company {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0f5b7a 0%, #0ea5e9 100%);
+  flex: 0 0 auto;
+}
+
+.company h1 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+.company p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: end;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgba(15, 91, 122, 0.18);
+}
+
+.report-title {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+  align-items: center;
+}
+
+.report-title h2 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+.report-title .subtitle {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.location {
+  text-align: right;
+}
+.location .label {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.location .value {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.table-wrap {
+  /* Minimal left/right padding as requested */
+  padding: 8px 0 0;
+}
+
+table.report {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+table.report thead th {
+  /* Smaller header text to prevent overlap in Acrobat */
+  font-size: 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  color: #0b2230;
+  background: #f1f5f9;
+  border-bottom: 1px solid var(--line-strong);
+  padding: 6px 2px;
+  text-align: left;
+  vertical-align: bottom;
+  white-space: normal;
+  line-height: 1.15;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+table.report thead tr.group th {
+  background: #eaf2f8;
+  border-bottom: 1px solid var(--line-strong);
+  font-weight: 800;
+  font-size: 7.5px;
+}
+
+table.report tbody td {
+  /* Slightly smaller values to align visually under headers */
+  font-size: 9.5px;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Keep dividers minimal: only group boundaries are styled below */
+
+/* Narrow columns: center-align header text for cleaner fit */
+table.report thead tr:not(.group) th.col-pol,
+table.report thead tr:not(.group) th.col-pod,
+table.report thead tr:not(.group) th.col-fdc,
+table.report thead tr:not(.group) th.col-ppcc,
+table.report thead tr:not(.group) th.col-vw,
+table.report thead tr:not(.group) th.col-teu,
+table.report thead tr:not(.group) th.col-rev,
+table.report thead tr:not(.group) th.col-cost,
+table.report thead tr:not(.group) th.col-profit {
+  text-align: center;
+}
+
+/* --- Column dividers (group boundaries) --- */
+/* Column indexes:
+   1-9  Shipment & Parties
+   10-14 Our Routed
+   15-19 Agent Routed
+*/
+table.report thead tr:not(.group) th:nth-child(10),
+table.report tbody td:nth-child(10) {
+  border-left: 2px solid var(--line-strong);
+}
+
+table.report thead tr:not(.group) th:nth-child(15),
+table.report tbody td:nth-child(15) {
+  border-left: 2px solid var(--line-strong);
+}
+
+table.report thead tr:not(.group) th:nth-child(14),
+table.report tbody td:nth-child(14) {
+  border-right: 1px solid var(--line-strong);
+}
+
+table.report thead tr:not(.group) th:nth-child(19),
+table.report tbody td:nth-child(19) {
+  border-right: 1px solid var(--line-strong);
+}
+
+/* Add dividers in the top grouped header row as well */
+table.report thead tr.group th:nth-child(2),
+table.report thead tr.group th:nth-child(3) {
+  border-left: 2px solid var(--line-strong);
+}
+
+/* Give PP/CC and boundary columns breathing room from the divider */
+table.report thead tr:not(.group) th:nth-child(9),
+table.report tbody td:nth-child(9) {
+  padding-right: 4px;
+}
+table.report thead tr:not(.group) th:nth-child(10),
+table.report tbody td:nth-child(10) {
+  padding-left: 4px;
+}
+
+table.report tbody tr:nth-child(even) td {
+  background: var(--zebra);
+}
+
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nudge Our/Agent routed values slightly left inside cells */
+table.report tbody td:nth-child(n + 10):nth-child(-n + 19) {
+  padding-right: 8px; /* more right padding => right-aligned text shifts left */
+}
+
+td.center,
+th.center {
+  text-align: center;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.footer {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 12px;
+  /* Minimal left/right padding */
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+}
+
+/* Make borders touch edges more tightly */
+table.report {
+  border-left-width: 1px;
+  border-right-width: 1px;
+}
+
+.notes {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.footer-right {
+  text-align: right;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.page-no {
+  margin-top: 6px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+/* Column sizing tuned for A4 portrait (dense) */
+.col-salesman { width: 7.5%; }
+.col-customer  { width: 12.5%; }
+.col-agent     { width: 11.5%; }
+.col-origin    { width: 7.5%; }
+.col-pol       { width: 5.5%; }
+.col-pod       { width: 5.5%; }
+.col-fdc       { width: 5.5%; }
+.col-jobproj   { width: 10.5%; }
+.col-ppcc      { width: 4.5%; }
+
+.col-vw        { width: 5.5%; }
+.col-teu       { width: 4.0%; }
+.col-rev       { width: 6.0%; }
+.col-cost      { width: 6.0%; }
+.col-profit    { width: 6.0%; }
+
