@@ -87,20 +87,6 @@ const fetchChargeMaster = async () => {
   }
 };
 
-const fetchChartOfAccounts = async () => {
-  try {
-    const response = await postAPICall(
-      URL.chartOfAccountsFilter,
-      { filters: {} },
-      API_HEADER,
-    );
-    return (response as { data?: unknown[] })?.data ?? [];
-  } catch (error) {
-    console.error("Error fetching chart of accounts:", error);
-    return [];
-  }
-};
-
 // GET job-create dropdown list (shipment_id, service_id for get-effective-sac)
 const fetchJobCreate = async () => {
   try {
@@ -152,7 +138,9 @@ const CRN_OPTIONS = [
 
 type ChargeRow = {
   id?: number;
+  account_id?: number | null;
   account_code: string;
+  account_name?: string;
   subledger_code: string;
   CRN: string;
   narration: string;
@@ -253,6 +241,7 @@ type ApiCharge = {
   id?: number;
   account_code?: string;
   gl_account_code?: string; // list API may return either
+  account_name?: string;
   subledger_code?: string;
   CRN?: string;
   narration?: string;
@@ -277,6 +266,7 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   return charges.map((c) => ({
     id: c.id,
     account_code: String(c.account_code ?? c.gl_account_code ?? "").trim(),
+    account_name: c.account_name ?? "",
     subledger_code: c.subledger_code ?? "",
     CRN: c.CRN ?? "",
     narration: c.narration ?? "",
@@ -458,6 +448,7 @@ export default function SupplierInvoiceCreate({
       charges_data: [
         {
           account_code: "",
+          account_name: "",
           subledger_code: "",
           CRN: "Cost",
           narration: "",
@@ -571,28 +562,6 @@ export default function SupplierInvoiceCreate({
       label: item.charge_name ?? item.charge_code ?? "",
     }));
   }, [chargeData]);
-
-  const { data: chartOfAccountsData = [] } = useQuery({
-    queryKey: ["chartOfAccounts"],
-    queryFn: fetchChartOfAccounts,
-    staleTime: Infinity,
-  });
-
-  const accountOptions = useMemo(() => {
-    const data = chartOfAccountsData as {
-      gl_account_code?: string;
-      account_name?: string;
-      sl_code?: string;
-    }[];
-    if (!Array.isArray(data)) return [];
-    return data
-      .map((item) => ({
-        value: String(item.gl_account_code ?? ""),
-        label: item.account_name ?? item.gl_account_code ?? "",
-        sl_code: item.sl_code ?? "",
-      }))
-      .filter((o) => o.value);
-  }, [chartOfAccountsData]);
 
   const { data: jobCreateData = [] } = useQuery({
     queryKey: ["jobCreate"],
@@ -829,10 +798,11 @@ export default function SupplierInvoiceCreate({
     // Header-level account/subledger from PR applied to every charge row
     const prAccountCode = String(prData.account_code ?? "");
     const prSubledgerCode = String(prData.subledger_code ?? "");
-
+    const prAccountName = String(prData.account_name ?? "");
     const charges = Array.isArray(prData.charges) ? prData.charges : [];
     const mappedCharges: ChargeRow[] = charges.map((c: Record<string, any>) => ({
       account_code: prAccountCode,
+      account_name: prAccountName,
       subledger_code: prSubledgerCode,
       CRN: "Cost",
       narration: "",
@@ -891,6 +861,7 @@ export default function SupplierInvoiceCreate({
     const chargesPayload = values.charges_data.map((c) => {
       const base = {
         account_code: c.account_code || "",
+        account_name: c.account_name || "",
         subledger_code: c.subledger_code || "",
         CRN: c.CRN || "",
         narration: c.narration || "",
@@ -1286,6 +1257,7 @@ export default function SupplierInvoiceCreate({
     const roe = currCode ? getRoeValue(currCode) : 1;
     form.insertListItem("charges_data", {
       account_code: "",
+      account_name: "",
       subledger_code: "",
       CRN: "Cost",
       narration: "",
@@ -1908,26 +1880,80 @@ export default function SupplierInvoiceCreate({
                       />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <Dropdown
-                        placeholder="Account Code"
-                        data={accountOptions}
-                        value={row.account_code || null}
-                        onChange={(v) => {
-                          const code = v ?? "";
+                      <SearchableSelect
+                        placeholder="Search by account name"
+                        apiEndpoint={URL.chartOfAccounts}
+                        value={
+                          row.account_id != null ? String(row.account_id) : null
+                        }
+                        dropdownZIndex={1100}
+                        minSearchLength={1}
+                        searchFields={["gl_account_code", "account_name", "id"]}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const id = String(item.id ?? "").trim();
+                          const gl = String(item.gl_account_code ?? "").trim();
+                          const name = String(item.account_name ?? "").trim();
+                          return {
+                            value: id,
+                            label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                          };
+                        }}
+                        displayValue={
+                          row.account_name
+                            ? `${row.account_name}${
+                                row.account_code ? ` - ${row.account_code}` : ""
+                              }`
+                            : row.account_code || undefined
+                        }
+                        returnOriginalData
+                        onChange={(value, _selectedData, originalData) => {
+                          if (!value || !originalData) {
+                            form.setFieldValue(
+                              `charges_data.${index}.account_id`,
+                              null,
+                            );
+                            form.setFieldValue(
+                              `charges_data.${index}.account_code`,
+                              "",
+                            );
+                            form.setFieldValue(
+                              `charges_data.${index}.subledger_code`,
+                              "",
+                            );
+                            form.setFieldValue(
+                              `charges_data.${index}.account_name`,
+                              "",
+                            );
+                            return;
+                          }
+                          form.setFieldValue(
+                            `charges_data.${index}.account_id`,
+                            Number.isFinite(Number(value))
+                              ? Number(value)
+                              : null,
+                          );
                           form.setFieldValue(
                             `charges_data.${index}.account_code`,
-                            code,
+                            originalData.gl_account_code !== undefined &&
+                              originalData.gl_account_code !== null
+                              ? String(originalData.gl_account_code)
+                              : "",
                           );
-                          const opt = accountOptions.find(
-                            (o) => o.value === code,
-                          ) as { sl_code?: string } | undefined;
                           form.setFieldValue(
                             `charges_data.${index}.subledger_code`,
-                            opt?.sl_code ?? "",
+                            originalData.sl_code !== undefined &&
+                              originalData.sl_code !== null
+                              ? String(originalData.sl_code)
+                              : "",
+                          );
+                          form.setFieldValue(
+                            `charges_data.${index}.account_name`,
+                            originalData.account_name !== undefined &&
+                              originalData.account_name !== null
+                              ? String(originalData.account_name)
+                              : "",
                           );
                         }}
-                        searchable
-                        clearable
                         disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
