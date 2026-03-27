@@ -674,7 +674,7 @@ const Navbar = ({
                       setIsSeaExportOpen,
                     }}
                   />
-<SubNavLink
+                  <SubNavLink
                     parent="Accounts"
                     label="Payment Request Approval"
                     icon={IconCircleCheck}
@@ -783,8 +783,8 @@ const Navbar = ({
                 }}
               />
             </Stack>
-  {/* Workflow */}
-           
+            {/* Workflow */}
+
             <Stack mt={!opened ? 4 : 16} gap={4}>
               {opened ? (
                 <SectionTitle title="Workflow" />
@@ -801,8 +801,23 @@ const Navbar = ({
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
                 }}
-             
-             
+
+
+
+              />
+              <SimpleNavLink
+                label="Invoice"
+                key={"Invoice"}
+                icon={IconPercentage}
+                path="/invoice"
+                collapsibles={{
+                  setIsSalesOpen,
+                  setIsTariffOpen,
+                  setIsCustomerServiceOpen,
+                }}
+
+
+
               />
             </Stack>
             {/* System Section */}

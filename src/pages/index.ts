@@ -163,6 +163,7 @@ import Origin from "./call-entry/tariff/OriginMaster";
 import FreightCreate from "./call-entry/tariff/FreightCreate";
 import DestinationCreate from "./call-entry/tariff/DestinationCreate";
 import HBLDocumentManager from "./Workflow/jobcreation/AutoJobCreation"
+import Invoice from "./Workflow/jobcreation/InvoiceCreation";
 export {
   Login,
   Dashboard,
@@ -300,5 +301,6 @@ export {
   OceanImportBookingMaster,
   OceanImportBookingCreate,
   OceanImportToExportBooking,
-  HBLDocumentManager
+  HBLDocumentManager,
+  Invoice
 };

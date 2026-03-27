@@ -7,11 +7,6 @@ const hblApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL}workflow`,
 });
 
-// hblApi.interceptors.request.use((config) => {
-//   Object.assign(config.headers, API_HEADER.headers);
-//   return config;
-// });
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type FileStatus = "pending" | "processing" | "done" | "failed" | "job_created" | string;
@@ -320,6 +315,8 @@ const STYLES = `
   .hbl-app .bar-btn.danger:hover { background: var(--red); color: white; }
   .hbl-app .bar-btn.outline { background: transparent; color: var(--muted); border-color: var(--border); }
   .hbl-app .bar-btn.outline:hover { color: var(--text); background: var(--surface2); }
+  .hbl-app .bar-btn.green { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+  .hbl-app .bar-btn.green:hover { background: var(--green); color: white; }
   .hbl-app .toast { position: fixed; bottom: 80px; right: 24px; padding: 10px 16px; border-radius: 8px; font-size: .8rem; font-weight: 500; font-family: var(--sans); display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 300; animation: hbl-toast-in .3s cubic-bezier(.34,1.56,.64,1); pointer-events: none; }
   .hbl-app .toast.success { background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; }
   .hbl-app .toast.error { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
@@ -497,6 +494,15 @@ interface UploadModalProps {
   showToast: (msg: string, type?: ToastState["type"]) => void;
 }
 
+// ✅ Allowed file extensions: PDF + all common image formats
+const ALLOWED_EXTENSIONS = [
+  ".pdf",
+  ".jpg", ".jpeg", ".png", ".gif",
+  ".webp", ".bmp", ".tiff", ".tif", ".svg",
+];
+
+const ALLOWED_ACCEPT = ALLOWED_EXTENSIONS.join(",");
+
 const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
   const [hblFiles, setHbl] = useState<File[]>([]);
   const [mblFiles, setMbl] = useState<File[]>([]);
@@ -505,13 +511,16 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<UploadResult | null>(null);
 
+  // ✅ FIX 1: Filter by allowed extensions (PDF + all image formats)
   const addFiles = (type: "hbl" | "mbl", files: FileList | null) => {
     if (!files) return;
-    const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
+    const allowed = Array.from(files).filter(f =>
+      ALLOWED_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext))
+    );
     const setter = type === "hbl" ? setHbl : setMbl;
     setter(prev => {
       const names = new Set(prev.map(f => f.name));
-      return [...prev, ...pdfs.filter(f => !names.has(f.name))];
+      return [...prev, ...allowed.filter(f => !names.has(f.name))];
     });
   };
 
@@ -529,15 +538,12 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
     mblFiles.forEach(f => fd.append("mbl_attachments", f));
     try {
       setProgress(70);
-      const { data} = await    hblApi.post<UploadResult>("/upload/", fd, {
-        headers: { "Content-Type": "multipart/form-data" ,
-          Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}`
+      const { data } = await hblApi.post<UploadResult>("/upload/", fd, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}`,
         },
       });
-   
-      
-      
-    
       setProgress(100);
       setResults(data);
       setHbl([]); setMbl([]);
@@ -572,14 +578,32 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
         >
           <div className="dz-icon">{emoji}</div>
           <p>Drop or <span style={{ color, fontWeight: 700 }}>browse {type.toUpperCase()}</span></p>
-          <small>{type === "hbl" ? "House Bill of Lading PDFs" : "Master Bill of Lading PDFs"}</small>
+          {/* ✅ FIX 2: Updated helper text */}
+          <small>
+            {type === "hbl"
+              ? "House Bill of Lading — PDF & Images"
+              : "Master Bill of Lading — PDF & Images"}
+          </small>
         </div>
-        <input type="file" id={`fi-${type}`} accept=".pdf" multiple onChange={e => addFiles(type, e.target.files)} style={{ display: "none" }} />
+
+        {/* ✅ FIX 3: accept includes PDF + all image formats */}
+        <input
+          type="file"
+          id={`fi-${type}`}
+          accept={ALLOWED_ACCEPT}
+          multiple
+          onChange={e => addFiles(type, e.target.files)}
+          style={{ display: "none" }}
+        />
+
         {files.length
           ? files.map((f, i) => (
             <div className="zone-file-row" key={i}>
               <div>
-                <div className="zfname" title={f.name}>📄 {f.name}</div>
+                {/* ✅ FIX 4: Show 🖼️ for images, 📄 for PDFs */}
+                <div className="zfname" title={f.name}>
+                  {f.type.startsWith("image/") ? "🖼️" : "📄"} {f.name}
+                </div>
                 <div className="zfsize">{(f.size / 1024).toFixed(1)} KB</div>
               </div>
               <button className="zf-rm" onClick={() => removeFile(type, i)}>✕</button>
@@ -715,19 +739,13 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
 
   return (
     <div className="form-body">
-
       <Sec icon="📄" title="Document Header">
         <div className="fgrid c4">
           <FF label="MBL Number" val={p.mbl_number ?? p.bl_number} cls="mono" />
-          {/* <FF label="Document Type" val={p.document_type} span={2} /> */}
           <FF label="Carrier Code" val={p.carrier_code} cls="mono" />
           <FF label="Service" val={p.service} />
           <FF label="Service Type" val={p.service_type} />
           <FF label="Freight Terms" val={p.freight_terms} />
-          {/* <FF label="No. of Original Waybills" val={p.number_of_original_waybills} /> */}
-          {/* <FF label="Signed By" val={(p as any).signed_by} span={4} /> */}
-          {/* <FF label="Carrier Full Name" val={p.carrier_full_name} span={3} /> */}
-          {/* <FF label="Head Office" val={p.carrier_head_office} span={4} /> */}
         </div>
       </Sec>
 
@@ -735,7 +753,6 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
         <div className="fgrid c4">
           <FF label="Port of Loading" val={p.port_of_loading} />
           <FF label="Port of Discharge" val={p.port_of_discharge} />
-          {/* <FF label="Place of Receipt" val={p.place_of_receipt} /> */}
           <FF label="Place of Delivery" val={p.place_of_delivery} />
           <FF label="Origin Code" val={p.origin_code} cls="mono" />
           <FF label="Destination Code" val={p.destination_code} cls="mono" />
@@ -770,8 +787,6 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
             <thead>
               <tr>
                 <th>Container No.</th><th>Type</th><th>Seal No.</th>
-                {/* <th>Pkgs</th> */}
-                {/* <th>Pkg Type</th><th>Gross Wt (KG)</th><th>Tare Wt (KG)</th><th>Volume (CBM)</th> */}
               </tr>
             </thead>
             <tbody>
@@ -780,11 +795,6 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
                   <td>{c.container_no ?? "—"}</td>
                   <td>{c.container_type_input ?? c.container_type ?? "—"}</td>
                   <td>{c.actual_seal_no ?? c.seal_no ?? "—"}</td>
-                  {/* <td>{c.no_of_packages ?? "—"}</td>
-                  <td>{c.package_type ?? "—"}</td>
-                  <td>{c.gross_weight_kgs ?? c.gross_weight ?? "—"}</td>
-                  <td>{c.tare_weight_kgs ?? "—"}</td>
-                  <td>{c.volume_cbm ?? c.volume ?? "—"}</td> */}
                 </tr>
               ))}
             </tbody>
@@ -815,26 +825,11 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
                 <FF label="Trade" val={hd.trade} />
                 <FF label="Routed" val={hd.routed} />
                 <FF label="Freight Terms" val={hd.freight_terms} />
-                {/* <FF label="HS Code" val={hd.hs_code} cls="mono" /> */}
                 <FF label="Marks No" val={hd.marks_no} />
                 <FF label="Origin Code" val={hd.origin_code} cls="mono" />
                 <FF label="Destination Code" val={hd.destination_code} cls="mono" />
                 <FF label="Invoice No" val={hd.invoice_no} cls="mono" />
-                {/* <FF label="Invoice Date" val={hd.invoice_date} /> */}
-                {/* <FF label="PO No" val={hd.po_no} cls="mono" />
-                <FF label="PI No" val={hd.pi_no} cls="mono" />
-                <FF label="LC Number" val={hd.lc_number} cls="mono" />
-                <FF label="LC Date" val={hd.lc_date} /> */}
                 <FF label="Date of Issue" val={hd.date_of_issue} />
-                {/* <FF label="On Board Date" val={hd.on_board_date ?? hd.shipped_on_board_date} /> */}
-                {/* <FF label="No. of Originals" val={hd.no_of_originals ?? hd.number_of_originals} /> */}
-                {/* <FF label="Place of Issue" val={hd.place_of_issue} /> */}
-                {/* <FF label="Place of Acceptance" val={hd.place_of_acceptance} /> */}
-                {/* <FF label="Place of Delivery" val={hd.place_of_delivery} />
-                <FF label="Shipment Terms" val={hd.shipment_terms_code} />
-                <FF label="Shipment Ref No" val={hd.shipment_reference_no} cls="mono" />
-                <FF label="Free Time at Dest." val={hd.free_time_at_destination} />
-                <FF label="Package Type" val={hd.package_type} /> */}
               </div>
 
               {(hd.total_packages || hd.total_volume_cbm || hd.total_gross_weight_kgs) && (
@@ -861,7 +856,6 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
                   <FF label="Name" val={hd.consignee_name} span={4} />
                   <FF label="Address" val={hd.consignee_address} span={4} />
                   <FF label="GST" val={hd.consignee_gst ?? hd.gst_no_consignee} cls="mono" />
-                  {/* <FF label="IEC" val={hd.consignee_iec ?? hd.iec_no} cls="mono" /> */}
                   <FF label="PAN" val={hd.consignee_pan ?? hd.pan_no} cls="mono" />
                   <FF label="Email" val={hd.consignee_email} />
                 </div>
@@ -1108,32 +1102,51 @@ const HBLDocumentManager: FC = () => {
     if (!confirm(`Delete ${ids.length} record(s)?`)) return;
     try {
       await hblApi.delete("/files/", {
-  headers: {
-    Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}`,
-  },
-  data: ids,
-});
-
-setSelected(new Set());
-loadFiles();
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+        data: ids,
+      });
+      setSelected(new Set());
+      loadFiles();
     } catch { showToast("Delete failed", "error"); }
   };
 
-  const startJobs = async () => {
+  // ✅ FIX: Pass selected txn_ids to start_creating_jobs if any are selected;
+  //         otherwise send all pending txn_ids as fallback.
+  const startJobs = async (overrideIds?: string[]) => {
     setJobLoading(true);
     try {
-      await hblApi.post("/start_creating_jobs/", {}, { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } });
-      showToast("✅ Jobs started", "success");
+      // If caller passes explicit IDs (from action bar), use those.
+      // Otherwise fall back to all pending records.
+      const ids = overrideIds && overrideIds.length > 0
+        ? overrideIds
+        : allFiles.filter(f => f.status === "pending").map(f => f.txn_id);
+
+      await hblApi.post(
+        "/start_creating_jobs/",
+        { txn_ids: ids },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } }
+      );
+
+      const label = overrideIds?.length ? `${overrideIds.length} selected` : "all pending";
+      showToast(`✅ Jobs started for ${label}`, "success");
+      setSelected(new Set());
       loadFiles();
-    } catch { showToast("❌ Server unreachable", "error"); }
-    finally { setJobLoading(false); }
+    } catch {
+      showToast("❌ Server unreachable", "error");
+    } finally {
+      setJobLoading(false);
+    }
   };
 
   const statuses: Array<FileStatus | ""> = ["", "pending", "processing", "done", "failed"];
   const statusLabels: Record<string, string> = { "": "All", pending: "Pending", processing: "Processing", done: "Done", failed: "Failed" };
   const sortCols: Array<[keyof FileRecord, string]> = [
-    ["txn_id", "TXN ID"], ["filename", "Filename"], ["bl_number", "BL Number"],
-    ["shipper_name", "Shipper"], ["port_of_loading", "Route"], ["status", "Status"], ["file_type", "File Type"],
+    ["txn_id", "TXN ID"], ["filename", "Filename"],
+     ["bl_number", "BL Number"],
+    ["shipper_name", "Shipper"],
+     ["port_of_loading", "Route"], 
+     ["status", "Status"],
+      ["file_type", "File Type"],
   ];
 
   const doneCount = allFiles.filter(f => f.status === "done").length;
@@ -1154,13 +1167,14 @@ loadFiles();
             <span>Failed <strong style={{ color: "var(--red)" }}>{failedCount}</strong></span>
           </div>
           <button className="btn btn-ghost" onClick={loadFiles} title="Refresh">↻</button>
-          <button className="btn btn-green" onClick={startJobs} disabled={jobLoading}>
+          {/* ✅ Topbar "Start Jobs" sends no override → falls back to all pending */}
+          <button className="btn btn-green" onClick={() => startJobs()} disabled={jobLoading}>
             {jobLoading && (
               <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "hbl-spin .7s linear infinite", display: "inline-block" }} />
             )}
             {jobLoading ? "Starting…" : "▶ Start Jobs"}
           </button>
-          <button className="btn btn-primary" onClick={() => setModal({ type: "upload" })}>＋ Upload PDFs</button>
+          <button className="btn btn-primary" onClick={() => setModal({ type: "upload" })}>＋ Upload</button>
         </div>
       </div>
 
@@ -1207,7 +1221,10 @@ loadFiles();
                 </td>
                 <td className="td-txn">{f.txn_id}</td>
                 <td>
-                  <div className="td-filename" title={f.filename}>📄 {f.filename}</div>
+                  {/* ✅ Show 🖼️ for image files in the table too */}
+                  <div className="td-filename" title={f.filename}>
+                    {/\.(jpg|jpeg|png|gif|webp|bmp|tiff?|svg)$/i.test(f.filename) ? "🖼️" : "📄"} {f.filename}
+                  </div>
                   <div style={{ fontSize: ".65rem", color: "var(--muted)", marginTop: 2, fontFamily: "var(--mono)" }}>{f.size_kb} KB</div>
                 </td>
                 <td className="td-bl">{f.bl_number ?? "—"}</td>
@@ -1244,7 +1261,7 @@ loadFiles();
           <div className="state-box">
             <div className="state-icon">📭</div>
             <div className="state-text">No documents found</div>
-            <div className="state-sub">Upload a PDF to get started</div>
+            <div className="state-sub">Upload a file to get started</div>
           </div>
         )}
         {loadState === "error" && (
@@ -1275,11 +1292,20 @@ loadFiles();
         </div>
       </div>
 
+      {/* ✅ Action bar: Delete + Start Jobs for selected records */}
       <div className={`action-bar ${selected.size > 0 ? "visible" : ""}`}>
         <span style={{ fontSize: ".78rem", color: "var(--muted)" }}>
           <strong style={{ color: "var(--text)" }}>{selected.size}</strong> selected
         </span>
         <div style={{ width: 1, height: 16, background: "var(--border)" }} />
+        {/* ✅ Start Jobs for selected: passes selected txn_ids explicitly */}
+        <button
+          className="bar-btn green"
+          onClick={() => startJobs(Array.from(selected))}
+          disabled={jobLoading}
+        >
+          {jobLoading ? "Starting…" : "▶ Start Jobs"}
+        </button>
         <button className="bar-btn danger" onClick={deleteSelected}>🗑 Delete</button>
         <button className="bar-btn outline" onClick={clearSel}>✕ Clear</button>
       </div>

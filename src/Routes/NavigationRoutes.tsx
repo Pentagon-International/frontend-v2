@@ -126,7 +126,8 @@ import {
   OceanImportBookingMaster,
   OceanImportBookingCreate,
   OceanImportToExportBooking,
-  HBLDocumentManager
+  HBLDocumentManager,
+  Invoice,
 } from "../pages";
 import Road from "../pages/dashboard/Road";
 import DemoPage from "../pages/dashboard/DemoPage";
@@ -408,6 +409,7 @@ const NavigationRoutes = () => {
         <Route path="/tariff-create" element={<TariffCreate />} />
         <Route path="/tariff-bulk-upload" element={<TariffBulkUpload />} />
         <Route path="/hbl-document-manager" element={<HBLDocumentManager />} />
+        <Route path="/invoice" element={<Invoice />} />
         <Route path="master" element={<MastersPage />}>
           <Route path="group-company" element={<GroupCompany />} />
           <Route path="group-company-new" element={<NewGroupCompany />} />
