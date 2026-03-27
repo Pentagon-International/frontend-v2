@@ -710,7 +710,13 @@ function OceanExportBookingMaster() {
       {
         accessorKey: "shipment_code",
         header: "Booking ID",
+        size: 120,
+      },
+      {
+        accessorKey: "enquiry_id",
+        header: "Enquiry ID",
         size: 150,
+        Cell: ({ cell }) => cell.getValue() || "-"
       },
       {
         accessorKey: "date",
