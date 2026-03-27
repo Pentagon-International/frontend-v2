@@ -2197,6 +2197,7 @@ function QuotationCreate({
     // Transform charges for CURRENT service to API format
     const transformedCharges = charges.map((charge: any) => {
       const base: any = {
+        charge_name: charge.charge_name,
         charge_id:
           charge.charge_id !== undefined && charge.charge_id !== null
             ? Number(charge.charge_id)
@@ -2368,6 +2369,7 @@ function QuotationCreate({
             data.quotationForm.quote_currency_country_code,
           charges: serviceCharges.map((charge: any) => {
             const base: any = {
+              charge_name: charge.charge_name,
               charge_id:
                 charge.charge_id !== undefined && charge.charge_id !== null
                   ? Number(charge.charge_id)
@@ -5029,86 +5031,134 @@ function QuotationCreate({
                       >
                         <Grid gutter="sm">
                           <Grid.Col span={2}>
-                            <SearchableSelect
-                              placeholder="Charge Name"
-                              apiEndpoint={URL.chargeMaster}
-                              dropdownZIndex={310}
-                              searchFields={["charge_code", "charge_name"]}
-                              displayFormat={(
-                                item: Record<string, unknown>,
-                              ) => {
-                                const charge = item as {
-                                  id?: number;
-                                  charge_name?: string;
-                                };
-                                const name = charge.charge_name || "";
-                                return {
-                                  value: String(charge.id ?? ""),
-                                  label: name,
-                                };
-                              }}
-                              value={
-                                dynamicForm.values.charges[index]?.charge_id !=
-                                null
-                                  ? String(
-                                      dynamicForm.values.charges[index]
-                                        .charge_id,
-                                    )
-                                  : null
-                              }
-                              displayValue={
-                                dynamicForm.values.charges[index]
-                                  ?.charge_name || ""
-                              }
-                              onChange={(value, selected, originalData) => {
-                                if (isViewMode) return;
-                                const original = (originalData || {}) as {
-                                  id?: number;
-                                  charge_name?: string;
-                                };
-                                const name =
-                                  original.charge_name !== undefined &&
-                                  original.charge_name !== null
-                                    ? original.charge_name
-                                    : selected?.label
-                                      ? selected.label.split(" (")[0]
-                                      : "";
-                                dynamicForm.setFieldValue(
+                            {dynamicForm.values.charges[index]?.charge_id !=
+                            null ? (
+                              <TextInput
+                                placeholder="Charge Name"
+                                styles={{
+                                  input: {
+                                    fontSize: "14px",
+                                    fontFamily: "Inter",
+                                    height: "36px",
+                                  },
+                                }}
+                                {...dynamicForm.getInputProps(
                                   `charges.${index}.charge_name`,
-                                  name,
-                                );
-                                if (original.id != null) {
-                                  dynamicForm.setFieldValue(
-                                    `charges.${index}.charge_id`,
-                                    original.id,
-                                  );
-                                } else if (value) {
-                                  dynamicForm.setFieldValue(
-                                    `charges.${index}.charge_id`,
-                                    Number(value),
-                                  );
-                                } else {
-                                  dynamicForm.setFieldValue(
-                                    `charges.${index}.charge_id`,
-                                    null,
-                                  );
+                                )}
+                                readOnly={isViewMode}
+                                disabled={isViewMode}
+                                rightSection={
+                                  isViewMode ? null : (
+                                    <ActionIcon
+                                      variant="subtle"
+                                      color="gray"
+                                      onClick={() => {
+                                        dynamicForm.setFieldValue(
+                                          `charges.${index}.charge_name`,
+                                          "",
+                                        );
+                                        dynamicForm.setFieldValue(
+                                          `charges.${index}.charge_id`,
+                                          null,
+                                        );
+                                      }}
+                                      aria-label="Clear charge name"
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 18,
+                                          lineHeight: 1,
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        ×
+                                      </Text>
+                                    </ActionIcon>
+                                  )
                                 }
-                              }}
-                              readOnly={isViewMode}
-                              disabled={isViewMode}
-                              error={
-                                (dynamicForm.errors as any)?.charges?.[index]
-                                  ?.charge_name as string | undefined
-                              }
-                              returnOriginalData
-                              styles={{
-                                input: {
-                                  fontSize: "14px",
-                                  fontFamily: "Inter",
-                                  height: "36px",
-                                },
-                              }}
-                            />
+                              />
+                            ) : (
+                              <SearchableSelect
+                                placeholder="Charge Name"
+                                apiEndpoint={URL.chargeMaster}
+                                dropdownZIndex={310}
+                                searchFields={["charge_code", "charge_name"]}
+                                displayFormat={(
+                                  item: Record<string, unknown>,
+                                ) => {
+                                  const charge = item as {
+                                    id?: number;
+                                    charge_name?: string;
+                                  };
+                                  const name = charge.charge_name || "";
+                                  return {
+                                    value: String(charge.id ?? ""),
+                                    label: name,
+                                  };
+                                }}
+                                value={
+                                  dynamicForm.values.charges[index]?.charge_id !=
+                                  null
+                                    ? String(
+                                        dynamicForm.values.charges[index]
+                                          .charge_id,
+                                      )
+                                    : null
+                                }
+                                displayValue={
+                                  dynamicForm.values.charges[index]
+                                    ?.charge_name || ""
+                                }
+                                onChange={(value, selected, originalData) => {
+                                  if (isViewMode) return;
+                                  const original = (originalData || {}) as {
+                                    id?: number;
+                                    charge_name?: string;
+                                  };
+                                  const name =
+                                    original.charge_name !== undefined &&
+                                    original.charge_name !== null
+                                      ? original.charge_name
+                                      : selected?.label
+                                        ? selected.label.split(" (")[0]
+                                        : "";
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.charge_name`,
+                                    name,
+                                  );
+                                  if (original.id != null) {
+                                    dynamicForm.setFieldValue(
+                                      `charges.${index}.charge_id`,
+                                      original.id,
+                                    );
+                                  } else if (value) {
+                                    dynamicForm.setFieldValue(
+                                      `charges.${index}.charge_id`,
+                                      Number(value),
+                                    );
+                                  } else {
+                                    dynamicForm.setFieldValue(
+                                      `charges.${index}.charge_id`,
+                                      null,
+                                    );
+                                  }
+                                }}
+                                readOnly={isViewMode}
+                                disabled={isViewMode}
+                                error={
+                                  (dynamicForm.errors as any)?.charges?.[index]
+                                    ?.charge_name as string | undefined
+                                }
+                                returnOriginalData
+                                styles={{
+                                  input: {
+                                    fontSize: "14px",
+                                    fontFamily: "Inter",
+                                    height: "36px",
+                                  },
+                                }}
+                              />
+                            )}
                           </Grid.Col>
                           <Grid.Col span={1}>
                             <Dropdown
@@ -6370,80 +6420,131 @@ function QuotationCreate({
                     <Box key={index}>
                       <Grid gutter="sm">
                         <Grid.Col span={2}>
-                          <SearchableSelect
-                            placeholder="Charge Name"
-                            apiEndpoint={URL.chargeMaster}
-                            dropdownZIndex={310}
-                            searchFields={["charge_code", "charge_name"]}
-                            displayFormat={(item: Record<string, unknown>) => {
-                              const charge = item as {
-                                id?: number;
-                                charge_name?: string;
-                              };
-                              const name = charge.charge_name || "";
-                              return {
-                                value: String(charge.id ?? ""),
-                                label: name,
-                              };
-                            }}
-                            value={
-                              dynamicForm.values.charges[index]?.charge_id !=
-                              null
-                                ? String(
-                                    dynamicForm.values.charges[index].charge_id,
-                                  )
-                                : null
-                            }
-                            displayValue={
-                              dynamicForm.values.charges[index]?.charge_name ||
-                              ""
-                            }
-                            onChange={(value, selected, originalData) => {
-                              const original = (originalData || {}) as {
-                                id?: number;
-                                charge_name?: string;
-                              };
-                              const name =
-                                original.charge_name !== undefined &&
-                                original.charge_name !== null
-                                  ? original.charge_name
-                                  : selected?.label
-                                    ? selected.label.split(" (")[0]
-                                    : "";
-                              dynamicForm.setFieldValue(
+                          {dynamicForm.values.charges[index]?.charge_id !=
+                          null ? (
+                            <TextInput
+                              placeholder="Charge Name"
+                              styles={{
+                                input: {
+                                  fontSize: "14px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
                                 `charges.${index}.charge_name`,
-                                name,
-                              );
-                              if (original.id != null) {
-                                dynamicForm.setFieldValue(
-                                  `charges.${index}.charge_id`,
-                                  original.id,
-                                );
-                              } else if (value) {
-                                dynamicForm.setFieldValue(
-                                  `charges.${index}.charge_id`,
-                                  Number(value),
-                                );
-                              } else {
-                                dynamicForm.setFieldValue(
-                                  `charges.${index}.charge_id`,
-                                  null,
-                                );
+                              )}
+                              readOnly={isViewMode}
+                              disabled={isViewMode}
+                              rightSection={
+                                isViewMode ? null : (
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    onClick={() => {
+                                      dynamicForm.setFieldValue(
+                                        `charges.${index}.charge_name`,
+                                        "",
+                                      );
+                                      dynamicForm.setFieldValue(
+                                        `charges.${index}.charge_id`,
+                                        null,
+                                      );
+                                    }}
+                                    aria-label="Clear charge name"
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 18,
+                                        lineHeight: 1,
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      ×
+                                    </Text>
+                                  </ActionIcon>
+                                )
                               }
-                            }}
-                            error={
-                              (dynamicForm.errors as any)?.charges?.[index]
-                                ?.charge_name as string | undefined
-                            }
-                            returnOriginalData
-                            styles={{
-                              input: {
-                                fontSize: "14px",
-                                fontFamily: "Inter",
-                                height: "36px",
-                              },
-                            }}
-                          />
+                            />
+                          ) : (
+                            <SearchableSelect
+                              placeholder="Charge Name"
+                              apiEndpoint={URL.chargeMaster}
+                              dropdownZIndex={310}
+                              searchFields={["charge_code", "charge_name"]}
+                              displayFormat={(item: Record<string, unknown>) => {
+                                const charge = item as {
+                                  id?: number;
+                                  charge_name?: string;
+                                };
+                                const name = charge.charge_name || "";
+                                return {
+                                  value: String(charge.id ?? ""),
+                                  label: name,
+                                };
+                              }}
+                              value={
+                                dynamicForm.values.charges[index]?.charge_id !=
+                                null
+                                  ? String(
+                                      dynamicForm.values.charges[index].charge_id,
+                                    )
+                                  : null
+                              }
+                              displayValue={
+                                dynamicForm.values.charges[index]?.charge_name ||
+                                ""
+                              }
+                              onChange={(value, selected, originalData) => {
+                                if (isViewMode) return;
+                                const original = (originalData || {}) as {
+                                  id?: number;
+                                  charge_name?: string;
+                                };
+                                const name =
+                                  original.charge_name !== undefined &&
+                                  original.charge_name !== null
+                                    ? original.charge_name
+                                    : selected?.label
+                                      ? selected.label.split(" (")[0]
+                                      : "";
+                                dynamicForm.setFieldValue(
+                                  `charges.${index}.charge_name`,
+                                  name,
+                                );
+                                if (original.id != null) {
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.charge_id`,
+                                    original.id,
+                                  );
+                                } else if (value) {
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.charge_id`,
+                                    Number(value),
+                                  );
+                                } else {
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.charge_id`,
+                                    null,
+                                  );
+                                }
+                              }}
+                              readOnly={isViewMode}
+                              disabled={isViewMode}
+                              error={
+                                (dynamicForm.errors as any)?.charges?.[index]
+                                  ?.charge_name as string | undefined
+                              }
+                              returnOriginalData
+                              styles={{
+                                input: {
+                                  fontSize: "14px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                            />
+                          )}
                         </Grid.Col>
                         <Grid.Col span={1}>
                           <Dropdown
