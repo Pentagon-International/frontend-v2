@@ -168,6 +168,7 @@ import PipelineCreate from "../pages/dashboard/PipelineCreate";
 import useAuthStore from "../store/authStore";
 import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
+import ReportsPage from "../pages/reports/ReportsPage";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -289,7 +290,7 @@ const NavigationRoutes = () => {
           </Route>
         </Route>
         <Route path="/reports">
-          <Route index element={<Navigate to="/reports/job-profit" replace />} />
+          <Route index element={<ReportsPage />} />
           <Route path="job-profit" element={<JobProfit />} />
         </Route>
         <Route path="/help" element={<DemoPage />} />

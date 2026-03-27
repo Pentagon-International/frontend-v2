@@ -36,7 +36,6 @@ import {
   IconGitBranch,
   IconReceiptTax,
   IconSearch,
-  IconFileText,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -70,7 +69,6 @@ const Navbar = ({
   const [isSeaExportOpen, setIsSeaExportOpen] = useState(false);
   const [isAirOpen, setIsAirOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
-  const [isReportsOpen, setIsReportsOpen] = useState(false);
 
   // Keep Accounts expanded when on receipt, payment, overseas-receipt or supplier-invoice routes
   useEffect(() => {
@@ -87,12 +85,6 @@ const Navbar = ({
     }
   }, [location.pathname]);
 
-  // Keep Reports expanded when on reports routes
-  useEffect(() => {
-    if (location.pathname.startsWith("/reports")) {
-      setIsReportsOpen(true);
-    }
-  }, [location.pathname]);
 
   const handleLogoClick = () => {
     // Navigate to dashboard with reset flag if not already at base level
@@ -816,29 +808,18 @@ const Navbar = ({
               ) : (
                 <Divider my="xs" color="#D5D5D5" size="sm" />
               )}
-              <Box>
-                <CollapsibleNav
-                  label="Reports"
-                  openedLocal={isReportsOpen}
-                  setOpenedLocal={setIsReportsOpen}
-                  icon={IconFileAnalytics as any}
-                >
-                  <SubNavLink
-                    parent="Reports"
-                    label="Job Profit"
-                    icon={IconFileText}
-                    path="/reports/job-profit"
-                    collapsibles={{
-                      setIsSalesOpen,
-                      setIsTariffOpen,
-                      setIsCustomerServiceOpen,
-                      setIsAirOpen,
-                      setIsSeaExportOpen,
-                      setIsAccountsOpen,
-                    }}
-                  />
-                </CollapsibleNav>
-              </Box>
+              <SimpleNavLink
+                label="Reports"
+                icon={IconFileAnalytics}
+                path="/reports"
+                collapsibles={{
+                  setIsSalesOpen,
+                  setIsTariffOpen,
+                  setIsCustomerServiceOpen,
+                  setIsAirOpen,
+                  setIsSeaExportOpen,
+                }}
+              />
               <SimpleNavLink
                 label="Help"
                 icon={IconHelpCircle}
