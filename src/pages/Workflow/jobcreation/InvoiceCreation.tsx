@@ -101,17 +101,17 @@ const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
 
   .inv-app {
-    --bg: #f5f4f0;
+    --bg: #ffffff;
     --surface: #ffffff;
-    --surface2: #f0ede8;
-    --surface3: #e8e4dd;
-    --border: #ddd9d2;
-    --border2: #c8c3ba;
+    --surface2: #f0f9ff;
+    --surface3: #e0f2fe;
+    --border: #bae6fd;
+    --border2: #7dd3fc;
     --text: #1a1916;
     --muted: #7a7570;
-    --accent: #c4622d;
-    --accent2: #a84f22;
-    --accent-bg: rgba(196,98,45,0.08);
+    --accent: #0ea5e9;
+    --accent2: #0284c7;
+    --accent-bg: rgba(14,165,233,0.08);
     --green: #2d7a4f;
     --green-bg: rgba(45,122,79,0.08);
     --yellow: #a07820;
@@ -401,7 +401,8 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
 
   const addFiles = (fl: FileList | null) => {
     if (!fl) return;
-    const pdfs = Array.from(fl).filter(f => f.name.toLowerCase().endsWith(".pdf"));
+    const allowed = /\.(pdf|jpg|jpeg|png|gif|bmp|webp|tiff?|svg)$/i;
+    const pdfs = Array.from(fl).filter(f => allowed.test(f.name));
     setFiles(prev => {
       const names = new Set(prev.map(f => f.name));
       return [...prev, ...pdfs.filter(f => !names.has(f.name))];
@@ -438,7 +439,7 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal">
         <div className="modal-head">
-          <h2>📤 Upload Invoice PDFs</h2>
+          <h2>📤 Upload Invoices</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -452,9 +453,9 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
           >
             <div className="dz-icon">🧾</div>
             <p>Drop files or <span style={{ color: "var(--accent)", fontWeight: 700 }}>browse</span></p>
-            <small>PDF invoices only</small>
+            <small>PDF or any image format (JPG, PNG, WEBP, etc.)</small>
           </div>
-          <input type="file" id="fi-inv" accept=".pdf" multiple onChange={e => addFiles(e.target.files)} style={{ display: "none" }} />
+          <input type="file" id="fi-inv" accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.webp,.tiff,.tif,.svg,image/*" multiple onChange={e => addFiles(e.target.files)} style={{ display: "none" }} />
 
           {files.length > 0
             ? files.map((f, i) => (
@@ -751,15 +752,11 @@ const Invoice: FC = () => {
   useEffect(() => { loadFiles(); }, [loadFiles]);
 
   useEffect(() => {
-    const inProgress = allFiles.some(f => f.status === "pending" || f.status === "processing");
-    if (inProgress && !pollRef.current) {
-      pollRef.current = setInterval(loadFiles, 4000);
-    } else if (!inProgress && pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
+    if (!pollRef.current) {
+      pollRef.current = setInterval(loadFiles, 5000);
     }
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
-  }, [allFiles, loadFiles]);
+  }, [loadFiles]);
 
   const filtered = allFiles
     .filter(f => {

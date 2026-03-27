@@ -47,11 +47,14 @@ interface OceanRouting {
 
 interface ContainerDetail {
   container_no?: string;
+  container_number?: string;
   container_type_input?: string;
   actual_seal_no?: string;
   container_type?: string;
   seal_no?: string;
+  seal_number?: string;
   no_of_packages?: number;
+  packages?: number;
   package_type?: string;
   gross_weight?: string;
   gross_weight_kgs?: number;
@@ -60,6 +63,7 @@ interface ContainerDetail {
   tare_weight_kgs?: number;
   chargeable_weight?: string;
   haz?: boolean;
+  description?: string;
 }
 
 interface CargoSummary {
@@ -922,8 +926,8 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
                     <tbody>
                       {hd.cargo_details.map((c, ci) => (
                         <tr key={ci}>
-                          <td>{c.container_no ?? "—"}</td>
-                          <td>{c.no_of_packages ?? "—"}</td>
+                          <td>{c.container_no ?? c.container_number ?? "—"}</td>
+                          <td>{c.no_of_packages ?? c.packages ?? "—"}</td>
                           <td>{c.gross_weight_kgs ?? c.gross_weight ?? "—"}</td>
                           <td>{c.volume_cbm ?? c.volume ?? "—"}</td>
                           <td>{c.chargeable_weight ?? "—"}</td>
@@ -1123,7 +1127,7 @@ const HBLDocumentManager: FC = () => {
 
       await hblApi.post(
         "/start_creating_jobs/",
-        { txn_ids: ids },
+        { txn_ids: ids, transactions_id: ids },
         { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } }
       );
 
@@ -1142,11 +1146,8 @@ const HBLDocumentManager: FC = () => {
   const statusLabels: Record<string, string> = { "": "All", pending: "Pending", processing: "Processing", done: "Done", failed: "Failed" };
   const sortCols: Array<[keyof FileRecord, string]> = [
     ["txn_id", "TXN ID"], ["filename", "Filename"],
-     ["bl_number", "BL Number"],
-    ["shipper_name", "Shipper"],
-     ["port_of_loading", "Route"], 
-     ["status", "Status"],
-      ["file_type", "File Type"],
+    ["bl_number", "BL Number"],
+    ["status", "Status"],
   ];
 
   const doneCount = allFiles.filter(f => f.status === "done").length;
@@ -1167,13 +1168,14 @@ const HBLDocumentManager: FC = () => {
             <span>Failed <strong style={{ color: "var(--red)" }}>{failedCount}</strong></span>
           </div>
           <button className="btn btn-ghost" onClick={loadFiles} title="Refresh">↻</button>
-          {/* ✅ Topbar "Start Jobs" sends no override → falls back to all pending */}
-          <button className="btn btn-green" onClick={() => startJobs()} disabled={jobLoading}>
-            {jobLoading && (
-              <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "hbl-spin .7s linear infinite", display: "inline-block" }} />
-            )}
-            {jobLoading ? "Starting…" : "▶ Start Jobs"}
-          </button>
+          {selected.size > 0 && (
+            <button className="btn btn-green" onClick={() => startJobs(Array.from(selected))} disabled={jobLoading}>
+              {jobLoading && (
+                <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "hbl-spin .7s linear infinite", display: "inline-block" }} />
+              )}
+              {jobLoading ? "Starting…" : `▶ Start Jobs (${selected.size})`}
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => setModal({ type: "upload" })}>＋ Upload</button>
         </div>
       </div>
@@ -1208,7 +1210,6 @@ const HBLDocumentManager: FC = () => {
                 </th>
               ))}
               <th>PDF Type</th>
-              <th onClick={() => sortToggle("cost_usd")}>Cost {sortKey === "cost_usd" ? (sortDir === 1 ? "↑" : "↓") : "↕"}</th>
               <th onClick={() => sortToggle("uploaded_at")}>Uploaded {sortKey === "uploaded_at" ? (sortDir === 1 ? "↑" : "↓") : "↓"}</th>
               <th>Actions</th>
             </tr>
@@ -1228,18 +1229,8 @@ const HBLDocumentManager: FC = () => {
                   <div style={{ fontSize: ".65rem", color: "var(--muted)", marginTop: 2, fontFamily: "var(--mono)" }}>{f.size_kb} KB</div>
                 </td>
                 <td className="td-bl">{f.bl_number ?? "—"}</td>
-                <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={f.shipper_name ?? ""}>
-                  {f.shipper_name ?? "—"}
-                </td>
-                <td style={{ fontSize: ".75rem", whiteSpace: "nowrap" }}>
-                  {f.port_of_loading
-                    ? <>{f.port_of_loading}<span style={{ color: "var(--muted)", margin: "0 4px" }}>→</span>{f.port_of_discharge ?? "—"}</>
-                    : "—"}
-                </td>
                 <td><Badge status={f.status} /></td>
-                <td><FtTag type={f.file_type ?? ""} /></td>
                 <td><span className="pdf-tag">{f.pdf_type ?? "—"}</span></td>
-                <td className="cost-val">{f.cost_usd ? `$${f.cost_usd}` : "—"}</td>
                 <td className="td-date">{f.uploaded_at ? f.uploaded_at.slice(0, 16) : "—"}</td>
                 <td onClick={e => e.stopPropagation()}>
                   <div className="action-row">
