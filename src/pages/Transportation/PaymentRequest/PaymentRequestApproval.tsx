@@ -103,10 +103,11 @@ type FilterState = {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS = [
-  { value: "Rejected", label: "Rejected" },
-  { value: "Unapproved", label: "Unapproved" },
-  { value: "Approved", label: "Approved (Waiting for Payment / CRJ)" },
-  { value: "Unposted", label: "Unposted" },
+  { value: "Active", label: "Unapproved" },
+    { value: "Approved", label: "Approved" },
+  { value: "APPROVED_WITHOUT_CRJ", label: "Approved (Waiting for Payment / CRJ)" },
+  { value: "UNPOSTED", label: "Unposted" },
+    { value: "Rejected", label: "Rejected" },
 ];
 
 const PAYMENT_TYPE_OPTIONS = [
