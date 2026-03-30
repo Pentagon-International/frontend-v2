@@ -1821,16 +1821,22 @@ export default function SupplierInvoiceCreate({
                 <Text size="sm" fw={600} c="#105476">
                   Charges
                 </Text>
-                {/* <Button
-                type="button"
-                size="sm"
-                variant="light"
-                color="#105476"
-                leftSection={<IconPlus size={16} />}
-                onClick={addChargeRow}
-              >
-                Add Charge
-              </Button> */}
+                {!isReversal &&
+                form.values.tds_section_code?.trim() ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="light"
+                    color="#105476"
+                    disabled={
+                      isReadOnly ||
+                      reversalFormDisabled ||
+                      !isVendorSelected
+                    }
+                  >
+                    Calculate TDS
+                  </Button>
+                ) : null}
               </Group>
               <Box mb="sm" mt="sm">
                 <Grid

@@ -2033,6 +2033,20 @@ function PaymentRequest() {
             ) : null}
           </Grid>
 
+          {form.values.tds_section_code?.trim() ? (
+            <Group justify="flex-end" mt="md" mb="sm">
+              <Button
+                type="button"
+                variant="light"
+                color="#105476"
+                size="sm"
+                disabled={isReadOnly}
+              >
+                Calculate TDS
+              </Button>
+            </Group>
+          ) : null}
+
           {/* ── Charges Section ── */}
           <Box mt="xl">
             {/* Charges header row (sticky) */}
