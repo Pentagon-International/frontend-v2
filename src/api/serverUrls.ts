@@ -109,7 +109,6 @@ export const URL = {
   lead: "lead/",
   chargeMaster: "charge-master/",
   chargeMasterFilter: "filter/charge-master/",
-  tdsSectionMaster: "tds_section_master/",
   tdsSectionMasterFilter: "filter/tds_section_master/",
   cfsMaster: "cfs-master/",
   cfsMasterFilter: "filter/cfs-master/",
