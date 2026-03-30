@@ -114,6 +114,9 @@ type AddressData = {
   gst_registration_status?: string;
   composite_regular?: string;
   sez?: boolean;
+  pan_aadhaar_link?: boolean;
+  Itr_filed?: "Yes" | "No" | "NA" | "";
+  tds_threshold_flag?: boolean;
   latitude?: number;
   longitude?: number;
 };
@@ -396,6 +399,7 @@ const AddressCard = memo(
   ({
     index,
     isViewMode,
+    isVendorMasterRoute,
     addressForm,
     countryOptions,
     selectedCountries,
@@ -416,6 +420,7 @@ const AddressCard = memo(
   }: {
     index: number;
     isViewMode: boolean;
+    isVendorMasterRoute: boolean;
     addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
     countryOptions: { value: string; label: string }[];
     selectedCountries: Record<number, string>;
@@ -438,8 +443,24 @@ const AddressCard = memo(
   }) => {
     return (
       <Card key={index} shadow="xs" padding="md">
-        <Grid>
-          <Grid.Col span={4}>
+        <Stack gap="sm">
+          <Card withBorder radius="md" padding="md">
+            <Box
+              mb="sm"
+              px="sm"
+              py={6}
+              style={{
+                backgroundColor: "#F3F7FA",
+                border: "1px solid #D7E3ED",
+                borderRadius: 8,
+              }}
+            >
+              <Text size="sm" fw={600} c="#105476">
+                Address
+              </Text>
+            </Box>
+            <Grid>
+            <Grid.Col span={4}>
             <TextInput
               label="Location"
               placeholder="Enter location"
@@ -642,106 +663,201 @@ const AddressCard = memo(
               disabled={isViewMode}
               {...addressForm.getInputProps(`addresses_data.${index}.email`)}
             />
-          </Grid.Col>
+            </Grid.Col>
+            </Grid>
+          </Card>
 
-          <Grid.Col span={4}>
-            <TextInput
-              label="PAN No"
-              placeholder="Enter PAN number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <TextInput
-              label="GST No"
-              placeholder="Enter GST number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <TextInput
-              label="TAN No"
-              placeholder="Enter TAN number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.tan_no`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <TextInput
-              label="ARN No"
-              placeholder="Enter ARN number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.arn_no`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <TextInput
-              label="UIN No"
-              placeholder="Enter UIN number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.uin_no`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <Select
-              label="GST Registration Status"
-              placeholder="Select status"
-              data={[
-                { value: "Registered", label: "Registered" },
-                { value: "Unregistered", label: "Unregistered" },
-              ]}
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.gst_registration_status`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <Select
-              label="Composite / Regular"
-              placeholder="Select"
-              data={[
-                { value: "composite", label: "Composite" },
-                { value: "Regular", label: "Regular" },
-              ]}
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.composite_regular`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <Box pt={22}>
-              <Switch
-                label="SEZ"
-                description={
-                  addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
-                }
-                disabled={isViewMode}
-                checked={Boolean(addressForm.values.addresses_data[index]?.sez)}
-                onChange={(e) =>
-                  addressForm.setFieldValue(
-                    `addresses_data.${index}.sez`,
-                    e.currentTarget.checked,
-                  )
-                }
-              />
+          <Card withBorder radius="md" padding="md">
+            <Box
+              mb="sm"
+              px="sm"
+              py={6}
+              style={{
+                backgroundColor: "#F3F7FA",
+                border: "1px solid #D7E3ED",
+                borderRadius: 8,
+              }}
+            >
+              <Text size="sm" fw={600} c="#105476">
+                GST
+              </Text>
             </Box>
-          </Grid.Col>
+            <Grid>
+            <Grid.Col span={4}>
+              <TextInput
+                label="PAN No"
+                placeholder="Enter PAN number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <TextInput
+                label="GST No"
+                placeholder="Enter GST number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <TextInput
+                label="TAN No"
+                placeholder="Enter TAN number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.tan_no`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <TextInput
+                label="ARN No"
+                placeholder="Enter ARN number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.arn_no`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <TextInput
+                label="UIN No"
+                placeholder="Enter UIN number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.uin_no`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <Select
+                label="GST Registration Status"
+                placeholder="Select status"
+                data={[
+                  { value: "Registered", label: "Registered" },
+                  { value: "Unregistered", label: "Unregistered" },
+                ]}
+                disabled={isViewMode}
+                {...addressForm.getInputProps(
+                  `addresses_data.${index}.gst_registration_status`,
+                )}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <Select
+                label="Composite / Regular"
+                placeholder="Select"
+                data={[
+                  { value: "composite", label: "Composite" },
+                  { value: "Regular", label: "Regular" },
+                ]}
+                disabled={isViewMode}
+                {...addressForm.getInputProps(
+                  `addresses_data.${index}.composite_regular`,
+                )}
+              />
+            </Grid.Col>
 
-          <Grid.Col span={12}>
-            <Group justify="right" mb="md">
-              {canRemove && (
-                <ActionIcon
-                  variant="light"
-                  color="red"
-                  onClick={() => onRemove(index)}
+            {isVendorMasterRoute && (
+              <Grid.Col span={4}>
+                <Select
+                  label="Income tax return filed"
+                  placeholder="Select"
+                  data={[
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" },
+                      { value: "NA", label: "NA" },
+                  ]}
                   disabled={isViewMode}
-                >
-                  <IconTrash size={16} />
-                </ActionIcon>
-              )}
-            </Group>
-          </Grid.Col>
-        </Grid>
+                  {...addressForm.getInputProps(`addresses_data.${index}.Itr_filed`)}
+                />
+              </Grid.Col>
+            )}
+
+            <Grid.Col span={4}>
+              <Box pt={22}>
+                <Switch
+                  label="SEZ"
+                  description={
+                    addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
+                  }
+                  disabled={isViewMode}
+                  checked={Boolean(addressForm.values.addresses_data[index]?.sez)}
+                  onChange={(e) =>
+                    addressForm.setFieldValue(
+                      `addresses_data.${index}.sez`,
+                      e.currentTarget.checked,
+                    )
+                  }
+                />
+              </Box>
+            </Grid.Col>
+
+            {isVendorMasterRoute && (
+              <>
+                <Grid.Col span={4}>
+                  <Box pt={22}>
+                    <Switch
+                      label="PAN/Aadhaar linked"
+                      description={
+                        addressForm.values.addresses_data[index]
+                          ?.pan_aadhaar_link
+                          ? "Yes"
+                          : "No"
+                      }
+                      disabled={isViewMode}
+                      checked={Boolean(
+                        addressForm.values.addresses_data[index]
+                          ?.pan_aadhaar_link,
+                      )}
+                      onChange={(e) =>
+                        addressForm.setFieldValue(
+                          `addresses_data.${index}.pan_aadhaar_link`,
+                          e.currentTarget.checked,
+                        )
+                      }
+                    />
+                  </Box>
+                </Grid.Col>
+
+                <Grid.Col span={4}>
+                  <Box pt={22}>
+                    <Switch
+                      label="TDS less than 50,000"
+                      description={
+                        addressForm.values.addresses_data[index]
+                          ?.tds_threshold_flag
+                          ? "Yes"
+                          : "No"
+                      }
+                      disabled={isViewMode}
+                      checked={Boolean(
+                        addressForm.values.addresses_data[index]
+                          ?.tds_threshold_flag,
+                      )}
+                      onChange={(e) =>
+                        addressForm.setFieldValue(
+                          `addresses_data.${index}.tds_threshold_flag`,
+                          e.currentTarget.checked,
+                        )
+                      }
+                    />
+                  </Box>
+                </Grid.Col>
+              </>
+            )}
+
+            <Grid.Col span={12}>
+              <Group justify="right" mb="md">
+                {canRemove && (
+                  <ActionIcon
+                    variant="light"
+                    color="red"
+                    onClick={() => onRemove(index)}
+                    disabled={isViewMode}
+                  >
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                )}
+              </Group>
+            </Grid.Col>
+            </Grid>
+          </Card>
+        </Stack>
       </Card>
     );
   },
@@ -786,6 +902,7 @@ function CustomerCreate() {
   const [tdsIdBySectionId, setTdsIdBySectionId] = useState<
     Record<number, number>
   >({});
+  const [tdsType, setTdsType] = useState<"Company" | "Individual" | "Partnership" | "">("");
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -1057,6 +1174,9 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          pan_aadhaar_link: false,
+          Itr_filed: "",
+          tds_threshold_flag: false,
           latitude: 0,
           longitude: 0,
         },
@@ -1092,6 +1212,9 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          pan_aadhaar_link: false,
+          Itr_filed: "",
+          tds_threshold_flag: false,
           latitude: 0,
           longitude: 0,
         },
@@ -1277,6 +1400,7 @@ function CustomerCreate() {
             customer_type?: string;
             credit_type?: string;
             assigned_to_display?: string;
+            tds_type?: string;
             tds_section_data?: Array<{
               id?: number;
               section_id?: number;
@@ -1330,6 +1454,11 @@ function CustomerCreate() {
                 mobile_no: addr.mobile_no || addr.mobile || "",
                 email: addr.email || "",
                 pan_no: addr.pan_no ?? "",
+                pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
+                Itr_filed: (addr as AddressData).Itr_filed ?? "",
+                tds_threshold_flag: Boolean(
+                  (addr as AddressData).tds_threshold_flag,
+                ),
                 gst_id: addr.gst_id ?? "",
                 tan_no: addr.tan_no ?? "",
                 arn_no: addr.arn_no ?? "",
@@ -1403,6 +1532,16 @@ function CustomerCreate() {
           addressForm.setValues({
             addresses_data: formData.addresses_data,
           });
+
+          if (isVendorMasterRoute && typeof fetchedCustomerData.tds_type === "string") {
+            setTdsType(
+              (fetchedCustomerData.tds_type as
+                | "Company"
+                | "Individual"
+                | "Partnership"
+                | "") ?? "",
+            );
+          }
 
           // Vendor-only: restore TDS section rows
           if (isVendorMasterRoute && Array.isArray(fetchedCustomerData.tds_section_data)) {
@@ -1561,6 +1700,11 @@ function CustomerCreate() {
             mobile_no: addr.mobile_no || addr.mobile || "",
             email: addr.email || "",
             pan_no: addr.pan_no ?? "",
+            pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
+            Itr_filed: (addr as AddressData).Itr_filed ?? "",
+            tds_threshold_flag: Boolean(
+              (addr as AddressData).tds_threshold_flag,
+            ),
             gst_id: addr.gst_id ?? "",
             tan_no: addr.tan_no ?? "",
             arn_no: addr.arn_no ?? "",
@@ -1678,6 +1822,20 @@ function CustomerCreate() {
         });
         setTdsIdBySectionId(idMap);
         tdsDisplayForm.setValues({ tds_sections: rows });
+      }
+
+      if (
+        isVendorMasterRoute &&
+        typeof (customerData as unknown as { tds_type?: unknown } | undefined)?.tds_type ===
+          "string"
+      ) {
+        setTdsType(
+          ((customerData as unknown as { tds_type?: string } | undefined)?.tds_type as
+            | "Company"
+            | "Individual"
+            | "Partnership"
+            | "") ?? "",
+        );
       }
 
       // Initialize selected countries and states for cascading dropdowns
@@ -2020,9 +2178,16 @@ function CustomerCreate() {
           gst_registration_status: addr.gst_registration_status ?? "",
           composite_regular: addr.composite_regular ?? "",
           sez: Boolean(addr.sez),
+          ...(isVendorMasterRoute
+            ? {
+                pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
+                Itr_filed: addr.Itr_filed ?? "",
+                tds_threshold_flag: Boolean(addr.tds_threshold_flag),
+              }
+            : {}),
         })),
         ...(isVendorMasterRoute
-          ? { tds_section_data: values.tds_section_data ?? [] }
+          ? { tds_type: tdsType, tds_section_data: values.tds_section_data ?? [] }
           : {}),
       };
 
@@ -2095,6 +2260,13 @@ function CustomerCreate() {
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
             sez: Boolean(addr.sez),
+            ...(isVendorMasterRoute
+              ? {
+                  pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
+                  Itr_filed: addr.Itr_filed ?? "",
+                  tds_threshold_flag: Boolean(addr.tds_threshold_flag),
+                }
+              : {}),
           };
 
           // Include id if it exists (for existing addresses in edit mode)
@@ -2105,7 +2277,7 @@ function CustomerCreate() {
           return addressPayload;
         }),
         ...(isVendorMasterRoute
-          ? { tds_section_data: values.tds_section_data ?? [] }
+          ? { tds_type: tdsType, tds_section_data: values.tds_section_data ?? [] }
           : {}),
         // },
       };
@@ -2285,19 +2457,33 @@ function CustomerCreate() {
       )}
 
       {/* Header */}
-      <Text size="xl" fw={600} c="#105476" mb="lg">
-        {isCreateMode
-          ? isVendorMasterRoute
-            ? "Create Vendor"
-            : "Create Customer"
-          : isEditMode
+      <Group justify="space-between" align="center" mb="lg">
+        <Text size="xl" fw={600} c="#105476">
+          {isCreateMode
             ? isVendorMasterRoute
-              ? "Edit Vendor"
-              : "Edit Customer"
-            : isVendorMasterRoute
-              ? "View Vendor"
-              : "View Customer"}
-      </Text>
+              ? "Create Vendor"
+              : "Create Customer"
+            : isEditMode
+              ? isVendorMasterRoute
+                ? "Edit Vendor"
+                : "Edit Customer"
+              : isVendorMasterRoute
+                ? "View Vendor"
+                : "View Customer"}
+        </Text>
+
+        {!isViewMode && (
+          <Button
+            rightSection={<IconCheck size={16} />}
+            onClick={handleFinalSubmit}
+            color="teal"
+            disabled={isSubmitting}
+            loading={isSubmitting}
+          >
+            {isCreateMode ? "Create" : "Update"}
+          </Button>
+        )}
+      </Group>
 
       <Tabs
         value={String(active)}
@@ -2495,17 +2681,6 @@ function CustomerCreate() {
                   >
                     Next
                   </Button>
-                  {!isViewMode && (
-                    <Button
-                      rightSection={<IconCheck size={16} />}
-                      onClick={handleFinalSubmit}
-                      color="teal"
-                      disabled={isSubmitting}
-                      loading={isSubmitting}
-                    >
-                      {isCreateMode ? "Create" : "Update"}
-                    </Button>
-                  )}
                 </Group>
               </Group>
             </Card>
@@ -2514,10 +2689,10 @@ function CustomerCreate() {
 
         <Tabs.Panel value="1">
           <Box mt="md">
-            <Card shadow="sm" padding="lg" radius="md">
-              <Text size="sm" fw={500}>
+            <Card shadow="sm" padding="xs" radius="md">
+              {/* <Text size="sm" fw={500}>
                 Address
-              </Text>
+              </Text> */}
 
               <Stack>
                 {addressForm.values.addresses_data.map((_, index) => (
@@ -2525,6 +2700,7 @@ function CustomerCreate() {
                     key={`address-${index}-${addressForm.values.addresses_data[index]?.city || ""}-${addressStateRestored}`}
                     index={index}
                     isViewMode={isViewMode}
+                    isVendorMasterRoute={isVendorMasterRoute}
                     addressForm={addressForm}
                     countryOptions={countryOptions}
                     selectedCountries={selectedCountries}
@@ -2671,30 +2847,7 @@ function CustomerCreate() {
                       Next
                     </Button>
                   )}
-                  {!isVendorMasterRoute && (
-                    <Button
-                      rightSection={<IconCheck size={16} />}
-                      onClick={handleFinalSubmit}
-                      color="teal"
-                      disabled={isViewMode || isSubmitting}
-                      loading={isSubmitting}
-                      style={{ display: isViewMode ? "none" : "block" }}
-                    >
-                      {isCreateMode ? "Create" : "Update"}
-                    </Button>
-                  )}
 
-                  {isVendorMasterRoute && !isViewMode && (
-                    <Button
-                      rightSection={<IconCheck size={16} />}
-                      onClick={handleFinalSubmit}
-                      color="teal"
-                      disabled={isSubmitting}
-                      loading={isSubmitting}
-                    >
-                      {isCreateMode ? "Create" : "Update"}
-                    </Button>
-                  )}
                 </Group>
               </Group>
             </Card>
@@ -2706,6 +2859,28 @@ function CustomerCreate() {
             <Box mt="md">
               <Card shadow="sm" padding="lg" radius="md">
                 <Stack gap="md">
+                  <Grid gutter="sm">
+                    <Grid.Col span={4}>
+                      <Select
+                        label="TDS Type"
+                        placeholder="Select TDS type"
+                        data={[
+                          { value: "Company", label: "Company" },
+                          { value: "Individual", label: "Individual" },
+                          { value: "Partnership", label: "Partnership" },
+                        ]}
+                        disabled={isViewMode}
+                        value={tdsType}
+                        onChange={(v) =>
+                          setTdsType(
+                            (v as "Company" | "Individual" | "Partnership" | "") ??
+                              "",
+                          )
+                        }
+                      />
+                    </Grid.Col>
+                  </Grid>
+
                   {tdsDisplayForm.values.tds_sections.map((_, index) => (
                     <Card
                       key={index}
@@ -3075,15 +3250,7 @@ function CustomerCreate() {
                       {isViewMode ? "Back to List" : "Cancel"}
                     </Button>
                     {!isViewMode && (
-                      <Button
-                        rightSection={<IconCheck size={16} />}
-                        onClick={handleFinalSubmit}
-                        color="teal"
-                        disabled={isSubmitting}
-                        loading={isSubmitting}
-                      >
-                        {isCreateMode ? "Create" : "Update"}
-                      </Button>
+                      <Box />
                     )}
                   </Group>
                 </Group>
