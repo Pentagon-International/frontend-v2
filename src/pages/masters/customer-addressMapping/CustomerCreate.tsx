@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
-import { Dropdown, SearchableSelect, ToastNotification } from "../../../components";
+import { Dropdown, SearchableSelect, SingleDateInput, ToastNotification } from "../../../components";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -141,6 +141,35 @@ type SalespersonsResponse = {
   message: string;
   data: SalespersonData[];
 };
+
+/** Vendor-only TDS Section step: UI only, not sent with customer API or loaded from API */
+type TdsSectionRow = {
+  section_uid: string;
+  section_code: string;
+  section_name: string;
+  exemption_tds: string;
+  exemption_certificate_no: string;
+  tds_percent: string;
+  valid_from: Date | null;
+  valid_to: Date | null;
+  tds_lower_limit: string;
+};
+
+type TdsDisplayFormValues = {
+  tds_sections: TdsSectionRow[];
+};
+
+const emptyTdsSectionRow = (): TdsSectionRow => ({
+  section_uid: "",
+  section_code: "",
+  section_name: "",
+  exemption_tds: "",
+  exemption_certificate_no: "",
+  tds_percent: "",
+  valid_from: null,
+  valid_to: null,
+  tds_lower_limit: "",
+});
 
 // Separate validation schemas for each form
 const customerValidationSchema = yup.object({
@@ -619,6 +648,15 @@ function CustomerCreate() {
   const params = useParams();
   const customerData = location.state?.customerData;
 
+  const isVendorMasterRoute = location.pathname.includes("/master/vendor");
+  const baseMasterPath = isVendorMasterRoute ? "/master/vendor" : "/master/customer";
+
+  const tdsDisplayForm = useForm<TdsDisplayFormValues>({
+    initialValues: {
+      tds_sections: [emptyTdsSectionRow()],
+    },
+  });
+
   // Determine the mode based on route parameters
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
   const isViewMode = Boolean(params.id && location.pathname.includes("/view/"));
@@ -782,11 +820,16 @@ function CustomerCreate() {
 
   // Memoized dropdown options for better performance
   const customerTypeOptions = useMemo(() => {
-    return customerTypes.map((type) => ({
+    const opts = customerTypes.map((type) => ({
       value: type.customer_type_code,
       label: type.customer_type_name,
     }));
-  }, [customerTypes]);
+    if (!isVendorMasterRoute) return opts;
+    const allow = new Set(["supplier", "carrier", "transporter"]);
+    return opts.filter((o) =>
+      allow.has((o.label || "").toLowerCase()),
+    );
+  }, [customerTypes, isVendorMasterRoute]);
 
   // Memoize country options
   const countryOptions = useMemo(() => {
@@ -1410,40 +1453,31 @@ function CustomerCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerData, isLoading, isFormInitialized, countries, cities]); // Added countries and cities dependency (forms excluded to prevent infinite loops)
 
+  const maxStepIndex = isVendorMasterRoute ? 2 : 1;
+
   const handleNext = () => {
-    // Skip validation in view mode since all fields are readonly
     if (isViewMode) {
-      setActive((current) => current + 1);
+      setActive((current) => Math.min(current + 1, maxStepIndex));
       return;
     }
 
-    let validationPassed = true;
-
     if (active === 0) {
-      // Validate customer form (Step 1)
       const customerResult = customerForm.validate();
-      // console.log("Customer validation result:", customerResult);
-
-      if (customerResult.hasErrors) {
-        validationPassed = false;
-        // Errors will be displayed inline by the form validation
+      if (!customerResult.hasErrors) {
+        setActive(1);
       }
+      return;
     }
 
     if (active === 1) {
-      // Validate address form (Step 2)
       const addressResult = addressForm.validate();
-      // console.log("Address validation result:", addressResult);
-
       if (addressResult.hasErrors) {
-        validationPassed = false;
-        // Force re-render to show validation errors
         addressForm.validate();
+        return;
       }
-    }
-
-    if (validationPassed) {
-      setActive((current) => current + 1);
+      if (isVendorMasterRoute) {
+        setActive(2);
+      }
     }
   };
 
@@ -1775,7 +1809,7 @@ function CustomerCreate() {
           type: "success",
           message: "Customer created successfully",
         });
-        navigate("/master/customer", { state: { refreshData: true } });
+        navigate(baseMasterPath, { state: { refreshData: true } });
       }
     } catch (err: unknown) {
       console.log("🔍 CustomerCreate - createCustomer Error Caught:", {
@@ -1853,7 +1887,7 @@ function CustomerCreate() {
           type: "success",
           message: "Customer updated successfully",
         });
-        navigate("/master/customer", { state: { refreshData: true } });
+        navigate(baseMasterPath, { state: { refreshData: true } });
       }
     } catch (err: unknown) {
       console.log("🔍 CustomerCreate - updateCustomer Error Caught:", {
@@ -1964,7 +1998,13 @@ function CustomerCreate() {
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
             <Text c="dimmed" fw={500}>
-              {isCreateMode ? "Creating Customer..." : "Updating Customer..."}
+              {isCreateMode
+                ? isVendorMasterRoute
+                  ? "Creating Vendor..."
+                  : "Creating Customer..."
+                : isVendorMasterRoute
+                  ? "Updating Vendor..."
+                  : "Updating Customer..."}
             </Text>
           </Stack>
         </Box>
@@ -1973,10 +2013,16 @@ function CustomerCreate() {
       {/* Header */}
       <Text size="xl" fw={600} c="#105476" mb="lg">
         {isCreateMode
-          ? "Create Customer"
+          ? isVendorMasterRoute
+            ? "Create Vendor"
+            : "Create Customer"
           : isEditMode
-            ? "Edit Customer"
-            : "View Customer"}
+            ? isVendorMasterRoute
+              ? "Edit Vendor"
+              : "Edit Customer"
+            : isVendorMasterRoute
+              ? "View Vendor"
+              : "View Customer"}
       </Text>
 
       <Stepper
@@ -1986,16 +2032,23 @@ function CustomerCreate() {
         orientation="horizontal"
         allowNextStepsSelect={isViewMode}
       >
-        {/* Step 1: Customer Master */}
-        <Stepper.Step label="1" description="Customer Master">
+        {/* Step 1: Customer / Vendor Master */}
+        <Stepper.Step
+          label="1"
+          description={isVendorMasterRoute ? "Vendor Master" : "Customer Master"}
+        >
           <Box mt="md">
             <Card shadow="sm" padding="lg" radius="md">
               <Grid gutter={"sm"}>
                 <Grid.Col span={4}>
                   <TextInput
-                    label="Customer Name"
+                    label={isVendorMasterRoute ? "Vendor Name" : "Customer Name"}
                     withAsterisk
-                    placeholder="Enter customer name"
+                    placeholder={
+                      isVendorMasterRoute
+                        ? "Enter vendor name"
+                        : "Enter customer name"
+                    }
                     disabled={!!isViewMode}
                     value={customerForm.values.customer_name}
                     onChange={(e) => {
@@ -2011,9 +2064,13 @@ function CustomerCreate() {
 
                 <Grid.Col span={4}>
                   <Select
-                    label="Customer Type"
+                    label={isVendorMasterRoute ? "Vendor Type" : "Customer Type"}
                     withAsterisk
-                    placeholder="Select customer type"
+                    placeholder={
+                      isVendorMasterRoute
+                        ? "Select vendor type"
+                        : "Select customer type"
+                    }
                     searchable
                     data={customerTypeOptions}
                     disabled={!!isViewMode}
@@ -2098,9 +2155,11 @@ function CustomerCreate() {
                   variant="outline"
                   color="#105476"
                   leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => navigate("/master/customer")}
+                  onClick={() => navigate(baseMasterPath)}
                 >
-                  Back to Customer List
+                  {isVendorMasterRoute
+                    ? "Back to Vendor List"
+                    : "Back to Customer List"}
                 </Button>
                 <Button
                   rightSection={<IconArrowRight size={14} />}
@@ -2176,7 +2235,7 @@ function CustomerCreate() {
                   <Button
                     variant="outline"
                     color="#105476"
-                    onClick={() => navigate("/master/customer")}
+                    onClick={() => navigate(baseMasterPath)}
                     disabled={isSubmitting}
                   >
                     {isViewMode ? "Back to List" : "Cancel"}
@@ -2218,7 +2277,9 @@ function CustomerCreate() {
                       style={{ border: "1px solid #105476" }}
                       color="white"
                     >
-                      Add Customer Relationships
+                      {isVendorMasterRoute
+                        ? "Add Vendor Relationships"
+                        : "Add Customer Relationships"}
                     </Button>
                   )}
                   {isEditMode && !isViewMode && customerId && (
@@ -2259,24 +2320,293 @@ function CustomerCreate() {
                       style={{ border: "1px solid #105476" }}
                       color="white"
                     >
-                      Edit Customer Relationships
+                      {isVendorMasterRoute
+                        ? "Edit Vendor Relationships"
+                        : "Edit Customer Relationships"}
                     </Button>
                   )}
-                  <Button
-                    rightSection={<IconCheck size={16} />}
-                    onClick={handleFinalSubmit}
-                    color="teal"
-                    disabled={isViewMode || isSubmitting}
-                    loading={isSubmitting}
-                    style={{ display: isViewMode ? "none" : "block" }}
-                  >
-                    {isCreateMode ? "Create" : "Update"}
-                  </Button>
+                  {isVendorMasterRoute && !isViewMode && (
+                    <Button
+                      rightSection={<IconArrowRight size={14} />}
+                      onClick={handleNext}
+                      color="#105476"
+                      disabled={isSubmitting}
+                    >
+                      Next
+                    </Button>
+                  )}
+                  {!isVendorMasterRoute && (
+                    <Button
+                      rightSection={<IconCheck size={16} />}
+                      onClick={handleFinalSubmit}
+                      color="teal"
+                      disabled={isViewMode || isSubmitting}
+                      loading={isSubmitting}
+                      style={{ display: isViewMode ? "none" : "block" }}
+                    >
+                      {isCreateMode ? "Create" : "Update"}
+                    </Button>
+                  )}
                 </Group>
               </Group>
             </Card>
           </Box>
         </Stepper.Step>
+
+        {isVendorMasterRoute && (
+          <Stepper.Step label="3" description="TDS Section">
+            <Box mt="md">
+              <Card shadow="sm" padding="lg" radius="md">
+                <Stack gap="md">
+                  {tdsDisplayForm.values.tds_sections.map((_, index) => (
+                    <Card
+                      key={index}
+                      withBorder
+                      padding="md"
+                      radius="md"
+                      bg="#fafafa"
+                    >
+                      <Group justify="space-between" align="center" mb="sm">
+                        <Text size="sm" fw={600} c="#105476">
+                          TDS Section {index + 1}
+                        </Text>
+                        {!isViewMode &&
+                          tdsDisplayForm.values.tds_sections.length > 1 && (
+                            <ActionIcon
+                              variant="light"
+                              color="red"
+                              onClick={() =>
+                                tdsDisplayForm.removeListItem(
+                                  "tds_sections",
+                                  index,
+                                )
+                              }
+                              aria-label="Remove TDS section"
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          )}
+                      </Group>
+                      <Grid gutter="sm">
+                        <Grid.Col span={4}>
+                          <TextInput
+                            label="Section UID"
+                            placeholder="Section UID"
+                            disabled={isViewMode}
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.section_uid`,
+                            )}
+                            styles={{
+                              input: { fontSize: "13px", fontFamily: "Inter" },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <TextInput
+                            label="Section Code"
+                            placeholder="Section code"
+                            disabled={isViewMode}
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.section_code`,
+                            )}
+                            styles={{
+                              input: { fontSize: "13px", fontFamily: "Inter" },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <TextInput
+                            label="Section Name"
+                            placeholder="Section name"
+                            disabled={isViewMode}
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.section_name`,
+                            )}
+                            styles={{
+                              input: { fontSize: "13px", fontFamily: "Inter" },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <TextInput
+                            label="Exemption TDS"
+                            placeholder="Exemption TDS"
+                            disabled={isViewMode}
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.exemption_tds`,
+                            )}
+                            styles={{
+                              input: { fontSize: "13px", fontFamily: "Inter" },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <TextInput
+                            label="Exemption Certificate No"
+                            placeholder="Certificate number"
+                            disabled={isViewMode}
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.exemption_certificate_no`,
+                            )}
+                            styles={{
+                              input: { fontSize: "13px", fontFamily: "Inter" },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <TextInput
+                            label="TDS %"
+                            placeholder="TDS %"
+                            disabled={isViewMode}
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.tds_percent`,
+                            )}
+                            styles={{
+                              input: { fontSize: "13px", fontFamily: "Inter" },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <SingleDateInput
+                            label="Valid From"
+                            placeholder="Valid from"
+                            disabled={isViewMode}
+                            valueFormat="YYYY-MM-DD"
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.valid_from`,
+                            )}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <SingleDateInput
+                            label="Valid To"
+                            placeholder="Valid to"
+                            disabled={isViewMode}
+                            valueFormat="YYYY-MM-DD"
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.valid_to`,
+                            )}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <TextInput
+                            label="TDS Lower Limit"
+                            placeholder="TDS lower limit"
+                            disabled={isViewMode}
+                            {...tdsDisplayForm.getInputProps(
+                              `tds_sections.${index}.tds_lower_limit`,
+                            )}
+                            styles={{
+                              input: { fontSize: "13px", fontFamily: "Inter" },
+                              label: {
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                                marginBottom: "4px",
+                                fontFamily: "Inter",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                      </Grid>
+                    </Card>
+                  ))}
+
+                  <Group justify="flex-end">
+                    <Button
+                      variant="outline"
+                      leftSection={<IconPlus size={16} />}
+                      onClick={() =>
+                        tdsDisplayForm.insertListItem(
+                          "tds_sections",
+                          emptyTdsSectionRow(),
+                        )
+                      }
+                      disabled={isViewMode}
+                      color="#105476"
+                    >
+                      Add
+                    </Button>
+                  </Group>
+                </Stack>
+
+                <Group justify="space-between" mt="xl">
+                  <Button
+                    variant="default"
+                    leftSection={<IconArrowLeft size={16} />}
+                    onClick={handleBack}
+                    disabled={isSubmitting}
+                  >
+                    Back
+                  </Button>
+                  <Group>
+                    <Button
+                      variant="outline"
+                      color="#105476"
+                      onClick={() => navigate(baseMasterPath)}
+                      disabled={isSubmitting}
+                    >
+                      {isViewMode ? "Back to List" : "Cancel"}
+                    </Button>
+                    {!isViewMode && (
+                      <Button
+                        rightSection={<IconCheck size={16} />}
+                        onClick={handleFinalSubmit}
+                        color="teal"
+                        disabled={isSubmitting}
+                        loading={isSubmitting}
+                      >
+                        {isCreateMode ? "Create" : "Update"}
+                      </Button>
+                    )}
+                  </Group>
+                </Group>
+              </Card>
+            </Box>
+          </Stepper.Step>
+        )}
       </Stepper>
     </Box>
   );

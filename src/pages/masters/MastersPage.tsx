@@ -21,6 +21,8 @@ import {
   IconReceiptTax,
   IconPercentage,
   IconWorld,
+  IconCalculator,
+  IconTruck,
 } from "@tabler/icons-react";
 import MasterCard from "../../components/MasterCard";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -70,6 +72,10 @@ export default function MastersPage() {
         title: "Customer & Partner Masters",
         items: [
           { icon: <IconUsers size={28} color="#105476" />, label: "Customer" },
+          {
+            icon: <IconTruck size={28} color="#105476" />,
+            label: "Vendor",
+          },
           {
             icon: <IconUsersGroup size={28} color="#105476" />,
             label: "Customer Type",
@@ -139,6 +145,10 @@ export default function MastersPage() {
           {
             icon: <IconCurrencyDollar size={28} color="#105476" />,
             label: "Charge",
+          },
+          {
+            icon: <IconCalculator size={28} color="#105476" />,
+            label: "TDS Section",
           },
           {
             icon: <IconChartBar size={28} color="#105476" />,

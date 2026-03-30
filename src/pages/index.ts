@@ -78,6 +78,7 @@ import UserCreate from "./masters/user/UserCreate";
 
 import CustomerMaster from "./masters/customer-addressMapping/CustomerMaster";
 import CustomerCreate from "./masters/customer-addressMapping/CustomerCreate";
+import VendorMaster from "./masters/vendor/VendorMaster";
 import CoordinatorReassignationMaster from "./masters/coordinator-reassignation/CoordinatorReassignationMaster";
 import CoordinatorReassignationCreate from "./masters/coordinator-reassignation/CoordinatorReassignationCreate";
 import CustomerRelationshipMappingMaster from "./masters/customer-relationship-mapping/CustomerRelationshipMappingMaster";
@@ -143,6 +144,8 @@ import ServiceMasterView from "../pages/masters/service-master/ServiceMasterView
 // Accounts Masters
 import ChargeMaster from "./masters/charge/ChargeMaster";
 import ChargeCreate from "./masters/charge/ChargeCreate";
+import TdsSectionMaster from "./masters/tds-section/TdsSectionMaster";
+import TdsSectionCreate from "./masters/tds-section/TdsSectionCreate";
 import NetworkMaster from "./masters/network-master/NetworkMaster";
 import NetworkCreate from "./masters/network-master/NetworkCreate";
 import ChartOfAccountsMaster from "./masters/chart-of-accounts/ChartOfAccountsMaster";
@@ -220,6 +223,7 @@ export {
   UserCreate,
   CustomerMaster,
   CustomerCreate,
+  VendorMaster,
   CoordinatorReassignationMaster,
   CoordinatorReassignationCreate,
   CustomerRelationshipMappingMaster,
@@ -230,6 +234,8 @@ export {
   ServiceMasterView,
   ChargeMaster,
   ChargeCreate,
+  TdsSectionMaster,
+  TdsSectionCreate,
   NetworkMaster,
   NetworkCreate,
   ChartOfAccountsMaster,

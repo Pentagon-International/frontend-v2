@@ -64,12 +64,15 @@ import {
   DestinationCreate,
   CustomerMaster,
   CustomerCreate,
+  VendorMaster,
   CoordinatorReassignationMaster,
   CoordinatorReassignationCreate,
   CustomerRelationshipMappingMaster,
   CustomerRelationshipMappingCreate,
   ChargeMaster,
   ChargeCreate,
+  TdsSectionMaster,
+  TdsSectionCreate,
   NetworkMaster,
   NetworkCreate,
   ChartOfAccountsMaster,
@@ -478,6 +481,13 @@ const NavigationRoutes = () => {
             <Route path="view/:id" element={<CustomerCreate />} />
           </Route>
 
+          <Route path="vendor">
+            <Route index element={<VendorMaster />} />
+            <Route path="create" element={<CustomerCreate />} />
+            <Route path="edit/:id" element={<CustomerCreate />} />
+            <Route path="view/:id" element={<CustomerCreate />} />
+          </Route>
+
           <Route path="sales-co-ordinator-reassignation">
             <Route index element={<CoordinatorReassignationMaster />} />
             <Route path="create" element={<CoordinatorReassignationCreate />} />
@@ -519,6 +529,12 @@ const NavigationRoutes = () => {
             <Route index element={<ChargeMaster />} />
             <Route path="create" element={<ChargeCreate />} />
             <Route path="edit" element={<ChargeCreate />} />
+          </Route>
+
+          <Route path="tds-section">
+            <Route index element={<TdsSectionMaster />} />
+            <Route path="create" element={<TdsSectionCreate />} />
+            <Route path="edit" element={<TdsSectionCreate />} />
           </Route>
 
           <Route path="network-master">
