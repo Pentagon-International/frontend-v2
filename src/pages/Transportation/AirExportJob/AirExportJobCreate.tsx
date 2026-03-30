@@ -349,6 +349,13 @@ function AirExportJobCreate() {
   // Proforma PDF preview state
   const [proformaPreviewOpen, setProformaPreviewOpen] = useState(false);
   const [proformaPdfBlob, setProformaPdfBlob] = useState<string | null>(null);
+  const [proformaCurrencyModalOpen, setProformaCurrencyModalOpen] =
+    useState(false);
+  const [selectedProformaCurrency, setSelectedProformaCurrency] =
+    useState<string>("");
+  const [pendingProformaShipmentId, setPendingProformaShipmentId] = useState<
+    string | null
+  >(null);
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -1873,16 +1880,20 @@ function AirExportJobCreate() {
   // Proforma PDF preview handlers
   const handleProformaPreview = async (shipmentId: string) => {
     if (!shipmentId) return;
+    if (!selectedProformaCurrency) return;
     setProformaPreviewOpen(true);
     setProformaPdfBlob(null);
     try {
       const token = useAuthStore.getState().accessToken;
       const response = await fetch(
-        // `${URL.base}job-create/proforma/${shipmentId}/pdf/`,
-       `${URL.base}job-create/proforma/411/pdf/`,
+        `${URL.base}job-create/proforma/${shipmentId}/pdf/`,
         {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ currency: selectedProformaCurrency }),
         },
       );
       if (!response.ok) {
@@ -4432,6 +4443,52 @@ function AirExportJobCreate() {
         </Stack>
       </Modal>
 
+      {/* Proforma Currency Modal */}
+      <Modal
+        opened={proformaCurrencyModalOpen}
+        onClose={() => {
+          setProformaCurrencyModalOpen(false);
+          setSelectedProformaCurrency("");
+          setPendingProformaShipmentId(null);
+        }}
+        title="Currency"
+        centered
+        size="sm"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+      >
+        <Stack gap="md">
+          <Dropdown
+            label="Currency"
+            placeholder="Select Currency"
+            searchable
+            clearable
+            dropdownZIndex={1000}
+            data={[
+              { value: "INR", label: "INR" },
+              { value: "USD", label: "USD" },
+            ]}
+            value={selectedProformaCurrency || null}
+            onChange={(value) => setSelectedProformaCurrency(value || "")}
+          />
+          <Group justify="flex-end">
+            <Button
+              color="#105476"
+              disabled={!selectedProformaCurrency}
+              onClick={() => {
+                if (!pendingProformaShipmentId) return;
+                setProformaCurrencyModalOpen(false);
+                handleProformaPreview(pendingProformaShipmentId);
+              }}
+            >
+              Get
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* Proforma PDF Preview Modal */}
       <Modal
         opened={proformaPreviewOpen}
@@ -4613,10 +4670,11 @@ function AirExportJobCreate() {
                               color: "#424242",
                             },
                           }}
-                          onClick={() =>
-                            // handleProformaPreview(hawb.shipment_id)
-                            handleProformaPreview(hawb.id)
-                          }
+                          onClick={() => {
+                            setPendingProformaShipmentId(String(hawb.id ?? ""));
+                            setSelectedProformaCurrency("");
+                            setProformaCurrencyModalOpen(true);
+                          }}
                         >
                           Proforma
                         </Menu.Item>

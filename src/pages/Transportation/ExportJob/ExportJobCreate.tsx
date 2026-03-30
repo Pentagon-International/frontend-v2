@@ -366,6 +366,13 @@ function ExportJobCreate() {
   // Proforma PDF preview state
   const [proformaPreviewOpen, setProformaPreviewOpen] = useState(false);
   const [proformaPdfBlob, setProformaPdfBlob] = useState<string | null>(null);
+  const [proformaCurrencyModalOpen, setProformaCurrencyModalOpen] =
+    useState(false);
+  const [selectedProformaCurrency, setSelectedProformaCurrency] =
+    useState<string>("");
+  const [pendingProformaShipmentId, setPendingProformaShipmentId] = useState<
+    string | null
+  >(null);
 
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
@@ -1977,6 +1984,7 @@ function ExportJobCreate() {
   // Proforma PDF preview handlers
   const handleProformaPreview = async (shipmentId: string) => {
     if (!shipmentId) return;
+    if (!selectedProformaCurrency) return;
     setProformaPreviewOpen(true);
     setProformaPdfBlob(null);
     try {
@@ -1984,8 +1992,12 @@ function ExportJobCreate() {
       const response = await fetch(
         `${URL.base}job-create/proforma/${shipmentId}/pdf/`,
         {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ currency: selectedProformaCurrency }),
         },
       );
       if (!response.ok) {
@@ -5155,7 +5167,13 @@ function ExportJobCreate() {
                                   color: "#424242",
                                 },
                               }}
-                              onClick={() => handleProformaPreview(house.id)}
+                              onClick={() => {
+                                setPendingProformaShipmentId(
+                                  String(house.id ?? ""),
+                                );
+                                setSelectedProformaCurrency("");
+                                setProformaCurrencyModalOpen(true);
+                              }}
                             >
                               Proforma
                             </Menu.Item>
@@ -5295,6 +5313,52 @@ function ExportJobCreate() {
           </Stack>
         </Box>
       )}
+
+      {/* Proforma Currency Modal */}
+      <Modal
+        opened={proformaCurrencyModalOpen}
+        onClose={() => {
+          setProformaCurrencyModalOpen(false);
+          setSelectedProformaCurrency("");
+          setPendingProformaShipmentId(null);
+        }}
+        title="Currency"
+        centered
+        size="sm"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+      >
+        <Stack gap="md">
+          <Dropdown
+            label="Currency"
+            placeholder="Select Currency"
+            searchable
+            clearable
+            dropdownZIndex={1000}
+            data={[
+              { value: "INR", label: "INR" },
+              { value: "USD", label: "USD" },
+            ]}
+            value={selectedProformaCurrency || null}
+            onChange={(value) => setSelectedProformaCurrency(value || "")}
+          />
+          <Group justify="flex-end">
+            <Button
+              color="#105476"
+              disabled={!selectedProformaCurrency}
+              onClick={() => {
+                if (!pendingProformaShipmentId) return;
+                setProformaCurrencyModalOpen(false);
+                handleProformaPreview(pendingProformaShipmentId);
+              }}
+            >
+              Get
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* Proforma PDF Preview Modal */}
       <Modal
