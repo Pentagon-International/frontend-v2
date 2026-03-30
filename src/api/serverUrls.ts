@@ -69,6 +69,7 @@ export const URL = {
   customerData: "call-entry/customer-data/",
   country: "country/",
   state: "state/",
+  tdsSectionMaster: "tds_section_master/",
   city: "city/",
   carrierComparison: "carrier-comparison/",
   exportShipment: "export-shipment/",

@@ -60,6 +60,16 @@ const fetchStateMaster = async () => {
   }
 };
 
+const fetchTdsSectionMaster = async () => {
+  try {
+    const response = await getAPICall(`${URL.tdsSectionMaster}`, API_HEADER);
+    return (response as { data?: unknown[] })?.data ?? response ?? [];
+  } catch (error) {
+    console.error("Error fetching TDS section master:", error);
+    return [];
+  }
+};
+
 const fetchDaybookByType = async (
   documentType: "CRJ" | "CRJREV",
 ): Promise<unknown[]> => {
@@ -488,6 +498,13 @@ export default function SupplierInvoiceCreate({
     staleTime: Infinity,
   });
 
+  const { data: tdsSectionData = [], isLoading: isTdsSectionLoading } =
+    useQuery({
+      queryKey: ["tdsSectionMaster"],
+      queryFn: fetchTdsSectionMaster,
+      staleTime: Infinity,
+    });
+
   const daybookDocumentType = isReversal ? "CRJREV" : "CRJ";
   const { data: daybookData = [], isLoading: isDaybookLoading } = useQuery({
     queryKey: ["daybook", daybookDocumentType],
@@ -530,6 +547,23 @@ export default function SupplierInvoiceCreate({
       label: item.state_name ?? item.name ?? "",
     }));
   }, [stateData]);
+
+  const tdsSectionOptions = useMemo(() => {
+    const data = tdsSectionData as {
+      tds_section_code?: string | number;
+      tds_section_name?: string;
+    }[];
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((item) => {
+        const code = String(item.tds_section_code ?? "").trim();
+        const name = String(item.tds_section_name ?? "").trim();
+        const label =
+          name && code ? `${name} - ${code}` : name || code;
+        return { value: code, label };
+      })
+      .filter((o) => o.value);
+  }, [tdsSectionData]);
 
   const daybookOptions = useMemo(() => {
     const data = daybookData as { id?: number; name?: string }[];
@@ -1495,13 +1529,23 @@ export default function SupplierInvoiceCreate({
               />
             </Grid.Col>
             <Grid.Col span={1.25}>
-              <TextInput
+              <Dropdown
                 label="TDS Section Code"
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
-                placeholder="TDS Section Code"
-                value={form.values.tds_section_code}
-                onChange={(e) =>
-                  form.setFieldValue("tds_section_code", e.target.value)
+                placeholder={
+                  isTdsSectionLoading ? "Loading..." : "Select TDS section"
+                }
+                data={tdsSectionOptions}
+                value={form.values.tds_section_code || null}
+                onChange={(v) =>
+                  form.setFieldValue("tds_section_code", v ?? "")
+                }
+                searchable
+                clearable
+                disabled={
+                  isTdsSectionLoading ||
+                  isReadOnly ||
+                  reversalFormDisabled ||
+                  !isVendorSelected
                 }
                 styles={effectiveInputStyles}
               />

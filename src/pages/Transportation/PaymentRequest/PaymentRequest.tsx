@@ -116,6 +116,15 @@ const fetchStateMaster = async () => {
   }
 };
 
+const fetchTdsSectionMaster = async () => {
+  try {
+    const response = await getAPICall(`${URL.tdsSectionMaster}`, API_HEADER);
+    return (response as { data?: unknown[] })?.data ?? response ?? [];
+  } catch {
+    return [];
+  }
+};
+
 // Fetch effective SAC (tax code) for charge + service
 const fetchGetEffectiveSac = async (
   items: { charge_id: number; service_id:  number }[],
@@ -573,6 +582,13 @@ function PaymentRequest() {
     staleTime: Infinity,
   });
 
+  const { data: tdsSectionData = [], isLoading: isTdsSectionLoading } =
+    useQuery({
+      queryKey: ["tdsSectionMaster"],
+      queryFn: fetchTdsSectionMaster,
+      staleTime: Infinity,
+    });
+
   const stateOptions = useMemo(() => {
     const data = stateData as { id?: number; state_name?: string; name?: string }[];
     if (!Array.isArray(data)) return [];
@@ -581,6 +597,23 @@ function PaymentRequest() {
       label: item.state_name ?? item.name ?? "",
     }));
   }, [stateData]);
+
+  const tdsSectionOptions = useMemo(() => {
+    const data = tdsSectionData as {
+      tds_section_code?: string | number;
+      tds_section_name?: string;
+    }[];
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((item) => {
+        const code = String(item.tds_section_code ?? "").trim();
+        const name = String(item.tds_section_name ?? "").trim();
+        const label =
+          name && code ? `${name} - ${code}` : name || code;
+        return { value: code, label };
+      })
+      .filter((o) => o.value);
+  }, [tdsSectionData]);
 
   // Fetch payment request data when opening edit/view URL (/edit/:id or /view/:id)
   const { data: requestFetchRes, isFetching: requestFetchLoading } = useQuery({
@@ -1922,14 +1955,19 @@ function PaymentRequest() {
             </Grid.Col>
 
             <Grid.Col span={3}>
-              <TextInput
+              <Dropdown
                 label="TDS Section Code"
-                placeholder="Enter TDS section code"
-                value={form.values.tds_section_code}
-                onChange={(e) =>
-                  form.setFieldValue("tds_section_code", e.target.value)
+                placeholder={
+                  isTdsSectionLoading ? "Loading..." : "Select TDS section"
                 }
-                readOnly={isReadOnly}
+                data={tdsSectionOptions}
+                value={form.values.tds_section_code || null}
+                onChange={(v) =>
+                  form.setFieldValue("tds_section_code", v ?? "")
+                }
+                searchable
+                clearable
+                disabled={isTdsSectionLoading || isReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
