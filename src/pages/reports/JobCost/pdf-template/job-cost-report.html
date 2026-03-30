@@ -136,88 +136,42 @@
           </tr>
         </thead>
         <tbody>
-          <tr class="section-row">
-            <td>Freight</td>
-            <td class="num"> </td><td class="num"> </td><td class="num"> </td><td class="num"> </td>
-            <td class="num"> </td><td class="num"> </td><td class="num"> </td><td class="num"> </td><td class="num"> </td>
-          </tr>
+          {# Dynamic charges (mirrors job_profit_report.html: {% for row in rows %} loop) #}
+          {% for row in rows %}
           <tr>
-            <td>FREIGHT CHARGE</td>
-            <td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td>
-            <td class="num">102,882.83</td><td class="num">90,079.63</td><td class="num">12,803.20</td><td class="num">6,401.60</td><td class="num">0.00</td>
+            <td>{{ row.charge_name|default:"" }}</td>
+            <td class="num">{{ row.provisional_revenue|default:"" }}</td>
+            <td class="num">{{ row.provisional_cost|default:"" }}</td>
+            <td class="num">{{ row.provisional_neutral|default:"" }}</td>
+            <td class="num">{{ row.provisional_gp|default:"" }}</td>
+            <td class="num">{{ row.actual_revenue|default:"" }}</td>
+            <td class="num">{{ row.actual_cost|default:"" }}</td>
+            <td class="num">{{ row.actual_gp|default:"" }}</td>
+            <td class="num">{{ row.gp_per_unit|default:"" }}</td>
+            <td class="num">{{ row.actual_neutral|default:"" }}</td>
           </tr>
+          {% empty %}
           <tr>
-            <td>SHIPPING LINE CHARGES</td>
-            <td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td>
-            <td class="num">27,000.00</td><td class="num">28,541.00</td><td class="num">-1,541.00</td><td class="num">-770.50</td><td class="num">0.00</td>
+            <td colspan="10" class="center">No data available</td>
           </tr>
-
-          <!-- Sample: Many charge lines under Freight (to demo multi-page) -->
-          <tr><td>FREIGHT SURCHARGE - 01</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">1,250.00</td><td class="num">650.00</td><td class="num">600.00</td><td class="num">300.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 02</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">980.00</td><td class="num">480.00</td><td class="num">500.00</td><td class="num">250.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 03</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">1,600.00</td><td class="num">900.00</td><td class="num">700.00</td><td class="num">350.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 04</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">720.00</td><td class="num">300.00</td><td class="num">420.00</td><td class="num">210.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 05</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">2,250.00</td><td class="num">1,400.00</td><td class="num">850.00</td><td class="num">425.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 06</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">310.00</td><td class="num">90.00</td><td class="num">220.00</td><td class="num">110.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 07</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">540.00</td><td class="num">260.00</td><td class="num">280.00</td><td class="num">140.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 08</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">890.00</td><td class="num">410.00</td><td class="num">480.00</td><td class="num">240.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 09</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">1,140.00</td><td class="num">560.00</td><td class="num">580.00</td><td class="num">290.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 10</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">650.00</td><td class="num">280.00</td><td class="num">370.00</td><td class="num">185.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 11</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">775.00</td><td class="num">355.00</td><td class="num">420.00</td><td class="num">210.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 12</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">920.00</td><td class="num">480.00</td><td class="num">440.00</td><td class="num">220.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 13</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">1,050.00</td><td class="num">530.00</td><td class="num">520.00</td><td class="num">260.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 14</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">1,180.00</td><td class="num">610.00</td><td class="num">570.00</td><td class="num">285.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 15</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">1,320.00</td><td class="num">700.00</td><td class="num">620.00</td><td class="num">310.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 16</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">1,490.00</td><td class="num">820.00</td><td class="num">670.00</td><td class="num">335.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 17</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">620.00</td><td class="num">280.00</td><td class="num">340.00</td><td class="num">170.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 18</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">860.00</td><td class="num">390.00</td><td class="num">470.00</td><td class="num">235.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 19</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">990.00</td><td class="num">450.00</td><td class="num">540.00</td><td class="num">270.00</td><td class="num">0.00</td></tr>
-          <tr><td>FREIGHT SURCHARGE - 20</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">1,110.00</td><td class="num">520.00</td><td class="num">590.00</td><td class="num">295.00</td><td class="num">0.00</td></tr>
-          <tr class="total-row">
-            <td>Total :</td>
-            <td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>
-            <td class="num">129,882.83</td><td class="num">118,620.63</td><td class="num">11,262.20</td><td class="num">5,631.10</td><td class="num"></td>
-          </tr>
-
-          <tr class="section-row">
-            <td>Others</td>
-            <td class="num"> </td><td class="num"> </td><td class="num"> </td><td class="num"> </td>
-            <td class="num"> </td><td class="num"> </td><td class="num"> </td><td class="num"> </td><td class="num"> </td>
-          </tr>
-          <tr>
-            <td>DELIVERY ORDER CHARGES</td>
-            <td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td>
-            <td class="num">1,000.00</td><td class="num">0.00</td><td class="num">1,000.00</td><td class="num">500.00</td><td class="num">0.00</td>
-          </tr>
-          <tr class="total-row">
-            <td>Total :</td>
-            <td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>
-            <td class="num">1,000.00</td><td class="num">0.00</td><td class="num">1,000.00</td><td class="num">500.00</td><td class="num"></td>
-          </tr>
-
-          <tr class="grand-total">
-            <td>Grand Total :</td>
-            <td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>
-            <td class="num">130,882.83</td><td class="num">118,620.63</td><td class="num">12,262.20</td><td class="num">6,131.10</td><td class="num"></td>
-          </tr>
-
+          {% endfor %}
         </tbody>
       </table>
     </div>
 
-    <!-- ══════════════════════════════════════════════
-         RUNNING FOOTER (every page)
-    ══════════════════════════════════════════════ -->
-    <div class="running-footer" role="contentinfo">
-      <div class="footer-left">
-        Ref: R00113 on 25-Mar-2026 by ACHENNAI-CHENNAI
-      </div>
-      <div class="footer-right">
-        <div class="page-no" aria-label="Page number"></div>
-      </div>
-    </div>
-
   </div><!-- /.page-preview -->
+
+  <!-- ══════════════════════════════════════════════
+       RUNNING FOOTER (every page)
+  ══════════════════════════════════════════════ -->
+  <div class="running-footer" role="contentinfo">
+    <div class="footer-left">
+      Ref: R00113 on 25-Mar-2026 by ACHENNAI-CHENNAI
+    </div>
+    <div class="footer-right">
+      <div class="page-no" aria-label="Page number"></div>
+    </div>
+  </div>
 
 </body>
 </html>

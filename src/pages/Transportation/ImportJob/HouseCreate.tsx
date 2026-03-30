@@ -80,6 +80,8 @@ type HouseDetailsForm = {
   trade: string;
   // Agent fields sent in payload (no origin_agent_* keys)
   agent_name: string;
+  /** customer_code used for similar-booking API filters (not sent in payload) */
+  agent_code: string;
   agent_address: string;
   agent_email: string;
   /** internal select value; not sent in payload */
@@ -766,6 +768,11 @@ function HouseCreate() {
       trade: editData?.trade || "",
       agent_name:
         (editData as { agent_name?: string } | undefined)?.agent_name || "",
+      agent_code:
+        editIndex === undefined
+          ? location.state?.mblDetails?.origin_agent || ""
+          : (editData as { agent_code?: string } | undefined)?.agent_code ||
+            "",
       agent_address:
         (editData as { agent_address?: string } | undefined)?.agent_address ||
         "",
@@ -1009,14 +1016,14 @@ function HouseCreate() {
   useEffect(() => {
     if (isEditMode) return;
     const hblNo = form.values.hbl_number?.trim();
-    const agentName = form.values.agent_name?.trim();
-    if (hblNo && agentName) {
-      debouncedFetchSimilarBookings(hblNo, agentName);
+    const agentCode = form.values.agent_code?.trim();
+    if (hblNo && agentCode) {
+      debouncedFetchSimilarBookings(hblNo, agentCode);
     }
   }, [
     isEditMode,
     form.values.hbl_number,
-    form.values.agent_name,
+    form.values.agent_code,
     debouncedFetchSimilarBookings,
   ]);
 
@@ -1606,6 +1613,9 @@ function HouseCreate() {
     // In create mode: always set from MBL if available
     // In edit mode: only set if not already set (to preserve user edits)
     if (mblOriginAgent && mblOriginAgent.trim() !== "") {
+      if (!isEditMode || !form.values.agent_code) {
+        form.setFieldValue("agent_code", mblOriginAgent);
+      }
       // Auto-set HBL origin agent name from MBL origin agent name
       if (mblOriginAgentName && mblOriginAgentName.trim() !== "") {
         // Only set if not already set in edit mode, or always in create mode
@@ -3529,6 +3539,14 @@ function HouseCreate() {
                   onChange={(_value, _selectedData, originalData) => {
                     const newValue = _value || "";
                     form.setFieldValue("agent_name", newValue);
+                  const code =
+                    (originalData as Record<string, unknown> | undefined)
+                      ?.customer_code != null
+                      ? String(
+                          (originalData as Record<string, unknown>).customer_code,
+                        )
+                      : "";
+                  form.setFieldValue("agent_code", code);
 
                     if (
                       newValue &&
@@ -3565,6 +3583,7 @@ function HouseCreate() {
                     } else {
                       setOriginAgentAddressOptions([]);
                       form.setFieldValue("agent_address", "");
+                    form.setFieldValue("agent_code", "");
                     }
                   }}
                   returnOriginalData={true}

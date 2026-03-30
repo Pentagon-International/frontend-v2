@@ -10,7 +10,7 @@ import {
   Group,
   Select,
   Stack,
-  Stepper,
+  Tabs,
   Switch,
   Text,
   TextInput,
@@ -114,6 +114,9 @@ type AddressData = {
   gst_registration_status?: string;
   composite_regular?: string;
   sez?: boolean;
+  pan_aadhaar_link?: boolean;
+  Itr_filed?: "Yes" | "No" | "NA" | "";
+  tds_threshold_flag?: boolean;
   latitude?: number;
   longitude?: number;
 };
@@ -142,12 +145,12 @@ type SalespersonsResponse = {
   data: SalespersonData[];
 };
 
-/** Vendor-only TDS Section step: UI only, not sent with customer API or loaded from API */
 type TdsSectionRow = {
-  section_uid: string;
+  id: number | null;
+  section_id: number | null;
   section_code: string;
   section_name: string;
-  exemption_tds: string;
+  exemption_tds: boolean;
   exemption_certificate_no: string;
   tds_percent: string;
   valid_from: Date | null;
@@ -160,16 +163,40 @@ type TdsDisplayFormValues = {
 };
 
 const emptyTdsSectionRow = (): TdsSectionRow => ({
-  section_uid: "",
+  id: null,
+  section_id: null,
   section_code: "",
   section_name: "",
-  exemption_tds: "",
+  exemption_tds: false,
   exemption_certificate_no: "",
   tds_percent: "",
   valid_from: null,
   valid_to: null,
   tds_lower_limit: "",
 });
+
+type TdsSectionPayloadRow = {
+  id?: number;
+  section_id: number;
+  exemption_tds: boolean;
+  exemption_certificate_no: string | null;
+  tds_percentage: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  tds_lower_limit: string | null;
+};
+
+type CustomerSubmitValues = CustomerFormData & {
+  tds_section_data?: TdsSectionPayloadRow[];
+};
+
+type TdsSectionMasterItem = {
+  id?: number;
+  tds_section_code?: string;
+  tds_section_name?: string;
+  tds_section_rate?: string;
+  status?: string;
+};
 
 // Separate validation schemas for each form
 const customerValidationSchema = yup.object({
@@ -257,6 +284,109 @@ const addressValidationSchema = yup.object({
     .min(1, "At least one address is required"),
 });
 
+const twoDecimalInputRegex = /^\d*(\.\d{0,2})?$/;
+const twoDecimalRequiredRegex = /^\d+(\.\d{1,2})?$/;
+
+function formatDateYYYYMMDD(value: Date | null): string | null {
+  if (!value) return null;
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, "0");
+  const d = String(value.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function parseDateYYYYMMDD(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function normalizeTwoDecimalString(value: string): string {
+  const v = value.trim();
+  if (!v) return "";
+  const n = Number(v);
+  if (!isFinite(n)) return v;
+  return n.toFixed(2);
+}
+
+const tdsDisplayValidationSchema = yup
+  .object({
+    tds_sections: yup
+      .array()
+      .of(
+        yup.object({
+          section_id: yup
+            .number()
+            .nullable()
+            .required("Section name is required"),
+          section_code: yup.string().required("Section name is required"),
+          section_name: yup.string().required("Section name is required"),
+          exemption_tds: yup.boolean().required(),
+          exemption_certificate_no: yup
+            .string()
+            .when("exemption_tds", {
+              is: true,
+              then: (s) => s.required("Exemption certificate number is required"),
+              otherwise: (s) => s.optional(),
+            }),
+          tds_percent: yup
+            .string()
+            .when("exemption_tds", {
+              is: true,
+              then: (s) =>
+                s
+                  .required("TDS % is required")
+                  .matches(
+                    twoDecimalRequiredRegex,
+                    "Enter a valid number",
+                  ),
+              otherwise: (s) =>
+                s
+                  .optional()
+                  .test(
+                    "two-decimals",
+                    "Enter a valid number",
+                    (v) => !v || twoDecimalRequiredRegex.test(v),
+                  ),
+            }),
+          valid_from: yup.date().nullable().when("exemption_tds", {
+            is: true,
+            then: (s) => s.required("Valid from is required"),
+            otherwise: (s) => s.optional(),
+          }),
+          valid_to: yup.date().nullable().when("exemption_tds", {
+            is: true,
+            then: (s) => s.required("Valid to is required"),
+            otherwise: (s) => s.optional(),
+          }),
+          tds_lower_limit: yup
+            .string()
+            .when("exemption_tds", {
+              is: true,
+              then: (s) =>
+                s
+                  .required("TDS lower limit is required")
+                  .matches(
+                    twoDecimalRequiredRegex,
+                    "Enter a valid number",
+                  ),
+              otherwise: (s) =>
+                s
+                  .optional()
+                  .test(
+                    "two-decimals",
+                    "Enter a valid number",
+                    (v) => !v || twoDecimalRequiredRegex.test(v),
+                  ),
+            }),
+        }),
+      )
+      .min(1, "At least one TDS section is required"),
+  })
+  .required();
+
 // Term code options
 const termCodeOptions = [
   { label: "Credit", value: "CREDIT" },
@@ -269,6 +399,7 @@ const AddressCard = memo(
   ({
     index,
     isViewMode,
+    isVendorMasterRoute,
     addressForm,
     countryOptions,
     selectedCountries,
@@ -284,12 +415,12 @@ const AddressCard = memo(
     handleClearCustomCity,
     customCities,
     citySearchValues,
-    getCityName,
     onRemove,
     canRemove,
   }: {
     index: number;
     isViewMode: boolean;
+    isVendorMasterRoute: boolean;
     addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
     countryOptions: { value: string; label: string }[];
     selectedCountries: Record<number, string>;
@@ -299,7 +430,6 @@ const AddressCard = memo(
     getStateValue: (index: number) => string;
     cityOptions: { value: string; label: string }[];
     getCityValue: (cityName: string) => string;
-    getCityName: (cityValue: string) => string;
     handleCountryChange: (index: number, countryCode: string) => void;
     handleStateChange: (index: number, stateId: string) => void;
     handleCityChange: (index: number, cityId: string) => void;
@@ -313,8 +443,24 @@ const AddressCard = memo(
   }) => {
     return (
       <Card key={index} shadow="xs" padding="md">
-        <Grid>
-          <Grid.Col span={4}>
+        <Stack gap="sm">
+          <Card withBorder radius="md" padding="md">
+            <Box
+              mb="sm"
+              px="sm"
+              py={6}
+              style={{
+                backgroundColor: "#F3F7FA",
+                border: "1px solid #D7E3ED",
+                borderRadius: 8,
+              }}
+            >
+              <Text size="sm" fw={600} c="#105476">
+                Address
+              </Text>
+            </Box>
+            <Grid>
+            <Grid.Col span={4}>
             <TextInput
               label="Location"
               placeholder="Enter location"
@@ -331,7 +477,11 @@ const AddressCard = memo(
                 );
               }}
               error={
-                addressForm.errors.addresses_data?.[index]?.customer_location
+                (
+                  addressForm.errors as unknown as {
+                    addresses_data?: Array<Partial<Record<string, string>>>;
+                  }
+                ).addresses_data?.[index]?.customer_location
               }
             />
           </Grid.Col>
@@ -424,7 +574,13 @@ const AddressCard = memo(
                   const formattedValue = toTitleCase(e.target.value);
                   handleCustomCityChange(index, formattedValue);
                 }}
-                error={addressForm.errors.addresses_data?.[index]?.city}
+                error={
+                  (
+                    addressForm.errors as unknown as {
+                      addresses_data?: Array<Partial<Record<string, string>>>;
+                    }
+                  ).addresses_data?.[index]?.city
+                }
                 rightSection={
                   !isViewMode && (
                     <ActionIcon
@@ -507,102 +663,201 @@ const AddressCard = memo(
               disabled={isViewMode}
               {...addressForm.getInputProps(`addresses_data.${index}.email`)}
             />
-          </Grid.Col>
+            </Grid.Col>
+            </Grid>
+          </Card>
 
-          <Grid.Col span={4}>
-            <TextInput
-              label="PAN No"
-              placeholder="Enter PAN number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <TextInput
-              label="GST No"
-              placeholder="Enter GST number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <TextInput
-              label="TAN No"
-              placeholder="Enter TAN number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.tan_no`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <TextInput
-              label="ARN No"
-              placeholder="Enter ARN number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.arn_no`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <TextInput
-              label="UIN No"
-              placeholder="Enter UIN number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.uin_no`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <Select
-              label="GST Registration Status"
-              placeholder="Select status"
-              data={[
-                { value: "Registered", label: "Registered" },
-                { value: "Unregistered", label: "Unregistered" },
-              ]}
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.gst_registration_status`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <Select
-              label="Composite / Regular"
-              placeholder="Select"
-              data={[
-                { value: "composite", label: "Composite" },
-                { value: "Regular", label: "Regular" },
-              ]}
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.composite_regular`)}
-            />
-          </Grid.Col>
-          <Grid.Col span={4}>
-            <Switch
-              label="SEZ"
-              description={addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"}
-              disabled={isViewMode}
-              checked={Boolean(addressForm.values.addresses_data[index]?.sez)}
-              onChange={(e) =>
-                addressForm.setFieldValue(
-                  `addresses_data.${index}.sez`,
-                  e.currentTarget.checked,
-                )
-              }
-            />
-          </Grid.Col>
+          <Card withBorder radius="md" padding="md">
+            <Box
+              mb="sm"
+              px="sm"
+              py={6}
+              style={{
+                backgroundColor: "#F3F7FA",
+                border: "1px solid #D7E3ED",
+                borderRadius: 8,
+              }}
+            >
+              <Text size="sm" fw={600} c="#105476">
+                GST
+              </Text>
+            </Box>
+            <Grid>
+            <Grid.Col span={4}>
+              <TextInput
+                label="PAN No"
+                placeholder="Enter PAN number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <TextInput
+                label="GST No"
+                placeholder="Enter GST number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <TextInput
+                label="TAN No"
+                placeholder="Enter TAN number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.tan_no`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <TextInput
+                label="ARN No"
+                placeholder="Enter ARN number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.arn_no`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <TextInput
+                label="UIN No"
+                placeholder="Enter UIN number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.uin_no`)}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <Select
+                label="GST Registration Status"
+                placeholder="Select status"
+                data={[
+                  { value: "Registered", label: "Registered" },
+                  { value: "Unregistered", label: "Unregistered" },
+                ]}
+                disabled={isViewMode}
+                {...addressForm.getInputProps(
+                  `addresses_data.${index}.gst_registration_status`,
+                )}
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
+              <Select
+                label="Composite / Regular"
+                placeholder="Select"
+                data={[
+                  { value: "composite", label: "Composite" },
+                  { value: "Regular", label: "Regular" },
+                ]}
+                disabled={isViewMode}
+                {...addressForm.getInputProps(
+                  `addresses_data.${index}.composite_regular`,
+                )}
+              />
+            </Grid.Col>
 
-          <Grid.Col span={12}>
-            <Group justify="right" mb="md">
-              {canRemove && (
-                <ActionIcon
-                  variant="light"
-                  color="red"
-                  onClick={() => onRemove(index)}
+            {isVendorMasterRoute && (
+              <Grid.Col span={4}>
+                <Select
+                  label="Income tax return filed"
+                  placeholder="Select"
+                  data={[
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" },
+                      { value: "NA", label: "NA" },
+                  ]}
                   disabled={isViewMode}
-                >
-                  <IconTrash size={16} />
-                </ActionIcon>
-              )}
-            </Group>
-          </Grid.Col>
-        </Grid>
+                  {...addressForm.getInputProps(`addresses_data.${index}.Itr_filed`)}
+                />
+              </Grid.Col>
+            )}
+
+            <Grid.Col span={4}>
+              <Box pt={22}>
+                <Switch
+                  label="SEZ"
+                  description={
+                    addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
+                  }
+                  disabled={isViewMode}
+                  checked={Boolean(addressForm.values.addresses_data[index]?.sez)}
+                  onChange={(e) =>
+                    addressForm.setFieldValue(
+                      `addresses_data.${index}.sez`,
+                      e.currentTarget.checked,
+                    )
+                  }
+                />
+              </Box>
+            </Grid.Col>
+
+            {isVendorMasterRoute && (
+              <>
+                <Grid.Col span={4}>
+                  <Box pt={22}>
+                    <Switch
+                      label="PAN/Aadhaar linked"
+                      description={
+                        addressForm.values.addresses_data[index]
+                          ?.pan_aadhaar_link
+                          ? "Yes"
+                          : "No"
+                      }
+                      disabled={isViewMode}
+                      checked={Boolean(
+                        addressForm.values.addresses_data[index]
+                          ?.pan_aadhaar_link,
+                      )}
+                      onChange={(e) =>
+                        addressForm.setFieldValue(
+                          `addresses_data.${index}.pan_aadhaar_link`,
+                          e.currentTarget.checked,
+                        )
+                      }
+                    />
+                  </Box>
+                </Grid.Col>
+
+                <Grid.Col span={4}>
+                  <Box pt={22}>
+                    <Switch
+                      label="TDS less than 50,000"
+                      description={
+                        addressForm.values.addresses_data[index]
+                          ?.tds_threshold_flag
+                          ? "Yes"
+                          : "No"
+                      }
+                      disabled={isViewMode}
+                      checked={Boolean(
+                        addressForm.values.addresses_data[index]
+                          ?.tds_threshold_flag,
+                      )}
+                      onChange={(e) =>
+                        addressForm.setFieldValue(
+                          `addresses_data.${index}.tds_threshold_flag`,
+                          e.currentTarget.checked,
+                        )
+                      }
+                    />
+                  </Box>
+                </Grid.Col>
+              </>
+            )}
+
+            <Grid.Col span={12}>
+              <Group justify="right" mb="md">
+                {canRemove && (
+                  <ActionIcon
+                    variant="light"
+                    color="red"
+                    onClick={() => onRemove(index)}
+                    disabled={isViewMode}
+                  >
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                )}
+              </Group>
+            </Grid.Col>
+            </Grid>
+          </Card>
+        </Stack>
       </Card>
     );
   },
@@ -643,6 +898,11 @@ function CustomerCreate() {
   >({});
   const [isFormInitialized, setIsFormInitialized] = useState(false);
   const [addressStateRestored, setAddressStateRestored] = useState(false);
+  // For edit flow: keep existing row IDs keyed by `section_id` so we can send them back on update.
+  const [tdsIdBySectionId, setTdsIdBySectionId] = useState<
+    Record<number, number>
+  >({});
+  const [tdsType, setTdsType] = useState<"Company" | "Individual" | "Partnership" | "">("");
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -651,16 +911,19 @@ function CustomerCreate() {
   const isVendorMasterRoute = location.pathname.includes("/master/vendor");
   const baseMasterPath = isVendorMasterRoute ? "/master/vendor" : "/master/customer";
 
-  const tdsDisplayForm = useForm<TdsDisplayFormValues>({
-    initialValues: {
-      tds_sections: [emptyTdsSectionRow()],
-    },
-  });
-
   // Determine the mode based on route parameters
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
   const isViewMode = Boolean(params.id && location.pathname.includes("/view/"));
   const isCreateMode = !params.id;
+
+  const tdsDisplayForm = useForm<TdsDisplayFormValues>({
+    initialValues: {
+      tds_sections: [emptyTdsSectionRow()],
+    },
+    validate: isViewMode ? undefined : yupResolver(tdsDisplayValidationSchema),
+    validateInputOnChange: false,
+    validateInputOnBlur: false,
+  });
 
   // Customer ID from route parameters
   const customerId = params.id;
@@ -841,6 +1104,36 @@ function CustomerCreate() {
       }));
   }, [countries]);
 
+  // Fetch TDS section master data for vendor TDS Section step
+  const { data: tdsSectionMaster = [] } = useQuery({
+    queryKey: ["tdsSectionMaster"],
+    queryFn: async () => {
+      try {
+        const response = await getAPICall(`${URL.tdsSectionMaster}`, API_HEADER);
+        return (response as { data?: unknown[] })?.data ?? response ?? [];
+      } catch (error) {
+        console.error("Error fetching TDS section master:", error);
+        return [];
+      }
+    },
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    enabled: isVendorMasterRoute,
+  });
+
+  const tdsSectionOptions = useMemo(() => {
+    const rows = (tdsSectionMaster ?? []) as TdsSectionMasterItem[];
+    return rows
+      .filter((r) => (r.status ? String(r.status).toUpperCase() === "ACTIVE" : true))
+      .filter((r) => r.tds_section_code && r.tds_section_name)
+      .map((r) => ({
+        value: String(r.id ?? ""),
+        label: String(r.tds_section_name),
+        section_code: String(r.tds_section_code),
+      }));
+  }, [tdsSectionMaster]);
+
   // Memoize city options (large dataset - 1292kb)
   const cityOptions = useMemo(() => {
     return cities
@@ -881,6 +1174,9 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          pan_aadhaar_link: false,
+          Itr_filed: "",
+          tds_threshold_flag: false,
           latitude: 0,
           longitude: 0,
         },
@@ -916,6 +1212,9 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          pan_aadhaar_link: false,
+          Itr_filed: "",
+          tds_threshold_flag: false,
           latitude: 0,
           longitude: 0,
         },
@@ -1084,6 +1383,7 @@ function CustomerCreate() {
     states,
     cities,
     addressForm,
+    customerForm,
   ]);
 
   // Function to fetch customer data for edit/view mode
@@ -1099,6 +1399,20 @@ function CustomerCreate() {
             name?: string;
             customer_type?: string;
             credit_type?: string;
+            assigned_to_display?: string;
+            tds_type?: string;
+            tds_section_data?: Array<{
+              id?: number;
+              section_id?: number;
+              section_code?: string;
+              section_name?: string;
+              exemption_tds?: boolean;
+              exemption_certificate_no?: string;
+              tds_percentage?: string;
+              valid_from?: string | null;
+              valid_to?: string | null;
+              tds_lower_limit?: string;
+            }>;
           };
 
           // Process the fetched data
@@ -1139,14 +1453,19 @@ function CustomerCreate() {
                 phone_no: addr.phone_no || addr.landline || addr.phone || "",
                 mobile_no: addr.mobile_no || addr.mobile || "",
                 email: addr.email || "",
-                pan_no: (addr as any).pan_no ?? "",
-                gst_id: (addr as any).gst_id ?? "",
-                tan_no: (addr as any).tan_no ?? "",
-                arn_no: (addr as any).arn_no ?? "",
-                uin_no: (addr as any).uin_no ?? "",
-                gst_registration_status: (addr as any).gst_registration_status ?? "",
-                composite_regular: (addr as any).composite_regular ?? "",
-                sez: Boolean((addr as any).sez),
+                pan_no: addr.pan_no ?? "",
+                pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
+                Itr_filed: (addr as AddressData).Itr_filed ?? "",
+                tds_threshold_flag: Boolean(
+                  (addr as AddressData).tds_threshold_flag,
+                ),
+                gst_id: addr.gst_id ?? "",
+                tan_no: addr.tan_no ?? "",
+                arn_no: addr.arn_no ?? "",
+                uin_no: addr.uin_no ?? "",
+                gst_registration_status: addr.gst_registration_status ?? "",
+                composite_regular: addr.composite_regular ?? "",
+                sez: Boolean(addr.sez),
                 latitude: addr.latitude || 0,
                 longitude: addr.longitude || 0,
               };
@@ -1214,6 +1533,46 @@ function CustomerCreate() {
             addresses_data: formData.addresses_data,
           });
 
+          if (isVendorMasterRoute && typeof fetchedCustomerData.tds_type === "string") {
+            setTdsType(
+              (fetchedCustomerData.tds_type as
+                | "Company"
+                | "Individual"
+                | "Partnership"
+                | "") ?? "",
+            );
+          }
+
+          // Vendor-only: restore TDS section rows
+          if (isVendorMasterRoute && Array.isArray(fetchedCustomerData.tds_section_data)) {
+            const rows: TdsSectionRow[] =
+              fetchedCustomerData.tds_section_data.length > 0
+                ? fetchedCustomerData.tds_section_data.map((r) => ({
+                    id: r.id ?? null,
+                    section_id: r.section_id ?? null,
+                    section_code: r.section_code ?? "",
+                    section_name: r.section_name ?? "",
+                    exemption_tds: Boolean(r.exemption_tds),
+                    exemption_certificate_no: r.exemption_certificate_no ?? "",
+                    tds_percent:
+                      r.tds_percentage != null ? String(r.tds_percentage) : "",
+                    valid_from: parseDateYYYYMMDD(r.valid_from),
+                    valid_to: parseDateYYYYMMDD(r.valid_to),
+                    tds_lower_limit:
+                      r.tds_lower_limit != null ? String(r.tds_lower_limit) : "",
+                  }))
+                : [emptyTdsSectionRow()];
+
+            const idMap: Record<number, number> = {};
+            fetchedCustomerData.tds_section_data.forEach((r) => {
+              if (r.section_id != null && r.id != null) {
+                idMap[r.section_id] = r.id;
+              }
+            });
+            setTdsIdBySectionId(idMap);
+            tdsDisplayForm.setValues({ tds_sections: rows });
+          }
+
           // Initialize selected countries and states for cascading dropdowns
           const newSelectedCountries: Record<number, string> = {};
           const newSelectedStates: Record<number, string> = {};
@@ -1266,7 +1625,7 @@ function CustomerCreate() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [countries, customerTypes, cities], // Added countries and cities dependency (forms excluded to prevent infinite loops)
+    [countries, customerTypes, cities, isVendorMasterRoute, tdsDisplayForm], // Added countries and cities dependency (forms excluded to prevent infinite loops)
   );
 
   // Fetch customer data when in edit or view mode (only if not coming back from relationship mapping)
@@ -1329,7 +1688,7 @@ function CustomerCreate() {
             // If city not found, keep original value (could be city_code or custom city name)
           }
           return {
-            id: (addr as any).id, // Include id if it exists (for edit mode)
+            id: addr.id, // Include id if it exists (for edit mode)
             customer_location: addr.customer_location || addr.location || "",
             address_type: addr.address_type || "Primary",
             address: addr.address || "",
@@ -1340,14 +1699,19 @@ function CustomerCreate() {
             phone_no: addr.phone_no || addr.landline || addr.phone || "",
             mobile_no: addr.mobile_no || addr.mobile || "",
             email: addr.email || "",
-            pan_no: (addr as any).pan_no ?? "",
-            gst_id: (addr as any).gst_id ?? "",
-            tan_no: (addr as any).tan_no ?? "",
-            arn_no: (addr as any).arn_no ?? "",
-            uin_no: (addr as any).uin_no ?? "",
-            gst_registration_status: (addr as any).gst_registration_status ?? "",
-            composite_regular: (addr as any).composite_regular ?? "",
-            sez: Boolean((addr as any).sez),
+            pan_no: addr.pan_no ?? "",
+            pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
+            Itr_filed: (addr as AddressData).Itr_filed ?? "",
+            tds_threshold_flag: Boolean(
+              (addr as AddressData).tds_threshold_flag,
+            ),
+            gst_id: addr.gst_id ?? "",
+            tan_no: addr.tan_no ?? "",
+            arn_no: addr.arn_no ?? "",
+            uin_no: addr.uin_no ?? "",
+            gst_registration_status: addr.gst_registration_status ?? "",
+            composite_regular: addr.composite_regular ?? "",
+            sez: Boolean(addr.sez),
             latitude: addr.latitude || 0,
             longitude: addr.longitude || 0,
           };
@@ -1407,6 +1771,73 @@ function CustomerCreate() {
         addresses_data: formData.addresses_data,
       });
 
+      // Vendor-only: when coming from list page, restore TDS rows from location.state.
+      if (
+        isVendorMasterRoute &&
+        Array.isArray(
+          (customerData as unknown as { tds_section_data?: unknown[] } | undefined)
+            ?.tds_section_data,
+        )
+      ) {
+        const incoming = (
+          customerData as unknown as { tds_section_data?: Array<{
+          id?: number;
+          section_id?: number;
+          section_code?: string;
+          section_name?: string;
+          exemption_tds?: boolean;
+          exemption_certificate_no?: string;
+          tds_percentage?: string;
+          valid_from?: string | null;
+          valid_to?: string | null;
+          tds_lower_limit?: string;
+        }> } | undefined
+        )?.tds_section_data;
+
+        const incomingRows = incoming ?? [];
+
+        const rows: TdsSectionRow[] =
+          incomingRows.length > 0
+            ? incomingRows.map((r) => ({
+                id: r.id ?? null,
+                section_id: r.section_id ?? null,
+                section_code: r.section_code ?? "",
+                section_name: r.section_name ?? "",
+                exemption_tds: Boolean(r.exemption_tds),
+                exemption_certificate_no: r.exemption_certificate_no ?? "",
+                tds_percent:
+                  r.tds_percentage != null ? String(r.tds_percentage) : "",
+                valid_from: parseDateYYYYMMDD(r.valid_from),
+                valid_to: parseDateYYYYMMDD(r.valid_to),
+                tds_lower_limit:
+                  r.tds_lower_limit != null ? String(r.tds_lower_limit) : "",
+              }))
+            : [emptyTdsSectionRow()];
+
+        const idMap: Record<number, number> = {};
+        incomingRows.forEach((r) => {
+          if (r.section_id != null && r.id != null) {
+            idMap[r.section_id] = r.id;
+          }
+        });
+        setTdsIdBySectionId(idMap);
+        tdsDisplayForm.setValues({ tds_sections: rows });
+      }
+
+      if (
+        isVendorMasterRoute &&
+        typeof (customerData as unknown as { tds_type?: unknown } | undefined)?.tds_type ===
+          "string"
+      ) {
+        setTdsType(
+          ((customerData as unknown as { tds_type?: string } | undefined)?.tds_type as
+            | "Company"
+            | "Individual"
+            | "Partnership"
+            | "") ?? "",
+        );
+      }
+
       // Initialize selected countries and states for cascading dropdowns
       const newSelectedCountries: Record<number, string> = {};
       const newSelectedStates: Record<number, string> = {};
@@ -1453,37 +1884,7 @@ function CustomerCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerData, isLoading, isFormInitialized, countries, cities]); // Added countries and cities dependency (forms excluded to prevent infinite loops)
 
-  const maxStepIndex = isVendorMasterRoute ? 2 : 1;
-
-  const handleNext = () => {
-    if (isViewMode) {
-      setActive((current) => Math.min(current + 1, maxStepIndex));
-      return;
-    }
-
-    if (active === 0) {
-      const customerResult = customerForm.validate();
-      if (!customerResult.hasErrors) {
-        setActive(1);
-      }
-      return;
-    }
-
-    if (active === 1) {
-      const addressResult = addressForm.validate();
-      if (addressResult.hasErrors) {
-        addressForm.validate();
-        return;
-      }
-      if (isVendorMasterRoute) {
-        setActive(2);
-      }
-    }
-  };
-
-  const handleBack = () => {
-    setActive((current) => current - 1);
-  };
+  // Tabs navigation handled via setActive.
 
   const addAddress = () => {
     const newAddress = {
@@ -1585,31 +1986,7 @@ function CustomerCreate() {
   );
 
   // Check if city exists in dropdown options
-  const isCityInDropdown = useCallback(
-    (cityValue: string) => {
-      if (!cityValue) return false;
-      const city = cities.find(
-        (c) => c.city_name === cityValue || c.city_code === cityValue,
-      );
-      return !!city;
-    },
-    [cities],
-  );
-
-  // Get city name from stored value (code or name)
-  const getCityName = useCallback(
-    (cityValue: string) => {
-      if (!cityValue) return "";
-      // Try to find by city_name first
-      let city = cities.find((c) => c.city_name === cityValue);
-      // If not found, try to find by city_code
-      if (!city) {
-        city = cities.find((c) => c.city_code === cityValue);
-      }
-      return city ? city.city_name : cityValue; // Return city name if found, otherwise return the value as-is (custom city)
-    },
-    [cities],
-  );
+  // (Removed unused city helpers)
 
   // Handle country selection - wrapped in useCallback for better performance
   const handleCountryChange = useCallback(
@@ -1778,7 +2155,7 @@ function CustomerCreate() {
     [customerForm, addressForm],
   );
 
-  const createCustomer = async (values: CustomerFormData): Promise<void> => {
+  const createCustomer = async (values: CustomerSubmitValues): Promise<void> => {
     try {
       setIsSubmitting(true);
       const payload = {
@@ -1786,6 +2163,7 @@ function CustomerCreate() {
         customer_type_code: values.customer_type_code,
         term_code: values.term_code,
         own_office: values.own_office === "true",
+        status: "ACTIVE",
         assigned_to: values.assigned_to,
         network_id: values.network_id ? Number(values.network_id) : null,
         addresses_data: values.addresses_data.map((addr) => ({
@@ -1800,7 +2178,17 @@ function CustomerCreate() {
           gst_registration_status: addr.gst_registration_status ?? "",
           composite_regular: addr.composite_regular ?? "",
           sez: Boolean(addr.sez),
+          ...(isVendorMasterRoute
+            ? {
+                pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
+                Itr_filed: addr.Itr_filed ?? "",
+                tds_threshold_flag: Boolean(addr.tds_threshold_flag),
+              }
+            : {}),
         })),
+        ...(isVendorMasterRoute
+          ? { tds_type: tdsType, tds_section_data: values.tds_section_data ?? [] }
+          : {}),
       };
 
       const res = await postAPICall(URL.customer, payload, API_HEADER);
@@ -1812,15 +2200,16 @@ function CustomerCreate() {
         navigate(baseMasterPath, { state: { refreshData: true } });
       }
     } catch (err: unknown) {
+      const debugMessage =
+        err && typeof err === "object" && "message" in err
+          ? (err as { message?: unknown }).message
+          : undefined;
       console.log("🔍 CustomerCreate - createCustomer Error Caught:", {
         err,
         errType: typeof err,
         isError: err instanceof Error,
         hasMessage: err && typeof err === "object" && "message" in err,
-        message:
-          err && typeof err === "object" && "message" in err
-            ? (err as any).message
-            : undefined,
+        message: debugMessage,
       });
 
       // Extract error message from various error formats
@@ -1828,7 +2217,8 @@ function CustomerCreate() {
       if (err instanceof Error) {
         errorMessage = err.message;
       } else if (err && typeof err === "object" && "message" in err) {
-        errorMessage = String((err as any).message);
+        const msg = (err as { message?: unknown }).message;
+        errorMessage = typeof msg === "string" ? msg : String(msg);
       }
 
       console.log(
@@ -1845,7 +2235,7 @@ function CustomerCreate() {
     }
   };
 
-  const updateCustomer = async (values: CustomerFormData): Promise<void> => {
+  const updateCustomer = async (values: CustomerSubmitValues): Promise<void> => {
     try {
       setIsSubmitting(true);
       const payload = {
@@ -1854,10 +2244,11 @@ function CustomerCreate() {
         customer_type_code: values.customer_type_code,
         term_code: values.term_code,
         own_office: values.own_office === "true",
+        status: "ACTIVE",
         assigned_to: values.assigned_to,
         network_id: values.network_id ? Number(values.network_id) : null,
         addresses_data: values.addresses_data.map((addr) => {
-          const addressPayload: any = {
+          const addressPayload: AddressData & { id?: number } = {
             ...addr,
             address_type:
               addr.address_type === "Primary" ? "Primary" : addr.address_type,
@@ -1869,6 +2260,13 @@ function CustomerCreate() {
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
             sez: Boolean(addr.sez),
+            ...(isVendorMasterRoute
+              ? {
+                  pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
+                  Itr_filed: addr.Itr_filed ?? "",
+                  tds_threshold_flag: Boolean(addr.tds_threshold_flag),
+                }
+              : {}),
           };
 
           // Include id if it exists (for existing addresses in edit mode)
@@ -1878,6 +2276,9 @@ function CustomerCreate() {
 
           return addressPayload;
         }),
+        ...(isVendorMasterRoute
+          ? { tds_type: tdsType, tds_section_data: values.tds_section_data ?? [] }
+          : {}),
         // },
       };
 
@@ -1890,15 +2291,16 @@ function CustomerCreate() {
         navigate(baseMasterPath, { state: { refreshData: true } });
       }
     } catch (err: unknown) {
+      const debugMessage =
+        err && typeof err === "object" && "message" in err
+          ? (err as { message?: unknown }).message
+          : undefined;
       console.log("🔍 CustomerCreate - updateCustomer Error Caught:", {
         err,
         errType: typeof err,
         isError: err instanceof Error,
         hasMessage: err && typeof err === "object" && "message" in err,
-        message:
-          err && typeof err === "object" && "message" in err
-            ? (err as any).message
-            : undefined,
+        message: debugMessage,
       });
 
       // Extract error message from various error formats
@@ -1906,7 +2308,8 @@ function CustomerCreate() {
       if (err instanceof Error) {
         errorMessage = err.message;
       } else if (err && typeof err === "object" && "message" in err) {
-        errorMessage = String((err as any).message);
+        const msg = (err as { message?: unknown }).message;
+        errorMessage = typeof msg === "string" ? msg : String(msg);
       }
 
       console.log(
@@ -1932,16 +2335,50 @@ function CustomerCreate() {
     // Validate both forms before final submission
     const customerResult = customerForm.validate();
     const addressResult = addressForm.validate();
+    const tdsResult = isVendorMasterRoute ? tdsDisplayForm.validate() : null;
 
-    if (!customerResult.hasErrors && !addressResult.hasErrors) {
+    if (
+      !customerResult.hasErrors &&
+      !addressResult.hasErrors &&
+      (!isVendorMasterRoute || (tdsResult && !tdsResult.hasErrors))
+    ) {
       // Combine data from both forms
       if (customerForm.values.assigned_to === "Agent") {
         customerForm.values.assigned_to = "";
       }
-      const finalData = {
+      const finalData: CustomerSubmitValues = {
         ...customerForm.values,
         addresses_data: addressForm.values.addresses_data,
       };
+
+      if (isVendorMasterRoute) {
+        finalData.tds_section_data = (tdsDisplayForm.values.tds_sections || [])
+          .filter((r) => r.section_id != null)
+          .map((r) => ({
+            ...(r.id != null ? { id: r.id } : {}),
+            section_id: Number(r.section_id),
+            exemption_tds: Boolean(r.exemption_tds),
+            exemption_certificate_no: r.exemption_tds
+              ? r.exemption_certificate_no?.trim() || null
+              : null,
+            tds_percentage: r.exemption_tds
+              ? (() => {
+                  const v = normalizeTwoDecimalString(r.tds_percent || "");
+                  return v ? v : null;
+                })()
+              : null,
+            valid_from: r.exemption_tds
+              ? formatDateYYYYMMDD(r.valid_from)
+              : null,
+            valid_to: r.exemption_tds ? formatDateYYYYMMDD(r.valid_to) : null,
+            tds_lower_limit: r.exemption_tds
+              ? (() => {
+                  const v = normalizeTwoDecimalString(r.tds_lower_limit || "");
+                  return v ? v : null;
+                })()
+              : null,
+          }));
+      }
 
       // Decide between create and update strictly based on route mode,
       // so PAN-based prefill (which passes customerData without id) still uses create flow.
@@ -1954,14 +2391,23 @@ function CustomerCreate() {
       // Force re-render to show validation errors inline
       if (customerResult.hasErrors) {
         customerForm.validate();
+        setActive(0);
       }
       if (addressResult.hasErrors) {
         addressForm.validate();
+        if (!customerResult.hasErrors) setActive(1);
+      }
+      if (isVendorMasterRoute && tdsResult?.hasErrors) {
+        tdsDisplayForm.validate();
+        if (!customerResult.hasErrors && !addressResult.hasErrors) setActive(2);
       }
 
       // Show validation errors in console for debugging
       console.log("Customer form errors:", customerResult.errors);
       console.log("Address form errors:", addressResult.errors);
+      if (isVendorMasterRoute) {
+        console.log("TDS form errors:", tdsDisplayForm.errors);
+      }
     }
   };
 
@@ -2011,32 +2457,97 @@ function CustomerCreate() {
       )}
 
       {/* Header */}
-      <Text size="xl" fw={600} c="#105476" mb="lg">
-        {isCreateMode
-          ? isVendorMasterRoute
-            ? "Create Vendor"
-            : "Create Customer"
-          : isEditMode
+      <Group justify="space-between" align="center" mb="lg">
+        <Text size="xl" fw={600} c="#105476">
+          {isCreateMode
             ? isVendorMasterRoute
-              ? "Edit Vendor"
-              : "Edit Customer"
-            : isVendorMasterRoute
-              ? "View Vendor"
-              : "View Customer"}
-      </Text>
+              ? "Create Vendor"
+              : "Create Customer"
+            : isEditMode
+              ? isVendorMasterRoute
+                ? "Edit Vendor"
+                : "Edit Customer"
+              : isVendorMasterRoute
+                ? "View Vendor"
+                : "View Customer"}
+        </Text>
 
-      <Stepper
+        {!isViewMode && (
+          <Button
+            rightSection={<IconCheck size={16} />}
+            onClick={handleFinalSubmit}
+            color="teal"
+            disabled={isSubmitting}
+            loading={isSubmitting}
+          >
+            {isCreateMode ? "Create" : "Update"}
+          </Button>
+        )}
+      </Group>
+
+      <Tabs
+        value={String(active)}
+        onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        active={active}
-        onStepClick={setActive}
-        orientation="horizontal"
-        allowNextStepsSelect={isViewMode}
       >
-        {/* Step 1: Customer / Vendor Master */}
-        <Stepper.Step
-          label="1"
-          description={isVendorMasterRoute ? "Vendor Master" : "Customer Master"}
+        <Tabs.List
+          mb="md"
+          style={{
+            display: "flex",
+            gap: "8px",
+            flexWrap: "wrap",
+            borderBottom: "none",
+          }}
         >
+          <Tabs.Tab
+            value="0"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 0 ? 600 : 400,
+            }}
+          >
+            {isVendorMasterRoute ? "Vendor Master" : "Customer Master"}
+          </Tabs.Tab>
+
+          <Tabs.Tab
+            value="1"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 1 ? 600 : 400,
+            }}
+          >
+            Address
+          </Tabs.Tab>
+
+          {isVendorMasterRoute && (
+            <Tabs.Tab
+              value="2"
+              style={{
+                textAlign: "center",
+                padding: "12px",
+                backgroundColor: "transparent",
+                borderBottom: active === 2 ? "3px solid #105476" : "none",
+                color: "#105476",
+                fontSize: 16,
+                fontWeight: active === 2 ? 600 : 400,
+              }}
+            >
+              TDS Section
+            </Tabs.Tab>
+          )}
+        </Tabs.List>
+
+        <Tabs.Panel value="0">
           <Box mt="md">
             <Card shadow="sm" padding="lg" radius="md">
               <Grid gutter={"sm"}>
@@ -2161,26 +2672,27 @@ function CustomerCreate() {
                     ? "Back to Vendor List"
                     : "Back to Customer List"}
                 </Button>
-                <Button
-                  rightSection={<IconArrowRight size={14} />}
-                  onClick={handleNext}
-                  color="#105476"
-                  disabled={isSubmitting}
-                >
-                  Next
-                </Button>
+                <Group>
+                  <Button
+                    variant="default"
+                    onClick={() => setActive(1)}
+                    rightSection={<IconArrowRight size={14} />}
+                    disabled={isSubmitting}
+                  >
+                    Next
+                  </Button>
+                </Group>
               </Group>
             </Card>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
-        {/* Step 2: Address */}
-        <Stepper.Step label="2" description="Address">
+        <Tabs.Panel value="1">
           <Box mt="md">
-            <Card shadow="sm" padding="lg" radius="md">
-              <Text size="sm" fw={500}>
+            <Card shadow="sm" padding="xs" radius="md">
+              {/* <Text size="sm" fw={500}>
                 Address
-              </Text>
+              </Text> */}
 
               <Stack>
                 {addressForm.values.addresses_data.map((_, index) => (
@@ -2188,6 +2700,7 @@ function CustomerCreate() {
                     key={`address-${index}-${addressForm.values.addresses_data[index]?.city || ""}-${addressStateRestored}`}
                     index={index}
                     isViewMode={isViewMode}
+                    isVendorMasterRoute={isVendorMasterRoute}
                     addressForm={addressForm}
                     countryOptions={countryOptions}
                     selectedCountries={selectedCountries}
@@ -2203,7 +2716,6 @@ function CustomerCreate() {
                     handleClearCustomCity={handleClearCustomCity}
                     customCities={customCities}
                     citySearchValues={citySearchValues}
-                    getCityName={getCityName}
                     onRemove={removeAddress}
                     canRemove={addressForm.values.addresses_data.length > 1}
                   />
@@ -2226,7 +2738,7 @@ function CustomerCreate() {
                 <Button
                   variant="default"
                   leftSection={<IconArrowLeft size={16} />}
-                  onClick={handleBack}
+                  onClick={() => setActive(0)}
                   disabled={isSubmitting}
                 >
                   Back
@@ -2328,36 +2840,47 @@ function CustomerCreate() {
                   {isVendorMasterRoute && !isViewMode && (
                     <Button
                       rightSection={<IconArrowRight size={14} />}
-                      onClick={handleNext}
+                      onClick={() => setActive(2)}
                       color="#105476"
                       disabled={isSubmitting}
                     >
                       Next
                     </Button>
                   )}
-                  {!isVendorMasterRoute && (
-                    <Button
-                      rightSection={<IconCheck size={16} />}
-                      onClick={handleFinalSubmit}
-                      color="teal"
-                      disabled={isViewMode || isSubmitting}
-                      loading={isSubmitting}
-                      style={{ display: isViewMode ? "none" : "block" }}
-                    >
-                      {isCreateMode ? "Create" : "Update"}
-                    </Button>
-                  )}
+
                 </Group>
               </Group>
             </Card>
           </Box>
-        </Stepper.Step>
+        </Tabs.Panel>
 
         {isVendorMasterRoute && (
-          <Stepper.Step label="3" description="TDS Section">
+          <Tabs.Panel value="2">
             <Box mt="md">
               <Card shadow="sm" padding="lg" radius="md">
                 <Stack gap="md">
+                  <Grid gutter="sm">
+                    <Grid.Col span={4}>
+                      <Select
+                        label="TDS Type"
+                        placeholder="Select TDS type"
+                        data={[
+                          { value: "Company", label: "Company" },
+                          { value: "Individual", label: "Individual" },
+                          { value: "Partnership", label: "Partnership" },
+                        ]}
+                        disabled={isViewMode}
+                        value={tdsType}
+                        onChange={(v) =>
+                          setTdsType(
+                            (v as "Company" | "Individual" | "Partnership" | "") ??
+                              "",
+                          )
+                        }
+                      />
+                    </Grid.Col>
+                  </Grid>
+
                   {tdsDisplayForm.values.tds_sections.map((_, index) => (
                     <Card
                       key={index}
@@ -2389,13 +2912,53 @@ function CustomerCreate() {
                       </Group>
                       <Grid gutter="sm">
                         <Grid.Col span={4}>
-                          <TextInput
-                            label="Section UID"
-                            placeholder="Section UID"
+                          <Select
+                            label="Section Name"
+                            placeholder="Select section name"
+                            searchable
                             disabled={isViewMode}
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.section_uid`,
-                            )}
+                            data={tdsSectionOptions}
+                            value={
+                              tdsDisplayForm.values.tds_sections[index]
+                                ?.section_id != null
+                                ? String(
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.section_id,
+                                  )
+                                : ""
+                            }
+                            onChange={(value) => {
+                              const selected = tdsSectionOptions.find(
+                                (o) => o.value === value,
+                              );
+                              const sectionId =
+                                value != null && value !== ""
+                                  ? Number(value)
+                                  : null;
+                              tdsDisplayForm.setFieldValue(
+                                `tds_sections.${index}.section_id`,
+                                sectionId,
+                              );
+                              tdsDisplayForm.setFieldValue(
+                                `tds_sections.${index}.id`,
+                                sectionId != null
+                                  ? tdsIdBySectionId[sectionId] ?? null
+                                  : null,
+                              );
+                              tdsDisplayForm.setFieldValue(
+                                `tds_sections.${index}.section_code`,
+                                selected?.section_code || "",
+                              );
+                              tdsDisplayForm.setFieldValue(
+                                `tds_sections.${index}.section_name`,
+                                selected?.label || "",
+                              );
+                            }}
+                            error={
+                              tdsDisplayForm.getInputProps(
+                                `tds_sections.${index}.section_id`,
+                              ).error
+                            }
                             styles={{
                               input: { fontSize: "13px", fontFamily: "Inter" },
                               label: {
@@ -2412,7 +2975,7 @@ function CustomerCreate() {
                           <TextInput
                             label="Section Code"
                             placeholder="Section code"
-                            disabled={isViewMode}
+                            disabled
                             {...tdsDisplayForm.getInputProps(
                               `tds_sections.${index}.section_code`,
                             )}
@@ -2429,50 +2992,68 @@ function CustomerCreate() {
                           />
                         </Grid.Col>
                         <Grid.Col span={4}>
-                          <TextInput
-                            label="Section Name"
-                            placeholder="Section name"
-                            disabled={isViewMode}
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.section_name`,
-                            )}
-                            styles={{
-                              input: { fontSize: "13px", fontFamily: "Inter" },
-                              label: {
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                          <TextInput
-                            label="Exemption TDS"
-                            placeholder="Exemption TDS"
-                            disabled={isViewMode}
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.exemption_tds`,
-                            )}
-                            styles={{
-                              input: { fontSize: "13px", fontFamily: "Inter" },
-                              label: {
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
+                          <Box pt={30}>
+                            <Switch
+                              label="Exemption TDS"
+                              description={
+                                tdsDisplayForm.values.tds_sections[index]
+                                  ?.exemption_tds
+                                  ? "Yes"
+                                  : "No"
+                              }
+                              disabled={isViewMode}
+                              checked={Boolean(
+                                tdsDisplayForm.values.tds_sections[index]
+                                  ?.exemption_tds,
+                              )}
+                              onChange={(e) => {
+                                const checked = e.currentTarget.checked;
+                                tdsDisplayForm.setFieldValue(
+                                  `tds_sections.${index}.exemption_tds`,
+                                  checked,
+                                );
+
+                                // When exemption is turned off, clear dependent fields
+                                // so payload does not carry stale values.
+                                if (!checked) {
+                                  tdsDisplayForm.setFieldValue(
+                                    `tds_sections.${index}.exemption_certificate_no`,
+                                    "",
+                                  );
+                                  tdsDisplayForm.setFieldValue(
+                                    `tds_sections.${index}.tds_percent`,
+                                    "",
+                                  );
+                                  tdsDisplayForm.setFieldValue(
+                                    `tds_sections.${index}.valid_from`,
+                                    null,
+                                  );
+                                  tdsDisplayForm.setFieldValue(
+                                    `tds_sections.${index}.valid_to`,
+                                    null,
+                                  );
+                                  tdsDisplayForm.setFieldValue(
+                                    `tds_sections.${index}.tds_lower_limit`,
+                                    "",
+                                  );
+                                }
+                              }}
+                            />
+                          </Box>
                         </Grid.Col>
                         <Grid.Col span={4}>
                           <TextInput
                             label="Exemption Certificate No"
                             placeholder="Certificate number"
-                            disabled={isViewMode}
+                            disabled={
+                              isViewMode ||
+                              !tdsDisplayForm.values.tds_sections[index]
+                                ?.exemption_tds
+                            }
+                            withAsterisk={Boolean(
+                              tdsDisplayForm.values.tds_sections[index]
+                                ?.exemption_tds,
+                            )}
                             {...tdsDisplayForm.getInputProps(
                               `tds_sections.${index}.exemption_certificate_no`,
                             )}
@@ -2492,10 +3073,34 @@ function CustomerCreate() {
                           <TextInput
                             label="TDS %"
                             placeholder="TDS %"
-                            disabled={isViewMode}
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.tds_percent`,
+                            disabled={
+                              isViewMode ||
+                              !tdsDisplayForm.values.tds_sections[index]
+                                ?.exemption_tds
+                            }
+                            withAsterisk={Boolean(
+                              tdsDisplayForm.values.tds_sections[index]
+                                ?.exemption_tds,
                             )}
+                            inputMode="decimal"
+                            value={
+                              tdsDisplayForm.values.tds_sections[index]
+                                ?.tds_percent ?? ""
+                            }
+                            onChange={(e) => {
+                              const v = e.currentTarget.value.trim();
+                              if (v === "" || twoDecimalInputRegex.test(v)) {
+                                tdsDisplayForm.setFieldValue(
+                                  `tds_sections.${index}.tds_percent`,
+                                  v,
+                                );
+                              }
+                            }}
+                            error={
+                              tdsDisplayForm.getInputProps(
+                                `tds_sections.${index}.tds_percent`,
+                              ).error
+                            }
                             styles={{
                               input: { fontSize: "13px", fontFamily: "Inter" },
                               label: {
@@ -2512,32 +3117,86 @@ function CustomerCreate() {
                           <SingleDateInput
                             label="Valid From"
                             placeholder="Valid from"
-                            disabled={isViewMode}
-                            valueFormat="YYYY-MM-DD"
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.valid_from`,
-                            )}
+                            disabled={
+                              isViewMode ||
+                              !tdsDisplayForm.values.tds_sections[index]
+                                ?.exemption_tds
+                            }
+                            value={
+                              tdsDisplayForm.values.tds_sections[index]
+                                ?.valid_from ?? null
+                            }
+                            onChange={(value) =>
+                              tdsDisplayForm.setFieldValue(
+                                `tds_sections.${index}.valid_from`,
+                                value,
+                              )
+                            }
+                            error={
+                              tdsDisplayForm.getInputProps(
+                                `tds_sections.${index}.valid_from`,
+                              ).error
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={4}>
                           <SingleDateInput
                             label="Valid To"
                             placeholder="Valid to"
-                            disabled={isViewMode}
-                            valueFormat="YYYY-MM-DD"
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.valid_to`,
-                            )}
+                            disabled={
+                              isViewMode ||
+                              !tdsDisplayForm.values.tds_sections[index]
+                                ?.exemption_tds
+                            }
+                            value={
+                              tdsDisplayForm.values.tds_sections[index]
+                                ?.valid_to ?? null
+                            }
+                            onChange={(value) =>
+                              tdsDisplayForm.setFieldValue(
+                                `tds_sections.${index}.valid_to`,
+                                value,
+                              )
+                            }
+                            error={
+                              tdsDisplayForm.getInputProps(
+                                `tds_sections.${index}.valid_to`,
+                              ).error
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={4}>
                           <TextInput
                             label="TDS Lower Limit"
                             placeholder="TDS lower limit"
-                            disabled={isViewMode}
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.tds_lower_limit`,
+                            disabled={
+                              isViewMode ||
+                              !tdsDisplayForm.values.tds_sections[index]
+                                ?.exemption_tds
+                            }
+                            withAsterisk={Boolean(
+                              tdsDisplayForm.values.tds_sections[index]
+                                ?.exemption_tds,
                             )}
+                            inputMode="decimal"
+                            value={
+                              tdsDisplayForm.values.tds_sections[index]
+                                ?.tds_lower_limit ?? ""
+                            }
+                            onChange={(e) => {
+                              const v = e.currentTarget.value.trim();
+                              if (v === "" || twoDecimalInputRegex.test(v)) {
+                                tdsDisplayForm.setFieldValue(
+                                  `tds_sections.${index}.tds_lower_limit`,
+                                  v,
+                                );
+                              }
+                            }}
+                            error={
+                              tdsDisplayForm.getInputProps(
+                                `tds_sections.${index}.tds_lower_limit`,
+                              ).error
+                            }
                             styles={{
                               input: { fontSize: "13px", fontFamily: "Inter" },
                               label: {
@@ -2576,7 +3235,7 @@ function CustomerCreate() {
                   <Button
                     variant="default"
                     leftSection={<IconArrowLeft size={16} />}
-                    onClick={handleBack}
+                    onClick={() => setActive(1)}
                     disabled={isSubmitting}
                   >
                     Back
@@ -2591,23 +3250,15 @@ function CustomerCreate() {
                       {isViewMode ? "Back to List" : "Cancel"}
                     </Button>
                     {!isViewMode && (
-                      <Button
-                        rightSection={<IconCheck size={16} />}
-                        onClick={handleFinalSubmit}
-                        color="teal"
-                        disabled={isSubmitting}
-                        loading={isSubmitting}
-                      >
-                        {isCreateMode ? "Create" : "Update"}
-                      </Button>
+                      <Box />
                     )}
                   </Group>
                 </Group>
               </Card>
             </Box>
-          </Stepper.Step>
+          </Tabs.Panel>
         )}
-      </Stepper>
+      </Tabs>
     </Box>
   );
 }

@@ -2842,11 +2842,10 @@ function ImportJobCreate() {
 
       <Tabs
         value={String(active)}
-        onChange={(v) =>
-          v !== null &&
-          (isReadOnly || (mode === "edit" && jobData?.id)) &&
-          setActive(Number(v))
-        }
+        onChange={(v) => {
+          if (v === null) return;
+          setActive(Number(v));
+        }}
         color="#105476"
       >
         <Tabs.List
