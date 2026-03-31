@@ -2306,6 +2306,7 @@ function CallEntryNew() {
                               withAsterisk
                               searchable
                               clearable
+                              dropdownZIndex={3000}
                               data={["AIR", "FCL", "LCL"]}
                               rightSection={<IconChevronDown />}
                               {...profilingForm.getInputProps(
@@ -2334,6 +2335,7 @@ function CallEntryNew() {
                               placeholder="Type origin port"
                               apiEndpoint={URL.portMaster}
                               searchFields={["port_name", "port_code"]}
+                              dropdownZIndex={3000}
                               displayFormat={(item: any) => ({
                                 value: String(item.port_code),
                                 label: `${item.port_name} (${item.port_code})`,
@@ -2358,6 +2360,7 @@ function CallEntryNew() {
                               placeholder="Type destination port"
                               apiEndpoint={URL.portMaster}
                               searchFields={["port_name", "port_code"]}
+                              dropdownZIndex={3000}
                               displayFormat={(item: any) => ({
                                 value: String(item.port_code),
                                 label: `${item.port_name} (${item.port_code})`,
@@ -2407,6 +2410,7 @@ function CallEntryNew() {
                               placeholder="Select Frequency"
                               withAsterisk
                               searchable
+                              dropdownZIndex={3000}
                               clearable
                               data={frequencyProfile}
                               limit={50}
