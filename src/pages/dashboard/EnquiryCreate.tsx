@@ -9,7 +9,6 @@ import {
   Group,
   Loader,
   Modal,
-  NumberInput,
   Radio,
   Select,
   Stack,
@@ -58,6 +57,8 @@ import QuotationCreate from "./QuotationCreate";
 import { useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import { toTitleCase } from "../../utils/textFormatter";
+import { roundToDecimals } from "../../utils/numberInputUtils";
+import FormNumberInput from "../../components/FormNumberInput";
 import useAuthStore from "../../store/authStore";
 import CustomerDataDrawer from "../../components/CustomerDataDrawer/CustomerDataDrawer";
 import LastEnquiriesList from "./LastEnquiriesList";
@@ -1311,10 +1312,8 @@ function EnquiryCreate() {
             (cargo) => {
               const fclDetail: any = {
                 container_type: cargo.container_type_code,
-                no_of_containers: Number(cargo.no_of_containers) || 0,
-                gross_weight: cargo.gross_weight
-                  ? Number(cargo.gross_weight).toFixed(2)
-                  : "0.00",
+                no_of_containers: Math.trunc(Number(cargo.no_of_containers) || 0),
+                gross_weight: roundToDecimals(cargo.gross_weight, 2) ?? 0,
               };
               if (cargo.id) {
                 fclDetail.id = cargo.id;
@@ -1324,16 +1323,13 @@ function EnquiryCreate() {
           );
         } else if (effectiveServiceType === "AIR") {
           const cargo = serviceDetail.cargo_details[0];
-          servicePayload.no_of_packages = Number(cargo.no_of_packages) || 0;
-          servicePayload.gross_weight = cargo.gross_weight
-            ? Number(cargo.gross_weight).toFixed(2)
-            : "0.00";
-          servicePayload.volume_weight = cargo.volume_weight
-            ? Math.round(Number(cargo.volume_weight) * 1000) / 1000
-            : 0;
-          servicePayload.chargeable_weight = cargo.chargable_weight
-            ? Number(cargo.chargable_weight).toFixed(2)
-            : "0.00";
+          servicePayload.no_of_packages = Math.trunc(
+            Number(cargo.no_of_packages) || 0
+          );
+          servicePayload.gross_weight = roundToDecimals(cargo.gross_weight, 2) ?? 0;
+          servicePayload.volume_weight = roundToDecimals(cargo.volume_weight, 2) ?? 0;
+          servicePayload.chargeable_weight =
+            roundToDecimals(cargo.chargable_weight, 2) ?? 0;
           const dimUnit = serviceDetail.dimension_unit || "";
           const dimRows = Array.isArray(serviceDetail.diemensions)
             ? serviceDetail.diemensions
@@ -1341,15 +1337,15 @@ function EnquiryCreate() {
           if (dimUnit && dimRows.length > 0) {
             servicePayload.dimension_details = dimRows.map((r: any) => {
               const dimensionItem: any = {
-                pieces: Number(r?.pieces) || 0,
-                length: Number(r?.length) || 0,
-                width: Number(r?.width) || 0,
-                height: Number(r?.height) || 0,
-                value:
+                pieces: Math.trunc(Number(r?.pieces) || 0),
+                length: roundToDecimals(r?.length, 2) ?? 0,
+                width: roundToDecimals(r?.width, 2) ?? 0,
+                height: roundToDecimals(r?.height, 2) ?? 0,
+                value: roundToDecimals(
                   Number(r?.value) || getDimensionValue("AIR", dimUnit) || 0,
-                volume_weight: r?.vol_weight
-                  ? Math.round(Number(r.vol_weight) * 1000) / 1000
-                  : 0,
+                  2
+                ) ?? 0,
+                volume_weight: roundToDecimals(r?.vol_weight, 3) ?? 0,
                 dimension_unit: dimUnit,
               };
               if (r?.id) {
@@ -1360,16 +1356,13 @@ function EnquiryCreate() {
           }
         } else if (effectiveServiceType === "LCL") {
           const cargo = serviceDetail.cargo_details[0];
-          servicePayload.no_of_packages = Number(cargo.no_of_packages) || 0;
-          servicePayload.gross_weight = cargo.gross_weight
-            ? Number(cargo.gross_weight).toFixed(2)
-            : "0.00";
-          servicePayload.volume = cargo.volume
-            ? Number(cargo.volume).toFixed(3)
-            : "0.000";
-          servicePayload.chargeable_volume = cargo.chargable_volume
-            ? Number(cargo.chargable_volume).toFixed(3)
-            : "0.000";
+          servicePayload.no_of_packages = Math.trunc(
+            Number(cargo.no_of_packages) || 0
+          );
+          servicePayload.gross_weight = roundToDecimals(cargo.gross_weight, 2) ?? 0;
+          servicePayload.volume = roundToDecimals(cargo.volume, 3) ?? 0;
+          servicePayload.chargeable_volume =
+            roundToDecimals(cargo.chargable_volume, 3) ?? 0;
           const dimUnit = serviceDetail.dimension_unit || "";
           const dimRows = Array.isArray(serviceDetail.diemensions)
             ? serviceDetail.diemensions
@@ -1377,15 +1370,15 @@ function EnquiryCreate() {
           if (dimUnit && dimRows.length > 0) {
             servicePayload.dimension_details = dimRows.map((r: any) => {
               const dimensionItem: any = {
-                pieces: Number(r?.pieces) || 0,
-                length: Number(r?.length) || 0,
-                width: Number(r?.width) || 0,
-                height: Number(r?.height) || 0,
-                value:
+                pieces: Math.trunc(Number(r?.pieces) || 0),
+                length: roundToDecimals(r?.length, 2) ?? 0,
+                width: roundToDecimals(r?.width, 2) ?? 0,
+                height: roundToDecimals(r?.height, 2) ?? 0,
+                value: roundToDecimals(
                   Number(r?.value) || getDimensionValue("LCL", dimUnit) || 0,
-                volume_weight: r?.vol_weight
-                  ? Math.round(Number(r.vol_weight) * 1000) / 1000
-                  : 0,
+                  2
+                ) ?? 0,
+                volume_weight: roundToDecimals(r?.vol_weight, 3) ?? 0,
                 dimension_unit: dimUnit,
               };
               if (r?.id) {
@@ -6185,7 +6178,7 @@ function EnquiryCreate() {
                                   })() && (
                                     <Grid>
                                       <Grid.Col span={3}>
-                                        <NumberInput
+                                        <FormNumberInput
                                           hideControls
                                           rightSectionPointerEvents="none"
                                           key={serviceForm.key(
@@ -6247,7 +6240,7 @@ function EnquiryCreate() {
                                       </Grid.Col>
                                       {/* Dimension Unit + Add Button (AIR) */}
                                       <Grid.Col span={3}>
-                                        <NumberInput
+                                        <FormNumberInput
                                           hideControls
                                           styles={{
                                             input: {
@@ -6277,7 +6270,7 @@ function EnquiryCreate() {
                                         />
                                       </Grid.Col>
                                       <Grid.Col span={3}>
-                                        <NumberInput
+                                        <FormNumberInput
                                           hideControls
                                           key={serviceForm.key(
                                             `service_details.${serviceIndex}.cargo_details.0.volume_weight`
@@ -6336,7 +6329,7 @@ function EnquiryCreate() {
                                         />
                                       </Grid.Col>
                                       <Grid.Col span={3}>
-                                        <NumberInput
+                                        <FormNumberInput
                                           hideControls
                                           key={serviceForm.key(
                                             `service_details.${serviceIndex}.cargo_details.0.chargable_weight`
@@ -6435,7 +6428,7 @@ function EnquiryCreate() {
                                                 >
                                                   <Grid>
                                                     <Grid.Col span={1.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
                                                         allowDecimal={false}
                                                         decimalScale={0}
@@ -6496,7 +6489,7 @@ function EnquiryCreate() {
                                                           list[rowIdx] = {
                                                             ...(list[rowIdx] ||
                                                               {}),
-                                                            pieces: val,
+                                                            pieces: pieces,
                                                             value: v || null,
                                                             vol_weight:
                                                               isFinite(vol)
@@ -6511,10 +6504,10 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={1.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        allowDecimal={false}
-                                                        decimalScale={0}
+                                                        allowDecimal={true}
+                                                        decimalScale={2}
                                                         value={
                                                           row?.length ?? null
                                                         }
@@ -6587,10 +6580,10 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={1.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        allowDecimal={false}
-                                                        decimalScale={0}
+                                                        allowDecimal={true}
+                                                        decimalScale={2}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -6663,10 +6656,10 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={1.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        allowDecimal={false}
-                                                        decimalScale={0}
+                                                        allowDecimal={true}
+                                                        decimalScale={2}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -6739,10 +6732,10 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={2}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        allowDecimal={false}
-                                                        decimalScale={0}
+                                                        allowDecimal={true}
+                                                        decimalScale={2}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -6759,9 +6752,9 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={2.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        decimalScale={2}
+                                                        decimalScale={3}
                                                         styles={{
                                                           input: {
                                                             fontSize: "13px",
@@ -6854,7 +6847,7 @@ function EnquiryCreate() {
                                   })() === "LCL" && (
                                     <Grid>
                                       <Grid.Col span={3}>
-                                        <NumberInput
+                                        <FormNumberInput
                                           hideControls
                                           key={serviceForm.key(
                                             `service_details.${serviceIndex}.cargo_details.0.no_of_packages`
@@ -6914,7 +6907,7 @@ function EnquiryCreate() {
                                         />
                                       </Grid.Col>
                                       <Grid.Col span={3}>
-                                        <NumberInput
+                                        <FormNumberInput
                                           hideControls
                                           key={serviceForm.key(
                                             `service_details.${serviceIndex}.cargo_details.0.gross_weight`
@@ -6944,7 +6937,7 @@ function EnquiryCreate() {
                                         />
                                       </Grid.Col>
                                       <Grid.Col span={3}>
-                                        <NumberInput
+                                        <FormNumberInput
                                           hideControls
                                           key={serviceForm.key(
                                             `service_details.${serviceIndex}.cargo_details.0.volume`
@@ -7003,7 +6996,7 @@ function EnquiryCreate() {
                                         />
                                       </Grid.Col>
                                       <Grid.Col span={3}>
-                                        <NumberInput
+                                        <FormNumberInput
                                           hideControls
                                           key={serviceForm.key(
                                             `service_details.${serviceIndex}.cargo_details.0.chargable_volume`
@@ -7101,7 +7094,7 @@ function EnquiryCreate() {
                                                 >
                                                   <Grid>
                                                     <Grid.Col span={1.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
                                                         allowDecimal={false}
                                                         decimalScale={0}
@@ -7170,7 +7163,7 @@ function EnquiryCreate() {
                                                           list[rowIdx] = {
                                                             ...(list[rowIdx] ||
                                                               {}),
-                                                            pieces: val,
+                                                            pieces: pieces,
                                                             value: v || null,
                                                             vol_weight:
                                                               isFinite(vol)
@@ -7185,10 +7178,10 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={1.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        allowDecimal={false}
-                                                        decimalScale={0}
+                                                        allowDecimal={true}
+                                                        decimalScale={2}
                                                         value={
                                                           row?.length ?? null
                                                         }
@@ -7269,10 +7262,10 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={1.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        allowDecimal={false}
-                                                        decimalScale={0}
+                                                        allowDecimal={true}
+                                                        decimalScale={2}
                                                         value={
                                                           row?.width ?? null
                                                         }
@@ -7353,10 +7346,10 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={1.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        allowDecimal={false}
-                                                        decimalScale={0}
+                                                        allowDecimal={true}
+                                                        decimalScale={2}
                                                         value={
                                                           row?.height ?? null
                                                         }
@@ -7437,10 +7430,10 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={2}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        allowDecimal={false}
-                                                        decimalScale={0}
+                                                        allowDecimal={true}
+                                                        decimalScale={2}
                                                         value={
                                                           row?.value ?? null
                                                         }
@@ -7465,9 +7458,9 @@ function EnquiryCreate() {
                                                       />
                                                     </Grid.Col>
                                                     <Grid.Col span={2.5}>
-                                                      <NumberInput
+                                                      <FormNumberInput
                                                         hideControls
-                                                        decimalScale={2}
+                                                        decimalScale={3}
                                                         value={
                                                           row?.vol_weight ??
                                                           null
@@ -7607,7 +7600,7 @@ function EnquiryCreate() {
                                                 />
                                               </Grid.Col>
                                               <Grid.Col span={3}>
-                                                <NumberInput
+                                                <FormNumberInput
                                                   hideControls
                                                   key={serviceForm.key(
                                                     `service_details.${serviceIndex}.cargo_details.${cargoIndex}.no_of_containers`
@@ -7639,7 +7632,7 @@ function EnquiryCreate() {
                                                 />
                                               </Grid.Col>
                                               <Grid.Col span={3}>
-                                                <NumberInput
+                                                <FormNumberInput
                                                   hideControls
                                                   key={serviceForm.key(
                                                     `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
