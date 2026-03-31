@@ -1,178 +1,310 @@
-<!DOCTYPE html>
+<!doctype html>
 <!--
-  Job Cost Sheet (Template) — A4 Portrait
-  Static HTML (no scripts). Intended for backend HTML→PDF rendering.
-  Style approach mirrors your j-profit-report template: header + info grid + continuous table + running footer.
+  SubJob Cost Sheet — A4 Landscape
+  · Header: PDF-accurate — [logo] [company name+address] [title right]
+             PAN/GSTN strip at bottom of header
+  · No chips/pills — plain text header matching the PDF
+  · Meta table: 6-row key-value grid, flush with table-wrap (0 left gap)
+  · Cost table: Provisional cols (empty per PDF) + Actual cols with data
+  · Footer every page: "Ref: R00113 on 25-MAR-2026 by ACCHENNAI-CHENNAI"
+    left, "Page X of Y" right
+  · Design system: original job-cost-sheet.css tokens — unchanged
 -->
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Job Cost Sheet</title>
-  <link rel="stylesheet" href="job-cost-report.css" />
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SubJob Cost Sheet — R00113</title>
+    <link rel="stylesheet" href="job-cost-report.css" />
+  </head>
+  <body>
+    <div class="page-preview">
+      <!-- ══════════════════════════════════════════════════
+         HEADER — matches PDF exactly
+         [logo slot]  [company name + address]  [title right]
+         ── PAN/GSTN strip ─────────── ref string ──────────
+    ══════════════════════════════════════════════════════ -->
+      <header class="report-header">
+        <div class="header-top">
+          <!-- Logo placeholder (left) -->
+          <div class="logo-slot">Company<br />Logo</div>
 
-  <!-- Print/Download (hidden in print) -->
-  <div class="no-print" style="width:190mm;margin:12px auto 0;display:flex;justify-content:flex-end;gap:8px;">
-    <button type="button" style="border:1px solid #cbd5e1;background:#fff;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;" onclick="window.print()">
-      Print
-    </button>
-    <button type="button" style="border:1px solid #cbd5e1;background:#111827;color:#fff;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;" onclick="window.print()">
-      Download PDF
-    </button>
-  </div>
+          <!-- Company info (centre) -->
+          <div class="company">
+            <h1>Pentagon International Freight Solutions Pvt Ltd(Chennai)</h1>
+            <p>
+              No. 15, Dr. Gopala Menon Road, Kodambakkam, Chennai – 600 024.<br />
+              Tel + 91 4443012828 &nbsp;&nbsp;&nbsp;&nbsp; Email :-
+              <a href="mailto:customerservice.maa@pentagonindia.net" class="email-link">
+                customerservice.maa@pentagonindia.net
+              </a>
+            </p>
+            <div class="pan-gstn">
+              PAN NO : AAGCP4765J &nbsp;&nbsp;&nbsp;&nbsp; GSTN:-
+              33AAGCP4765J1Z5
+            </div>
+          </div>
 
-  <div class="page-preview">
-
-    <!-- ══════════════════════════════════════════════
-         HEADER — page 1 only
-    ══════════════════════════════════════════════ -->
-    <header class="report-header">
-      <div class="header-top">
-        <div class="company">
-          <h1>PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PVT LTD (CHENNAI)</h1>
-          <p>
-            No. 15, Dr. Gopala Menon Road, Kodambakkam, Chennai - 600 024.<br />
-            Tel: +91 4443012828 &nbsp; | &nbsp; Email: customerservice.maa@pentagonindia.net<br />
-            PAN NO: AAGCP4765J &nbsp; | &nbsp; GSTN: 33AAGCP4765J1Z5
-          </p>
+          <!-- Doc title block (right) -->
+          <div class="doc-title-block">
+            <div class="ref-text">
+              Ref: R00113 on 25-MAR-2026 by ACCHENNAI-CHENNAI
+            </div>
+            <div class="doc-currency">All in Local Currency</div>
+          </div>
         </div>
-        <div class="meta">
-          <div class="chip">Ref: R00113 · 25-Mar-2026 · ACHENNAI-CHENNAI</div>
-          <div class="chip">Currency: INR</div>
+
+        <!-- PAN / GSTN strip -->
+        <div class="header-strip">
+          <div class="doc-title">SubJob Cost Sheet</div>
         </div>
+      </header>
+
+      <!-- Breathing room -->
+      <div class="table-gap" aria-hidden="true"></div>
+
+      <!-- ══════════════════════════════════════════════════
+         META TABLE — job details (6 rows, PDF order)
+    ══════════════════════════════════════════════════════ -->
+      <div class="meta-wrap">
+        <table class="meta" aria-label="Job details">
+          <colgroup>
+            <col style="width: 10%" />
+            <col style="width: 14%" />
+            <col style="width: 10%" />
+            <col style="width: 14%" />
+            <col style="width: 8%" />
+            <col style="width: 14%" />
+            <col style="width: 10%" />
+            <col style="width: 20%" />
+          </colgroup>
+          <tbody>
+            <!-- Row 1 -->
+            <tr>
+              <td class="k">Job Ref</td>
+              <td class="v">FI-250338220001-1/02-MAR-26</td>
+              <td class="k">Freight</td>
+              <td class="v">COLLECT</td>
+              <td class="k">Origin</td>
+              <td class="v">SHANGHAI</td>
+              <td class="k">Weight</td>
+              <td class="v">25121</td>
+            </tr>
+            <!-- Row 2 -->
+            <tr>
+              <td class="k">Booking No</td>
+              <td class="v">382216000087</td>
+              <td class="k">Sales Person</td>
+              <td class="v">PARESH BHANUSHALI</td>
+              <td class="k">POL</td>
+              <td class="v">SHANGHAI / 09-FEB-26</td>
+              <td class="k">Volume</td>
+              <td class="v">18.4</td>
+            </tr>
+            <!-- Row 3 -->
+            <tr>
+              <td class="k">Trade Code</td>
+              <td class="v">IMPORT</td>
+              <td class="k">Shipper Name</td>
+              <td class="v">JIANGSU TELISON NEW MATERIALS CO., L</td>
+              <td class="k">POD</td>
+              <td class="v">CHENNAI / 02-MAR-26</td>
+              <td class="k">Loadability</td>
+              <td class="v">2.000 &nbsp;/18.4</td>
+            </tr>
+            <!-- Row 4 -->
+            <tr>
+              <td class="k">HBL No/HAWB</td>
+              <td class="v">871116000106</td>
+              <td class="k">Consignee Name</td>
+              <td class="v">RENEWSYS INDIA PVT LTD</td>
+              <td class="k">FDC</td>
+              <td class="v">CHENNAI</td>
+              <td class="k">No of Subjob</td>
+              <td class="v">1</td>
+            </tr>
+            <!-- Row 5 -->
+            <tr>
+              <td class="k">OBL No/MAWB</td>
+              <td class="v">ONEYSHAG02034600</td>
+              <td class="k">Agent Name</td>
+              <td class="v">PENTAGON PRIME CHINA CO LIMTED</td>
+              <td class="k">Container</td>
+              <td class="v">1x40'H</td>
+              <td class="k">Routed by</td>
+              <td class="v">SELF</td>
+            </tr>
+            <!-- Row 6 -->
+            <tr>
+              <td class="k">Billing Party</td>
+              <td class="v">C001113-RENEWSYS INDIA PVT LTD</td>
+              <td class="k">Cost Center</td>
+              <td class="v" colspan="5">XXXXXX-DEFAULT_COST_CENTER_CODE</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <div class="title-bar">
-        <div class="title-left"> </div>
-        <div class="title-center">
-          <h2>SubJob Cost Sheet</h2>
-        </div>
-        <div class="title-right">All in Local Currency</div>
+      <!-- ══════════════════════════════════════════════════
+         COST TABLE
+         · Provisional columns: empty (—) as per PDF
+         · Actual columns: Revenue, Cost, GP, GP/Unit filled
+         · thead repeats on every printed page
+    ══════════════════════════════════════════════════════ -->
+      <div class="table-wrap">
+        <table class="cost" aria-label="SubJob Cost Sheet Charges">
+          <colgroup>
+            <col class="c-charge" />
+            <col class="c-prov-rev" />
+            <col class="c-prov-cost" />
+            <col class="c-prov-neu" />
+            <col class="c-prov-gp" />
+            <col class="c-act-rev" />
+            <col class="c-act-cost" />
+            <col class="c-act-gp" />
+            <col class="c-act-gpu" />
+            <col class="c-act-neu" />
+          </colgroup>
+
+          <thead>
+            <!-- Group row -->
+            <tr class="group">
+              <th class="left">Charge Name</th>
+              <th colspan="4">Provisional</th>
+              <th colspan="5" class="act-start">Actual</th>
+            </tr>
+            <!-- Sub-column row -->
+            <tr class="sub">
+              <th class="left"></th>
+              <th class="num">Revenue</th>
+              <th class="num">Cost</th>
+              <th class="num">Neutral</th>
+              <th class="num">GP</th>
+              <th class="num act-start">Revenue</th>
+              <th class="num">Cost</th>
+              <th class="num">GP</th>
+              <th class="num">GP/Unit</th>
+              <th class="num">Neutral</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <!-- ══ FREIGHT ═══════════════════════════════════ -->
+            <tr class="section-row">
+              <td colspan="10">Freight</td>
+            </tr>
+
+            <!-- FREIGHT CHARGE -->
+            <tr>
+              <td class="left">FREIGHT CHARGE</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num act-start">102,882.83</td>
+              <td class="num">90,079.63</td>
+              <td class="num pos">12,803.20</td>
+              <td class="num pos">6,401.60</td>
+              <td class="num dash">—</td>
+            </tr>
+
+            <!-- SHIPPING LINE CHARGES -->
+            <tr>
+              <td class="left">SHIPPING LINE CHARGES</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num act-start">27,000.00</td>
+              <td class="num">28,541.00</td>
+              <td class="num neg">-1,541.00</td>
+              <td class="num neg">-770.50</td>
+              <td class="num dash">—</td>
+            </tr>
+
+            <!-- Freight Total -->
+            <tr class="subtotal-row">
+              <td class="center">Total &nbsp;:</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num act-start">1,29,882.83</td>
+              <td class="num">1,18,620.63</td>
+              <td class="num pos">11,262.20</td>
+              <td class="num pos">5,631.10</td>
+              <td class="num dash">—</td>
+            </tr>
+
+            <!-- ══ OTHERS ══════════════════════════════════ -->
+            <tr class="section-row">
+              <td colspan="10">Others</td>
+            </tr>
+
+            <!-- DELIVERY ORDER CHARGES -->
+            <tr>
+              <td class="left">DELIVERY ORDER CHARGES</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num act-start">1,000.00</td>
+              <td class="num dash">—</td>
+              <td class="num pos">1,000.00</td>
+              <td class="num pos">500.00</td>
+              <td class="num dash">—</td>
+            </tr>
+
+            <!-- Others Total -->
+            <tr class="subtotal-row">
+              <td class="center">Total &nbsp;:</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num act-start">1,000.00</td>
+              <td class="num dash">—</td>
+              <td class="num pos">1,000.00</td>
+              <td class="num pos">500.00</td>
+              <td class="num dash">—</td>
+            </tr>
+
+            <!-- ══ GRAND TOTAL ══════════════════════════════ -->
+            <tr class="grand-row">
+              <td class="center">Grand Total &nbsp;:</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num dash">—</td>
+              <td class="num act-start">1,30,882.83</td>
+              <td class="num">1,18,620.63</td>
+              <td class="num">12,262.20</td>
+              <td class="num">6,131.10</td>
+              <td class="num dash">—</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-    </header>
-
-    <!-- ══════════════════════════════════════════════
-         META TABLE (simple, printer-friendly)
-    ══════════════════════════════════════════════ -->
-    <section class="meta-table-wrap">
-      <table class="meta-table" aria-label="Job meta table">
-        <tbody>
-          <tr>
-            <td class="k">Job Ref</td><td class="v">FI-250338220001-1/02-MAR-26</td>
-            <td class="k">Freight</td><td class="v">COLLECT</td>
-            <td class="k">Origin</td><td class="v">SHANGHAI</td>
-            <td class="k">Weight</td><td class="v">25121</td>
-          </tr>
-          <tr>
-            <td class="k">Booking No</td><td class="v">382216000087</td>
-            <td class="k">Sales Person</td><td class="v">PARESH BHANUSHALI</td>
-            <td class="k">POL</td><td class="v">SHANGHAI / 09-FEB-26</td>
-            <td class="k">Volume</td><td class="v">18.4</td>
-          </tr>
-          <tr>
-            <td class="k">Trade Code</td><td class="v">IMPORT</td>
-            <td class="k">Shipper Name</td><td class="v">JIANGSU TEILSON NEW MATERIALS CO.,</td>
-            <td class="k">POD</td><td class="v">CHENNAI / 02-MAR-26</td>
-            <td class="k">Loadability</td><td class="v">2.000</td>
-          </tr>
-          <tr>
-            <td class="k">HBL No/HAWB</td><td class="v">871116000106</td>
-            <td class="k">Consignee Name</td><td class="v">RENEWSYS INDIA PVT LTD</td>
-            <td class="k">FDC</td><td class="v">CHENNAI</td>
-            <td class="k">No of Subjob</td><td class="v">1</td>
-          </tr>
-          <tr>
-            <td class="k">OBL No/MAWB</td><td class="v">ONEYSHAG02034600</td>
-            <td class="k">Agent Name</td><td class="v">PENTAGON PRIME CHINA CO LIMITED</td>
-            <td class="k">Container</td><td class="v">1x40'H</td>
-            <td class="k">Routed by</td><td class="v">SELF</td>
-          </tr>
-          <tr>
-            <td class="k">Billing Party</td><td class="v">C001113 - RENEWSYS INDIA PVT LTD</td>
-            <td class="k">Cost Center</td><td class="v">XXXXXX-DEFAULT_COST_CENTER_CODE</td>
-            <td class="k"></td><td class="v"></td>
-            <td class="k"></td><td class="v"></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- ══════════════════════════════════════════════
-         COST TABLE — continuous, multi-page capable
-    ══════════════════════════════════════════════ -->
-    <div class="table-wrap">
-      <table class="cost" aria-label="SubJob cost sheet table">
-        <colgroup>
-          <col class="c-charge" />
-          <col class="c-m1" />
-          <col class="c-m2" />
-          <col class="c-m3" />
-          <col class="c-m4" />
-          <col class="c-a1" />
-          <col class="c-a2" />
-          <col class="c-a3" />
-          <col class="c-a4" />
-          <col class="c-a5" />
-        </colgroup>
-        <thead>
-          <tr class="group">
-            <th class="left">Charge Name</th>
-            <th colspan="4">Provisional</th>
-            <th colspan="5">Actual</th>
-          </tr>
-          <tr class="sub">
-            <th class="left"></th>
-            <th class="center">Revenue</th>
-            <th class="center">Cost</th>
-            <th class="center">Neutral</th>
-            <th class="center">GP</th>
-            <th class="center">Revenue</th>
-            <th class="center">Cost</th>
-            <th class="center">GP</th>
-            <th class="center">GP/Unit</th>
-            <th class="center">Neutral</th>
-          </tr>
-        </thead>
-        <tbody>
-          {# Dynamic charges (mirrors job_profit_report.html: {% for row in rows %} loop) #}
-          {% for row in rows %}
-          <tr>
-            <td>{{ row.charge_name|default:"" }}</td>
-            <td class="num">{{ row.provisional_revenue|default:"" }}</td>
-            <td class="num">{{ row.provisional_cost|default:"" }}</td>
-            <td class="num">{{ row.provisional_neutral|default:"" }}</td>
-            <td class="num">{{ row.provisional_gp|default:"" }}</td>
-            <td class="num">{{ row.actual_revenue|default:"" }}</td>
-            <td class="num">{{ row.actual_cost|default:"" }}</td>
-            <td class="num">{{ row.actual_gp|default:"" }}</td>
-            <td class="num">{{ row.gp_per_unit|default:"" }}</td>
-            <td class="num">{{ row.actual_neutral|default:"" }}</td>
-          </tr>
-          {% empty %}
-          <tr>
-            <td colspan="10" class="center">No data available</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
     </div>
+    <!-- /.page-preview -->
 
-  </div><!-- /.page-preview -->
-
-  <!-- ══════════════════════════════════════════════
-       RUNNING FOOTER (every page)
-  ══════════════════════════════════════════════ -->
-  <div class="running-footer" role="contentinfo">
-    <div class="footer-left">
-      Ref: R00113 on 25-Mar-2026 by ACHENNAI-CHENNAI
+    <!-- ══════════════════════════════════════════════════════
+       RUNNING FOOTER — outside .page-preview
+       WeasyPrint registers this via position:running().
+       Screen: shown below the page card.
+       Print:  injected into @bottom-left margin on every page.
+  ══════════════════════════════════════════════════════════ -->
+    <div class="running-footer" role="contentinfo">
+      <div class="footer-left">
+        Ref: R00113 on 25-MAR-2026 by ACCHENNAI-CHENNAI
+      </div>
+      <div class="footer-right">
+        <div class="page-no">
+          Page&nbsp;<span class="page-no-current"></span>&nbsp;of&nbsp;<span
+            class="page-no-total"
+          ></span>
+        </div>
+      </div>
     </div>
-    <div class="footer-right">
-      <div class="page-no" aria-label="Page number"></div>
-    </div>
-  </div>
-
-</body>
+  </body>
 </html>
-
