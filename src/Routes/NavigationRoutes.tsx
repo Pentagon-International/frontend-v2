@@ -73,6 +73,8 @@ import {
   ChargeCreate,
   TdsSectionMaster,
   TdsSectionCreate,
+  TdsRateSectionMaster,
+  TdsRateSectionCreate,
   NetworkMaster,
   NetworkCreate,
   ChartOfAccountsMaster,
@@ -535,6 +537,12 @@ const NavigationRoutes = () => {
             <Route index element={<TdsSectionMaster />} />
             <Route path="create" element={<TdsSectionCreate />} />
             <Route path="edit" element={<TdsSectionCreate />} />
+          </Route>
+
+          <Route path="tds-rate-section">
+            <Route index element={<TdsRateSectionMaster />} />
+            <Route path="create" element={<TdsRateSectionCreate />} />
+            <Route path="edit" element={<TdsRateSectionCreate />} />
           </Route>
 
           <Route path="network-master">

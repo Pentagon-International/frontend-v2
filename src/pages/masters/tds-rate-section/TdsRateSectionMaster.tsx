@@ -53,7 +53,7 @@ type TdsSectionFilters = {
   tds_section_rate: string;
 };
 
-export default function TdsSectionMaster() {
+export default function TdsRateSectionMaster() {
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -187,7 +187,7 @@ export default function TdsSectionMaster() {
           Object.keys(filtersPayload).length > 0 ? { filters: filtersPayload } : {};
         setIsInitialLoad(false);
         const response = await apiCallProtected.post(
-          `${URL.tdsSectionMasterFilter}?&index=${index}&limit=${pagination.pageSize}`,
+          `${URL.tdsRateSectionMasterFilter}?&index=${index}&limit=${pagination.pageSize}`,
           payload,
         );
         setShowFilters(false);
@@ -239,11 +239,11 @@ export default function TdsSectionMaster() {
         header: "TDS Section Name",
         size: 220,
       },
-      // {
-      //   accessorKey: "tds_section_rate",
-      //   header: "Rate(%)",
-      //   size: 100,
-      // },
+    //   {
+    //     accessorKey: "tds_section_rate",
+    //     header: "Rate(%)",
+    //     size: 100,
+    //   },
       {
         id: "actions",
         header: "Actions",
@@ -262,9 +262,13 @@ export default function TdsSectionMaster() {
                     setStoreFilters(LIST_KEY, appliedFilters);
                     setStoreSearch(LIST_KEY, search);
                     setShouldRestore(LIST_KEY, true);
-                    navigate("/master/tds-section/edit", {
+                    const selectedId = row.original?.id;
+                    navigate(
+                      `/master/tds-rate-section/edit${selectedId ? `?id=${selectedId}` : ""}`,
+                      {
                       state: { ...row.original },
-                    });
+                      },
+                    );
                   }}
                 >
                   <Group gap={"sm"}>
@@ -419,7 +423,7 @@ export default function TdsSectionMaster() {
             c={"#444955"}
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
-            TDS Section Master List
+            TDS Rate Section Master List
           </Text>
 
           <Group gap="xs" wrap="nowrap">
@@ -504,7 +508,7 @@ export default function TdsSectionMaster() {
                 setStoreFilters(LIST_KEY, appliedFilters);
                 setStoreSearch(LIST_KEY, search);
                 setShouldRestore(LIST_KEY, true);
-                navigate("/master/tds-section/create");
+                navigate("/master/tds-rate-section/create");
               }}
             >
               Create New

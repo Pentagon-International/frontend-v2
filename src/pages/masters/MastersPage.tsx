@@ -151,6 +151,10 @@ export default function MastersPage() {
             label: "TDS Section",
           },
           {
+            icon: <IconCalculator size={28} color="#105476" />,
+            label: "TDS Rate Section",
+          },
+          {
             icon: <IconChartBar size={28} color="#105476" />,
             label: "Chart of Accounts",
           },

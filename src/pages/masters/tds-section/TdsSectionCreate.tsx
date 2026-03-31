@@ -234,7 +234,7 @@ export default function TdsSectionCreate() {
                   />
                 </Grid.Col>
 
-                <Grid.Col span={6}>
+                {/* <Grid.Col span={6}>
                   <TextInput
                     label="Rate(%)"
                     placeholder="Enter rate"
@@ -255,7 +255,7 @@ export default function TdsSectionCreate() {
                       },
                     }}
                   />
-                </Grid.Col>
+                </Grid.Col> */}
               </Grid>
             </Box>
 

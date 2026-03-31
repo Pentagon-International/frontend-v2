@@ -146,6 +146,8 @@ import ChargeMaster from "./masters/charge/ChargeMaster";
 import ChargeCreate from "./masters/charge/ChargeCreate";
 import TdsSectionMaster from "./masters/tds-section/TdsSectionMaster";
 import TdsSectionCreate from "./masters/tds-section/TdsSectionCreate";
+import TdsRateSectionMaster from "./masters/tds-rate-section/TdsRateSectionMaster";
+import TdsRateSectionCreate from "./masters/tds-rate-section/TdsRateSectionCreate";
 import NetworkMaster from "./masters/network-master/NetworkMaster";
 import NetworkCreate from "./masters/network-master/NetworkCreate";
 import ChartOfAccountsMaster from "./masters/chart-of-accounts/ChartOfAccountsMaster";
@@ -236,6 +238,8 @@ export {
   ChargeCreate,
   TdsSectionMaster,
   TdsSectionCreate,
+  TdsRateSectionMaster,
+  TdsRateSectionCreate,
   NetworkMaster,
   NetworkCreate,
   ChartOfAccountsMaster,
