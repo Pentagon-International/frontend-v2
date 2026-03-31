@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useCallback, FC, ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, FC, ReactNode } from "react";
 import axios from "axios";
-import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 
 const hblApi = axios.create({
@@ -210,10 +209,25 @@ interface ToastState {
   type: "success" | "error" | "info";
 }
 
+interface PortOption {
+  port_code: string;
+  port_name: string;
+  transport_mode: string;
+  alias_code: string;
+}
+
+interface CarrierOption {
+  carrier_code: string;
+  carrier_name: string;
+  transport_mode?: string;
+  alias_code?: string;
+}
+
 type ModalState =
   | { type: "upload" }
   | { type: "detail"; record: FileRecord }
   | { type: "payload"; txn_id: string; record?: FileRecord }
+  | { type: "fix_port"; record: FileRecord }
   | null;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -244,7 +258,8 @@ const STYLES = `
   .hbl-app .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: .75rem; pointer-events: none; }
   .hbl-app .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 7px; font-size: .8rem; font-weight: 600; font-family: var(--sans); cursor: pointer; transition: all .15s; border: none; white-space: nowrap; padding: 8px 14px; }
   .hbl-app .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 1px 3px rgba(37,99,235,.3); }
-  .hbl-app .btn-primary:hover { background: var(--accent2); }
+  .hbl-app .btn-primary:hover:not(:disabled) { background: var(--accent2); }
+  .hbl-app .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
   .hbl-app .btn-green { background: var(--green); color: #fff; box-shadow: 0 1px 3px rgba(5,150,105,.3); }
   .hbl-app .btn-green:hover:not(:disabled) { background: #047857; }
   .hbl-app .btn-green:disabled { opacity: .5; cursor: not-allowed; }
@@ -421,6 +436,7 @@ const STYLES = `
   .hbl-app .us-count { font-family: var(--mono); font-weight: 700; font-size: .8rem; }
   .hbl-app .us-count.hbl { color: var(--hbl); }
   .hbl-app .us-count.mbl { color: var(--mbl); }
+  .hbl-app .dirty-indicator { display: inline-flex; align-items: center; gap: 5px; font-size: .68rem; color: var(--yellow); font-family: var(--mono); padding: 3px 8px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; }
   @media(max-width:768px){
     .hbl-app .info-grid,.hbl-app .upload-zones{grid-template-columns:1fr}
     .hbl-app .fgrid.c4,.hbl-app .fgrid.c3{grid-template-columns:1fr 1fr}
@@ -498,7 +514,6 @@ interface UploadModalProps {
   showToast: (msg: string, type?: ToastState["type"]) => void;
 }
 
-// ✅ Allowed file extensions: PDF + all common image formats
 const ALLOWED_EXTENSIONS = [
   ".pdf",
   ".jpg", ".jpeg", ".png", ".gif",
@@ -515,7 +530,6 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<UploadResult | null>(null);
 
-  // ✅ FIX 1: Filter by allowed extensions (PDF + all image formats)
   const addFiles = (type: "hbl" | "mbl", files: FileList | null) => {
     if (!files) return;
     const allowed = Array.from(files).filter(f =>
@@ -582,15 +596,12 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
         >
           <div className="dz-icon">{emoji}</div>
           <p>Drop or <span style={{ color, fontWeight: 700 }}>browse {type.toUpperCase()}</span></p>
-          {/* ✅ FIX 2: Updated helper text */}
           <small>
             {type === "hbl"
               ? "House Bill of Lading — PDF & Images"
               : "Master Bill of Lading — PDF & Images"}
           </small>
         </div>
-
-        {/* ✅ FIX 3: accept includes PDF + all image formats */}
         <input
           type="file"
           id={`fi-${type}`}
@@ -599,12 +610,10 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
           onChange={e => addFiles(type, e.target.files)}
           style={{ display: "none" }}
         />
-
         {files.length
           ? files.map((f, i) => (
             <div className="zone-file-row" key={i}>
               <div>
-                {/* ✅ FIX 4: Show 🖼️ for images, 📄 for PDFs */}
                 <div className="zfname" title={f.name}>
                   {f.type.startsWith("image/") ? "🖼️" : "📄"} {f.name}
                 </div>
@@ -691,7 +700,7 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
 
 type DetailTab = "payload" | "raw";
 
-const DetailModal: FC<{ record: FileRecord; onClose: () => void }> = ({ record, onClose }) => {
+const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: CarrierOption[]; onClose: () => void }> = ({ record, ports, carriers, onClose }) => {
   const [tab, setTab] = useState<DetailTab>("payload");
   const p = record.api_payload ?? record.extracted_data ?? {} as PayloadData;
 
@@ -721,7 +730,7 @@ const DetailModal: FC<{ record: FileRecord; onClose: () => void }> = ({ record, 
           ))}
         </div>
         <div className="tab-body">
-          {tab === "payload" && <PayloadFormBody p={p} />}
+          {tab === "payload" && <PayloadFormBody p={p} ports={ports} carriers={carriers} />}
           {tab === "raw" && (
             Object.keys(p).length
               ? <pre style={{ maxHeight: "calc(88vh - 200px)" }}>{JSON.stringify(p, null, 2)}</pre>
@@ -733,35 +742,186 @@ const DetailModal: FC<{ record: FileRecord; onClose: () => void }> = ({ record, 
   );
 };
 
+// ─── Editable Field ───────────────────────────────────────────────────────────
+
+const EF: FC<{
+  label: string;
+  value?: unknown;
+  cls?: string;
+  span?: 1 | 2 | 3 | 4;
+  onChange: (val: string) => void;
+}> = ({ label, value, cls = "", span = 1, onChange }) => {
+  const v = Array.isArray(value) ? value.join(", ") : value != null ? String(value) : "";
+  return (
+    <div className={`ff${span > 1 ? ` s${span}` : ""}`}>
+      <label>{label}</label>
+      <input
+        value={v}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          width: "100%", background: "var(--surface)", border: "1px solid var(--border2)",
+          borderRadius: 5, padding: "5px 9px",
+          fontFamily: cls === "mono" ? "var(--mono)" : "var(--sans)",
+          fontSize: ".8rem", color: "var(--text)", outline: "none", transition: "border-color .15s",
+        }}
+        onFocus={e => (e.currentTarget.style.borderColor = "var(--accent)")}
+        onBlur={e => (e.currentTarget.style.borderColor = "var(--border2)")}
+      />
+    </div>
+  );
+};
+
 // ─── Payload Form Body ────────────────────────────────────────────────────────
 
-const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
+const PayloadFormBody: FC<{
+  p: PayloadData;
+  ports?: PortOption[];
+  editPorts?: {
+    ports: PortOption[];
+    originCode: string; originText: string;
+    destCode: string; destText: string;
+    onOriginChange: (t: string) => void;
+    onOriginSelect: (code: string, display: string) => void;
+    onDestChange: (t: string) => void;
+    onDestSelect: (code: string, display: string) => void;
+  };
+  editHousingPorts?: Array<{
+    ports: PortOption[];
+    originCode: string; originText: string;
+    destCode: string; destText: string;
+    onOriginChange: (t: string) => void;
+    onOriginSelect: (code: string, display: string) => void;
+    onDestChange: (t: string) => void;
+    onDestSelect: (code: string, display: string) => void;
+  }>;
+  onFieldChange?: (field: keyof PayloadData, val: string) => void;
+  onHousingFieldChange?: (idx: number, field: keyof HousingDetail, val: string) => void;
+  onFixCode?: () => void;
+  onFixHousingCode?: (idx: number) => void;
+  carriers?: CarrierOption[];
+  onFixCarrier?: () => void;
+}> = ({ p, ports = [], carriers = [], editPorts, editHousingPorts, onFieldChange, onHousingFieldChange, onFixCode, onFixHousingCode, onFixCarrier }) => {
   if (!p || !Object.keys(p).length)
     return <div className="state-box"><div className="state-icon">📭</div><div className="state-text">No payload data</div></div>;
 
   const housing = Array.isArray(p.housing_details) ? p.housing_details : [];
 
+  const F = (label: string, val: unknown, field: keyof PayloadData, cls?: string, span?: 1 | 2 | 3 | 4) =>
+    onFieldChange
+      ? <EF label={label} value={val} cls={cls} span={span} onChange={v => onFieldChange(field, v)} />
+      : <FF label={label} val={val} cls={cls} span={span} />;
+
+  const HF = (idx: number, label: string, val: unknown, field: keyof HousingDetail, cls?: string, span?: 1 | 2 | 3 | 4) =>
+    onHousingFieldChange
+      ? <EF label={label} value={val} cls={cls} span={span} onChange={v => onHousingFieldChange(idx, field, v)} />
+      : <FF label={label} val={val} cls={cls} span={span} />;
+
+  const resolvePort = (code?: string) => ports.find(pt => pt.alias_code === code || pt.port_code === code);
+  const resolveCarrier = (code?: string) => carriers.find(c => c.alias_code === code || c.carrier_code === code);
+
+  const PortCodeView: FC<{ label: string; code?: string; span?: 1 | 2 | 3 | 4; onFix?: () => void }> = ({ label, code, span = 1, onFix }) => {
+    const match = resolvePort(code as string | undefined);
+    const isValid = !!match;
+    return (
+      <div className={`ff${span > 1 ? ` s${span}` : ""}`}>
+        <label>{label}</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <div className={`fval mono`} style={{ color: code ? (isValid ? "var(--green)" : "var(--red)") : undefined }}>
+            {code ?? "—"}
+          </div>
+          {code && (
+            <div style={{ fontSize: ".68rem", color: isValid ? "var(--muted)" : "var(--red)", fontFamily: "var(--sans)", paddingLeft: 2 }}>
+              {isValid ? `${match.port_name} · ${match.transport_mode}` : "⚠ Not found in port list"}
+            </div>
+          )}
+          {!isValid && code && onFix && (
+            <button
+              onClick={onFix}
+              style={{
+                alignSelf: "flex-start", marginTop: 2, padding: "2px 8px",
+                fontSize: ".6rem", fontWeight: 700, fontFamily: "var(--sans)",
+                background: "rgba(220,38,38,.08)", border: "1px solid rgba(220,38,38,.35)",
+                borderRadius: 4, color: "var(--red)", cursor: "pointer", display: "flex",
+                alignItems: "center", gap: 4,
+              }}
+            >
+              🔧 Fix Alias
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const CarrierCodeView: FC<{ label: string; code?: string }> = ({ label, code }) => {
+    const match = resolveCarrier(code);
+    const isValid = !!match;
+    return (
+      <div className="ff">
+        <label>{label}</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <div className="fval mono" style={{ color: code ? (isValid ? "var(--green)" : "var(--red)") : undefined }}>
+            {code ?? "—"}
+          </div>
+          {code && (
+            <div style={{ fontSize: ".68rem", color: isValid ? "var(--muted)" : "var(--red)", fontFamily: "var(--sans)", paddingLeft: 2 }}>
+              {isValid ? match.carrier_name : "⚠ Not found in carrier list"}
+            </div>
+          )}
+          {!isValid && code && onFixCarrier && (
+            <button
+              onClick={onFixCarrier}
+              style={{
+                alignSelf: "flex-start", marginTop: 2, padding: "2px 8px",
+                fontSize: ".6rem", fontWeight: 700, fontFamily: "var(--sans)",
+                background: "rgba(220,38,38,.08)", border: "1px solid rgba(220,38,38,.35)",
+                borderRadius: 4, color: "var(--red)", cursor: "pointer", display: "flex",
+                alignItems: "center", gap: 4,
+              }}
+            >
+              🔧 Fix Alias
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="form-body">
       <Sec icon="📄" title="Document Header">
         <div className="fgrid c4">
-          <FF label="MBL Number" val={p.mbl_number ?? p.bl_number} cls="mono" />
-          <FF label="Carrier Code" val={p.carrier_code} cls="mono" />
-          <FF label="Service" val={p.service} />
-          <FF label="Service Type" val={p.service_type} />
-          <FF label="Freight Terms" val={p.freight_terms} />
+          {F("MBL Number", p.mbl_number ?? p.bl_number, "mbl_number", "mono")}
+          <CarrierCodeView label="Carrier Code" code={p.carrier_code as string | undefined} />
+          {F("Carrier Name", p.carrier_name, "carrier_name")}
+          {F("Service", p.service, "service")}
+          {F("Service Type", p.service_type, "service_type")}
+          {F("Freight Terms", p.freight_terms, "freight_terms")}
         </div>
       </Sec>
 
       <Sec icon="🗺️" title="Routing & Ports">
         <div className="fgrid c4">
-          <FF label="Port of Loading" val={p.port_of_loading} />
-          <FF label="Port of Discharge" val={p.port_of_discharge} />
-          <FF label="Place of Delivery" val={p.place_of_delivery} />
-          <FF label="Origin Code" val={p.origin_code} cls="mono" />
-          <FF label="Destination Code" val={p.destination_code} cls="mono" />
-          <FF label="Freight Payable At" val={p.freight_payable_at} />
-          <FF label="Export Reference" val={p.export_reference} cls="mono" />
+          {F("Port of Loading", p.port_of_loading, "port_of_loading")}
+          {F("Port of Discharge", p.port_of_discharge, "port_of_discharge")}
+          {F("Place of Delivery", p.place_of_delivery, "place_of_delivery")}
+          {editPorts ? (
+            <>
+              <div className="ff" style={{ overflow: "visible" }}>
+                <PortSearch label="Origin Code" value={editPorts.originCode} inputText={editPorts.originText} ports={editPorts.ports} onChange={editPorts.onOriginChange} onSelect={editPorts.onOriginSelect} onFix={onFixCode} />
+              </div>
+              <div className="ff" style={{ overflow: "visible" }}>
+                <PortSearch label="Destination Code" value={editPorts.destCode} inputText={editPorts.destText} ports={editPorts.ports} onChange={editPorts.onDestChange} onSelect={editPorts.onDestSelect} onFix={onFixCode} />
+              </div>
+            </>
+          ) : (
+            <>
+              <PortCodeView label="Origin Code" code={p.origin_code as string | undefined} onFix={onFixCode} />
+              <PortCodeView label="Destination Code" code={p.destination_code as string | undefined} onFix={onFixCode} />
+            </>
+          )}
+          {F("Freight Payable At", p.freight_payable_at, "freight_payable_at")}
+          {F("Export Reference", p.export_reference, "export_reference", "mono")}
         </div>
         {p.ocean_routings?.map((r, i) => (
           <div className="routing-pill" key={i}>
@@ -776,12 +936,12 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
 
       <Sec icon="🚢" title="Vessel & Voyage">
         <div className="fgrid c4">
-          <FF label="Vessel Name" val={p.vessel_name} />
-          <FF label="Voyage Number" val={p.voyage_number} cls="mono" />
-          <FF label="Date of Issue" val={p.date_of_issue} />
-          <FF label="On Board Date" val={p.on_board_date ?? p.shipped_on_board_date} />
-          <FF label="Place of Issue" val={p.place_of_issue} />
-          <FF label="Agent" val={p.agent} />
+          {F("Vessel Name", p.vessel_name, "vessel_name")}
+          {F("Voyage Number", p.voyage_number, "voyage_number", "mono")}
+          {F("Date of Issue", p.date_of_issue, "date_of_issue")}
+          {F("On Board Date", p.on_board_date ?? p.shipped_on_board_date, "on_board_date")}
+          {F("Place of Issue", p.place_of_issue, "place_of_issue")}
+          {F("Agent", p.agent, "agent")}
         </div>
       </Sec>
 
@@ -806,9 +966,9 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
         </Sec>
       )}
 
-      {fv(p.special_clauses) && (
+      {(onFieldChange || fv(p.special_clauses)) && (
         <Sec icon="📋" title="Special Clauses">
-          <div className="fgrid c2"><FF label="Clause" val={p.special_clauses} span={2} /></div>
+          <div className="fgrid c2">{F("Clause", p.special_clauses, "special_clauses", "", 2)}</div>
         </Sec>
       )}
 
@@ -825,15 +985,28 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
             </div>
             <div className="hcard-body">
               <div className="fgrid c4" style={{ marginBottom: 12 }}>
-                <FF label="HBL Number" val={hd.hbl_number} cls="mono" />
-                <FF label="Trade" val={hd.trade} />
-                <FF label="Routed" val={hd.routed} />
-                <FF label="Freight Terms" val={hd.freight_terms} />
-                <FF label="Marks No" val={hd.marks_no} />
-                <FF label="Origin Code" val={hd.origin_code} cls="mono" />
-                <FF label="Destination Code" val={hd.destination_code} cls="mono" />
-                <FF label="Invoice No" val={hd.invoice_no} cls="mono" />
-                <FF label="Date of Issue" val={hd.date_of_issue} />
+                {HF(idx, "HBL Number", hd.hbl_number, "hbl_number", "mono")}
+                {HF(idx, "Trade", hd.trade, "trade")}
+                {HF(idx, "Routed", hd.routed, "routed")}
+                {HF(idx, "Freight Terms", hd.freight_terms, "freight_terms")}
+                {HF(idx, "Marks No", hd.marks_no, "marks_no")}
+                {editHousingPorts?.[idx] ? (
+                  <>
+                    <div className="ff" style={{ overflow: "visible" }}>
+                      <PortSearch label="Origin Code" value={editHousingPorts[idx].originCode} inputText={editHousingPorts[idx].originText} ports={editHousingPorts[idx].ports} onChange={editHousingPorts[idx].onOriginChange} onSelect={editHousingPorts[idx].onOriginSelect} onFix={onFixHousingCode ? () => onFixHousingCode(idx) : undefined} />
+                    </div>
+                    <div className="ff" style={{ overflow: "visible" }}>
+                      <PortSearch label="Destination Code" value={editHousingPorts[idx].destCode} inputText={editHousingPorts[idx].destText} ports={editHousingPorts[idx].ports} onChange={editHousingPorts[idx].onDestChange} onSelect={editHousingPorts[idx].onDestSelect} onFix={onFixHousingCode ? () => onFixHousingCode(idx) : undefined} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <PortCodeView label="Origin Code" code={hd.origin_code as string | undefined} onFix={onFixHousingCode ? () => onFixHousingCode(idx) : undefined} />
+                    <PortCodeView label="Destination Code" code={hd.destination_code as string | undefined} onFix={onFixHousingCode ? () => onFixHousingCode(idx) : undefined} />
+                  </>
+                )}
+                {HF(idx, "Invoice No", hd.invoice_no, "invoice_no", "mono")}
+                {HF(idx, "Date of Issue", hd.date_of_issue, "date_of_issue")}
               </div>
 
               {(hd.total_packages || hd.total_volume_cbm || hd.total_gross_weight_kgs) && (
@@ -846,70 +1019,70 @@ const PayloadFormBody: FC<{ p: PayloadData }> = ({ p }) => {
 
               <SubSec icon="🏭" title="Shipper">
                 <div className="fgrid c4">
-                  <FF label="Name" val={hd.shipper_name} span={3} />
-                  <FF label="Email" val={hd.shipper_email} />
-                  <FF label="Address" val={hd.shipper_address} span={4} />
-                  <FF label="Tel" val={hd.shipper_tel} cls="mono" />
-                  <FF label="Fax" val={hd.shipper_fax} cls="mono" />
-                  <FF label="Phone" val={hd.shipper_phone} cls="mono" />
+                  {HF(idx, "Name", hd.shipper_name, "shipper_name", "", 3)}
+                  {HF(idx, "Email", hd.shipper_email, "shipper_email")}
+                  {HF(idx, "Address", hd.shipper_address, "shipper_address", "", 4)}
+                  {HF(idx, "Tel", hd.shipper_tel, "shipper_tel", "mono")}
+                  {HF(idx, "Fax", hd.shipper_fax, "shipper_fax", "mono")}
+                  {HF(idx, "Phone", hd.shipper_phone, "shipper_phone", "mono")}
                 </div>
               </SubSec>
 
               <SubSec icon="📦" title="Consignee">
                 <div className="fgrid c4">
-                  <FF label="Name" val={hd.consignee_name} span={4} />
-                  <FF label="Address" val={hd.consignee_address} span={4} />
-                  <FF label="GST" val={hd.consignee_gst ?? hd.gst_no_consignee} cls="mono" />
-                  <FF label="PAN" val={hd.consignee_pan ?? hd.pan_no} cls="mono" />
-                  <FF label="Email" val={hd.consignee_email} />
+                  {HF(idx, "Name", hd.consignee_name, "consignee_name", "", 4)}
+                  {HF(idx, "Address", hd.consignee_address, "consignee_address", "", 4)}
+                  {HF(idx, "GST", hd.consignee_gst ?? hd.gst_no_consignee, "consignee_gst", "mono")}
+                  {HF(idx, "PAN", hd.consignee_pan ?? hd.pan_no, "consignee_pan", "mono")}
+                  {HF(idx, "Email", hd.consignee_email, "consignee_email")}
                 </div>
               </SubSec>
 
               <SubSec icon="🔔" title="Notify Party 1">
                 <div className="fgrid c4">
-                  <FF label="Name" val={hd.notify1_customer_name} span={4} />
-                  <FF label="Address" val={hd.notify1_customer_address} span={4} />
-                  <FF label="Email" val={hd.notify1_customer_email} />
-                  <FF label="Phone" val={hd.notify1_customer_phone} cls="mono" />
+                  {HF(idx, "Name", hd.notify1_customer_name, "notify1_customer_name", "", 4)}
+                  {HF(idx, "Address", hd.notify1_customer_address, "notify1_customer_address", "", 4)}
+                  {HF(idx, "Email", hd.notify1_customer_email, "notify1_customer_email")}
+                  {HF(idx, "Phone", hd.notify1_customer_phone, "notify1_customer_phone", "mono")}
                 </div>
               </SubSec>
 
-              {(hd.notify2_customer_name || hd.notify2_customer_address) && (
+              {(hd.notify2_customer_name || hd.notify2_customer_address || onHousingFieldChange) && (
                 <SubSec icon="🔔" title="Notify Party 2">
                   <div className="fgrid c4">
-                    <FF label="Name" val={hd.notify2_customer_name} span={4} />
-                    <FF label="Address" val={hd.notify2_customer_address} span={4} />
-                    <FF label="Email" val={hd.notify2_customer_email} />
+                    {HF(idx, "Name", hd.notify2_customer_name, "notify2_customer_name", "", 4)}
+                    {HF(idx, "Address", hd.notify2_customer_address, "notify2_customer_address", "", 4)}
+                    {HF(idx, "Email", hd.notify2_customer_email, "notify2_customer_email")}
                   </div>
                 </SubSec>
               )}
 
               <SubSec icon="🏢" title="Agent">
                 <div className="fgrid c4">
-                  <FF label="Name" val={hd.agent_name} span={2} />
-                  <FF label="GST No" val={hd.agent_gst_no} cls="mono" />
-                  <FF label="PAN No" val={hd.agent_pan_no} cls="mono" />
-                  <FF label="Address" val={hd.agent_address} span={4} />
-                  <FF label="Phone" val={fv(hd.agent_phone)} cls="mono" />
-                  <FF label="Mobile" val={hd.agent_mobile} cls="mono" />
-                  <FF label="Email" val={hd.agent_email} />
+                  {HF(idx, "Name", hd.agent_name, "agent_name", "", 2)}
+                  {HF(idx, "GST No", hd.agent_gst_no, "agent_gst_no", "mono")}
+                  {HF(idx, "PAN No", hd.agent_pan_no, "agent_pan_no", "mono")}
+                  {HF(idx, "Address", hd.agent_address, "agent_address", "", 4)}
+                  {HF(idx, "Phone", fv(hd.agent_phone), "agent_phone", "mono")}
+                  {HF(idx, "Mobile", hd.agent_mobile, "agent_mobile", "mono")}
+                  {HF(idx, "Email", hd.agent_email, "agent_email")}
                 </div>
               </SubSec>
 
-              {(hd.issuing_agent || hd.issuing_agent_address) && (
+              {(hd.issuing_agent || hd.issuing_agent_address || onHousingFieldChange) && (
                 <SubSec icon="🏢" title="Issuing Agent">
                   <div className="fgrid c4">
-                    <FF label="Name" val={hd.issuing_agent} span={2} />
-                    <FF label="Email" val={fv(hd.issuing_agent_email)} span={2} />
-                    <FF label="Address" val={hd.issuing_agent_address} span={4} />
+                    {HF(idx, "Name", hd.issuing_agent, "issuing_agent", "", 2)}
+                    {HF(idx, "Email", fv(hd.issuing_agent_email), "issuing_agent_email", "", 2)}
+                    {HF(idx, "Address", hd.issuing_agent_address, "issuing_agent_address", "", 4)}
                   </div>
                 </SubSec>
               )}
 
-              {fv(hd.commodity_description) && (
+              {(fv(hd.commodity_description) || onHousingFieldChange) && (
                 <SubSec icon="📋" title="Commodity">
                   <div className="fgrid c2">
-                    <FF label="Description" val={hd.commodity_description} span={2} />
+                    {HF(idx, "Description", hd.commodity_description, "commodity_description", "", 2)}
                   </div>
                 </SubSec>
               )}
@@ -953,25 +1126,168 @@ interface PayloadModalProps {
   record?: FileRecord;
   onClose: () => void;
   showToast: (msg: string, type?: ToastState["type"]) => void;
+  onRefreshList?: () => void;
 }
 
-const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onClose, showToast }) => {
+const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onClose, showToast, onRefreshList }) => {
+  // ── FIX 1: Seed editData immediately from inlineRecord — no race condition ──
+  const initPayload = useCallback((): PayloadData => {
+    return inlineRecord?.api_payload ?? inlineRecord?.extracted_data ?? {};
+  }, [inlineRecord]);
+
   const [rec, setRec] = useState<FileRecord | null>(inlineRecord ?? null);
   const [loading, setLoading] = useState(!inlineRecord);
+  const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [ptab, setPtab] = useState<"form" | "raw">("form");
+  const [ports, setPorts] = useState<PortOption[]>([]);
+  const [carriers, setCarriers] = useState<CarrierOption[]>([]);
+  const [fixTarget, setFixTarget] = useState<{ record: FileRecord } | null>(null);
+  const [carrierFixTarget, setCarrierFixTarget] = useState<{ record: FileRecord } | null>(null);
 
+  // Seed all state immediately from inlineRecord (avoids blank form on first render)
+  const [editData, setEditData] = useState<PayloadData>(initPayload);
+  const [originText, setOriginText] = useState<string>(
+    () => (initPayload().origin_code as string) ?? ""
+  );
+  const [destText, setDestText] = useState<string>(
+    () => (initPayload().destination_code as string) ?? ""
+  );
+  const [housingOriginTexts, setHousingOriginTexts] = useState<string[]>(() => {
+    const h = initPayload().housing_details;
+    return Array.isArray(h) ? (h as HousingDetail[]).map(hd => (hd.origin_code as string) ?? "") : [];
+  });
+  const [housingDestTexts, setHousingDestTexts] = useState<string[]>(() => {
+    const h = initPayload().housing_details;
+    return Array.isArray(h) ? (h as HousingDetail[]).map(hd => (hd.destination_code as string) ?? "") : [];
+  });
+
+  // ── FIX 2: Only fetch + re-seed when record was NOT passed inline ──
   useEffect(() => {
-    if (inlineRecord) return;
-    hblApi.get<FileRecord>(`/files/${txn_id}`, { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } })
-      .then(r => { setRec(r.data); setLoading(false); })
+     if (inlineRecord) return ; // already seeded — skip
+    hblApi
+      .get<FileRecord>(`/files/${txn_id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => {
+        setRec(r.data);
+        const pd: PayloadData = r.data.api_payload ?? r.data.extracted_data ?? {};
+        setEditData(pd);
+        setOriginText((pd.origin_code as string) ?? "");
+        setDestText((pd.destination_code as string) ?? "");
+        const housing = Array.isArray(pd.housing_details) ? (pd.housing_details as HousingDetail[]) : [];
+        setHousingOriginTexts(housing.map(hd => (hd.origin_code as string) ?? ""));
+        setHousingDestTexts(housing.map(hd => (hd.destination_code as string) ?? ""));
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [txn_id, inlineRecord]);
 
-  const p: PayloadData = rec?.api_payload ?? rec?.extracted_data ?? {};
+  // Fetch port list
+  useEffect(() => {
+    hblApi
+      .get<{ ports: PortOption[] }>("/ports", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => setPorts(r.data.ports ?? []))
+      .catch(() => showToast("Failed to load ports", "error"));
+  }, [showToast]);
+
+  const reloadPorts = useCallback(() => {
+    hblApi
+      .get<{ ports: PortOption[] }>("/ports", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => { setPorts(r.data.ports ?? []); onRefreshList?.(); })
+      .catch(() => {});
+  }, [onRefreshList]);
+
+  useEffect(() => {
+    hblApi
+      .get<{ carriers: CarrierOption[] }>("/carriers", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => setCarriers(r.data.carriers ?? []))
+      .catch(() => {});
+  }, []);
+
+  const reloadCarriers = useCallback(() => {
+    hblApi
+      .get<{ carriers: CarrierOption[] }>("/carriers", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => { setCarriers(r.data.carriers ?? []); onRefreshList?.(); })
+      .catch(() => {});
+  }, [onRefreshList]);
+
+  const onFieldChange = useCallback((field: keyof PayloadData, val: string) => {
+    setIsDirty(true);
+    setEditData(prev => ({ ...prev, [field]: val }));
+  }, []);
+
+  const onHousingFieldChange = useCallback((idx: number, field: keyof HousingDetail, val: string) => {
+    setIsDirty(true);
+    setEditData(prev => {
+      const housing = Array.isArray(prev.housing_details)
+        ? [...(prev.housing_details as HousingDetail[])]
+        : [];
+      housing[idx] = { ...housing[idx], [field]: val };
+      return { ...prev, housing_details: housing };
+    });
+  }, []);
+
+  // ── FIX 3: Safe housing array — no unsafe cast, no crash on undefined ──
+  const editHousingPortsArr = (() => {
+    const housing = Array.isArray(editData.housing_details)
+      ? (editData.housing_details as HousingDetail[])
+      : [];
+    return housing.map((_, idx) => ({
+      ports,
+      originCode: housing[idx]?.origin_code as string ?? "",
+      originText: housingOriginTexts[idx] ?? "",
+      destCode: housing[idx]?.destination_code as string ?? "",
+      destText: housingDestTexts[idx] ?? "",
+      onOriginChange: (t: string) => {
+        setHousingOriginTexts(prev => { const a = [...prev]; a[idx] = t; return a; });
+        onHousingFieldChange(idx, "origin_code", "");
+      },
+      onOriginSelect: (code: string, display: string) => {
+        setHousingOriginTexts(prev => { const a = [...prev]; a[idx] = display; return a; });
+        onHousingFieldChange(idx, "origin_code", code);
+      },
+      onDestChange: (t: string) => {
+        setHousingDestTexts(prev => { const a = [...prev]; a[idx] = t; return a; });
+        onHousingFieldChange(idx, "destination_code", "");
+      },
+      onDestSelect: (code: string, display: string) => {
+        setHousingDestTexts(prev => { const a = [...prev]; a[idx] = display; return a; });
+        onHousingFieldChange(idx, "destination_code", code);
+      },
+    }));
+  })();
+
+  // ── FIX 4: Save payload to API ──
+  const savePayload = async () => {
+    setSaving(true);
+    try {
+      await hblApi.patch(
+        `/files/${txn_id}/payload`,
+        editData,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } }
+      );
+      showToast("✅ Payload saved successfully", "success");
+      setIsDirty(false);
+      onClose();
+    } catch {
+      showToast("❌ Save failed — check server connection", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const copy = () =>
     navigator.clipboard
-      .writeText(JSON.stringify(p, null, 2))
+      .writeText(JSON.stringify(editData, null, 2))
       .then(() => showToast("✅ JSON copied", "success"))
       .catch(() => showToast("❌ Copy failed", "error"));
 
@@ -983,18 +1299,25 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
               <span className="ft-tag mbl">MBL</span>
               {rec && <Badge status={rec.status ?? "done"} />}
-              {p.document_type && <span className="pdf-tag">{p.document_type}</span>}
+              {editData.document_type && <span className="pdf-tag">{editData.document_type}</span>}
+              {/* Dirty indicator — shows when there are unsaved changes */}
+              {isDirty && (
+                <span className="dirty-indicator">● Unsaved changes</span>
+              )}
             </div>
             <div style={{ fontSize: ".95rem", fontWeight: 700 }}>{rec?.filename ?? txn_id}</div>
             <div style={{ fontFamily: "var(--mono)", fontSize: ".65rem", color: "var(--muted)", marginTop: 2 }}>
-              {txn_id} · MBL: {p.mbl_number ?? p.bl_number ?? "—"}
+              {txn_id} · MBL: {editData.mbl_number ?? editData.bl_number ?? "—"}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button className="act-btn dl" style={{ padding: "5px 12px", fontSize: ".72rem" }} onClick={copy}>⎘ Copy JSON</button>
+            <button className="act-btn dl" style={{ padding: "5px 12px", fontSize: ".72rem" }} onClick={copy}>
+              ⎘ Copy JSON
+            </button>
             <button className="modal-close" onClick={onClose}>✕</button>
           </div>
         </div>
+
         <div className="tabs" style={{ padding: "8px 24px 0" }}>
           {(["form", "raw"] as const).map(t => (
             <button key={t} className={`tab-btn ${ptab === t ? "active" : ""}`} onClick={() => setPtab(t)}>
@@ -1002,12 +1325,514 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
             </button>
           ))}
         </div>
-        {loading
-          ? <div className="state-box"><div className="spinner" /></div>
-          : ptab === "form"
-            ? <PayloadFormBody p={p} />
-            : <div style={{ padding: 16, overflow: "auto" }}><pre style={{ maxHeight: "calc(92vh - 180px)" }}>{JSON.stringify(p, null, 2)}</pre></div>
-        }
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          {loading ? (
+            <div className="state-box"><div className="spinner" /></div>
+          ) : ptab === "form" ? (
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              <PayloadFormBody
+                p={editData}
+                ports={ports}
+                carriers={carriers}
+                onFixCarrier={() => rec && setCarrierFixTarget({ record: rec })}
+                editPorts={{
+                  ports,
+                  originCode: editData.origin_code as string ?? "",
+                  originText,
+                  destCode: editData.destination_code as string ?? "",
+                  destText,
+                  onOriginChange: t => { setOriginText(t); onFieldChange("origin_code", ""); },
+                  onOriginSelect: (code, display) => { setOriginText(display); onFieldChange("origin_code", code); },
+                  onDestChange: t => { setDestText(t); onFieldChange("destination_code", ""); },
+                  onDestSelect: (code, display) => { setDestText(display); onFieldChange("destination_code", code); },
+                }}
+                editHousingPorts={editHousingPortsArr}
+                onFieldChange={onFieldChange}
+                onHousingFieldChange={onHousingFieldChange}
+                onFixCode={() => rec && setFixTarget({ record: rec })}
+                onFixHousingCode={() => rec && setFixTarget({ record: rec })}
+              />
+            </div>
+          ) : (
+            <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+              <pre style={{ maxHeight: "calc(92vh - 220px)" }}>{JSON.stringify(rec?.api_payload ?? rec?.extracted_data ?? {}, null, 2)}</pre>
+            </div>
+          )}
+        </div>
+
+        {/* ── FIX 4: Footer with Save button ── */}
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={savePayload}
+            disabled={saving || loading}
+          >
+            {saving
+              ? <><span style={{ width: 13, height: 13, border: "2px solid rgba(255,255,255,.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "hbl-spin .7s linear infinite", display: "inline-block" }} /> Saving…</>
+              : "💾 Save Payload"}
+          </button>
+        </div>
+      </div>
+
+      {fixTarget && (
+        <PortFixModal
+          record={fixTarget.record}
+          ports={ports}
+          onClose={() => setFixTarget(null)}
+          onSaved={reloadPorts}
+          showToast={showToast}
+        />
+      )}
+      {carrierFixTarget && (
+        <CarrierFixModal
+          record={carrierFixTarget.record}
+          carriers={carriers}
+          onClose={() => setCarrierFixTarget(null)}
+          onSaved={reloadCarriers}
+          showToast={showToast}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── Port Search ──────────────────────────────────────────────────────────────
+
+const PortSearch: FC<{
+  label: string;
+  value: string;
+  inputText: string;
+  ports: PortOption[];
+  onChange: (text: string) => void;
+  onSelect: (code: string, display: string) => void;
+  placeholder?: string;
+  onFix?: () => void;
+}> = ({ label, value, inputText, ports, onChange, onSelect, placeholder = "Search port code or name…", onFix }) => {
+  const [open, setOpen] = useState(false);
+  const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => setOpen(false);
+    window.addEventListener("scroll", handler, true);
+    return () => window.removeEventListener("scroll", handler, true);
+  }, [open]);
+
+  const computePos = () => {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+  };
+
+  const handleFocus = () => { computePos(); setOpen(true); };
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(e.target.value);
+    computePos();
+    setOpen(true);
+  };
+
+  const filtered = useMemo(() => {
+    if (inputText.length < 1) return [];
+    const q = inputText.toLowerCase();
+    return ports.filter(p =>
+      p.port_code.toLowerCase().includes(q) ||
+      p.port_name.toLowerCase().includes(q) ||
+      p.alias_code.toLowerCase().includes(q)
+    ).slice(0, 80);
+  }, [inputText, ports]);
+
+  const matchesAlias = value ? ports.some(p => p.alias_code === value || p.port_code === value) : false;
+
+  return (
+    <div ref={wrapRef}>
+      <label style={{ display: "block", fontSize: ".78rem", fontWeight: 600, marginBottom: 5 }}>
+        {label} <span style={{ color: "var(--red)" }}>*</span>
+      </label>
+      <input
+        ref={inputRef}
+        placeholder={placeholder}
+        value={inputText}
+        autoComplete="off"
+        onChange={handleChange}
+        onFocus={handleFocus}
+        style={{
+          width: "100%", padding: "8px 12px", borderRadius: 7,
+          border: `1px solid ${matchesAlias ? "var(--green)" : "var(--border2)"}`,
+          fontFamily: "var(--sans)", fontSize: ".8rem", outline: "none",
+          background: "var(--surface)",
+        }}
+      />
+      {value && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+          <span style={{ fontSize: ".7rem", color: matchesAlias ? "var(--green)" : "var(--red)", fontFamily: "var(--mono)" }}>
+            {matchesAlias ? "✓" : "⚠"} {value}
+          </span>
+          {!matchesAlias && onFix && (
+            <button
+              onClick={onFix}
+              style={{
+                padding: "1px 7px", fontSize: ".6rem", fontWeight: 700,
+                fontFamily: "var(--sans)", background: "rgba(220,38,38,.08)",
+                border: "1px solid rgba(220,38,38,.35)", borderRadius: 4,
+                color: "var(--red)", cursor: "pointer",
+              }}
+            >
+              🔧 Fix Alias
+            </button>
+          )}
+        </div>
+      )}
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: "fixed",
+          top: dropPos.top,
+          left: dropPos.left,
+          width: dropPos.width,
+          background: "var(--surface)",
+          border: "1px solid var(--border2)",
+          borderRadius: 7,
+          boxShadow: "0 8px 28px rgba(0,0,0,.13)",
+          zIndex: 9999,
+          maxHeight: 240,
+          overflowY: "auto",
+        }}>
+          {filtered.map(p => (
+            <div
+              key={p.port_code}
+              onMouseDown={e => { e.preventDefault(); onSelect(p.port_code, `${p.port_code} – ${p.port_name}`); setOpen(false); }}
+              style={{ padding: "8px 12px", cursor: "pointer", fontSize: ".78rem", display: "flex", gap: 8, alignItems: "center", borderBottom: "1px solid var(--border)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "")}
+            >
+              <span style={{ fontFamily: "var(--mono)", fontWeight: 600, color: "var(--accent)", minWidth: 64 }}>{p.port_code}</span>
+              <span style={{ flex: 1 }}>{p.port_name}</span>
+              <span style={{ fontSize: ".68rem", color: "var(--muted)", fontFamily: "var(--mono)" }}>{p.transport_mode}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Port Fix Modal ───────────────────────────────────────────────────────────
+
+const PortFixModal: FC<{
+  record: FileRecord;
+  ports: PortOption[];
+  onClose: () => void;
+  onSaved: () => void;
+  showToast: (msg: string, type?: ToastState["type"]) => void;
+}> = ({ record, ports, onClose, onSaved, showToast }) => {
+  const payload = record.api_payload ?? record.extracted_data ?? {} as PayloadData;
+  const originCode = payload.origin_code as string | undefined;
+  const destCode = payload.destination_code as string | undefined;
+
+  const invalid = (code?: string) => !!code && !ports.some(p => p.alias_code === code);
+
+  const lookupPortName = useCallback((code?: string) => {
+    if (!code) return "";
+    return ports.find(p => p.alias_code === code || p.port_code === code)?.port_name ?? "";
+  }, [ports]);
+
+  const [originFixed, setOriginFixed] = useState("");
+  const [originText, setOriginText] = useState("");
+  const [destFixed, setDestFixed] = useState("");
+  const [destText, setDestText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!ports.length) return;
+    setOriginText(prev => prev || lookupPortName(originCode));
+    setDestText(prev => prev || lookupPortName(destCode));
+  }, [ports, originCode, destCode, lookupPortName]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const headers = { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` };
+      const createAlias = async (aliasCode: string, portCode: string) => {
+        const tm = ports.find(p => p.port_code === portCode)?.transport_mode ?? "SEA";
+        await hblApi.post("/port-aliases/", {
+          alias_code: aliasCode,
+          port_code: portCode,
+          transport_mode: tm,
+          status: "ACTIVE",
+        }, { headers });
+      };
+      if (invalid(originCode) && originFixed) await createAlias(originCode!, originFixed);
+      if (invalid(destCode) && destFixed) await createAlias(destCode!, destFixed);
+      showToast("✅ Port aliases created", "success");
+      onSaved();
+      onClose();
+    } catch {
+      showToast("❌ Save failed", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const PortFixRow: FC<{
+    sectionLabel: string;
+    aliasCode: string;
+    fixedCode: string;
+    inputText: string;
+    onTextChange: (t: string) => void;
+    onPortSelect: (code: string, display: string) => void;
+  }> = ({ sectionLabel, aliasCode, fixedCode, inputText, onTextChange, onPortSelect }) => (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: ".68rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
+        {sectionLabel}
+      </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div style={{ flex: "0 0 130px" }}>
+          <label style={{ fontSize: ".57rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", color: "var(--muted)", display: "block", marginBottom: 3 }}>
+            Alias Port Code
+          </label>
+          <input
+            value={aliasCode}
+            readOnly
+            style={{
+              width: "100%", background: "var(--surface2)", border: "1px solid var(--border)",
+              borderRadius: 5, padding: "6px 9px", fontSize: ".8rem", color: "var(--muted)",
+              fontFamily: "var(--mono)", cursor: "not-allowed",
+            }}
+          />
+        </div>
+        <div style={{ flex: 1, overflow: "visible" }}>
+          <PortSearch
+            label="Select Port"
+            value={fixedCode}
+            inputText={inputText}
+            ports={ports}
+            onChange={t => { onTextChange(t); }}
+            onSelect={onPortSelect}
+            placeholder="Search by port name…"
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" style={{ maxWidth: 500 }}>
+        <div className="modal-head">
+          <h2>⚠ Fix Invalid Port Codes</h2>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{ overflow: "visible" }}>
+          {invalid(originCode) && (
+            <PortFixRow
+              sectionLabel="Origin Code"
+              aliasCode={originCode ?? ""}
+              fixedCode={originFixed}
+              inputText={originText}
+              onTextChange={t => { setOriginText(t); setOriginFixed(""); }}
+              onPortSelect={(code, display) => { setOriginFixed(code); setOriginText(display); }}
+            />
+          )}
+          {invalid(destCode) && (
+            <PortFixRow
+              sectionLabel="Destination Code"
+              aliasCode={destCode ?? ""}
+              fixedCode={destFixed}
+              inputText={destText}
+              onTextChange={t => { setDestText(t); setDestFixed(""); }}
+              onPortSelect={(code, display) => { setDestFixed(code); setDestText(display); }}
+            />
+          )}
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "💾 Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Carrier Fix Modal ────────────────────────────────────────────────────────
+
+const CarrierFixModal: FC<{
+  record: FileRecord;
+  carriers: CarrierOption[];
+  onClose: () => void;
+  onSaved: () => void;
+  showToast: (msg: string, type?: ToastState["type"]) => void;
+}> = ({ record, carriers, onClose, onSaved, showToast }) => {
+  const payload = record.api_payload ?? record.extracted_data ?? {} as PayloadData;
+  const carrierCode = payload.carrier_code as string | undefined;
+
+  const invalid = (code?: string) =>
+    !!code && !carriers.some(c => c.alias_code === code || c.carrier_code === code);
+
+  const lookupCarrierName = useCallback((code?: string) => {
+    if (!code || !carriers.length) return "";
+    return carriers.find(c => c.alias_code === code || c.carrier_code === code)?.carrier_name ?? "";
+  }, [carriers]);
+
+  const [fixedCode, setFixedCode] = useState("");
+  const [inputText, setInputText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!carriers.length) return;
+    setInputText(prev => prev || lookupCarrierName(carrierCode));
+  }, [carriers, carrierCode, lookupCarrierName]);
+
+  const filtered = useMemo(() => {
+    if (inputText.length < 1) return [];
+    const q = inputText.toLowerCase();
+    return carriers.filter(c =>
+      c.carrier_code.toLowerCase().includes(q) ||
+      c.carrier_name.toLowerCase().includes(q) ||
+      (c.alias_code ?? "").toLowerCase().includes(q)
+    ).slice(0, 80);
+  }, [inputText, carriers]);
+
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const computePos = () => {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+  };
+
+  const save = async () => {
+    if (!fixedCode) return;
+    setSaving(true);
+    try {
+      const tm = carriers.find(c => c.carrier_code === fixedCode)?.transport_mode ?? "SEA";
+      await hblApi.post("/carrier-aliases/", {
+        alias_code: carrierCode,
+        carrier_code: fixedCode,
+        transport_mode: tm,
+        status: "ACTIVE",
+      }, { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } });
+      showToast("✅ Carrier alias created", "success");
+      onSaved();
+      onClose();
+    } catch {
+      showToast("❌ Save failed", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!invalid(carrierCode)) return null;
+
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" style={{ maxWidth: 460 }}>
+        <div className="modal-head">
+          <h2>🔧 Fix Invalid Carrier Code</h2>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{ overflow: "visible" }}>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: ".68rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
+              Carrier Code
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <div style={{ flex: "0 0 130px" }}>
+                <label style={{ fontSize: ".57rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", color: "var(--muted)", display: "block", marginBottom: 3 }}>
+                  Alias Code
+                </label>
+                <input
+                  value={carrierCode ?? ""}
+                  readOnly
+                  style={{
+                    width: "100%", background: "var(--surface2)", border: "1px solid var(--border)",
+                    borderRadius: 5, padding: "6px 9px", fontSize: ".8rem", color: "var(--muted)",
+                    fontFamily: "var(--mono)", cursor: "not-allowed",
+                  }}
+                />
+              </div>
+              <div ref={wrapRef} style={{ flex: 1, overflow: "visible" }}>
+                <label style={{ display: "block", fontSize: ".78rem", fontWeight: 600, marginBottom: 5 }}>
+                  Select Carrier <span style={{ color: "var(--red)" }}>*</span>
+                </label>
+                <input
+                  ref={inputRef}
+                  placeholder="Search by carrier name…"
+                  value={inputText}
+                  autoComplete="off"
+                  onChange={e => { setInputText(e.target.value); setFixedCode(""); computePos(); setOpen(true); }}
+                  onFocus={() => { computePos(); setOpen(true); }}
+                  style={{
+                    width: "100%", padding: "8px 12px", borderRadius: 7,
+                    border: `1px solid ${fixedCode ? "var(--green)" : "var(--border2)"}`,
+                    fontFamily: "var(--sans)", fontSize: ".8rem", outline: "none",
+                    background: "var(--surface)",
+                  }}
+                />
+                {fixedCode && (
+                  <div style={{ fontSize: ".7rem", color: "var(--green)", marginTop: 3, fontFamily: "var(--mono)" }}>
+                    ✓ {fixedCode}
+                  </div>
+                )}
+                {open && filtered.length > 0 && (
+                  <div style={{
+                    position: "fixed", top: dropPos.top, left: dropPos.left, width: dropPos.width,
+                    background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 7,
+                    boxShadow: "0 8px 28px rgba(0,0,0,.13)", zIndex: 9999, maxHeight: 240, overflowY: "auto",
+                  }}>
+                    {filtered.map(c => (
+                      <div
+                        key={c.carrier_code}
+                        onMouseDown={e => { e.preventDefault(); setFixedCode(c.carrier_code); setInputText(c.carrier_name); setOpen(false); }}
+                        style={{ padding: "8px 12px", cursor: "pointer", fontSize: ".78rem", display: "flex", gap: 8, alignItems: "center", borderBottom: "1px solid var(--border)" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "")}
+                      >
+                        <span style={{ fontFamily: "var(--mono)", fontWeight: 600, color: "var(--accent)", minWidth: 64 }}>{c.carrier_code}</span>
+                        <span style={{ flex: 1 }}>{c.carrier_name}</span>
+                        {c.transport_mode && <span style={{ fontSize: ".68rem", color: "var(--muted)", fontFamily: "var(--mono)" }}>{c.transport_mode}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || !fixedCode}>
+            {saving ? "Saving…" : "💾 Save"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1028,6 +1853,8 @@ const HBLDocumentManager: FC = () => {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [jobLoading, setJobLoading] = useState(false);
+  const [ports, setPorts] = useState<PortOption[]>([]);
+  const [carriers, setCarriers] = useState<CarrierOption[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1039,7 +1866,9 @@ const HBLDocumentManager: FC = () => {
 
   const loadFiles = useCallback(async () => {
     try {
-      const { data } = await hblApi.get<FilesResponse>("/files", { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } });
+      const { data } = await hblApi.get<FilesResponse>("/files", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      });
       setAllFiles(data.files ?? []);
       setLoadState("ok");
     } catch {
@@ -1058,6 +1887,44 @@ const HBLDocumentManager: FC = () => {
 
   useEffect(() => { loadFiles(); }, [loadFiles]);
 
+  const loadPorts = useCallback(() => {
+    hblApi
+      .get<{ ports: PortOption[] }>("/ports", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => setPorts(r.data.ports ?? []))
+      .catch(() => {});
+  }, []);
+
+  const loadCarriers = useCallback(() => {
+    hblApi
+      .get<{ carriers: CarrierOption[] }>("/carriers", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => setCarriers(r.data.carriers ?? []))
+      .catch(() => {});
+  }, []);
+
+  const refreshAll = useCallback(() => {
+    loadFiles();
+    loadPorts();
+    loadCarriers();
+  }, [loadFiles, loadPorts, loadCarriers]);
+
+  useEffect(() => { loadPorts(); }, [loadPorts]);
+  useEffect(() => { loadCarriers(); }, [loadCarriers]);
+
+  const hasCodeValidationError = (f: FileRecord): boolean => {
+    const payload = f.api_payload ?? f.extracted_data;
+    if (!payload) return false;
+    const origin = payload.origin_code as string | undefined;
+    const dest = payload.destination_code as string | undefined;
+    const carrier = payload.carrier_code as string | undefined;
+    const invalidPort = (code?: string) => !!code && !ports.some(p => p.alias_code === code || p.port_code === code);
+    const invalidCarrier = (code?: string) => !!code && !carriers.some(c => c.alias_code === code || c.carrier_code === code);
+    return invalidPort(origin) || invalidPort(dest) || invalidCarrier(carrier);
+  };
+
   useEffect(() => {
     const inProgress = allFiles.some(f => f.status === "pending" || f.status === "processing");
     if (inProgress && !pollRef.current) {
@@ -1071,11 +1938,23 @@ const HBLDocumentManager: FC = () => {
     };
   }, [allFiles, loadFiles]);
 
+  const getPortName = (code?: string) => {
+    if (!code) return "";
+    return ports.find(p => p.alias_code === code || p.port_code === code)?.port_name ?? "";
+  };
+
   const filtered = allFiles
     .filter(f => {
       const matchStatus = !statusFilter || f.status === statusFilter;
       const q = search.toLowerCase();
-      const matchSearch = !q || [f.txn_id, f.filename, f.bl_number, f.shipper_name, f.consignee_name].some(v => v?.toLowerCase().includes(q));
+      const payload = f.api_payload ?? f.extracted_data;
+      const originCode = payload?.origin_code as string | undefined;
+      const destCode = payload?.destination_code as string | undefined;
+      const matchSearch = !q || [
+        f.txn_id, f.filename, f.bl_number, f.shipper_name, f.consignee_name,
+        originCode, destCode,
+        getPortName(originCode), getPortName(destCode),
+      ].some(v => v?.toLowerCase().includes(q));
       return matchStatus && matchSearch;
     })
     .sort((a, b) => {
@@ -1114,25 +1993,23 @@ const HBLDocumentManager: FC = () => {
     } catch { showToast("Delete failed", "error"); }
   };
 
-  // ✅ FIX: Pass selected txn_ids to start_creating_jobs if any are selected;
-  //         otherwise send all pending txn_ids as fallback.
-  const startJobs = async (overrideIds?: string[]) => {
+  const startJobs = async (ids: string[]) => {
+    const invalid = ids.filter(id => {
+      const f = allFiles.find(x => x.txn_id === id);
+      return f ? hasCodeValidationError(f) : false;
+    });
+    if (invalid.length) {
+      showToast(`❌ ${invalid.length} record(s) have invalid port/carrier codes. Fix them before creating jobs.`, "error");
+      return;
+    }
     setJobLoading(true);
     try {
-      // If caller passes explicit IDs (from action bar), use those.
-      // Otherwise fall back to all pending records.
-      const ids = overrideIds && overrideIds.length > 0
-        ? overrideIds
-        : allFiles.filter(f => f.status === "pending").map(f => f.txn_id);
-
       await hblApi.post(
         "/start_creating_jobs/",
         { txn_ids: ids, transactions_id: ids },
         { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } }
       );
-
-      const label = overrideIds?.length ? `${overrideIds.length} selected` : "all pending";
-      showToast(`✅ Jobs started for ${label}`, "success");
+      showToast(`✅ Jobs started for ${ids.length} selected`, "success");
       setSelected(new Set());
       loadFiles();
     } catch {
@@ -1141,6 +2018,11 @@ const HBLDocumentManager: FC = () => {
       setJobLoading(false);
     }
   };
+
+  const selectedHasValidationError = Array.from(selected).some(id => {
+    const f = allFiles.find(x => x.txn_id === id);
+    return f ? hasCodeValidationError(f) : false;
+  });
 
   const statuses: Array<FileStatus | ""> = ["", "pending", "processing", "done", "failed"];
   const statusLabels: Record<string, string> = { "": "All", pending: "Pending", processing: "Processing", done: "Done", failed: "Failed" };
@@ -1169,11 +2051,18 @@ const HBLDocumentManager: FC = () => {
           </div>
           <button className="btn btn-ghost" onClick={loadFiles} title="Refresh">↻</button>
           {selected.size > 0 && (
-            <button className="btn btn-green" onClick={() => startJobs(Array.from(selected))} disabled={jobLoading}>
+            <button
+              className="btn btn-green"
+              onClick={() => startJobs(Array.from(selected))}
+              disabled={jobLoading || selectedHasValidationError}
+              title={selectedHasValidationError ? "Fix invalid port/carrier codes before creating jobs" : undefined}
+              style={selectedHasValidationError ? { opacity: .5, cursor: "not-allowed" } : undefined}
+            >
               {jobLoading && (
                 <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "hbl-spin .7s linear infinite", display: "inline-block" }} />
               )}
               {jobLoading ? "Starting…" : `▶ Start Jobs (${selected.size})`}
+              {selectedHasValidationError && <span style={{ fontSize: ".65rem", marginLeft: 4 }}>⚠</span>}
             </button>
           )}
           <button className="btn btn-primary" onClick={() => setModal({ type: "upload" })}>＋ Upload</button>
@@ -1222,7 +2111,6 @@ const HBLDocumentManager: FC = () => {
                 </td>
                 <td className="td-txn">{f.txn_id}</td>
                 <td>
-                  {/* ✅ Show 🖼️ for image files in the table too */}
                   <div className="td-filename" title={f.filename}>
                     {/\.(jpg|jpeg|png|gif|webp|bmp|tiff?|svg)$/i.test(f.filename) ? "🖼️" : "📄"} {f.filename}
                   </div>
@@ -1234,12 +2122,16 @@ const HBLDocumentManager: FC = () => {
                 <td className="td-date">{f.uploaded_at ? f.uploaded_at.slice(0, 16) : "—"}</td>
                 <td onClick={e => e.stopPropagation()}>
                   <div className="action-row">
-                    <button className="act-btn view" onClick={() => setModal({ type: "detail", record: f })}>View</button>
-                    {f.status === "done" && (
+                    {/* <button className="act-btn view" onClick={() => setModal({ type: "detail", record: f })}>View</button> */}
+                    {/* {f.status === "done" && (
                       <button className="act-btn dl" onClick={() => window.open(`/files/${f.txn_id}/download`, "_blank")}>↓ JSON</button>
-                    )}
-                    {f.file_type === "mbl" && (f.status === "done" || f.status === "job_created") && (
-                      <button className="act-btn payload" onClick={() => setModal({ type: "payload", txn_id: f.txn_id, record: f })}>⊞ Payload</button>
+                    )} */}
+                    { (f.status === "done" || f.status === "job_created") && (
+                      <button
+                        className="act-btn payload"
+                        onClick={() => setModal({ type: "payload", txn_id: f.txn_id, record: f })}
+                        style={hasCodeValidationError(f) ? { color: "var(--red)", borderColor: "var(--red)", background: "rgba(220,38,38,.06)" } : undefined}
+                      >⊞ View</button>
                     )}
                   </div>
                 </td>
@@ -1283,19 +2175,20 @@ const HBLDocumentManager: FC = () => {
         </div>
       </div>
 
-      {/* ✅ Action bar: Delete + Start Jobs for selected records */}
       <div className={`action-bar ${selected.size > 0 ? "visible" : ""}`}>
         <span style={{ fontSize: ".78rem", color: "var(--muted)" }}>
           <strong style={{ color: "var(--text)" }}>{selected.size}</strong> selected
         </span>
         <div style={{ width: 1, height: 16, background: "var(--border)" }} />
-        {/* ✅ Start Jobs for selected: passes selected txn_ids explicitly */}
         <button
           className="bar-btn green"
           onClick={() => startJobs(Array.from(selected))}
-          disabled={jobLoading}
+          disabled={jobLoading || selectedHasValidationError}
+          title={selectedHasValidationError ? "Fix invalid port/carrier codes before creating jobs" : undefined}
+          style={selectedHasValidationError ? { opacity: .5, cursor: "not-allowed" } : undefined}
         >
           {jobLoading ? "Starting…" : "▶ Start Jobs"}
+          {selectedHasValidationError && <span style={{ fontSize: ".65rem", marginLeft: 4 }}>⚠</span>}
         </button>
         <button className="bar-btn danger" onClick={deleteSelected}>🗑 Delete</button>
         <button className="bar-btn outline" onClick={clearSel}>✕ Clear</button>
@@ -1304,8 +2197,25 @@ const HBLDocumentManager: FC = () => {
       {toast && <Toast toast={toast} />}
 
       {modal?.type === "upload" && <UploadModal onClose={() => setModal(null)} onUploaded={loadFiles} showToast={showToast} />}
-      {modal?.type === "detail" && <DetailModal record={modal.record} onClose={() => setModal(null)} />}
-      {modal?.type === "payload" && <PayloadModal txn_id={modal.txn_id} record={modal.record} onClose={() => setModal(null)} showToast={showToast} />}
+      {modal?.type === "detail" && <DetailModal record={modal.record} ports={ports} carriers={carriers} onClose={() => setModal(null)} />}
+      {modal?.type === "payload" && (
+        <PayloadModal
+          txn_id={modal.txn_id}
+          record={modal.record}
+          onClose={() => setModal(null)}
+          showToast={showToast}
+          onRefreshList={refreshAll}
+        />
+      )}
+      {modal?.type === "fix_port" && (
+        <PortFixModal
+          record={modal.record}
+          ports={ports}
+          onClose={() => setModal(null)}
+          onSaved={loadFiles}
+          showToast={showToast}
+        />
+      )}
     </div>
   );
 };
