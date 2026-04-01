@@ -4043,44 +4043,84 @@ function HouseCreate() {
                   ` (${chargesForm.values.charges.length})`}
               </Text>
               {location.state?.job?.id != null && (
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  onClick={() => {
-                    const fullDetail = getCurrentHousingDetail();
-                    // For air import customer invoice, only Collect charges (mirrors Ocean Import)
-                    const collectCharges = (fullDetail.charges ?? []).filter(
-                      (c: { pp_cc?: string }) =>
-                        String(c.pp_cc ?? "").trim() === "Collect",
-                    );
-                    const detailForInvoice = {
-                      ...fullDetail,
-                      charges: collectCharges,
-                    };
-                    navigate("/air/import-job/invoice", {
-                      state: {
-                        serviceType: "AIR",
-                        hawbDetails: [detailForInvoice],
-                        housingDetails: [detailForInvoice],
-                        is_agent: false,
-                        // Indicate that Bill To / State / Address should come from consignee
-                        billToFrom: "consignee",
-                        ...(location.state?.job && { job: location.state.job }),
-                        ...(location.state?.mawbDetails && {
-                          mawbDetails: location.state.mawbDetails,
-                        }),
-                        ...(location.state?.carrierDetails && {
-                          carrierDetails: location.state.carrierDetails,
-                        }),
-                        ...(location.state?.routings && {
-                          routings: location.state.routings,
-                        }),
-                      },
-                    });
-                  }}
-                >
-                  Create Invoice
-                </Button>
+                <Group gap="xs">
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      // For air import customer invoice, only Collect charges (mirrors Ocean Import)
+                      const collectCharges = (fullDetail.charges ?? []).filter(
+                        (c: { pp_cc?: string }) =>
+                          String(c.pp_cc ?? "").trim() === "Collect",
+                      );
+                      const detailForInvoice = {
+                        ...fullDetail,
+                        charges: collectCharges,
+                      };
+                      navigate("/air/import-job/credit-note", {
+                        state: {
+                          serviceType: "AIR",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          // Indicate that Bill To / State / Address should come from consignee
+                          billToFrom: "consignee",
+                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.mawbDetails && {
+                            mawbDetails: location.state.mawbDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Credit Note
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      // For air import customer invoice, only Collect charges (mirrors Ocean Import)
+                      const collectCharges = (fullDetail.charges ?? []).filter(
+                        (c: { pp_cc?: string }) =>
+                          String(c.pp_cc ?? "").trim() === "Collect",
+                      );
+                      const detailForInvoice = {
+                        ...fullDetail,
+                        charges: collectCharges,
+                      };
+                      navigate("/air/import-job/invoice", {
+                        state: {
+                          serviceType: "AIR",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          // Indicate that Bill To / State / Address should come from consignee
+                          billToFrom: "consignee",
+                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.mawbDetails && {
+                            mawbDetails: location.state.mawbDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Invoice
+                  </Button>
+                </Group>
               )}
             </Group>
 

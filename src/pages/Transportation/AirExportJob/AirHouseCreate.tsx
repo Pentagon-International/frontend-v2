@@ -3897,41 +3897,78 @@ function HouseCreate() {
                   ` (${chargesForm.values.charges.length})`}
               </Text>
               {location.state?.job?.id != null && (
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  onClick={() => {
-                    const fullDetail = getCurrentHousingDetail();
-                    const prepaidCharges = (fullDetail.charges ?? []).filter(
-                      (c: { pp_cc?: string }) =>
-                        String(c.pp_cc ?? "").trim() === "Prepaid",
-                    );
-                    const detailForInvoice = {
-                      ...fullDetail,
-                      charges: prepaidCharges,
-                    };
-                    navigate("/air/export-job/invoice", {
-                      state: {
-                        serviceType: "AIR",
-                        hawbDetails: [detailForInvoice],
-                        housingDetails: [detailForInvoice],
-                        is_agent: false,
-                        ...(location.state?.job && { job: location.state.job }),
-                        ...(location.state?.mawbDetails && {
-                          mawbDetails: location.state.mawbDetails,
-                        }),
-                        ...(location.state?.carrierDetails && {
-                          carrierDetails: location.state.carrierDetails,
-                        }),
-                        ...(location.state?.routings && {
-                          routings: location.state.routings,
-                        }),
-                      },
-                    });
-                  }}
-                >
-                  Create Invoice
-                </Button>
+                <Group gap="xs">
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      const prepaidCharges = (fullDetail.charges ?? []).filter(
+                        (c: { pp_cc?: string }) =>
+                          String(c.pp_cc ?? "").trim() === "Prepaid",
+                      );
+                      const detailForInvoice = {
+                        ...fullDetail,
+                        charges: prepaidCharges,
+                      };
+                      navigate("/air/export-job/credit-note", {
+                        state: {
+                          serviceType: "AIR",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.mawbDetails && {
+                            mawbDetails: location.state.mawbDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Credit Note
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      const prepaidCharges = (fullDetail.charges ?? []).filter(
+                        (c: { pp_cc?: string }) =>
+                          String(c.pp_cc ?? "").trim() === "Prepaid",
+                      );
+                      const detailForInvoice = {
+                        ...fullDetail,
+                        charges: prepaidCharges,
+                      };
+                      navigate("/air/export-job/invoice", {
+                        state: {
+                          serviceType: "AIR",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.mawbDetails && {
+                            mawbDetails: location.state.mawbDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Invoice
+                  </Button>
+                </Group>
               )}
             </Group>
 

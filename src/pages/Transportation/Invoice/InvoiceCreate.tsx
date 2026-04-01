@@ -5,9 +5,6 @@ import {
   Grid,
   Group,
   Text,
-  TextInput,
-  Textarea,
-  NumberInput,
   Stack,
   Loader,
   ScrollArea,
@@ -45,6 +42,9 @@ import { apiCallProtected } from "../../../api/axios";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
+import FormNumberInput from "../../../components/FormNumberInput";
+import FormTextInput from "../../../components/FormTextInput";
+import FormTextArea from "../../../components/FormTextArea";
 
 // Fetch functions
 
@@ -94,10 +94,10 @@ const fetchStateMaster = async () => {
   }
 };
 
-// Daybook: POST with { filters: { document_type: "INV" } }, response.data has id and name
-const fetchDaybook = async () => {
+// Daybook: POST with { filters: { document_type } }, response.data has id and name
+const fetchDaybook = async (documentType: "INV" | "CRN" = "INV") => {
   try {
-    const payload = { filters: { document_type: "INV" } };
+    const payload = { filters: { document_type: documentType } };
     const response = await postAPICall(URL.daybook, payload, API_HEADER);
     return (response as { data?: unknown[] })?.data ?? [];
   } catch (error) {
@@ -298,6 +298,8 @@ type InvoiceDataFromApi = {
   currency_code?: string;
   day_book_id?: number;
   day_book_name?: string;
+  daybook_id?: number;
+  daybook_name?: string;
   status?: string;
   is_agent?: boolean;
   charges?: Array<{
@@ -319,7 +321,19 @@ type InvoiceDataFromApi = {
   }>;
 };
 
-function InvoiceCreate() {
+type InvoiceCreateProps = {
+  documentType?: "INV" | "CRN";
+  baseDrCr?: "Dr" | "Cr";
+  chargeDefaultDrCr?: "Dr" | "Cr";
+  documentLabel?: string;
+};
+
+function InvoiceCreate({
+  documentType = "INV",
+  baseDrCr = "Dr",
+  chargeDefaultDrCr = "Cr",
+  documentLabel = "Invoice",
+}: InvoiceCreateProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { id: invoiceId } = useParams<{ id: string }>();
@@ -405,6 +419,25 @@ function InvoiceCreate() {
   >({});
 
   const isReadOnly = isViewMode || invoiceIsPosted;
+  const invoiceDataFromState = (location.state?.invoiceData as
+    | Record<string, unknown>
+    | undefined) ?? { };
+  const inferredCreditFromData =
+    String(invoiceDataFromState?.document_type ?? "").toUpperCase() === "CRN" ||
+    String((invoiceDataFromApi as Record<string, unknown> | null)?.document_type ?? "").toUpperCase() === "CRN" ||
+    String(invoiceDataFromState?.Dr_Cr ?? invoiceDataFromState?.dr_cr ?? "").toLowerCase() === "cr" ||
+    String((invoiceDataFromApi as Record<string, unknown> | null)?.Dr_Cr ?? (invoiceDataFromApi as Record<string, unknown> | null)?.dr_cr ?? "").toLowerCase() === "cr";
+  const isCreditNoteFlow =
+    documentType === "CRN" ||
+    location.pathname.includes("credit-note") ||
+    inferredCreditFromData;
+  const resolvedDocumentLabel = isCreditNoteFlow ? "Credit Note" : documentLabel;
+  const pdfDocumentLabel = resolvedDocumentLabel;
+  const pageTitle = isViewMode
+    ? `View ${resolvedDocumentLabel}`
+    : isEditMode
+      ? `Edit ${resolvedDocumentLabel}`
+      : `Create ${resolvedDocumentLabel}`;
 
   // Ref for validate (state optional when agent invoice) — kept in sync with isAgentInvoice
   const isAgentInvoiceRef = useRef(false);
@@ -538,10 +571,10 @@ function InvoiceCreate() {
     staleTime: Infinity,
   });
 
-  // Fetch daybook data (filtered by document_type INV)
+  // Fetch daybook data (filtered by document_type)
   const { data: daybookData = [], isLoading: isDaybookLoading } = useQuery({
-    queryKey: ["daybook", "INV"],
-    queryFn: fetchDaybook,
+    queryKey: ["daybook", documentType],
+    queryFn: () => fetchDaybook(documentType),
     staleTime: Infinity,
   });
 
@@ -649,13 +682,42 @@ function InvoiceCreate() {
 
   // Format daybook options: id = value, name = label (value is daybook_id)
   const daybookOptions = useMemo(() => {
-    const data = daybookData as { id?: number; name?: string }[];
+    const invoiceData = (invoiceDataFromApi ??
+      (location.state?.invoiceData as InvoiceDataFromApi | undefined)) as
+      | InvoiceDataFromApi
+      | undefined;
+    const savedDaybookId =
+      invoiceData?.day_book_id != null
+        ? String(invoiceData.day_book_id)
+        : invoiceData?.daybook_id != null
+          ? String(invoiceData.daybook_id)
+          : "";
+    const savedDaybookName =
+      invoiceData?.day_book_name ?? invoiceData?.daybook_name ?? "";
+
+    const data = daybookData as Array<{
+      id?: number | string;
+      name?: string;
+      daybook_id?: number | string;
+      daybook_name?: string;
+    }>;
     if (!Array.isArray(data)) return [];
-    return data.map((item) => ({
-      value: String(item.id ?? ""),
-      label: item.name ?? "",
+    const options = data.map((item) => ({
+      value: String(item.id ?? item.daybook_id ?? ""),
+      label: item.name ?? item.daybook_name ?? "",
     }));
-  }, [daybookData]);
+    if (
+      isEditOrViewMode &&
+      savedDaybookId &&
+      !options.some((opt) => opt.value === savedDaybookId)
+    ) {
+      options.push({
+        value: savedDaybookId,
+        label: savedDaybookName || savedDaybookId,
+      });
+    }
+    return options;
+  }, [daybookData, invoiceDataFromApi, isEditOrViewMode, location.state]);
 
   // service_id from job (e.g. when navigating from air import list / house) for get-effective-sac
   const jobServiceId =
@@ -973,6 +1035,7 @@ function InvoiceCreate() {
 
         // Map house (HAWB) charges into invoice charges form (same shape as housing stepper for common fields)
         if (
+          documentType !== "CRN" &&
           firstHawb.charges &&
           Array.isArray(firstHawb.charges) &&
           firstHawb.charges.length > 0
@@ -1123,7 +1186,8 @@ function InvoiceCreate() {
                 ? amountInLocal
                 : null,
               tax_code: charge.tax_code ? String(charge.tax_code) : "",
-              dr_cr: (charge as any).dr_cr === "Dr" ? "Dr" : "Cr",
+              dr_cr:
+                (charge as any).dr_cr === "Dr" ? "Dr" : chargeDefaultDrCr,
             };
           });
           form.setFieldValue("charges", mappedCharges);
@@ -1184,7 +1248,7 @@ function InvoiceCreate() {
               header_amount: null,
               amount_in_local: null,
               tax_code: "",
-              dr_cr: "Cr",
+              dr_cr: chargeDefaultDrCr,
             },
           ]);
         }
@@ -1207,7 +1271,7 @@ function InvoiceCreate() {
           header_amount: null,
           amount_in_local: null,
           tax_code: "",
-          dr_cr: "Cr",
+          dr_cr: chargeDefaultDrCr,
         },
       ]);
     }
@@ -1275,7 +1339,11 @@ function InvoiceCreate() {
       gstn: invoiceData.gstn ?? "",
       shipment_no: invoiceData.shipment_no ?? "",
       daybook_id:
-        invoiceData.day_book_id != null ? String(invoiceData.day_book_id) : "",
+        invoiceData.day_book_id != null
+          ? String(invoiceData.day_book_id)
+          : invoiceData.daybook_id != null
+            ? String(invoiceData.daybook_id)
+            : "",
       document_date: documentDate,
       due_date: dueDate,
       currency: invoiceData.currency_code ?? "",
@@ -1371,7 +1439,7 @@ function InvoiceCreate() {
               dr_cr:
                 (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr"
                   ? "Dr"
-                  : "Cr",
+                  : chargeDefaultDrCr,
             }))
           : form.values.charges.length > 0
             ? form.values.charges
@@ -1390,7 +1458,7 @@ function InvoiceCreate() {
                   header_amount: null,
                   amount_in_local: null,
                   tax_code: "",
-                  dr_cr: "Cr",
+                  dr_cr: chargeDefaultDrCr,
                 },
               ],
     });
@@ -1993,12 +2061,15 @@ function InvoiceCreate() {
         job && (job.job_id != null || job.id != null)
           ? (job.job_id ?? job.id)
           : undefined;
+      const addressLabelForPayload =
+        addressOptions.find((opt) => opt.value === values.address)?.label ??
+        values.address;
 
       const payload = {
         ...(isUpdate ? { id: saveResponse.id } : {}),
         ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
-        address: values.address,
+        address: addressLabelForPayload,
         state_id: isAgent
           ? stateId != null && stateId > 0
             ? stateId
@@ -2021,7 +2092,7 @@ function InvoiceCreate() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Dr",
+        Dr_Cr: baseDrCr,
         is_agent: isAgent,
         charges: chargesPayload,
       };
@@ -2100,7 +2171,7 @@ function InvoiceCreate() {
             form.setFieldValue("charges", updatedCharges);
           }
           ToastNotification({
-            message: "Invoice created successfully",
+            message: `${documentLabel} created successfully`,
             type: "success",
           });
         }
@@ -2342,11 +2413,14 @@ function InvoiceCreate() {
         jobForPost && (jobForPost.job_id != null || jobForPost.id != null)
           ? (jobForPost.job_id ?? jobForPost.id)
           : undefined;
+      const addressLabelForPayload =
+        addressOptions.find((opt) => opt.value === values.address)?.label ??
+        values.address;
       const payload = {
         id: saveResponse.id,
         ...(jobIdForPost != null ? { job_id: jobIdForPost } : {}),
         bill_to: values.bill_to,
-        address: values.address,
+        address: addressLabelForPayload,
         state_id: isAgentPost
           ? stateId != null && stateId > 0
             ? stateId
@@ -2369,7 +2443,7 @@ function InvoiceCreate() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Dr",
+        Dr_Cr: baseDrCr,
         is_agent: isAgentPost,
         charges: allChargesPayload,
         taxes,
@@ -2568,10 +2642,10 @@ function InvoiceCreate() {
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
               {invoiceViewFetchLoading
-                ? "Loading invoice..."
+                ? `Loading ${resolvedDocumentLabel.toLowerCase()}...`
                 : isPosting
-                  ? "Posting invoice..."
-                  : "Saving invoice..."}
+                  ? `Posting ${resolvedDocumentLabel.toLowerCase()}...`
+                  : `Saving ${resolvedDocumentLabel.toLowerCase()}...`}
             </Text>
           </Stack>
         </Box>
@@ -2580,7 +2654,7 @@ function InvoiceCreate() {
         {/* Header: Title | document_no & status (after save) | Back */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
           <Text size="xl" fw={600} c="#105476">
-            Create Invoice
+            {pageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
             {saveResponse && (
@@ -2588,8 +2662,8 @@ function InvoiceCreate() {
                 <Group gap="xs" wrap="nowrap">
                   <Text size="sm" fw={500} c="dimmed">
                     {saveResponse.status?.toUpperCase() === "POSTED"
-                      ? "Invoice Number"
-                      : "Draft Invoice Number"}
+                      ? `${resolvedDocumentLabel} Number`
+                      : `Draft ${resolvedDocumentLabel} Number`}
                   </Text>
                   <Badge
                     size="sm"
@@ -2634,8 +2708,8 @@ function InvoiceCreate() {
                     onClick={handleDraftInvoicePreview}
                   >
                     {saveResponse?.status?.toUpperCase() === "POSTED"
-                      ? "Invoice"
-                      : "Draft Invoice"}
+                      ? pdfDocumentLabel
+                      : `Draft ${pdfDocumentLabel}`}
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
@@ -2692,18 +2766,6 @@ function InvoiceCreate() {
                 error={
                   form.errors.bill_to ? String(form.errors.bill_to) : undefined
                 }
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
 
@@ -2720,49 +2782,24 @@ function InvoiceCreate() {
                 error={form.errors.state || undefined}
                 readOnly={isStateLoading || isReadOnly}
                 // disabled={isStateLoading || isReadOnly}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
 
             {/* GSTN */}
             <Grid.Col span={2}>
-              <TextInput
+              <FormTextInput
                 label="GSTN"
                 placeholder="Enter GSTN"
                 value={form.values.gstn}
                 onChange={(e) => form.setFieldValue("gstn", e.target.value)}
                 error={form.errors.gstn}
                 readOnly={isReadOnly}
-                // disabled={isReadOnly}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
 
             {/* Shipment No / Job id - Job id when from Air Export Job */}
             <Grid.Col span={2}>
-              <TextInput
+              <FormTextInput
                 label={isFromAirExportJob ? "Job id" : "Shipment No"}
                 placeholder={
                   isFromAirExportJob ? "Job id" : "Enter shipment number"
@@ -2775,18 +2812,6 @@ function InvoiceCreate() {
                 }
                 withAsterisk
                 error={form.errors.shipment_no}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
 
@@ -2806,18 +2831,6 @@ function InvoiceCreate() {
                 error={form.errors.daybook_id}
                 readOnly={isDaybookLoading || isReadOnly}
                 // disabled={isDaybookLoading || isReadOnly}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
             {/* Document Date */}
@@ -2919,27 +2932,16 @@ function InvoiceCreate() {
                 }
                 // disabled={isCurrencyLoading || isReadOnly}
                 readOnly={isCurrencyLoading || isReadOnly}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
 
             {/* ROE */}
             <Grid.Col span={2}>
-              <NumberInput
+              <FormNumberInput
                 label="ROE"
                 placeholder="Enter rate of exchange"
                 value={form.values.roe ?? undefined}
+                decimalScale={2}
                 onChange={(value) => {
                   const numValue =
                     typeof value === "number"
@@ -2984,26 +2986,13 @@ function InvoiceCreate() {
                 readOnly={isReadOnly}
                 error={form.errors.roe ? String(form.errors.roe) : undefined}
                 min={0}
-                decimalScale={4}
                 step={0.0001}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
 
             {/* IRN No */}
             <Grid.Col span={2}>
-              <TextInput
+              <FormTextInput
                 label="IRN No"
                 placeholder="Enter IRN number"
                 value={form.values.irn_no}
@@ -3011,18 +3000,6 @@ function InvoiceCreate() {
                 error={form.errors.irn_no}
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
 
@@ -3034,6 +3011,7 @@ function InvoiceCreate() {
                   placeholder="Select address"
                   data={addressOptions}
                   value={form.values.address}
+                  dropdownZIndex={1000}
                   onChange={(value) =>
                     form.setFieldValue("address", value || "")
                   }
@@ -3046,21 +3024,9 @@ function InvoiceCreate() {
                       ? String(form.errors.address)
                       : undefined
                   }
-                  styles={{
-                    input: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                      height: "36px",
-                    },
-                    label: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                      marginBottom: "4px",
-                    },
-                  }}
                 />
               ) : (
-                <TextInput
+                <FormTextInput
                   label="Address"
                   placeholder="Enter address"
                   value={form.values.address}
@@ -3075,25 +3041,13 @@ function InvoiceCreate() {
                       ? String(form.errors.address)
                       : undefined
                   }
-                  styles={{
-                    input: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                      height: "36px",
-                    },
-                    label: {
-                      fontSize: "13px",
-                      fontFamily: "Inter",
-                      marginBottom: "4px",
-                    },
-                  }}
                 />
               )}
             </Grid.Col>
 
             {/* Narration - moved to end */}
             <Grid.Col span={6}>
-              <Textarea
+              <FormTextArea
                 label="Narration"
                 placeholder="Enter narration"
                 value={form.values.narration}
@@ -3104,17 +3058,6 @@ function InvoiceCreate() {
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 rows={2}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
           </Grid>
@@ -3228,14 +3171,11 @@ function InvoiceCreate() {
                   >
                     {showShipmentIdInCharges && (
                       <Grid.Col span={1}>
-                        <TextInput
+                        <FormTextInput
                           value={charge.shipment_id ?? ""}
                           readOnly
                           styles={{
                             input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
                               backgroundColor: "var(--mantine-color-gray-0)",
                             },
                           }}
@@ -3307,13 +3247,6 @@ function InvoiceCreate() {
                         error={chargeErrors[index]?.charge_name}
                         minSearchLength={2}
                         dropdownZIndex={1000}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1}>
@@ -3332,13 +3265,6 @@ function InvoiceCreate() {
                             `charges.${index}.unit_code`,
                             opt ? String(opt.label || opt.value) : v,
                           );
-                        }}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
                         }}
                       />
                     </Grid.Col>
@@ -3411,13 +3337,6 @@ function InvoiceCreate() {
                           }
                         }}
                         error={chargeErrors[index]?.currency}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
                       />
 
                       {/* <Group
@@ -3510,7 +3429,7 @@ function InvoiceCreate() {
                          </Group> */}
                     </Grid.Col>
                     <Grid.Col span={0.45}>
-                      <NumberInput
+                      <FormNumberInput
                         placeholder="ROE"
                         min={0}
                         hideControls
@@ -3588,21 +3507,15 @@ function InvoiceCreate() {
                           }
                         }}
                         error={chargeErrors[index]?.roe}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={0.65}>
-                      <NumberInput
+                      <FormNumberInput
                         placeholder="No of Unit"
                         min={0}
                         hideControls
                         // disabled={isReadOnly}
+                        allowDecimal={false}
                         readOnly={isReadOnly}
                         value={charge.no_of_unit || undefined}
                         onChange={(value) => {
@@ -3662,20 +3575,12 @@ function InvoiceCreate() {
                           );
                           form.setFieldValue("charges", updatedCharges);
                         }}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <NumberInput
+                      <FormNumberInput
                         placeholder="Per Unit"
                         min={0}
-                        decimalScale={2}
                         hideControls
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
@@ -3739,20 +3644,12 @@ function InvoiceCreate() {
                           );
                           form.setFieldValue("charges", updatedCharges);
                         }}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <NumberInput
+                      <FormNumberInput
                         placeholder="Currency Amount"
                         min={0}
-                        decimalScale={2}
                         hideControls
                         withAsterisk
                         // disabled={isReadOnly}
@@ -3817,20 +3714,12 @@ function InvoiceCreate() {
                           }
                         }}
                         error={chargeErrors[index]?.amount}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1}>
-                      <NumberInput
+                      <FormNumberInput
                         placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}`}
                         min={0}
-                        decimalScale={2}
                         hideControls
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
@@ -3841,20 +3730,12 @@ function InvoiceCreate() {
                             clampAmount(value as number | null),
                           );
                         }}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={0.8}>
-                      <NumberInput
+                      <FormNumberInput
                         placeholder="Local Amount"
                         min={0}
-                        decimalScale={2}
                         hideControls
                         withAsterisk
                         // disabled={isReadOnly}
@@ -3887,18 +3768,11 @@ function InvoiceCreate() {
                           });
                           form.setFieldValue("charges", updatedCharges);
                         }}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     {!isAgentInvoice && (
                       <Grid.Col span={0.8}>
-                        <TextInput
+                        <FormTextInput
                           placeholder="SAC Code"
                           withAsterisk
                           // disabled={isReadOnly}
@@ -3928,7 +3802,7 @@ function InvoiceCreate() {
                           { value: "Cr", label: "Cr" },
                           { value: "Dr", label: "Dr" },
                         ]}
-                        value={charge.dr_cr ?? "Cr"}
+                        value={charge.dr_cr ?? chargeDefaultDrCr}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         onChange={(value) =>
@@ -3950,7 +3824,7 @@ function InvoiceCreate() {
                     {!isAgentInvoice && headerSameState === true && (
                       <Grid.Col span={0.55}>
                         {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
-                        <TextInput
+                        <FormTextInput
                           placeholder="CGST"
                           value={(() => {
                             const rate = gstRatesByChargeIndex[index]?.cgst;
@@ -3992,7 +3866,7 @@ function InvoiceCreate() {
                     {!isAgentInvoice && headerSameState === true && (
                       <Grid.Col span={0.55}>
                         {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
-                        <TextInput
+                        <FormTextInput
                           placeholder="SGST"
                           value={(() => {
                             const rate = gstRatesByChargeIndex[index]?.sgst;
@@ -4035,7 +3909,7 @@ function InvoiceCreate() {
                     {!isAgentInvoice && headerSameState === false && (
                       <Grid.Col span={0.55}>
                         {/* {gstRatesByChargeIndex[index]?.same_state === false && ( */}
-                        <TextInput
+                        <FormTextInput
                           placeholder="IGST"
                           value={(() => {
                             const rate = gstRatesByChargeIndex[index]?.igst;
@@ -4153,7 +4027,7 @@ function InvoiceCreate() {
                                   header_amount: null,
                                   amount_in_local: null,
                                   tax_code: "",
-                                  dr_cr: "Cr",
+                                  dr_cr: chargeDefaultDrCr,
                                 });
                               }}
                             >
@@ -4398,7 +4272,9 @@ function InvoiceCreate() {
                   rightSection={<IconChevronRight size={16} />}
                   loading={isSubmitting}
                 >
-                  {saveResponse?.id ? "Update Invoice" : "Save Invoice"}
+                  {saveResponse?.id
+                    ? `Update ${resolvedDocumentLabel}`
+                    : `Save ${resolvedDocumentLabel}`}
                 </Button>
                 {saveResponse &&
                   saveResponse.status?.toUpperCase() === "UNPOSTED" &&
@@ -4410,7 +4286,7 @@ function InvoiceCreate() {
                       loading={isPosting}
                       onClick={handlePostInvoice}
                     >
-                      Post Invoice
+                      {`Post ${resolvedDocumentLabel}`}
                     </Button>
                   )}
               </>
