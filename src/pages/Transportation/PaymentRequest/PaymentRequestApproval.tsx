@@ -465,7 +465,8 @@ function PaymentRequestApproval() {
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              {row.original.status?.trim().toLowerCase() !== "approved" && (
+              {row.original.status?.trim().toLowerCase() !== "approved" &&
+                row.original.status?.trim().toLowerCase() !== "rejected" && (
                 <Box px={10} py={5}>
                   <UnstyledButton onClick={() => navigate(`/payment-request/edit/${row.original.id}`)}>
                     <Group gap="sm">

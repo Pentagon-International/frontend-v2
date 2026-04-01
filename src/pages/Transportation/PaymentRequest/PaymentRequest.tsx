@@ -792,6 +792,175 @@ function PaymentRequest() {
     await handleSubmit(form.values);
   };
 
+  const handleCalculateGst = async () => {
+    const validation = form.validate();
+    if (validation.hasErrors) return;
+    setIsSubmitting(true);
+    try {
+      const values = form.values;
+      const formatDate = (d: Date | null) => (d ? d.toISOString().split("T")[0] : null);
+
+      const currencyList = currencyData as Array<{
+        id?: number;
+        currency_code?: string;
+        code?: string;
+      }>;
+      const mainCurrencyId = currencyList?.find(
+        (item) =>
+          (item.currency_code ?? item.code ?? "").toString().trim().toUpperCase() ===
+          (values.currency ?? "").toString().trim().toUpperCase(),
+      )?.id;
+
+      const stateIdNum = values.state_code_1 ? Number(values.state_code_1) : undefined;
+
+      const payload: Record<string, unknown> = {
+        ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
+        job_reference: values.job_reference_1 ?? "",
+        crj_number: values.payment_crj_did ?? "",
+        approved_by: values.approved_by_1 ?? "",
+        approved_date: formatDate(values.approved_date),
+        customer_gst_no: values.customer_gst_no ?? "",
+        location_gst_no: values.location_gst_no ?? "",
+        date: formatDate(values.date),
+        payment_type: values.payment_type ?? "",
+        vouchar_type: values.voucher_type ?? "",
+        CINV: values.cinv ?? false,
+        proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+        actual_inv_no: values.actual_invoice_no ?? "",
+        account_id: values.account_id ? Number(values.account_id) : undefined,
+        amount: values.amount != null ? Number(values.amount) : null,
+        crj_date: formatDate(values.crj_date),
+        paid_to_type: values.paid_to_type ?? "",
+        paid_to: values.paid_to ?? "",
+        not_over: values.not_over ?? "",
+        tds_section_code: values.tds_section_code ?? "",
+        account_note: values.accountant_note ?? "",
+        note: values.note ?? "",
+        rejected_note: values.rejected_note || null,
+        on_hold_note: values.on_hold_note || null,
+        ...(values.approved ? { status: values.approved } : {}),
+        charges_data: values.charges.map((c) => ({
+          ...(c.id != null ? { id: c.id } : {}),
+          charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
+          job_id: (c.job_no ?? "") || (c.job_id ?? ""),
+          currency_id: c.currency_id ? Number(c.currency_id) : undefined,
+          unit_id: c.unit_id ? Number(c.unit_id) : undefined,
+          roe: c.roe != null ? Number(c.roe) : undefined,
+          no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : undefined,
+          amount_per_unit: c.amount_per_unit != null ? Number(c.amount_per_unit) : undefined,
+          amount: c.amount != null ? Number(c.amount) : undefined,
+          local_amount: c.amount_in_local != null ? Number(c.amount_in_local) : undefined,
+          sac_code: c.tax_code ?? "",
+        })),
+      };
+      if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
+        payload.currency_id = mainCurrencyId;
+      }
+      if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
+        payload.state_id = stateIdNum;
+      }
+
+      let rawResponse: any = null;
+      if (isUpdate) {
+        const updateId = saveResponse?.id ?? Number(requestId);
+        rawResponse = await apiCallProtected.put(
+          `${(URL as any).paymentRequest}${updateId}/`,
+          buildPaymentRequestFormData(payload as Record<string, unknown>, supportingDocuments),
+          {
+            headers: {
+              ...FORM_DATA_HEADERS,
+              ...API_HEADER.headers,
+            },
+          },
+        );
+      } else {
+        rawResponse = await apiCallProtected.post(
+          (URL as any).paymentRequest,
+          buildPaymentRequestFormData(payload as Record<string, unknown>, supportingDocuments),
+          {
+            headers: {
+              ...FORM_DATA_HEADERS,
+              ...API_HEADER.headers,
+            },
+          },
+        );
+      }
+
+      const saveData: PaymentRequestFromApi =
+        rawResponse?.data?.data ?? rawResponse?.data ?? rawResponse;
+      const paymentRequestId =
+        saveData?.id != null ? Number(saveData.id) : undefined;
+      if (!paymentRequestId || Number.isNaN(paymentRequestId)) {
+        throw new Error("Payment request id not found in response.");
+      }
+
+      const gstBreakupResponse = (await postAPICall(
+        URL.invoiceCalculateGstBreakup,
+        { payment_request_id: paymentRequestId },
+        API_HEADER,
+      )) as {
+        sac_wise_totals?: Array<Record<string, unknown>>;
+      };
+
+      const sacWiseTotals = Array.isArray(gstBreakupResponse?.sac_wise_totals)
+        ? gstBreakupResponse.sac_wise_totals
+        : [];
+      if (sacWiseTotals.length > 0) {
+        const gstCharges: ChargeItem[] = sacWiseTotals.map((item) => {
+          const totalAmountRaw = item.total_amount;
+          const totalAmount =
+            totalAmountRaw !== undefined &&
+            totalAmountRaw !== null &&
+            String(totalAmountRaw).trim() !== ""
+              ? Number(totalAmountRaw)
+              : null;
+          const roeRaw = item.roe;
+          const roeValue =
+            roeRaw !== undefined &&
+            roeRaw !== null &&
+            String(roeRaw).trim() !== ""
+              ? Number(roeRaw)
+              : 1;
+          const currencyCode = String(item.currency_code ?? "").trim();
+          const currencyId =
+            item.currency_id !== undefined && item.currency_id !== null
+              ? String(item.currency_id)
+              : "";
+          return {
+            ...emptyCharge(),
+            charge_id:
+              item.charge_id !== undefined && item.charge_id !== null
+                ? Number(item.charge_id)
+                : null,
+            charge_name: String(item.charge_name ?? ""),
+            job_no: String(item.job_id ?? ""),
+            cn_r: String(item.Dr_Cr ?? ""),
+            currency: currencyCode,
+            currency_id: currencyId,
+            roe: roeValue,
+            amount: totalAmount,
+            amount_in_local: totalAmount != null ? totalAmount * roeValue : null,
+          };
+        });
+        form.setFieldValue("charges", [...form.values.charges, ...gstCharges]);
+      }
+
+      ToastNotification({
+        message: "GST calculated successfully",
+        type: "success",
+      });
+    } catch (error: unknown) {
+      ToastNotification({
+        message:
+          (error as { message?: string })?.message ??
+          "Failed to calculate GST",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (values: PaymentRequestFormData) => {
     const isApproveAction = shouldApproveRef.current;
     const isRejectAction = shouldRejectRef.current;
@@ -921,6 +1090,9 @@ function PaymentRequest() {
             message: "Payment request updated successfully",
             type: "success",
           });
+          if (isApproveAction || isRejectAction) {
+            navigate(-1);
+          }
         }
       } else {
         // POST — create new record, then switch to edit mode in-place
@@ -2033,8 +2205,19 @@ function PaymentRequest() {
             ) : null}
           </Grid>
 
-          {form.values.tds_section_code?.trim() ? (
             <Group justify="flex-end" mt="md" mb="sm">
+              <Button
+                type="button"
+                variant="light"
+                color="#105476"
+                size="sm"
+                onClick={handleCalculateGst}
+                loading={isSubmitting}
+                disabled={isReadOnly}
+              >
+                Calculate GST
+              </Button>
+              {form.values.tds_section_code?.trim() ? (
               <Button
                 type="button"
                 variant="light"
@@ -2044,8 +2227,8 @@ function PaymentRequest() {
               >
                 Calculate TDS
               </Button>
+                        ) : null}
             </Group>
-          ) : null}
 
           {/* ── Charges Section ── */}
           <Box mt="xl">
