@@ -128,6 +128,7 @@ export const URL = {
   invoice: "invoice/",
   invoiceFilter: "filter/invoice/",
   invoiceCalculateGstBreakup: "invoice/calculate-gst-breakup/",
+  tdsCalculation: "tds_calculation/",
   invoiceReversableData: "invoice/reversable-data/",
   reverseInvoice: "reverse-invoice/",
   filterInvoice: "filter/invoice/",

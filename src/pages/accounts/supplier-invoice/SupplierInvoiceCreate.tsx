@@ -22,7 +22,7 @@ import {
   IconDownload,
   IconX,
 } from "@tabler/icons-react";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -156,6 +156,7 @@ type ChargeRow = {
   narration: string;
   shipment_no: string;
   charge_id: number | null;
+  charge_name?: string;
   currency_id: number | null;
   roe: number | null;
   amount: number | null;
@@ -186,8 +187,10 @@ type SupplierInvoiceFormValues = {
   narration: string;
   customer_gst_no: string;
   location_gst_no: string;
+  type: "INV" | "CRN";
   Inv_Crn_note: string;
   Inv_Crn_no: string;
+  roe: number | null;
   currency_id: string;
   taxable_amount: number | null;
   non_taxable_amount: number | null;
@@ -202,6 +205,10 @@ type SupplierInvoiceFormValues = {
   charges_data: ChargeRow[];
   supporting_documents: SupportingDocument[];
 };
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
   if (value === null || value === undefined) return null;
@@ -232,6 +239,12 @@ function formatDDMMYYYY(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
   return `${day}-${month}-${year}`;
+}
+
+function normalizeDrCr(value: unknown): "Dr" | "Cr" {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (raw === "CR" || raw === "CREDIT") return "Cr";
+  return "Dr";
 }
 
 function parseDDMMYYYY(s: string | null | undefined): Date | null {
@@ -282,6 +295,7 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
     narration: c.narration ?? "",
     shipment_no: String(c.shipment_no ?? "").trim(),
     charge_id: c.charge_id ?? null,
+    charge_name: (c as { charge_name?: unknown }).charge_name != null ? String((c as { charge_name?: unknown }).charge_name) : "",
     currency_id: c.currency_id ?? null,
     roe:
       typeof c.roe === "string" ? parseFloat(c.roe) || null : (c.roe ?? null),
@@ -384,6 +398,19 @@ export default function SupplierInvoiceCreate({
     Inv_Crn_no?: string;
     status?: string;
   } | null>(null);
+  const saveResponseRef = useRef<typeof saveResponse>(null);
+  useEffect(() => {
+    saveResponseRef.current = saveResponse;
+  }, [saveResponse]);
+
+  const [calcLoading, setCalcLoading] = useState(false);
+  const [calcLoadingText, setCalcLoadingText] = useState<string>("");
+
+  const parseNum = (v: unknown): number | null => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
   const [
     documentsModalOpened,
     { open: openDocumentsModal, close: closeDocumentsModal },
@@ -442,8 +469,10 @@ export default function SupplierInvoiceCreate({
       narration: "",
       customer_gst_no: "",
       location_gst_no: "",
+      type: "INV",
       Inv_Crn_note: "",
       Inv_Crn_no: "",
+      roe: null,
       currency_id: defaultBranchCurrencyId || "",
       taxable_amount: null,
       non_taxable_amount: null,
@@ -454,7 +483,7 @@ export default function SupplierInvoiceCreate({
       approved_amount: null,
       difference_amount: null,
       status: "UNPOSTED",
-      Dr_Cr: "Dr", // Header: Supplier Invoice = "Dr", Reverse = "Cr" (sent in payload only, no UI field)
+      Dr_Cr: isReversal ? "Dr" : "Cr", // Header: Supplier="Cr", Reverse="Dr" (payload only)
       charges_data: [
         {
           account_code: "",
@@ -472,7 +501,7 @@ export default function SupplierInvoiceCreate({
           amount: null,
           amount_in_local: null,
           tax_code: "",
-          Dr_Cr: "Cr", // Charges: Supplier Invoice = "Cr", Reverse = "Dr"
+          Dr_Cr: isReversal ? "Cr" : "Dr", // Charges: Supplier default="Dr", Reverse default="Cr"
         },
       ],
       supporting_documents: [] as SupportingDocument[],
@@ -483,6 +512,8 @@ export default function SupplierInvoiceCreate({
       due_date: (v) => (!v ? "Due date is required" : null),
       currency_id: (v) => (!v ? "Currency is required" : null),
       state_id: (v) => (!v ? "State is required" : null),
+      Inv_Crn_no: (v) =>
+        !String(v ?? "").trim() ? "Inv/Crn No is required" : null,
     },
   });
 
@@ -512,7 +543,7 @@ export default function SupplierInvoiceCreate({
     staleTime: Infinity,
   });
 
-  const { data: chargeData = [], isLoading: isChargeLoading } = useQuery({
+  const { isLoading: isChargeLoading } = useQuery({
     queryKey: ["chargeMaster"],
     queryFn: fetchChargeMaster,
     staleTime: Infinity,
@@ -548,6 +579,16 @@ export default function SupplierInvoiceCreate({
     }));
   }, [stateData]);
 
+  const effectiveStateOptions = useMemo(() => {
+    // For reversal-create: ensure the selected state's *name* is visible even before master loads.
+    const data = (invoiceFromState ?? {}) as Record<string, unknown>;
+    const id = data.state_id != null ? String(data.state_id) : "";
+    const name = data.state_name != null ? String(data.state_name) : "";
+    if (!isReversalCreate || !id || !name) return stateOptions;
+    if (stateOptions.some((o) => o.value === id)) return stateOptions;
+    return [{ value: id, label: name }, ...stateOptions];
+  }, [invoiceFromState, isReversalCreate, stateOptions]);
+
   const tdsSectionOptions = useMemo(() => {
     const data = tdsSectionData as {
       tds_section_code?: string | number;
@@ -582,20 +623,8 @@ export default function SupplierInvoiceCreate({
   const vendorApiEndpoint = isOverseasCrjDaybook ? URL.agent : URL.supplierByType;
 
   const isDaybookSelected = !!form.values.day_book_id;
-  const isVendorSelected = !!form.values.agent_code;
 
-  const chargeOptions = useMemo(() => {
-    const data = chargeData as {
-      id?: number;
-      charge_name?: string;
-      charge_code?: string;
-    }[];
-    if (!Array.isArray(data)) return [];
-    return data.map((item) => ({
-      value: String(item.id ?? ""),
-      label: item.charge_name ?? item.charge_code ?? "",
-    }));
-  }, [chargeData]);
+  // chargeOptions no longer used; charge selection uses SearchableSelect + API endpoint.
 
   const { data: jobCreateData = [] } = useQuery({
     queryKey: ["jobCreate"],
@@ -644,6 +673,9 @@ export default function SupplierInvoiceCreate({
   );
 
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
+  const isVendorSelected =
+    !!String(form.values.agent_code ?? "").trim() ||
+    !!String(agentDisplayName ?? "").trim();
 
   useEffect(() => {
     const effectiveCurrency =
@@ -688,6 +720,54 @@ export default function SupplierInvoiceCreate({
     if (changed) form.setFieldValue("charges_data", next);
   }, [chargesAmountRoeKey]);
 
+  // Auto-calc Inv/Crn Amount = sum of breakup amounts
+  const invCrnCalcKey = [
+    form.values.taxable_amount,
+    form.values.non_taxable_amount,
+    form.values.cgst_amount,
+    form.values.sgst_amount,
+    form.values.igst_amount,
+  ].join("|");
+  useEffect(() => {
+    const inv =
+      (parseNum(form.values.taxable_amount) ?? 0) +
+      (parseNum(form.values.non_taxable_amount) ?? 0) +
+      (parseNum(form.values.cgst_amount) ?? 0) +
+      (parseNum(form.values.sgst_amount) ?? 0) +
+      (parseNum(form.values.igst_amount) ?? 0);
+    const nextInv = clampAmount(inv);
+    if (nextInv !== (form.values.Inv_crn_amount ?? null)) {
+      form.setFieldValue("Inv_crn_amount", nextInv);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invCrnCalcKey]);
+
+  // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved
+  const chargesNetKey = form.values.charges_data
+    .map((c) => `${c.amount_in_local}-${c.Dr_Cr}`)
+    .join(",");
+  useEffect(() => {
+    const charges = form.values.charges_data ?? [];
+    const netLocal = round2(
+      charges.reduce((acc, row) => {
+        const amt = parseNum(row.amount_in_local) ?? 0;
+        if (!amt) return acc;
+        return row.Dr_Cr === "Cr" ? acc - amt : acc + amt;
+      }, 0),
+    );
+    const nextApproved = clampAmount(netLocal);
+    if (nextApproved !== (form.values.approved_amount ?? null)) {
+      form.setFieldValue("approved_amount", nextApproved);
+    }
+
+    const inv = parseNum(form.values.Inv_crn_amount) ?? 0;
+    const diff = clampAmount(round2(inv - netLocal));
+    if (diff !== (form.values.difference_amount ?? null)) {
+      form.setFieldValue("difference_amount", diff);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargesNetKey, form.values.Inv_crn_amount]);
+
   // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
   useEffect(() => {
     const runForViewEdit = isViewMode || isEditMode;
@@ -702,10 +782,16 @@ export default function SupplierInvoiceCreate({
         : [];
     let mappedCharges =
       chargesArray.length > 0 ? mapApiChargesToRows(chargesArray) : [];
-    // Supplier Invoice: header "Dr", charges "Cr". Reverse: header "Cr", charges "Dr"
-    const headerDrCr = isReversal ? ("Cr" as const) : ("Dr" as const);
-    const chargeDrCr = isReversal ? ("Dr" as const) : ("Cr" as const);
-    mappedCharges = mappedCharges.map((c) => ({ ...c, Dr_Cr: chargeDrCr }));
+    // Dr/Cr handling:
+    // - View/Edit: keep Dr/Cr as returned by API (including GST/TDS-generated rows).
+    // - Reversal Create: invert charge row Dr/Cr relative to source invoice.
+    const headerDrCr = isReversal ? ("Dr" as const) : ("Cr" as const);
+    if (runForReversalCreate) {
+      mappedCharges = mappedCharges.map((c) => ({
+        ...c,
+        Dr_Cr: c.Dr_Cr === "Cr" ? "Dr" : "Cr",
+      }));
+    }
     // Reversal create: daybook empty so user selects; date and due_date auto-set to today
     const daybookId =
       runForReversalCreate
@@ -755,8 +841,13 @@ export default function SupplierInvoiceCreate({
       narration: (data.narration ?? "") as string,
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
+      type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as "INV" | "CRN",
       Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
       Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
+      roe:
+        data.roe != null && data.roe !== ""
+          ? parseFloat(String(data.roe))
+          : null,
       currency_id: data.currency_id != null ? String(data.currency_id) : "",
       taxable_amount:
         data.taxable_amount != null
@@ -900,8 +991,8 @@ export default function SupplierInvoiceCreate({
         CRN: c.CRN || "",
         narration: c.narration || "",
         shipment_no: c.shipment_no || "",
-        charge_id: c.charge_id ?? 0,
-        currency_id: c.currency_id ?? 0,
+        charge_id: c.charge_id ?? null,
+        currency_id: c.currency_id ?? null,
         roe: String(c.roe ?? 0),
         amount: formatAmountToTwoDecimals(c.amount ?? 0),
         amount_in_local: formatAmountToTwoDecimals(c.amount_in_local ?? 0),
@@ -916,15 +1007,17 @@ export default function SupplierInvoiceCreate({
       ...(saveResponse?.id != null ? { id: saveResponse.id } : {}),
       day_book_id: values.day_book_id ? Number(values.day_book_id) : null,
       date: values.date ? formatDDMMYYYY(new Date(values.date)) : "",
-      agent_code: values.agent_code || "",
+      agent_name: agentDisplayName ?? "",
       state_id: values.state_id ? Number(values.state_id) : null,
       tds_section_code: values.tds_section_code || "",
       note: values.note || "",
       narration: values.narration || "",
       customer_gst_no: values.customer_gst_no || "",
       location_gst_no: values.location_gst_no || "",
+      type: values.type ?? "INV",
       Inv_Crn_note: values.Inv_Crn_note || "",
       Inv_Crn_no: values.Inv_Crn_no || "",
+      roe: values.roe ?? null,
       currency_id: values.currency_id ? Number(values.currency_id) : null,
       taxable_amount: formatAmountToTwoDecimals(values.taxable_amount ?? 0),
       non_taxable_amount: formatAmountToTwoDecimals(
@@ -1066,9 +1159,38 @@ export default function SupplierInvoiceCreate({
     );
   };
 
-  const handleSubmit = async (values: SupplierInvoiceFormValues) => {
+  const handleSubmit = async (
+    values: SupplierInvoiceFormValues,
+  ): Promise<number | null> => {
     setIsSubmitting(true);
     try {
+      // If shipment is selected, charge becomes mandatory (TDS rows won't have shipment_no)
+      const missingChargeAt = (values.charges_data ?? []).findIndex(
+        (c) => String(c.shipment_no ?? "").trim() !== "" && c.charge_id == null,
+      );
+      if (missingChargeAt >= 0) {
+        form.setFieldError(
+          `charges_data.${missingChargeAt}.charge_id`,
+          "Charge is required",
+        );
+        ToastNotification({
+          type: "error",
+          message: "Please select charge for the shipment row before saving.",
+        });
+        return null;
+      }
+
+      const hasAtLeastOneCharge = (values.charges_data ?? []).some(
+        (c) => c.amount != null && c.amount !== 0,
+      );
+      if (!hasAtLeastOneCharge) {
+        ToastNotification({
+          type: "error",
+          message: "Please enter at least one charge before saving.",
+        });
+        return null;
+      }
+
       const payload = buildPayload(values);
       (payload as Record<string, unknown>).is_agent = isOverseasCrjDaybook ? true : false;
       const isEdit = saveResponse?.id != null;
@@ -1141,6 +1263,11 @@ export default function SupplierInvoiceCreate({
               : "Supplier invoice updated successfully",
             type: "success",
           });
+          return data.id != null
+            ? Number(data.id)
+            : id != null
+              ? Number(id)
+              : null;
         }
       } else {
         const fd = buildSupplierInvoiceFormData(
@@ -1187,6 +1314,7 @@ export default function SupplierInvoiceCreate({
               : "Supplier invoice created successfully",
             type: "success",
           });
+          return data.id != null ? Number(data.id) : null;
         }
       }
     } catch (error: unknown) {
@@ -1203,15 +1331,26 @@ export default function SupplierInvoiceCreate({
             : "Failed to create supplier invoice"),
         type: "error",
       });
+      return null;
     } finally {
       setIsSubmitting(false);
     }
+    return null;
   };
 
   const handlePost = async () => {
     if (saveResponse?.id == null) return;
     setIsSubmitting(true);
     try {
+      const diff = round2(parseNum(form.values.difference_amount) ?? 0);
+      if (diff !== 0) {
+        ToastNotification({
+          type: "error",
+          message: `Difference Amount must be 0.00 to post. Current: ${diff.toFixed(2)}.`,
+        });
+        return;
+      }
+
       const payload = buildPayload(form.values, "POSTED");
       (payload as Record<string, unknown>).is_agent =
         isOverseasCrjDaybook ? true : false;
@@ -1297,6 +1436,7 @@ export default function SupplierInvoiceCreate({
       narration: "",
       shipment_no: "",
       charge_id: null,
+      charge_name: "",
       currency_id:
         defaultBranchCurrencyId != null
           ? Number(defaultBranchCurrencyId)
@@ -1307,13 +1447,13 @@ export default function SupplierInvoiceCreate({
       amount: null,
       amount_in_local: null,
       tax_code: "",
-      Dr_Cr: isReversal ? "Dr" : "Cr",
+      Dr_Cr: isReversal ? "Cr" : "Dr",
     });
   };
 
   return (
     <Box p={"sm"} style={{ position: "relative" }}>
-      {isSubmitting && (
+      {(isSubmitting || calcLoading) && (
         <Box
           style={{
             position: "fixed",
@@ -1328,7 +1468,7 @@ export default function SupplierInvoiceCreate({
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
-              Saving supplier invoice...
+              {calcLoading ? calcLoadingText : "Saving supplier invoice..."}
             </Text>
           </Stack>
         </Box>
@@ -1454,9 +1594,13 @@ export default function SupplierInvoiceCreate({
                 value={form.values.day_book_id || null}
                 onChange={(v) => {
                   form.setFieldValue("day_book_id", v ?? "");
-                  form.setFieldValue("agent_code", "");
-                  setAgentDisplayName(null);
-                  form.setFieldValue("state_id", "");
+                  // In reversal-create, vendor/state may be prefilled from source invoice and
+                  // the fields are disabled; clearing them here blocks creation.
+                  if (!isReversalCreate) {
+                    form.setFieldValue("agent_code", "");
+                    setAgentDisplayName(null);
+                    form.setFieldValue("state_id", "");
+                  }
                 }}
                 searchable
                 withAsterisk
@@ -1479,6 +1623,21 @@ export default function SupplierInvoiceCreate({
                 disabled={daybookDateDisabled || !isVendorSelected}
               />
             </Grid.Col>
+            <Grid.Col span={1.25}>
+              <SingleDateInput
+                label="Due Date"
+                placeholder="Select due date"
+                value={normalizeDate(form.values.due_date)}
+                onChange={(d) => form.setFieldValue("due_date", d)}
+                withAsterisk
+                error={
+                  form.errors.due_date
+                    ? String(form.errors.due_date)
+                    : undefined
+                }
+                disabled={isReadOnly || reversalFormDisabled}
+              />
+            </Grid.Col>
             <Grid.Col span={1.5}>
               <SearchableSelect
                 label="Vendor/Supplier"
@@ -1498,12 +1657,26 @@ export default function SupplierInvoiceCreate({
                   setAgentDisplayName(selectedData?.label ?? null);
                   const addresses =
                     (originalData?.addresses_data as
-                      | Array<{ state_id?: number }>
+                      | Array<{
+                          address_type?: string;
+                          state_id?: number | null;
+                          gst_id?: string | null;
+                        }>
                       | undefined) ?? [];
-                  const primary = addresses[0];
+
+                  const primary =
+                    addresses.find(
+                      (a) =>
+                        String(a.address_type ?? "").toUpperCase() === "PRIMARY",
+                    ) ?? addresses[0];
+
                   if (primary?.state_id != null) {
                     form.setFieldValue("state_id", String(primary.state_id));
                   }
+                  form.setFieldValue(
+                    "customer_gst_no",
+                    primary?.gst_id != null ? String(primary.gst_id) : "",
+                  );
                 }}
                 dropdownZIndex={1000}
                 styles={effectiveInputStyles}
@@ -1513,7 +1686,7 @@ export default function SupplierInvoiceCreate({
               <Dropdown
                 label="State"
                 placeholder={isStateLoading ? "Loading..." : "Select state"}
-                data={stateOptions}
+                data={effectiveStateOptions}
                 value={form.values.state_id || null}
                 onChange={(v) => form.setFieldValue("state_id", v ?? "")}
                 searchable
@@ -1550,25 +1723,13 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={1.25}>
+            <Grid.Col span={1}>
               <TextInput
                 label="Customer GST No"
                 placeholder="Customer GST No"
                 value={form.values.customer_gst_no}
                 onChange={(e) =>
                   form.setFieldValue("customer_gst_no", e.target.value)
-                }
-                styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
-              />
-            </Grid.Col>
-            <Grid.Col span={1.25}>
-              <TextInput
-                label="Location GST No"
-                placeholder="Location GST No"
-                value={form.values.location_gst_no}
-                onChange={(e) =>
-                  form.setFieldValue("location_gst_no", e.target.value)
                 }
                 styles={effectiveInputStyles}
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
@@ -1604,21 +1765,51 @@ export default function SupplierInvoiceCreate({
           <Text size="sm" fw={600} c="#105476" mb="xs">
             Agent INV/CRN Detail
           </Text>
-          <Grid mb="md">
+          <Grid mb="md" columns={12}>
 
-            <Grid.Col span={1}>
+            <Grid.Col span={0.7}>
+              <Dropdown
+                label="Type"
+                placeholder="Type"
+                data={[
+                  { value: "INV", label: "INV" },
+                  { value: "CRN", label: "CRN" },
+                ]}
+                value={form.values.type}
+                onChange={(v) =>
+                  form.setFieldValue("type", v === "CRN" ? "CRN" : "INV")
+                }
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                styles={effectiveInputStyles}
+              />
+            </Grid.Col>
+            <Grid.Col span={0.9}>
               <TextInput
-                label="Inv/Crn No"
-                placeholder="Inv/Crn No"
-                value={form.values.Inv_Crn_no}
+                label="Inv/Crn Note"
+                placeholder="Inv/Crn Note"
+                value={form.values.Inv_Crn_note}
                 onChange={(e) =>
-                  form.setFieldValue("Inv_Crn_no", e.target.value)
+                  form.setFieldValue("Inv_Crn_note", e.target.value)
                 }
                 styles={effectiveInputStyles}
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
-            <Grid.Col span={0.75}>
+            <Grid.Col span={0.9}>
+              <TextInput
+                label="Inv/Crn No"
+                placeholder="Inv/Crn No"
+                withAsterisk
+                value={form.values.Inv_Crn_no}
+                onChange={(e) =>
+                  form.setFieldValue("Inv_Crn_no", e.target.value)
+                }
+                error={form.errors.Inv_Crn_no}
+                styles={effectiveInputStyles}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+              />
+            </Grid.Col>
+            <Grid.Col span={0.8}>
               <Dropdown
                 label="Currency"
                 placeholder={
@@ -1639,27 +1830,22 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-
-            <Grid.Col span={1}>
+            <Grid.Col span={0.75}>
               <NumberInput
-                label="Inv/Crn Amount"
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                label="ROE"
                 placeholder="0"
-                value={form.values.Inv_crn_amount ?? undefined}
+                value={form.values.roe ?? undefined}
                 onChange={(v) =>
-                  form.setFieldValue(
-                    "Inv_crn_amount",
-                    typeof v === "number" ? clampAmount(v) : null,
-                  )
+                  form.setFieldValue("roe", typeof v === "number" ? v : null)
                 }
                 min={0}
-                decimalScale={2}
+                decimalScale={4}
                 hideControls
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-
-            <Grid.Col span={1}>
+            <Grid.Col span={0.9}>
               <NumberInput
                 label="Taxable Amount"
                 disabled={isReadOnly || reversalFormDisabled}
@@ -1695,7 +1881,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={0.85}>
+            <Grid.Col span={0.9}>
               <NumberInput
                 label="CGST Amount"
                 disabled={isReadOnly || reversalFormDisabled}
@@ -1713,7 +1899,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={1}>
+            <Grid.Col span={0.9}>
               <NumberInput
                 label="SGST Amount"
                 disabled={isReadOnly || reversalFormDisabled}
@@ -1731,7 +1917,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={1}>
+            <Grid.Col span={0.9}>
               <NumberInput
                 label="IGST Amount"
                 placeholder="0"
@@ -1750,66 +1936,42 @@ export default function SupplierInvoiceCreate({
               />
             </Grid.Col>
 
-            <Grid.Col span={1}>
+            <Grid.Col span={0.9}>
               <NumberInput
-                label="Approved Amount"
-                disabled={isReadOnly || reversalFormDisabled}
+                label="Inv/Crn Amount"
+                disabled
                 placeholder="0"
-                value={form.values.approved_amount ?? undefined}
-                onChange={(v) =>
-                  form.setFieldValue(
-                    "approved_amount",
-                    typeof v === "number" ? clampAmount(v) : null,
-                  )
-                }
+                value={form.values.Inv_crn_amount ?? undefined}
+                onChange={() => {}}
                 min={0}
                 decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={1}>
+            <Grid.Col span={0.9}>
               <NumberInput
-                label="Difference Amount"
-                disabled={isReadOnly || reversalFormDisabled}
+                label="Approved Amount"
+                disabled
                 placeholder="0"
-                value={form.values.difference_amount ?? undefined}
-                onChange={(v) =>
-                  form.setFieldValue(
-                    "difference_amount",
-                    typeof v === "number" ? clampAmount(v) : null,
-                  )
-                }
+                value={form.values.approved_amount ?? undefined}
+                onChange={() => {}}
+                min={0}
                 decimalScale={2}
                 hideControls
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={1.25}>
-              <SingleDateInput
-                label="Due Date"
-                placeholder="Select due date"
-                value={normalizeDate(form.values.due_date)}
-                onChange={(d) => form.setFieldValue("due_date", d)}
-                withAsterisk
-                error={
-                  form.errors.due_date
-                    ? String(form.errors.due_date)
-                    : undefined
-                }
-                disabled={isReadOnly || reversalFormDisabled}
-              />
-            </Grid.Col>
-            <Grid.Col span={1}>
-              <TextInput
-                label="Inv/Crn Note"
-                placeholder="Inv/Crn Note"
-                value={form.values.Inv_Crn_note}
-                onChange={(e) =>
-                  form.setFieldValue("Inv_Crn_note", e.target.value)
-                }
+            <Grid.Col span={0.9}>
+              <NumberInput
+                label="Difference Amount"
+                disabled
+                placeholder="0"
+                value={form.values.difference_amount ?? undefined}
+                onChange={() => {}}
+                decimalScale={2}
+                hideControls
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
           </Grid>
@@ -1821,23 +1983,292 @@ export default function SupplierInvoiceCreate({
                 <Text size="sm" fw={600} c="#105476">
                   Charges
                 </Text>
-                {!isReversal &&
-                form.values.tds_section_code?.trim() ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="light"
-                    color="#105476"
-                    disabled={
-                      isReadOnly ||
-                      reversalFormDisabled ||
-                      !isVendorSelected
-                    }
-                  >
-                    Calculate TDS
-                  </Button>
-                ) : null}
+                {!isReversal && form.values.tds_section_code?.trim() && (
+                  <Group gap="xs">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="light"
+                      color="#105476"
+                      disabled={
+                        isReadOnly ||
+                        reversalFormDisabled ||
+                        !isVendorSelected
+                      }
+                      onClick={async () => {
+                        if (!saveResponse?.id) {
+                          const hasCharge = form.values.charges_data.some(
+                            (c) => c.amount != null && c.amount !== 0,
+                          );
+                          if (!hasCharge) {
+                            ToastNotification({
+                              type: "error",
+                              message: "Please enter at least one charge before calculating GST.",
+                            });
+                            return;
+                          }
+                        }
+
+                        let supplierInvoiceId = saveResponse?.id ?? null;
+                        if (!supplierInvoiceId) {
+                          const v = form.validate();
+                          if (v.hasErrors) return;
+                          setCalcLoading(true);
+                          setCalcLoadingText("Creating supplier invoice first");
+                          supplierInvoiceId = await handleSubmit(form.values);
+                          if (!supplierInvoiceId) {
+                            setCalcLoading(false);
+                            return;
+                          }
+                        }
+
+                        try {
+                          setCalcLoading(true);
+                          setCalcLoadingText("Calculating GST...");
+                          const res = await postAPICall(
+                            URL.invoiceCalculateGstBreakup,
+                            { supplier_invoice_id: supplierInvoiceId },
+                            API_HEADER,
+                          );
+
+                          const data = res as Record<string, unknown>;
+                          const chargesFromApi =
+                            (data.charges as Array<Record<string, unknown>> | undefined) ??
+                            ((data.data as Record<string, unknown> | undefined)
+                              ?.charges as Array<Record<string, unknown>> | undefined) ??
+                            [];
+                          const sacWiseTotals =
+                            (data.sac_wise_totals as
+                              | Array<Record<string, unknown>>
+                              | undefined) ??
+                            ((data.data as Record<string, unknown> | undefined)
+                              ?.sac_wise_totals as
+                              | Array<Record<string, unknown>>
+                              | undefined) ??
+                            [];
+
+                          if (Array.isArray(chargesFromApi) && chargesFromApi.length) {
+                            const next = form.values.charges_data.map((c) => {
+                              const match = chargesFromApi.find(
+                                (x) =>
+                                  Number(x.charge_id) === Number(c.charge_id),
+                              );
+                              if (!match) return c;
+                              return {
+                                ...c,
+                                // Intentionally DO NOT map SAC/tax_code from calculate-gst-breakup.
+                              };
+                            });
+                            form.setFieldValue("charges_data", next);
+                          }
+
+                          if (Array.isArray(sacWiseTotals) && sacWiseTotals.length) {
+                            const existing = form.values.charges_data;
+                            const newRows: ChargeRow[] = sacWiseTotals
+                              .map((t): ChargeRow | null => {
+                                const chargeId = Number(t.charge_id);
+                                if (!Number.isFinite(chargeId)) return null;
+                                const amount = parseNum(t.total_amount);
+                                const currencyId = parseNum(t.currency_id);
+                                const roe = parseNum(t.roe);
+                                const Dr_Cr: "Dr" | "Cr" = normalizeDrCr(
+                                  (t.Dr_Cr as unknown) ??
+                                    (t.Dr_cr as unknown) ??
+                                    (t.cr_dr as unknown) ??
+                                    (t.Cr_Dr as unknown) ??
+                                    (t.Cr_dr as unknown),
+                                );
+
+                                const row: ChargeRow = {
+                                  account_code: String(t.account_code ?? ""),
+                                  account_name: String(t.account_name ?? ""),
+                                  subledger_code: String(t.subledger_code ?? ""),
+                                  // GST breakup rows should always be Neutral
+                                  CRN: "Neutral",
+                                  narration: String(t.narration ?? ""),
+                                  shipment_no: String(t.shipment_no ?? ""),
+                                  charge_id: chargeId,
+                                  charge_name: String(t.charge_name ?? ""),
+                                  currency_id:
+                                    currencyId != null ? Number(currencyId) : null,
+                                  roe: roe != null ? Number(roe) : null,
+                                  amount: amount != null ? Number(amount) : null,
+                                  amount_in_local: amount != null ? Number(amount) : null,
+                                  // Intentionally DO NOT map SAC/tax_code from calculate-gst-breakup.
+                                  tax_code: "",
+                                  Dr_Cr,
+                                };
+                                return row;
+                              })
+                              .filter((x): x is ChargeRow => x !== null);
+
+                            const deduped = newRows.filter((nr) => {
+                              return !existing.some(
+                                (er) =>
+                                  Number(er.charge_id) === Number(nr.charge_id) &&
+                                  String(er.account_code ?? "") ===
+                                    String(nr.account_code ?? "") &&
+                                  String(er.subledger_code ?? "") ===
+                                    String(nr.subledger_code ?? "") &&
+                                  Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
+                                  er.Dr_Cr === nr.Dr_Cr,
+                              );
+                            });
+
+                            if (deduped.length) {
+                              form.setFieldValue("charges_data", [
+                                ...existing,
+                                ...deduped,
+                              ]);
+                            }
+                          }
+
+                          // Optional: set header totals if API returns them
+                          const cgst = parseNum((data.cgst_total as unknown) ?? (data.cgst_amount as unknown));
+                          const sgst = parseNum((data.sgst_total as unknown) ?? (data.sgst_amount as unknown));
+                          const igst = parseNum((data.igst_total as unknown) ?? (data.igst_amount as unknown));
+                          if (cgst != null) form.setFieldValue("cgst_amount", cgst);
+                          if (sgst != null) form.setFieldValue("sgst_amount", sgst);
+                          if (igst != null) form.setFieldValue("igst_amount", igst);
+                        } catch (e: unknown) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              e instanceof Error
+                                ? e.message
+                                : "Failed to calculate GST breakup",
+                          });
+                        } finally {
+                          setCalcLoading(false);
+                        }
+                      }}
+                    >
+                      Calculate GST
+                    </Button>
+                     <Button
+                      type="button"
+                      size="sm"
+                      variant="light"
+                      color="#105476"
+                      disabled={
+                        isReadOnly ||
+                        reversalFormDisabled ||
+                        !isVendorSelected
+                      }
+                      onClick={async () => {
+                        if (!saveResponse?.id) {
+                          const hasCharge = form.values.charges_data.some(
+                            (c) => c.amount != null && c.amount !== 0,
+                          );
+                          if (!hasCharge) {
+                            ToastNotification({
+                              type: "error",
+                              message: "Please enter at least one charge before calculating TDS.",
+                            });
+                            return;
+                          }
+                        }
+
+                        // If invoice not yet saved, save first
+                        let supplierInvoiceId = saveResponse?.id ?? null;
+                        if (!supplierInvoiceId) {
+                          const v = form.validate();
+                          if (v.hasErrors) return;
+                          setCalcLoading(true);
+                          setCalcLoadingText("Creating supplier invoice first");
+                          supplierInvoiceId = await handleSubmit(form.values);
+                          if (!supplierInvoiceId) {
+                            setCalcLoading(false);
+                            return;
+                          }
+                        }
+
+                        try {
+                          setCalcLoading(true);
+                          setCalcLoadingText("Calculating TDS...");
+                          const res = await postAPICall(
+                            URL.tdsCalculation,
+                            { supplier_invoice_id: supplierInvoiceId },
+                            API_HEADER,
+                          );
+
+                          const data = res as Record<string, unknown>;
+                          const rows =
+                            (data.data as Array<Record<string, unknown>> | undefined) ??
+                            [];
+
+                          if (!Array.isArray(rows) || rows.length === 0) {
+                            ToastNotification({
+                              type: "error",
+                              message: "No TDS rows returned from calculation.",
+                            });
+                            return;
+                          }
+
+                          const existing = form.values.charges_data;
+                          const tdsChargeRows: ChargeRow[] = rows
+                            .map((r): ChargeRow | null => {
+                              const amount = parseNum(r.amount);
+                              const currencyId = parseNum(r.currency_id);
+                              const roe = parseNum(r.roe);
+                              if (amount == null) return null;
+                              return {
+                                account_code: String(r.account_code ?? ""),
+                                account_name: String(r.account_name ?? ""),
+                                subledger_code: String(r.subledger_code ?? ""),
+                                // Do not set CRN from TDS response
+                                CRN: "",
+                                narration: String(r.narration ?? ""),
+                                shipment_no: "",
+                                charge_id: null,
+                                charge_name: "",
+                                currency_id:
+                                  currencyId != null ? Number(currencyId) : null,
+                                roe: roe != null ? Number(roe) : null,
+                                amount: Number(amount),
+                                amount_in_local: Number(amount),
+                                tax_code: "",
+                                Dr_Cr: normalizeDrCr(
+                                  (r.Dr_cr as unknown) ??
+                                    (r.Dr_Cr as unknown) ??
+                                    (r.dr_cr as unknown) ??
+                                    (r.cr_dr as unknown),
+                                ),
+                              };
+                            })
+                            .filter((x): x is ChargeRow => x !== null);
+
+                          const deduped = tdsChargeRows.filter((nr) => {
+                            return !existing.some(
+                              (er) =>
+                                String(er.account_code ?? "") ===
+                                  String(nr.account_code ?? "") &&
+                                String(er.subledger_code ?? "") ===
+                                  String(nr.subledger_code ?? "") &&
+                                Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
+                                er.Dr_Cr === nr.Dr_Cr &&
+                                String(er.charge_name ?? "") ===
+                                  String(nr.charge_name ?? ""),
+                            );
+                          });
+
+                          if (deduped.length) {
+                            form.setFieldValue("charges_data", [
+                              ...existing,
+                              ...deduped,
+                            ]);
+                          }
+                        } finally {
+                          setCalcLoading(false);
+                        }
+                      }}
+                    >
+                      Calculate TDS
+                    </Button>
+                  </Group>
+                )}
               </Group>
+
               <Box mb="sm" mt="sm">
                 <Grid
                   w="100%"
@@ -1855,31 +2286,31 @@ export default function SupplierInvoiceCreate({
                   <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
                     Shipment No
                   </Grid.Col>
+                  <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
+                    Charge
+                  </Grid.Col>
+                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                    CRN
+                  </Grid.Col>
                   <Grid.Col span={1} style={{ fontSize: "13px" }}>
                     Account
                   </Grid.Col>
                   <Grid.Col span={1} style={{ fontSize: "13px" }}>
                     Subledger
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                    CRN
-                  </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={1.6} style={{ fontSize: "13px" }}>
                     Narration
-                  </Grid.Col>
-                  <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
-                    Charge
                   </Grid.Col>
                   <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
                     Currency
                   </Grid.Col>
-                  <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
                     ROE
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                     Amount
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                     Local Amount
                   </Grid.Col>
                   <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
@@ -1920,6 +2351,95 @@ export default function SupplierInvoiceCreate({
                         }}
                         searchable
                         clearable
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1.25}>
+                      <SearchableSelect
+                        placeholder="Charge"
+                        apiEndpoint={URL.chargeMaster}
+                        value={
+                          row.charge_id != null ? String(row.charge_id) : null
+                        }
+                        displayValue={row.charge_name || undefined}
+                        dropdownZIndex={1100}
+                        minSearchLength={1}
+                        searchFields={["charge_code", "charge_name", "id"]}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const id = String(item.id ?? "").trim();
+                          const code = String(item.charge_code ?? "").trim();
+                          const name = String(item.charge_name ?? "").trim();
+                          return {
+                            value: id,
+                            label: name
+                              ? `${name}${code ? ` (${code})` : ""}`
+                              : code,
+                          };
+                        }}
+                        returnOriginalData
+                        error={
+                          form.errors[`charges_data.${index}.charge_id`]
+                            ? String(form.errors[`charges_data.${index}.charge_id`])
+                            : undefined
+                        }
+                        onChange={(v, selectedData, originalData) => {
+                          const chargeId =
+                            v && Number.isFinite(Number(v)) ? Number(v) : null;
+                          form.setFieldValue(
+                            `charges_data.${index}.charge_id`,
+                            chargeId,
+                          );
+                          const nextName =
+                            selectedData?.label?.split(" (")[0] ??
+                            (originalData?.charge_name != null
+                              ? String(originalData.charge_name)
+                              : "");
+                          form.setFieldValue(
+                            `charges_data.${index}.charge_name`,
+                            chargeId ? nextName : "",
+                          );
+                          if (chargeId != null && row.shipment_no) {
+                            fetchSacForChargeRow(
+                              index,
+                              chargeId,
+                              row.shipment_no,
+                            );
+                          }
+                          if (!chargeId) {
+                            form.setFieldValue(
+                              `charges_data.${index}.tax_code`,
+                              "",
+                            );
+                          }
+                        }}
+                        disabled={isChargeLoading || isReadOnly || reversalFormDisabled}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={0.8}>
+                      <Dropdown
+                        placeholder=""
+                        data={CRN_OPTIONS}
+                        value={row.CRN || null}
+                        onChange={(v) =>
+                          form.setFieldValue(
+                            `charges_data.${index}.CRN`,
+                            v ?? "",
+                          )
+                        }
+                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -2004,7 +2524,12 @@ export default function SupplierInvoiceCreate({
                               : "",
                           );
                         }}
-                        disabled={isReadOnly || reversalFormDisabled}
+                        disabled={
+                          isReadOnly ||
+                          reversalFormDisabled ||
+                          (String(row.shipment_no ?? "").trim() !== "" &&
+                            row.charge_id != null)
+                        }
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -2019,28 +2544,12 @@ export default function SupplierInvoiceCreate({
                         placeholder="Subledger"
                         value={row.subledger_code}
                         readOnly
-                        disabled={isReadOnly || reversalFormDisabled}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={1}>
-                      <Dropdown
-                        placeholder="CRN"
-                        data={CRN_OPTIONS}
-                        value={row.CRN || null}
-                        onChange={(v) =>
-                          form.setFieldValue(
-                            `charges_data.${index}.CRN`,
-                            v ?? "",
-                          )
+                        disabled={
+                          isReadOnly ||
+                          reversalFormDisabled ||
+                          (String(row.shipment_no ?? "").trim() !== "" &&
+                            row.charge_id != null)
                         }
-                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -2050,7 +2559,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={1.6}>
                       <TextInput
                         placeholder="Narration"
                         value={row.narration}
@@ -2061,39 +2570,6 @@ export default function SupplierInvoiceCreate({
                           )
                         }
                         disabled={isReadOnly || reversalFormDisabled}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={1.25}>
-                      <Dropdown
-                        placeholder="Charge"
-                        data={chargeOptions}
-                        value={
-                          row.charge_id != null ? String(row.charge_id) : null
-                        }
-                        onChange={(v) => {
-                          const chargeId = v ? Number(v) : null;
-                          form.setFieldValue(
-                            `charges_data.${index}.charge_id`,
-                            chargeId,
-                          );
-                          if (chargeId != null && row.shipment_no) {
-                            fetchSacForChargeRow(
-                              index,
-                              chargeId,
-                              row.shipment_no,
-                            );
-                          }
-                        }}
-                        searchable
-                        clearable
-                        disabled={isChargeLoading || isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -2139,7 +2615,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.75}>
+                    <Grid.Col span={0.65}>
                       <NumberInput
                         placeholder="ROE"
                         value={row.roe ?? undefined}
@@ -2162,7 +2638,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.8}>
                       <NumberInput
                         placeholder="0"
                         value={row.amount ?? undefined}
@@ -2185,7 +2661,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.8}>
                       <NumberInput
                         placeholder="0"
                         value={row.amount_in_local ?? undefined}
@@ -2212,7 +2688,13 @@ export default function SupplierInvoiceCreate({
                       <TextInput
                         placeholder="SAC Code"
                         value={row.tax_code}
-                        readOnly
+                        onChange={(e) =>
+                          form.setFieldValue(
+                            `charges_data.${index}.tax_code`,
+                            e.currentTarget.value,
+                          )
+                        }
+                        disabled={isReadOnly || reversalFormDisabled}
                         styles={{
                           input: {
                             fontSize: "13px",
