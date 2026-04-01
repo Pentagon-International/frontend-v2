@@ -258,6 +258,9 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   // Track if filters are applied - default true for approval mode
   const [filtersApplied, setFiltersApplied] = useState(isApprovalMode);
+  const [listCurrentPage, setListCurrentPage] = useState(1);
+  const [listPageSize, setListPageSize] = useState(25);
+  const [listTotalRecords, setListTotalRecords] = useState(0);
 
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -578,11 +581,11 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   }, [openedRevision]);
 
   const {
-    data: quotationData = [],
+    data: quotationResult = { data: [], total: 0 },
     isFetching: quotationFetching,
     refetch: refetchQuotations,
   } = useQuery({
-    queryKey: ["quotations", fromDate, toDate],
+    queryKey: ["quotations", fromDate, toDate, listCurrentPage, listPageSize],
     queryFn: async () => {
       try {
         let requestBody: { filters: any } = { filters: {} };
@@ -596,15 +599,22 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         const endpoint = isApprovalMode
           ? URL.quotationFilterApproval
           : URL.quotationFilter;
-        const response = await apiCallProtected.post(endpoint, requestBody);
+        const response = await apiCallProtected.post(
+          `${endpoint}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
+          requestBody
+        );
         const result = response as any;
         if (result && Array.isArray(result.data)) {
-          return result.data;
+          const total = result?.total || result.data.length || 0;
+          setListTotalRecords(total);
+          return { data: result.data, total };
         }
-        return [];
+        setListTotalRecords(0);
+        return { data: [], total: 0 };
       } catch (error) {
         console.error("Error fetching quotation data:", error);
-        return [];
+        setListTotalRecords(0);
+        return { data: [], total: 0 };
       }
     },
     enabled: false, // Don't run automatically
@@ -642,7 +652,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   // Separate query for filtered data - only triggers on explicit actions
   const {
-    data: filteredQuotationData = [],
+    data: filteredQuotationResult = { data: [], total: 0 },
     isLoading: filteredQuotationLoading,
     isFetching: filteredQuotationFetching,
     refetch: refetchFilteredQuotationsRaw,
@@ -653,6 +663,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       toDate,
       debouncedSearch,
       isApprovalMode,
+      listCurrentPage,
+      listPageSize,
     ],
     queryFn: async () => {
       try {
@@ -677,22 +689,29 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         const endpoint = isApprovalMode
           ? URL.quotationFilterApproval
           : URL.quotationFilter;
-        const response = await apiCallProtected.post(endpoint, requestBody);
+        const response = await apiCallProtected.post(
+          `${endpoint}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
+          requestBody
+        );
         const data = response as any;
 
         if (data && Array.isArray(data.data)) {
           console.log("Filtered data received:", data.data.length, "records");
-          return data.data;
+          const total = data?.total || data.data.length || 0;
+          setListTotalRecords(total);
+          return { data: data.data, total };
         }
-        return [];
+        setListTotalRecords(0);
+        return { data: [], total: 0 };
       } catch (error) {
         console.error("Error fetching filtered quotation data:", error);
-        return [];
+        setListTotalRecords(0);
+        return { data: [], total: 0 };
       } finally {
         isRefetchingRef.current = false;
       }
     },
-    enabled: filtersApplied || hasActiveFiltersOrSearch, // Enable when filters are applied or active filters/search exist
+    enabled: false, // Always trigger manually (Apply Filters / explicit flows only)
     staleTime: 0,
     gcTime: 0,
     refetchOnWindowFocus: false,
@@ -706,7 +725,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       console.log(
         "⏸️ [Quotation] Refetch already in progress, skipping duplicate call"
       );
-      return { data: filteredQuotationData, status: "skipped" } as any;
+      return { data: filteredQuotationResult, status: "skipped" } as any;
     }
     isRefetchingRef.current = true;
     try {
@@ -717,7 +736,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         isRefetchingRef.current = false;
       }, 100);
     }
-  }, [refetchFilteredQuotationsRaw, filteredQuotationData]);
+  }, [refetchFilteredQuotationsRaw, filteredQuotationResult]);
 
   // Fetch salespersons data
   const { data: salespersonsData = [], isLoading: salespersonsLoading } =
@@ -779,15 +798,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     // If filters were applied OR search is present OR hasActiveFiltersOrSearch, show filtered results
     // Check if filteredQuotationData exists and has data (similar to EnquiryMaster pattern)
     // Use hasActiveFiltersOrSearch to determine if we should show filtered data
-    if (hasActiveFiltersOrSearch || filtersApplied) {
+    if (filtersApplied) {
       // Show filtered data if it exists, otherwise show empty array (will show "No records" message)
-      return filteredQuotationData || [];
+      return filteredQuotationResult?.data || [];
     }
     // Otherwise, show the original quotation data
-    return quotationData || [];
+    return quotationResult?.data || [];
   }, [
-    quotationData,
-    filteredQuotationData,
+    quotationResult,
+    filteredQuotationResult,
     filtersApplied,
     hasActiveFiltersOrSearch,
   ]);
@@ -796,6 +815,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   // isInitialLoading is set manually before/after explicit refetch calls
   const tableLoading =
     isInitialLoading || quotationFetching || filteredQuotationFetching;
+  const listPaginationInfo = useMemo(() => {
+    const total = listTotalRecords || 0;
+    const totalPages = Math.max(1, Math.ceil(total / listPageSize || 1));
+    const start = total === 0 ? 0 : (listCurrentPage - 1) * listPageSize + 1;
+    const end =
+      total === 0 ? 0 : Math.min(listCurrentPage * listPageSize, total);
+    return { start, end, total, totalPages };
+  }, [listCurrentPage, listPageSize, listTotalRecords]);
 
   // Keep isLoading for backward compatibility (used elsewhere)
   const isLoading =
@@ -808,12 +835,37 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       setIsInitialLoading(true);
       const result = await refetchQuotations();
       if (result.data) {
-        queryClient.setQueryData(["quotations", fromDate, toDate], result.data);
+        queryClient.setQueryData(
+          ["quotations", fromDate, toDate, listCurrentPage, listPageSize],
+          result.data
+        );
       }
     } finally {
       setIsInitialLoading(false);
     }
-  }, [refetchQuotations, queryClient, fromDate, toDate]);
+  }, [
+    refetchQuotations,
+    queryClient,
+    fromDate,
+    toDate,
+    listCurrentPage,
+    listPageSize,
+  ]);
+
+  const paginationInitialized = useRef(false);
+
+  useEffect(() => {
+    if (!paginationInitialized.current) {
+      paginationInitialized.current = true;
+      return;
+    }
+    if (filtersApplied) {
+      refetchFilteredQuotations();
+    } else {
+      loadAllQuotations();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listCurrentPage, listPageSize]);
 
   // Handle initial filters from navigation
   useEffect(() => {
@@ -2677,7 +2729,7 @@ console.log("currentQuotation: ", currentQuotation);
       isApprovalMode,
       location,
       buildFilterPayload,
-      filteredQuotationData,
+      filteredQuotationResult,
       canCreateBookingFromRow,
       handleCreateBookingFromRow,
     ]
@@ -2796,10 +2848,10 @@ console.log("currentQuotation: ", currentQuotation);
 
   // Reset pagination when filters or search change to prevent empty table rendering
   useEffect(() => {
-    if (tableRef.current && hasActiveFiltersOrSearch) {
+    if (tableRef.current && filtersApplied) {
       tableRef.current.setPageIndex(0);
     }
-  }, [hasActiveFiltersOrSearch, memoizedFilterPayload]);
+  }, [filtersApplied]);
 
   if (isApprovalMode && !isManagerOrAdmin) {
     return (
@@ -3510,11 +3562,11 @@ console.log("currentQuotation: ", currentQuotation);
                     <Select
                       size="xs"
                       data={["10", "25", "50"]}
-                      value={String(table.getState().pagination.pageSize)}
+                      value={String(listPageSize)}
                       onChange={(val) => {
                         if (!val) return;
-                        table.setPageSize(Number(val));
-                        table.setPageIndex(0);
+                        setListPageSize(Number(val));
+                        setListCurrentPage(1);
                       }}
                       w={110}
                       styles={{
@@ -3526,16 +3578,7 @@ console.log("currentQuotation: ", currentQuotation);
                       }}
                     />
                     <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                      {(() => {
-                        const { pageIndex, pageSize } =
-                          table.getState().pagination;
-                        const total =
-                          table.getPrePaginationRowModel().rows.length || 0;
-                        if (total === 0) return "0–0 of 0";
-                        const start = pageIndex * pageSize + 1;
-                        const end = Math.min((pageIndex + 1) * pageSize, total);
-                        return `${start}–${end} of ${total}`;
-                      })()}
+                      {`${listPaginationInfo.start}–${listPaginationInfo.end} of ${listPaginationInfo.total}`}
                     </Text>
                   </>
                 )}
@@ -3552,11 +3595,11 @@ console.log("currentQuotation: ", currentQuotation);
                     <Select
                       size="xs"
                       data={["10", "25", "50"]}
-                      value={String(table.getState().pagination.pageSize)}
+                      value={String(listPageSize)}
                       onChange={(val) => {
                         if (!val) return;
-                        table.setPageSize(Number(val));
-                        table.setPageIndex(0);
+                        setListPageSize(Number(val));
+                        setListCurrentPage(1);
                       }}
                       w={110}
                       styles={{
@@ -3568,28 +3611,15 @@ console.log("currentQuotation: ", currentQuotation);
                       }}
                     />
                     <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                      {(() => {
-                        const { pageIndex, pageSize } =
-                          table.getState().pagination;
-                        const total =
-                          table.getPrePaginationRowModel().rows.length || 0;
-                        if (total === 0) return "0–0 of 0";
-                        const start = pageIndex * pageSize + 1;
-                        const end = Math.min((pageIndex + 1) * pageSize, total);
-                        return `${start}–${end} of ${total}`;
-                      })()}
+                      {`${listPaginationInfo.start}–${listPaginationInfo.end} of ${listPaginationInfo.total}`}
                     </Text>
                   </>
                 )}
                 <ActionIcon
                   variant="default"
                   size="sm"
-                  onClick={() =>
-                    table.setPageIndex(
-                      Math.max(0, table.getState().pagination.pageIndex - 1)
-                    )
-                  }
-                  disabled={table.getState().pagination.pageIndex === 0}
+                  onClick={() => setListCurrentPage(Math.max(1, listCurrentPage - 1))}
+                  disabled={listCurrentPage <= 1}
                 >
                   <IconChevronLeft size={16} />
                 </ActionIcon>
@@ -3598,46 +3628,20 @@ console.log("currentQuotation: ", currentQuotation);
                   ta="center"
                   style={{ width: 26, fontFamily: "Inter" }}
                 >
-                  {table.getState().pagination.pageIndex + 1}
+                  {listCurrentPage}
                 </Text>
                 <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                  of{" "}
-                  {Math.max(
-                    1,
-                    Math.ceil(
-                      (table.getPrePaginationRowModel().rows.length || 0) /
-                        table.getState().pagination.pageSize
-                    )
-                  )}
+                  of {listPaginationInfo.totalPages}
                 </Text>
                 <ActionIcon
                   variant="default"
                   size="sm"
-                  onClick={() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    table.setPageIndex(
-                      Math.min(
-                        totalPages - 1,
-                        table.getState().pagination.pageIndex + 1
-                      )
-                    );
-                  }}
-                  disabled={(() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    return (
-                      table.getState().pagination.pageIndex >= totalPages - 1
-                    );
-                  })()}
+                  onClick={() =>
+                    setListCurrentPage(
+                      Math.min(listPaginationInfo.totalPages, listCurrentPage + 1)
+                    )
+                  }
+                  disabled={listCurrentPage >= listPaginationInfo.totalPages}
                 >
                   <IconChevronRight size={16} />
                 </ActionIcon>
