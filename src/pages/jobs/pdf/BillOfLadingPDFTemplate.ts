@@ -99,7 +99,16 @@ export const generateBillOfLadingPDF = (
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 5;
     const boxPadding = 5;
-    let yPos = 10;
+    const initialYPos = 10;
+
+    const copyLabels = [
+      "1st ORIGINAL",
+      "2nd ORIGINAL",
+      "3rd ORIGINAL",
+      "NON NEGOTIABLE COPY",
+      "NON NEGOTIABLE COPY",
+      "NON NEGOTIABLE COPY",
+    ];
 
     // Get branch info from user store (default branch)
     const defaultBranchInfo = getDefaultBranchInfo();
@@ -201,6 +210,11 @@ export const generateBillOfLadingPDF = (
     // Set line width
     doc.setLineWidth(0.3);
     doc.setDrawColor(0, 0, 0);
+
+    for (let copyIndex = 0; copyIndex < copyLabels.length; copyIndex++) {
+      if (copyIndex > 0) doc.addPage();
+      const copyLabel = copyLabels[copyIndex];
+      let yPos = initialYPos;
 
     // ===== PAGE BORDER =====
     const pagePadding = 5;
@@ -784,6 +798,7 @@ export const generateBillOfLadingPDF = (
       // Column 3: Description (partial on first page) - total_no_of_packages, container_type values, and commodity_description
       let col3Y = singleValueStartY;
       let col3MaxY = col3Y;
+
       if (packagesText) {
         // Check if this fits before drawing
         if (col3Y + 3.5 <= footerStartY - 5) {
@@ -814,6 +829,15 @@ export const generateBillOfLadingPDF = (
           break;
         }
       }
+
+      // Red copy label at end of Column 3 data area (just above footer border)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(255, 0, 0);
+      doc.text(copyLabel, containerCol3X + boxPadding, footerStartY - 6);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
       
       // Column 4: Gross Weight (single value, drawn once on first page only)
       if (grossWeightText) {
@@ -859,6 +883,16 @@ export const generateBillOfLadingPDF = (
     } else {
       // Empty row if no container details - draw vertical lines to footer section start
       const containerDetailsEndY = footerStartY;
+
+      // Red copy label at end of Column 3 data area even when no container details exist
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(255, 0, 0);
+      doc.text(copyLabel, containerCol3X + boxPadding, footerStartY - 6);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6);
+
       doc.line(containerCol2X, headerBottomY, containerCol2X, containerDetailsEndY);
       doc.line(containerCol3X, headerBottomY, containerCol3X, containerDetailsEndY);
       doc.line(containerCol4X, headerBottomY, containerCol4X, containerDetailsEndY);
@@ -1036,6 +1070,7 @@ export const generateBillOfLadingPDF = (
       doc.line(containerCol5X, currentPageBoxStartY, containerCol5X, currentPageBoxBottomY);
       }
     }
+    } // end 6-copy loop
 
     // Generate blob URL
     const pdfBlob = doc.output("blob");

@@ -1363,7 +1363,7 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
         </div>
 
         {/* ── FIX 4: Footer with Save button ── */}
-        <div className="modal-foot">
+       {/* <div className="modal-foot">
           <button className="btn btn-ghost" onClick={onClose}>
             Cancel
           </button>
@@ -1376,7 +1376,8 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
               ? <><span style={{ width: 13, height: 13, border: "2px solid rgba(255,255,255,.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "hbl-spin .7s linear infinite", display: "inline-block" }} /> Saving…</>
               : "💾 Save Payload"}
           </button>
-        </div>
+        </div> */}
+
       </div>
 
       {fixTarget && (
