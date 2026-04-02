@@ -57,6 +57,7 @@ export const CollapsibleNav = ({
         activeSubNav === "Payment Reversal" ||
         activeSubNav === "Payment Request Approval" ||
         activeSubNav === "Supplier Invoice" ||
+        activeSubNav === "Supplier Invoice RCM" ||
         activeSubNav === "Supplier Invoice Reversal" ||
         activeSubNav === "Journal Voucher" ||
         activeSubNav === "JournalVoucherReversal" ||
