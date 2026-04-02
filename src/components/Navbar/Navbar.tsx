@@ -233,6 +233,19 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Sales"
+                    label="RFQ"
+                    icon={IconMessageQuestion}
+                    path="/rfq"
+                    collapsibles={{
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Sales"
                     label="Quotation"
                     icon={IconFileDescription}
                     path="/quotation"

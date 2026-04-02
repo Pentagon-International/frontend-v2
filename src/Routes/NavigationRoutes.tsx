@@ -139,6 +139,8 @@ import DemoPage from "../pages/dashboard/DemoPage";
 import EnquiryCreate from "../pages/dashboard/EnquiryCreate";
 import GetRate from "../pages/dashboard/GetRate";
 import EnquiryMaster from "../pages/dashboard/EnquiryMaster";
+import RFQMaster from "../pages/dashboard/RFQ/RFQMaster";
+import RFQCreate from "../pages/dashboard/RFQ/RFQCreate";
 import LastEnquiriesList from "../pages/dashboard/LastEnquiriesList";
 import ReceiptMaster from "../pages/accounts/receipt/ReceiptMaster";
 import ReceiptCreate from "../pages/accounts/receipt/ReceiptCreate";
@@ -392,6 +394,8 @@ const NavigationRoutes = () => {
         <Route path="/call-entry-calendar" element={<CallEntryCalendar />} />
         <Route path="/enquiry" element={<EnquiryMaster />} />
         <Route path="/enquiry-create" element={<EnquiryCreate />} />
+        <Route path="/rfq" element={<RFQMaster />} />
+        <Route path="/rfq-create" element={<RFQCreate />} />
         <Route path="/last-enquiries" element={<LastEnquiriesList />} />
         <Route path="/get-rate" element={<GetRate />} />
         <Route path="/quotation-create" element={<QuotationCreate />} />

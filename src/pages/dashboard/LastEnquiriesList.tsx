@@ -19,16 +19,26 @@ type LocationState = {
 type LastEnquiriesListProps = {
   customerCode?: string;
   onRowSelect?: (row: EnquiryRow) => void;
+  moduleLabel?: string;
+  moduleKeyPrefix?: string;
 };
 
-function LastEnquiriesList({ customerCode, onRowSelect }: LastEnquiriesListProps) {
+function LastEnquiriesList({
+  customerCode,
+  onRowSelect,
+  moduleLabel = "Enquiry",
+  moduleKeyPrefix = "ENQUIRY",
+}: LastEnquiriesListProps) {
   const location = useLocation();
   const customerCodeFromState = (location.state as LocationState | null)
     ?.customer_code;
   const effectiveCustomerCode = customerCode ?? customerCodeFromState;
 
+  const queryBase = moduleKeyPrefix.toLowerCase();
+  const modulePluralKey = queryBase === "enquiry" ? "enquiries" : `${queryBase}s`;
+
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["last-enquiries", effectiveCustomerCode],
+    queryKey: [`last-${modulePluralKey}`, effectiveCustomerCode],
     enabled: Boolean(effectiveCustomerCode),
     queryFn: async () => {
       const payload = {
@@ -57,7 +67,7 @@ function LastEnquiriesList({ customerCode, onRowSelect }: LastEnquiriesListProps
   const columns = useMemo<MRT_ColumnDef<EnquiryRow>[]>(
     () => [
       // { accessorKey: "customer_name", header: "Customer Name" },
-      { accessorKey: "enquiry_id", header: "Enquiry ID" },
+      { accessorKey: "enquiry_id", header: `${moduleLabel} ID` },
       { accessorKey: "sales_person", header: "Sales Person" },
       {
         accessorKey: "service_trade_combined",
@@ -136,7 +146,7 @@ function LastEnquiriesList({ customerCode, onRowSelect }: LastEnquiriesListProps
           const value = cell.getValue<string>();
           return value || "-";
         }, },
-      { accessorKey: "enquiry_received_date", header: "Enquiry Date" },
+      { accessorKey: "enquiry_received_date", header: `${moduleLabel} Date` },
       { accessorKey: "status", header: "Status" },
     ],
     [],

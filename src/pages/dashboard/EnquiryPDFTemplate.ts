@@ -199,7 +199,8 @@ const getBranchInfo = (branchName: string, country?: any) => {
 export const generateEnquiryPDF = (
   rowData: any,
   defaultBranch: any,
-  country?: any
+  country?: any,
+  moduleLabel: string = "Enquiry"
 ): string => {
   try {
     const doc = new jsPDF();
@@ -214,8 +215,8 @@ export const generateEnquiryPDF = (
 
     // Set document properties
     doc.setProperties({
-      title: `Enquiry - ${rowData.enquiry_id}`,
-      subject: "Freight Enquiry",
+      title: `${moduleLabel} - ${rowData.enquiry_id}`,
+      subject: `Freight ${moduleLabel}`,
       author: branchInfo.name,
     });
 
@@ -314,7 +315,7 @@ export const generateEnquiryPDF = (
 
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
-    doc.text("ENQUIRY", margin + 38, leftYPos);
+    doc.text(moduleLabel.toUpperCase(), margin + 38, leftYPos);
     leftYPos += 5;
 
     // Reference
@@ -379,7 +380,7 @@ export const generateEnquiryPDF = (
     // ===== ENQUIRY DETAILS SECTION =====
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text("ENQUIRY DETAILS", margin, yPos, );
+    doc.text(`${moduleLabel.toUpperCase()} DETAILS`, margin, yPos, );
     yPos += 6;
 
     // Details box
@@ -389,10 +390,14 @@ export const generateEnquiryPDF = (
     const itemHeight = 6;
 
     const details = [
-      { label: "Enquiry ID", value: rowData.enquiry_id || "N/A", column: "left" },
+      {
+        label: `${moduleLabel} ID`,
+        value: rowData.enquiry_id || "N/A",
+        column: "left",
+      },
       { label: "Sales Person", value: rowData.sales_person || "N/A", column: "left" },
       {
-        label: "Enquiry Date",
+        label: `${moduleLabel} Date`,
         value: formatDate(rowData.enquiry_received_date),
         column: "left",
       },
@@ -745,7 +750,7 @@ export const generateEnquiryPDF = (
     const blobUrl = window.URL.createObjectURL(createdPdfBlob);
     return blobUrl;
   } catch (error) {
-    console.error("Error generating Enquiry PDF:", error);
+    console.error(`Error generating ${moduleLabel} PDF:`, error);
     throw error;
   }
 };

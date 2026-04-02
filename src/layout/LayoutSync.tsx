@@ -28,6 +28,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/enquiry")) {
       setActiveNav("Sales");
       setActiveSubNav("Enquiry");
+    } else if (path.startsWith("/rfq")) {
+      setActiveNav("Sales");
+      setActiveSubNav("RFQ");
     } else if (path === "/quotation-approval" || path.startsWith("/quotation-approval/")) {
       setActiveNav("Sales");
       setActiveSubNav("Quotation Approval");
