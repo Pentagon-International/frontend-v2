@@ -179,6 +179,7 @@ type PaymentRequestFormData = {
   cinv: boolean;
   actual_invoice_no: string;
   account_id: string;
+  account_code: string;
   currency: string;
   amount: number | null;
   crj_date: Date | null;
@@ -699,6 +700,7 @@ function PaymentRequest() {
       cinv: false,
       actual_invoice_no: "",
       account_id: "",
+      account_code: "",
       currency: defaultBranchCurrency,
       amount: null,
       crj_date: null,
@@ -747,6 +749,169 @@ function PaymentRequest() {
     form.values.voucher_type,
     form,
   ]);
+
+  // ─── Prefill Paid To from Air Export Job Supplier ──────────────────────
+  useEffect(() => {
+    if (isEditOrViewMode) return;
+    // Avoid repeated overriding during re-renders.
+    if (form.values.paid_to_type?.trim()) return;
+
+    const stateAny = location.state as any;
+
+    const supplierDetails =
+      stateAny?.supplier ??
+      stateAny?.Supplier ??
+      stateAny?.supplier_details ??
+      stateAny?.supplierData ??
+      stateAny?.job?.supplier ??
+      stateAny?.job?.supplier_details ??
+      stateAny?.job?.supplierData ??
+      null;
+
+    if (!supplierDetails) return;
+
+    const supplierName =
+      (supplierDetails.supplier_name ??
+        supplierDetails.supplierName ??
+        supplierDetails.name ??
+        supplierDetails.customer_name ??
+        supplierDetails.account_name ??
+        "") as string;
+
+    const supplierId =
+      supplierDetails.supplier_id ??
+      supplierDetails.id ??
+      supplierDetails.account_id ??
+      null;
+
+    const supplierCode =
+      supplierDetails.supplier_code ??
+      supplierDetails.customer_code ??
+      supplierDetails.code ??
+      null;
+
+    const nextAccountId =
+      supplierId != null && !Number.isNaN(Number(supplierId))
+        ? String(supplierId)
+        : supplierCode != null
+          ? String(supplierCode)
+          : "";
+
+    if (!supplierName?.trim() || !nextAccountId.trim()) return;
+
+    form.setFieldValue("paid_to_type", "supplier");
+    form.setFieldValue("account_id", nextAccountId);
+    form.setFieldValue("account_code", supplierCode != null ? String(supplierCode) : "");
+    setAccountNameDisplay(supplierName);
+    // Keep the "Paid To" text input in sync with the selected supplier.
+    form.setFieldValue("paid_to", supplierName);
+
+    const applyStateFromAddresses = (addresses: any) => {
+      if (!Array.isArray(addresses) || addresses.length === 0) return;
+
+      const primaryAddress =
+        addresses.find(
+          (a: any) =>
+            String(a?.address_type ?? "")
+              .trim()
+              .toUpperCase() === "PRIMARY",
+        ) ?? addresses[0];
+
+      const stateCandidate =
+        (primaryAddress as any)?.state_id ?? (primaryAddress as any)?.state;
+
+      if (stateCandidate == null || String(stateCandidate).trim() === "")
+        return;
+
+      const candidateStr = String(stateCandidate).trim();
+      const numericMatch = candidateStr.match(/^\d+$/);
+      const matchedState = numericMatch
+        ? stateOptions.find((s) => String(s.value).trim() === candidateStr) ?? null
+        : stateOptions.find(
+            (s) =>
+              String(s.label ?? "").trim().toLowerCase() ===
+              candidateStr.toLowerCase(),
+          ) ?? null;
+
+      form.setFieldValue(
+        "state_code_1",
+        matchedState?.value ??
+          (numericMatch ? candidateStr : String(stateCandidate).trim()),
+      );
+    };
+
+    // Auto-fill state from PRIMARY address if already provided in supplier object.
+    const addresses =
+      (supplierDetails.addresses_data ??
+        supplierDetails.addresses ??
+        []) as Array<any>;
+
+    if (Array.isArray(addresses) && addresses.length > 0) {
+      applyStateFromAddresses(addresses);
+      return;
+    }
+
+    // Otherwise, fetch supplier details by supplier code/id, then apply PRIMARY address state.
+    if (form.values.state_code_1?.trim()) return;
+
+    const supplierEndpoint = resolveAccountNameEndpointByPaidToType(
+      "supplier",
+    );
+
+    if (!supplierEndpoint) return;
+
+    (async () => {
+      try {
+        const query = supplierCode != null ? String(supplierCode) : nextAccountId;
+        const response = await getAPICall(
+          `${supplierEndpoint}?search=${encodeURIComponent(String(query))}`,
+          API_HEADER,
+        );
+
+        const first = Array.isArray(response)
+          ? response[0]
+          : Array.isArray((response as any)?.data)
+            ? (response as any).data[0]
+            : null;
+
+        const fetchedAddresses =
+          (first as any)?.addresses_data ?? (first as any)?.addresses;
+
+        applyStateFromAddresses(fetchedAddresses);
+
+        const fetchedId =
+          (first as any)?.id ??
+          (first as any)?.supplier_id ??
+          (first as any)?.account_id ??
+          null;
+        const fetchedCode =
+          (first as any)?.customer_code ??
+          (first as any)?.supplier_code ??
+          (first as any)?.account_code ??
+          (first as any)?.code ??
+          null;
+        const fetchedDisplayName =
+          (first as any)?.customer_name ??
+          (first as any)?.supplier_name ??
+          (first as any)?.account_name ??
+          (first as any)?.name ??
+          supplierName;
+
+        if (fetchedId != null && !Number.isNaN(Number(fetchedId))) {
+          form.setFieldValue("account_id", String(fetchedId));
+        }
+        if (fetchedCode != null) {
+          form.setFieldValue("account_code", String(fetchedCode));
+        }
+        if (fetchedDisplayName != null && String(fetchedDisplayName).trim()) {
+          setAccountNameDisplay(String(fetchedDisplayName));
+          form.setFieldValue("paid_to", String(fetchedDisplayName));
+        }
+      } catch {
+        // Ignore; state_code_1 can be set manually if fetch fails.
+      }
+    })();
+  }, [isEditOrViewMode, location.state, stateOptions, form]);
 
   // ─── Batch-fetch SAC codes for charges prefilled from location.state ─────
   useEffect(() => {
@@ -827,7 +992,11 @@ function PaymentRequest() {
         CINV: values.cinv ?? false,
         proforma_inv_no: values.proforma_invoice_no_1 ?? "",
         actual_inv_no: values.actual_invoice_no ?? "",
-        account_id: values.account_id ? Number(values.account_id) : undefined,
+        account_id:
+          values.account_id && Number.isFinite(Number(values.account_id))
+            ? Number(values.account_id)
+            : undefined,
+        ...(values.account_code ? { account_code: values.account_code } : {}),
         amount: values.amount != null ? Number(values.amount) : null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
@@ -995,7 +1164,11 @@ function PaymentRequest() {
         CINV: values.cinv ?? false,
         proforma_inv_no: values.proforma_invoice_no_1 ?? "",
         actual_inv_no: values.actual_invoice_no ?? "",
-        account_id: values.account_id ? Number(values.account_id) : undefined,
+        account_id:
+          values.account_id && Number.isFinite(Number(values.account_id))
+            ? Number(values.account_id)
+            : undefined,
+        ...(values.account_code ? { account_code: values.account_code } : {}),
         amount: values.amount != null ? Number(values.amount) : null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
@@ -1141,6 +1314,7 @@ function PaymentRequest() {
               cinv: d.CINV ?? false,
               actual_invoice_no: d.actual_inv_no ?? "",
               account_id: d.account_id != null ? String(d.account_id) : "",
+              account_code: d.account_code ?? "",
               currency: d.currency_code ?? values.currency,
               amount: d.amount != null ? Number(d.amount) : null,
               crj_date: normalizeDate(d.crj_date),
@@ -1250,6 +1424,7 @@ function PaymentRequest() {
       cinv: d.CINV ?? false,
       actual_invoice_no: d.actual_inv_no ?? "",
       account_id: d.account_id != null ? String(d.account_id) : "",
+      account_code: d.account_code ?? "",
       currency: d.currency_code ?? defaultBranchCurrency,
       amount: d.amount != null ? Number(d.amount) : null,
       crj_date: normalizeDate(d.crj_date),
@@ -1943,6 +2118,16 @@ function PaymentRequest() {
                   form.setFieldValue("account_id", value ?? "");
                   const selectedAccountName = selectedData?.label ?? "";
                   setAccountNameDisplay(selectedAccountName || null);
+                  const nextAccountCode = String(
+                    (originalData as any)?.customer_code ??
+                      (originalData as any)?.account_code ??
+                      (originalData as any)?.code ??
+                      "",
+                  ).trim();
+                  form.setFieldValue(
+                    "account_code",
+                    value && nextAccountCode ? nextAccountCode : "",
+                  );
                   // Auto-fill Paid To from selected account name; user can edit later.
                   form.setFieldValue("paid_to", selectedAccountName);
 
