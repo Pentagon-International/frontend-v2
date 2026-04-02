@@ -2200,8 +2200,7 @@ export default function SupplierInvoiceCreate({
                 <Text size="sm" fw={600} c="#105476">
                   Charges
                 </Text>
-                {!isReversal && form.values.tds_section_code?.trim() && (
-                  <Group gap="xs">
+                <Group gap="xs">
                     <Button
                       type="button"
                       size="sm"
@@ -2362,17 +2361,19 @@ export default function SupplierInvoiceCreate({
                     >
                       Calculate GST
                     </Button>
-                     <Button
-                      type="button"
-                      size="sm"
-                      variant="light"
-                      color="#105476"
-                      disabled={
-                        isReadOnly ||
-                        reversalFormDisabled ||
-                        !isVendorSelected
-                      }
-                      onClick={async () => {
+                    {String(form.values.tds_section_code ?? "").trim() !== "" &&
+                      !isReversal && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="light"
+                        color="#105476"
+                        disabled={
+                          isReadOnly ||
+                          reversalFormDisabled ||
+                          !isVendorSelected
+                        }
+                        onClick={async () => {
                         if (!saveResponse?.id) {
                           const hasCharge = form.values.charges_data.some(
                             (c) => c.amount != null && c.amount !== 0,
@@ -2478,12 +2479,12 @@ export default function SupplierInvoiceCreate({
                         } finally {
                           setCalcLoading(false);
                         }
-                      }}
-                    >
-                      Calculate TDS
-                    </Button>
+                        }}
+                      >
+                        Calculate TDS
+                      </Button>
+                    )}
                   </Group>
-                )}
               </Group>
 
               <Box mb="sm" mt="sm">

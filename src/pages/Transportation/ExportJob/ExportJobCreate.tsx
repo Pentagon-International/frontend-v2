@@ -4121,19 +4121,129 @@ function ExportJobCreate() {
               <Text size="lg" fw={600} c="#105476">
                 Estimates
               </Text>
-              <Button
-                variant="light"
-                color="#105476"
-                size="sm"
-                leftSection={<IconFileInvoice size={16} />}
-                styles={{
-                  root: {
-                    fontFamily: "Inter",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                  },
-                }}
-                onClick={() => {
+              <Group gap="xs" wrap="nowrap">
+                {mode === "edit" && !isReadOnly && (
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    size="sm"
+                    onClick={() => {
+                    const toStr = (v: unknown) => String(v ?? "").trim();
+                    const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                    if (!jobId) {
+                      ToastNotification({
+                        type: "error",
+                        message:
+                          "Job ID not found for Supplier Invoice prefill.",
+                      });
+                      return;
+                    }
+
+                    const estimates = estimatesForm.values.estimates ?? [];
+                    const estimateCharges = estimates
+                      .map((e) => ({
+                        shipment_no: jobId,
+                        charge_id: e.charge_id ?? null,
+                        charge_name: e.charge_name ?? "",
+                        currency_id: e.currency_id ?? null,
+                        roe: e.roe ?? null,
+                        amount: e.total_cost ?? null,
+                        supplier_code: toStr(e.supplier_code),
+                        supplier_name: toStr(e.supplier_name),
+                      }))
+                      .filter(
+                        (c) =>
+                          toStr((c as any).shipment_no) &&
+                          (c as any).charge_id != null &&
+                          (c as any).amount != null &&
+                          (c as any).amount !== "" &&
+                          (toStr((c as any).supplier_code) ||
+                            toStr((c as any).supplier_name)),
+                      );
+
+                    const houseCharges = (housingDetails ?? [])
+                      .flatMap((h) => {
+                        const rec = h as unknown as Record<string, unknown>;
+                        const shipmentNo = toStr((rec as any).shipment_id);
+                        const chargesArr = Array.isArray((rec as any).charges)
+                          ? ((rec as any).charges as unknown[])
+                          : Array.isArray((rec as any).mbl_charges)
+                            ? ((rec as any).mbl_charges as unknown[])
+                            : [];
+                        return chargesArr
+                          .map((c) => {
+                            const cr = c as Record<string, unknown>;
+                            return {
+                              shipment_no: shipmentNo,
+                              charge_id:
+                                cr.charge_id != null
+                                  ? Number(cr.charge_id)
+                                  : null,
+                              charge_name: toStr(cr.charge_name),
+                              currency_id:
+                                (cr as any).currency_id ??
+                                (cr as any).currency ??
+                                null,
+                              roe: (cr as any).roe ?? null,
+                              amount:
+                                (cr as any).total_cost ??
+                                (cr as any).cost_local_amount ??
+                                (cr as any).amount ??
+                                null,
+                              supplier_code: toStr((cr as any).supplier_code),
+                              supplier_name: toStr((cr as any).supplier_name),
+                            };
+                          })
+                          .filter(
+                            (x) =>
+                              toStr((x as any).shipment_no) &&
+                              (x as any).charge_id != null &&
+                              (x as any).amount != null &&
+                              (x as any).amount !== "" &&
+                              (toStr((x as any).supplier_code) ||
+                                toStr((x as any).supplier_name)),
+                          );
+                      })
+                      .filter(Boolean);
+
+                    const charges = [...estimateCharges, ...houseCharges];
+                    if (charges.length === 0) {
+                      ToastNotification({
+                        type: "error",
+                        message:
+                          "No charges found in Estimates/House charges to prefill.",
+                      });
+                      return;
+                    }
+
+                    navigate("/supplier-invoice/create", {
+                      state: {
+                        prefillSupplierInvoiceFromJob: {
+                          source: "air-import-job",
+                          job_id: jobId,
+                          charges,
+                        },
+                      },
+                    });
+                    }}
+                  >
+                    Create Supplier Invoice
+                  </Button>
+                )}
+
+                <Button
+                  variant="light"
+                  color="#105476"
+                  size="sm"
+                  leftSection={<IconFileInvoice size={16} />}
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                    },
+                  }}
+                  onClick={() => {
                   const estimates = estimatesForm.values.estimates ?? [];
                   const chargesFromEstimates = estimates
                     .filter(
@@ -4197,9 +4307,10 @@ function ExportJobCreate() {
                     },
                   });
                 }}
-              >
-                Create PRQ
-              </Button>
+                >
+                  Create PRQ
+                </Button>
+              </Group>
             </Group>
             <EstimatesSection
               serviceType={["FCL", "LCL"]}
