@@ -758,6 +758,24 @@ function PaymentRequest() {
 
     const stateAny = location.state as any;
 
+    // When opened from Air Export Job (serviceType AIR), do not auto-map
+    // Paid To Type / Account Name / Paid To / State.
+    const sourceServiceType = stateAny?.serviceType;
+    const isAirSource =
+      (typeof sourceServiceType === "string" &&
+        sourceServiceType.trim().toUpperCase() === "AIR") ||
+      (Array.isArray(sourceServiceType) &&
+        sourceServiceType.some(
+          (x) => String(x ?? "").trim().toUpperCase() === "AIR",
+        ));
+    const isExportJobSource =
+      Array.isArray(sourceServiceType) &&
+      sourceServiceType.some((x) => {
+        const v = String(x ?? "").trim().toUpperCase();
+        return v === "FCL" || v === "LCL";
+      });
+    if (isAirSource || isExportJobSource) return;
+
     const supplierDetails =
       stateAny?.supplier ??
       stateAny?.Supplier ??
