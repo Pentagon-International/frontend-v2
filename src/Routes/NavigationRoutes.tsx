@@ -139,6 +139,8 @@ import DemoPage from "../pages/dashboard/DemoPage";
 import EnquiryCreate from "../pages/dashboard/EnquiryCreate";
 import GetRate from "../pages/dashboard/GetRate";
 import EnquiryMaster from "../pages/dashboard/EnquiryMaster";
+import RFQMaster from "../pages/dashboard/RFQ/RFQMaster";
+import RFQCreate from "../pages/dashboard/RFQ/RFQCreate";
 import LastEnquiriesList from "../pages/dashboard/LastEnquiriesList";
 import ReceiptMaster from "../pages/accounts/receipt/ReceiptMaster";
 import ReceiptCreate from "../pages/accounts/receipt/ReceiptCreate";
@@ -154,6 +156,8 @@ import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierIn
 import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
 import SupplierInvoiceReversalMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceReversalMaster";
+import SupplierInvoiceRCMMaster from "../pages/accounts/supplier-invoice-RCM/SupplierInvoiceRCMMaster";
+import SupplierInvoiceRCMCreate from "../pages/accounts/supplier-invoice-RCM/SupplierInvoiceRCMCreate";
 import JournalVoucher from "../pages/accounts/journalVoucher/JournalVoucher";
 import JournalVoucherMaster from "../pages/accounts/journalVoucher/JournalVoucherMaster";
 import JournalVoucherReversal from "../pages/accounts/journalVoucherReversal/JournalVoucherReversal";
@@ -358,6 +362,8 @@ const NavigationRoutes = () => {
         <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/view" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/edit" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice-rcm" element={<SupplierInvoiceRCMMaster />} />
+        <Route path="/supplier-invoice-rcm/create" element={<SupplierInvoiceRCMCreate />} />
         <Route path="/supplier-invoice/reversal" element={<SupplierInvoiceReversalMaster />} />
         <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
@@ -388,6 +394,8 @@ const NavigationRoutes = () => {
         <Route path="/call-entry-calendar" element={<CallEntryCalendar />} />
         <Route path="/enquiry" element={<EnquiryMaster />} />
         <Route path="/enquiry-create" element={<EnquiryCreate />} />
+        <Route path="/rfq" element={<RFQMaster />} />
+        <Route path="/rfq-create" element={<RFQCreate />} />
         <Route path="/last-enquiries" element={<LastEnquiriesList />} />
         <Route path="/get-rate" element={<GetRate />} />
         <Route path="/quotation-create" element={<QuotationCreate />} />
