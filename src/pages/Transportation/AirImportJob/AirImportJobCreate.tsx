@@ -141,6 +141,10 @@ type HAWBDetail = {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
+  // Backward-compat fields used in submit payload mapping
+  notify1_customer_name?: string;
+  notify1_customer_address?: string;
+  notify1_customer_email?: string;
   notify_customer1_name: string;
   notify_customer1_address: string;
   notify_customer1_email: string;
@@ -2313,30 +2317,100 @@ function AirImportJobCreate() {
                     ? Number(charge.currency)
                     : null,
               no_of_unit:
-                charge.no_of_unit != null ? roundToDecimals(charge.no_of_unit) : null,
-              roe: charge.roe != null ? roundToDecimals(charge.roe) : null,
+                charge.no_of_unit != null
+                  ? roundToDecimals(
+                      charge.no_of_unit as unknown as
+                        | string
+                        | number
+                        | null
+                        | undefined,
+                    )
+                  : null,
+              roe:
+                charge.roe != null
+                  ? roundToDecimals(
+                      charge.roe as unknown as
+                        | string
+                        | number
+                        | null
+                        | undefined,
+                    )
+                  : null,
               amount_per_unit:
                 charge.amount_per_unit != null
-                  ? roundToDecimals(charge.amount_per_unit)
+                  ? roundToDecimals(
+                      charge.amount_per_unit as unknown as
+                        | string
+                        | number
+                        | null
+                        | undefined,
+                    )
                   : null,
-              amount: charge.amount != null ? roundToDecimals(charge.amount) : null,
+              amount:
+                charge.amount != null
+                  ? roundToDecimals(
+                      charge.amount as unknown as
+                        | string
+                        | number
+                        | null
+                        | undefined,
+                    )
+                  : null,
               sell_local_amount:
                 charge.sell_local_amount != null
-                  ? roundToDecimals(charge.sell_local_amount)
+                  ? roundToDecimals(
+                      charge.sell_local_amount as unknown as
+                        | string
+                        | number
+                        | null
+                        | undefined,
+                    )
                   : charge.local_amount != null
-                    ? roundToDecimals(charge.local_amount)
+                    ? roundToDecimals(
+                        charge.local_amount as unknown as
+                          | string
+                          | number
+                          | null
+                          | undefined,
+                      )
                     : null,
               unit_cost:
                 charge.unit_cost != null
-                  ? roundToDecimals(charge.unit_cost)
+                  ? roundToDecimals(
+                      charge.unit_cost as unknown as
+                        | string
+                        | number
+                        | null
+                        | undefined,
+                    )
                   : charge.cost_per_unit != null
-                    ? roundToDecimals(charge.cost_per_unit)
+                    ? roundToDecimals(
+                        charge.cost_per_unit as unknown as
+                          | string
+                          | number
+                          | null
+                          | undefined,
+                      )
                     : null,
               total_cost:
-                charge.total_cost != null ? roundToDecimals(charge.total_cost) : null,
+                charge.total_cost != null
+                  ? roundToDecimals(
+                      charge.total_cost as unknown as
+                        | string
+                        | number
+                        | null
+                        | undefined,
+                    )
+                  : null,
               cost_local_amount:
                 charge.cost_local_amount != null
-                  ? roundToDecimals(charge.cost_local_amount)
+                  ? roundToDecimals(
+                      charge.cost_local_amount as unknown as
+                        | string
+                        | number
+                        | null
+                        | undefined,
+                    )
                   : null,
             }));
           })(),
@@ -3255,6 +3329,7 @@ function AirImportJobCreate() {
                       <SearchableSelect
                         label="From"
                         required
+                        dropdownZIndex={1100}
                         apiEndpoint={URL.portMaster}
                         placeholder="Type from location"
                         searchFields={["port_code", "port_name"]}
@@ -3304,6 +3379,7 @@ function AirImportJobCreate() {
                       <SearchableSelect
                         label="To"
                         required
+                        dropdownZIndex={1100}
                         apiEndpoint={URL.portMaster}
                         placeholder="Type to location"
                         searchFields={["port_code", "port_name"]}
@@ -3356,6 +3432,7 @@ function AirImportJobCreate() {
                           <SearchableSelect
                             label="Carrier"
                             required
+                            dropdownZIndex={1100}
                             apiEndpoint={URL.carrier}
                             placeholder="Type carrier name"
                             searchFields={["carrier_code", "carrier_name"]}
@@ -3429,6 +3506,7 @@ function AirImportJobCreate() {
                           <SearchableSelect
                             label="Carrier"
                             required
+                            dropdownZIndex={1100}
                             apiEndpoint={URL.carrier}
                             placeholder="Type carrier name"
                             searchFields={["carrier_code", "carrier_name"]}
@@ -3479,6 +3557,7 @@ function AirImportJobCreate() {
                           <SearchableSelect
                             label="Carrier"
                             required
+                            dropdownZIndex={1100}
                             apiEndpoint={URL.carrier}
                             placeholder="Type carrier name"
                             searchFields={["carrier_code", "carrier_name"]}
@@ -3703,9 +3782,127 @@ function AirImportJobCreate() {
         {/* Tab 3: Estimates */}
         <Tabs.Panel value="2">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
-              Estimates
-            </Text>
+            <Group justify="space-between" align="center" mb="md">
+              <Text size="lg" fw={600} c="#105476">
+                Estimates
+              </Text>
+              {mode === "edit" && !isReadOnly && (
+                <Button
+                  variant="outline"
+                  color="#105476"
+                  onClick={() => {
+                    const toStr = (v: unknown) => String(v ?? "").trim();
+                    const toNumOrNull = (v: unknown): number | null => {
+                      if (v == null || v === "") return null;
+                      const n = Number(v);
+                      return Number.isFinite(n) ? n : null;
+                    };
+
+                    const estimates = Array.isArray(estimatesForm.values.estimates)
+                      ? estimatesForm.values.estimates
+                      : [];
+                    const houseList = Array.isArray(hawbDetails) ? hawbDetails : [];
+
+                    // Supplier Invoice prefill is vendor-driven on the target page,
+                    // so we pass all charges and let vendor selection filter them.
+
+                    const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                    if (!jobId) {
+                      ToastNotification({
+                        type: "error",
+                        message: "Job ID not found for Supplier Invoice prefill.",
+                      });
+                      return;
+                    }
+
+                    const estimateCharges = estimates
+                      .map((e) => {
+                        const er = e as unknown as Record<string, unknown>;
+                        return {
+                        shipment_no: jobId, // common shipment no for this flow
+                        charge_id: toNumOrNull(er.charge_id),
+                        charge_name: toStr(er.charge_name),
+                        currency_id: er.currency_id ?? null,
+                        roe: er.roe ?? null,
+                        amount: er.total_cost ?? null,
+                        supplier_code: toStr(er.supplier_code),
+                        supplier_name: toStr(er.supplier_name),
+                        };
+                      })
+                      .filter(
+                        (c) =>
+                          toStr((c as any).shipment_no) &&
+                          (c as any).charge_id != null &&
+                          (c as any).amount != null &&
+                          (c as any).amount !== "",
+                      );
+
+                    const houseCharges = houseList
+                      .flatMap((h) => {
+                        const hr = h as unknown as Record<string, unknown>;
+                        const shipmentNo = toStr((hr as any).shipment_id); // house shipment_id
+                        const chargesArr = Array.isArray(hr.charges)
+                          ? (hr.charges as unknown[])
+                          : Array.isArray((hr as any).mawb_charges)
+                            ? (((hr as any).mawb_charges as unknown[]) ?? [])
+                            : [];
+                        return chargesArr
+                          .map((c) => {
+                            const cr = c as unknown as Record<string, unknown>;
+                            return {
+                            shipment_no: shipmentNo,
+                            charge_id:
+                              cr.charge_id != null ? Number(cr.charge_id) : null,
+                            charge_name: toStr(cr.charge_name),
+                            currency_id:
+                              (cr as any).currency_id ??
+                              (cr as any).currency ??
+                              null,
+                            roe: cr.roe ?? null,
+                            amount:
+                              cr.total_cost ??
+                              cr.cost_local_amount ??
+                              cr.amount ??
+                              null,
+                            supplier_code: toStr(cr.supplier_code),
+                            supplier_name: toStr(cr.supplier_name),
+                            };
+                          })
+                          .filter(
+                            (x) =>
+                              toStr((x as any).shipment_no) &&
+                              (x as any).charge_id != null &&
+                              (x as any).amount != null &&
+                              (x as any).amount !== "",
+                          );
+                      })
+                      .filter(Boolean);
+
+                    const charges = [...estimateCharges, ...houseCharges];
+                    if (charges.length === 0) {
+                      ToastNotification({
+                        type: "error",
+                        message:
+                          "No charges found in Estimates/House charges to prefill.",
+                      });
+                      return;
+                    }
+
+                    navigate("/supplier-invoice/create", {
+                      state: {
+                        prefillSupplierInvoiceFromJob: {
+                          source: "air-import-job",
+                          job_id: jobId,
+                          charges,
+                        },
+                      },
+                    });
+                  }}
+                >
+                  Create Supplier Invoice
+                </Button>
+              )}
+            </Group>
             <EstimatesSection
               serviceType="AIR"
               key={`estimates-${formInitializedKey}`}
