@@ -35,6 +35,7 @@ import {
   SingleDateInput,
   ToastNotification,
 } from "../../../components";
+import { commonSearchAPI } from "../../../service/searchApi";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
@@ -204,6 +205,24 @@ type SupplierInvoiceFormValues = {
   Dr_Cr: "Cr" | "Dr"; // Sent in payload; no UI field. Supplier Invoice = "Dr", Reverse = "Cr"
   charges_data: ChargeRow[];
   supporting_documents: SupportingDocument[];
+};
+
+type SupplierInvoicePrefillFromJob = {
+  source: "air-import-job";
+  /** Job id (e.g. JB-2604-0008) used to build common shipment options */
+  job_id?: string;
+  charges?: Array<{
+    // shipment_no will be pre-decided by caller based on rules (job vs house)
+    shipment_no: string;
+    charge_id: number | null;
+    charge_name?: string;
+    currency_id?: string | number | null;
+    roe?: string | number | null;
+    amount?: string | number | null;
+    // Optional: propagate supplier fields for debugging/display in caller only
+    supplier_code?: string;
+    supplier_name?: string;
+  }>;
 };
 
 function round2(n: number): number {
@@ -378,6 +397,8 @@ export default function SupplierInvoiceCreate({
   // Load from list: state is invoice row (Supplier Invoice list) — same pattern as ReceiptCreate
   const invoiceFromState =
     location.state as SupplierInvoiceListItem | null | undefined;
+  const prefillFromJob = (location.state as any)
+    ?.prefillSupplierInvoiceFromJob as SupplierInvoicePrefillFromJob | null | undefined;
 
   // Reversal mode: header "Cr", charges "Dr" (opposite of Supplier Invoice: header "Dr", charges "Cr")
   useEffect(() => {
@@ -636,15 +657,6 @@ export default function SupplierInvoiceCreate({
     shipment_id?: string;
     service_id?: number;
   }[];
-  const shipmentOptions = useMemo(() => {
-    if (!Array.isArray(jobList)) return [];
-    return jobList
-      .filter((item) => item.shipment_id != null && item.shipment_id !== "")
-      .map((item) => ({
-        value: String(item.shipment_id),
-        label: String(item.shipment_id),
-      }));
-  }, [jobList]);
 
   const getServiceIdByShipmentId = useCallback(
     (shipmentId: string | null | undefined): number | null => {
@@ -655,27 +667,122 @@ export default function SupplierInvoiceCreate({
     [jobList],
   );
 
+  // Cache service_id resolution for shipment/job numbers (search endpoint returns both job_id + shipment_id types)
+  const shipmentServiceIdCacheRef = useRef<Record<string, number | null>>({});
+
+  const getServiceIdByShipmentIdAsync = useCallback(
+    async (shipmentId: string | null | undefined): Promise<number | null> => {
+      const shipmentNo = String(shipmentId ?? "").trim();
+      if (!shipmentNo) return null;
+
+      // First: use the preloaded job list if it contains a match
+      const direct = getServiceIdByShipmentId(shipmentNo);
+      if (direct != null) return direct;
+
+      // Next: use cache
+      if (shipmentNo in shipmentServiceIdCacheRef.current) {
+        return shipmentServiceIdCacheRef.current[shipmentNo] ?? null;
+      }
+
+      // Finally: search the job-create filter endpoint so we can resolve service_id
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.filterJobCreate,
+          query: shipmentNo,
+        });
+        const arr = Array.isArray(results)
+          ? (results as Array<Record<string, unknown>>)
+          : [];
+        const match = arr.find(
+          (x) => String(x?.shipment_id ?? "").trim() === shipmentNo,
+        );
+        const serviceId =
+          match?.service_id != null ? Number(match.service_id) : null;
+
+        shipmentServiceIdCacheRef.current[shipmentNo] =
+          serviceId != null && Number.isFinite(serviceId) ? serviceId : null;
+        return shipmentServiceIdCacheRef.current[shipmentNo];
+      } catch {
+        shipmentServiceIdCacheRef.current[shipmentNo] = null;
+        return null;
+      }
+    },
+    [getServiceIdByShipmentId],
+  );
+
   const fetchSacForChargeRow = useCallback(
     (index: number, chargeId: number | null, shipmentNo: string) => {
       if (chargeId == null || !shipmentNo) return;
-      const serviceId = getServiceIdByShipmentId(shipmentNo);
-      if (serviceId == null) return;
-      fetchGetEffectiveSac([
-        { charge_id: chargeId, service_id: serviceId },
-      ]).then((data) => {
-        const item = data.find((x) => x.charge_id === chargeId);
+      (async () => {
+        const serviceId = await getServiceIdByShipmentIdAsync(shipmentNo);
+        if (serviceId == null) return;
+        const data = await fetchGetEffectiveSac([
+          { charge_id: chargeId, service_id: serviceId },
+        ]);
+        const item = data.find(
+          (x) => x.charge_id === chargeId && x.service_id === serviceId,
+        );
         if (item?.sac_code != null && item.sac_code !== "") {
           form.setFieldValue(`charges_data.${index}.tax_code`, item.sac_code);
         }
-      });
+      })();
     },
-    [getServiceIdByShipmentId],
+    [getServiceIdByShipmentIdAsync, form],
   );
 
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
   const isVendorSelected =
     !!String(form.values.agent_code ?? "").trim() ||
     !!String(agentDisplayName ?? "").trim();
+
+  const isAirImportJobPrefillFlow =
+    prefillFromJob?.source === "air-import-job" &&
+    String(prefillFromJob?.job_id ?? "").trim() !== "";
+  const prefillJobId = String(prefillFromJob?.job_id ?? "").trim();
+
+  const [prefillShipmentOptions, setPrefillShipmentOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+
+  // Fetch a common shipment options list once for this flow using job_id,
+  // so all Shipment No fields share the same options.
+  useEffect(() => {
+    if (!isAirImportJobPrefillFlow) return;
+    commonSearchAPI({ endpoint: URL.filterJobCreate, query: prefillJobId })
+      .then((rows) => {
+        const arr = Array.isArray(rows)
+          ? (rows as Array<Record<string, unknown>>)
+          : [];
+        const opts = arr
+          .map((x) => String(x?.shipment_id ?? "").trim())
+          .filter(Boolean)
+          .map((v) => ({ value: v, label: v }));
+        setPrefillShipmentOptions(opts);
+      })
+      .catch(() => setPrefillShipmentOptions([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAirImportJobPrefillFlow, prefillJobId]);
+
+  // When charges are prefilled from Air Import Job and vendor is manually selected,
+  // auto-fetch SAC codes once shipment_no + charge_id exist.
+  const prefillSacKey = form.values.charges_data
+    .map((c) => `${c.shipment_no}|${c.charge_id}|${c.tax_code}`)
+    .join(",");
+  useEffect(() => {
+    if (!prefillFromJob) return;
+    if (prefillFromJob.source !== "air-import-job") return;
+    if (!String(form.values.agent_code ?? "").trim()) return; // only after manual vendor select
+    if (isViewMode || isEditMode || isReversal) return;
+
+    (form.values.charges_data ?? []).forEach((row, idx) => {
+      const shipmentNo = String(row.shipment_no ?? "").trim();
+      const chargeId = row.charge_id != null ? Number(row.charge_id) : null;
+      const hasSac = String(row.tax_code ?? "").trim() !== "";
+      if (!shipmentNo || chargeId == null || hasSac) return;
+      fetchSacForChargeRow(idx, chargeId, shipmentNo);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillSacKey, prefillFromJob, form.values.agent_code]);
 
   useEffect(() => {
     const effectiveCurrency =
@@ -977,6 +1084,99 @@ export default function SupplierInvoiceCreate({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pre-fill from Air Import Job (Estimates + House charges) → Create Supplier Invoice
+  const applyPrefillChargesForSupplier = useCallback(
+    (
+      supplierCodeRaw: string | null | undefined,
+      supplierNameRaw?: string | null | undefined,
+    ) => {
+      if (!prefillFromJob) return;
+      if (isViewMode || isEditMode || isReversal) return;
+      if (prefillFromJob.source !== "air-import-job") return;
+
+      const supplierCode = String(supplierCodeRaw ?? "").trim();
+      const supplierName = String(supplierNameRaw ?? "").trim();
+      if (!supplierCode && !supplierName) return;
+
+      const rows = Array.isArray(prefillFromJob.charges)
+        ? prefillFromJob.charges
+        : [];
+
+      const normalizeSupplierKey = (v: string) =>
+        v
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, ""); // remove spaces, dots, etc.
+
+      const codeKey = normalizeSupplierKey(supplierCode);
+      const nameKey = normalizeSupplierKey(supplierName);
+      const filtered = rows.filter((c) => {
+        const rowCode = normalizeSupplierKey(String(c.supplier_code ?? "").trim());
+        const rowName = normalizeSupplierKey(String(c.supplier_name ?? "").trim());
+        if (codeKey && rowCode && rowCode === codeKey) return true;
+        if (nameKey && rowName && rowName === nameKey) return true;
+        return false;
+      });
+
+      const mappedCharges: ChargeRow[] = filtered
+        .map((c) => {
+          // Estimates rows come with shipment_no = job_id.
+          // House rows come with shipment_no = house shipment_id.
+          // If caller didn't send shipment_no for some row, fall back to job_id.
+          const shipmentNo =
+            String(c.shipment_no ?? "").trim() ||
+            String(prefillFromJob.job_id ?? "").trim();
+          const chargeId = c.charge_id != null ? Number(c.charge_id) : null;
+          if (!shipmentNo || chargeId == null) return null;
+
+          const currencyIdNum =
+            c.currency_id != null && c.currency_id !== ""
+              ? Number(c.currency_id)
+              : null;
+          const roeNum =
+            c.roe != null && c.roe !== ""
+              ? parseFloat(String(c.roe)) || null
+              : null;
+          const amountNum =
+            c.amount != null && c.amount !== ""
+              ? parseFloat(String(c.amount)) || null
+              : null;
+
+          return {
+            account_code: "",
+            account_name: "",
+            subledger_code: "",
+            CRN: "Cost",
+            narration: "",
+            shipment_no: shipmentNo,
+            charge_id: chargeId,
+            charge_name: String(c.charge_name ?? ""),
+            currency_id: Number.isFinite(currencyIdNum as number)
+              ? (currencyIdNum as number)
+              : null,
+            roe: roeNum,
+            amount: amountNum,
+            amount_in_local: null,
+            tax_code: "",
+            Dr_Cr: "Dr" as const,
+          };
+        })
+        .filter(Boolean) as ChargeRow[];
+
+      if (mappedCharges.length > 0) {
+        form.setFieldValue("charges_data", mappedCharges);
+      }
+    },
+    [prefillFromJob, isViewMode, isEditMode, isReversal, form],
+  );
+
+  useEffect(() => {
+    if (!prefillFromJob) return;
+    if (isViewMode || isEditMode || isReversal) return;
+    if (prefillFromJob.source !== "air-import-job") return;
+    // Intentionally do NOT set vendor or charges on navigation.
+    // Charges are populated only when the user manually selects Vendor/Supplier.
+  }, [prefillFromJob, isViewMode, isEditMode, isReversal]);
 
   const buildPayload = (
     values: SupplierInvoiceFormValues,
@@ -1677,6 +1877,10 @@ export default function SupplierInvoiceCreate({
                     "customer_gst_no",
                     primary?.gst_id != null ? String(primary.gst_id) : "",
                   );
+
+                  // If navigated from Air Import Job → Create Supplier Invoice:
+                  // Populate charges only after vendor selection, filtered by matching supplier_code.
+                  applyPrefillChargesForSupplier(value, selectedData?.label ?? null);
                 }}
                 dropdownZIndex={1000}
                 styles={effectiveInputStyles}
@@ -2332,33 +2536,60 @@ export default function SupplierInvoiceCreate({
                     mt={index !== 0 ? "sm" : 0}
                   >
                     <Grid.Col span={1.25}>
-                      <Dropdown
-                        placeholder="Shipment No"
-                        data={shipmentOptions}
-                        value={row.shipment_no || null}
-                        disabled={isReadOnly || reversalFormDisabled}
-                        onChange={(v) => {
-                          const shipmentNo = v ?? "";
-                          form.setFieldValue(
-                            `charges_data.${index}.shipment_no`,
-                            shipmentNo,
-                          );
-                          fetchSacForChargeRow(
-                            index,
-                            row.charge_id,
-                            shipmentNo,
-                          );
-                        }}
-                        searchable
-                        clearable
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
+                      {isAirImportJobPrefillFlow ? (
+                        <Dropdown
+                          placeholder="Select shipment no"
+                          data={prefillShipmentOptions}
+                          value={row.shipment_no || null}
+                          onChange={(v) => {
+                            const shipmentNo = String(v ?? "").trim();
+                            form.setFieldValue(
+                              `charges_data.${index}.shipment_no`,
+                              shipmentNo,
+                            );
+                            fetchSacForChargeRow(index, row.charge_id, shipmentNo);
+                          }}
+                          searchable
+                          disabled={isReadOnly || reversalFormDisabled}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      ) : (
+                        <SearchableSelect
+                          placeholder="Search by shipment no"
+                          apiEndpoint={URL.filterJobCreate}
+                          value={row.shipment_no || null}
+                          displayValue={row.shipment_no || undefined}
+                          dropdownZIndex={1100}
+                          minSearchLength={1}
+                          searchFields={["shipment_id"]}
+                          displayFormat={(item: Record<string, unknown>) => {
+                            const shipmentId = String(item.shipment_id ?? "").trim();
+                            return { value: shipmentId, label: shipmentId };
+                          }}
+                          disabled={isReadOnly || reversalFormDisabled}
+                          onChange={(v) => {
+                            const shipmentNo = String(v ?? "").trim();
+                            form.setFieldValue(
+                              `charges_data.${index}.shipment_no`,
+                              shipmentNo,
+                            );
+                            fetchSacForChargeRow(index, row.charge_id, shipmentNo);
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      )}
                     </Grid.Col>
                     <Grid.Col span={1.25}>
                       <SearchableSelect
