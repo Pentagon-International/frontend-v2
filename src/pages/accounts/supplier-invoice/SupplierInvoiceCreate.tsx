@@ -920,19 +920,26 @@ export default function SupplierInvoiceCreate({
         ? parseFloat(String(prData.amount)) || null
         : null;
 
-    // Header-level account/subledger from PR applied to every charge row
-    const prAccountCode = String(prData.account_code ?? "");
-    const prSubledgerCode = String(prData.subledger_code ?? "");
-    const prAccountName = String(prData.account_name ?? "");
     const charges = Array.isArray(prData.charges) ? prData.charges : [];
     const mappedCharges: ChargeRow[] = charges.map((c: Record<string, any>) => ({
-      account_code: prAccountCode,
-      account_name: prAccountName,
-      subledger_code: prSubledgerCode,
-      CRN: "Cost",
+      // For GST rows from Payment Request, CRN should be Revenue.
+      // Other charges should continue as Cost.
+      // Charge names are compared in uppercase to handle casing differences.
+      CRN: [
+        "STATE GOODS AND SERVICE TAX",
+        "CENTRAL GOODS AND SERVICE TAX",
+        "INTEGRATED GOODS AND SERVICE TAX",
+      ].includes(String(c.charge_name ?? "").trim().toUpperCase())
+        ? "Revenue"
+        : "Cost",
+      // Do not map Account/Subledger from Payment Request.
+      account_code: "",
+      account_name: "",
+      subledger_code: "",
       narration: "",
-      shipment_no: String(c.job_id ?? prData.job_reference ?? ""),
+      shipment_no: String(c.job_no ?? c.job_id ?? ""),
       charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+      charge_name: String(c.charge_name ?? ""),
       currency_id: c.currency_id != null ? Number(c.currency_id) : null,
       roe: c.roe != null && c.roe !== "" ? parseFloat(String(c.roe)) || null : null,
       amount: c.amount != null && c.amount !== "" ? parseFloat(String(c.amount)) || null : null,
@@ -942,7 +949,13 @@ export default function SupplierInvoiceCreate({
     }));
 
     // Header fields
-    form.setFieldValue("Inv_Crn_no", String(prData.request_no ?? ""));
+    const actualInvNo = String(
+      prData.actual_inv_no ?? prData.actual_invoice_no ?? "",
+    ).trim();
+    form.setFieldValue(
+      "Inv_Crn_no",
+      actualInvNo,
+    );
     form.setFieldValue("creditor_agent", String(prData.paid_to ?? ""));
     form.setFieldValue("agent_code", String(prData.paid_to ?? ""));
     form.setFieldValue("customer_gst_no", String(prData.customer_gst_no ?? ""));
@@ -2373,13 +2386,10 @@ export default function SupplierInvoiceCreate({
                         searchFields={["charge_code", "charge_name", "id"]}
                         displayFormat={(item: Record<string, unknown>) => {
                           const id = String(item.id ?? "").trim();
-                          const code = String(item.charge_code ?? "").trim();
                           const name = String(item.charge_name ?? "").trim();
                           return {
                             value: id,
-                            label: name
-                              ? `${name}${code ? ` (${code})` : ""}`
-                              : code,
+                            label: name,
                           };
                         }}
                         returnOriginalData
@@ -2396,7 +2406,7 @@ export default function SupplierInvoiceCreate({
                             chargeId,
                           );
                           const nextName =
-                            selectedData?.label?.split(" (")[0] ??
+                            selectedData?.label ??
                             (originalData?.charge_name != null
                               ? String(originalData.charge_name)
                               : "");

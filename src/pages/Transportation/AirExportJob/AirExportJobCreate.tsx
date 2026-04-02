@@ -3599,6 +3599,12 @@ function AirExportJobCreate() {
                       tax_code: "",
                       tax: "false",
                     }));
+                  const firstSupplier =
+                    estimates.find(
+                      (e) =>
+                        String(e.supplier_code ?? "").trim() !== "" ||
+                        String(e.supplier_name ?? "").trim() !== "",
+                    ) ?? null;
                   navigate("/payment-request/create", {
                     state: {
                       serviceType: "AIR",
@@ -3606,6 +3612,17 @@ function AirExportJobCreate() {
                         chargesFromEstimates.length > 0
                           ? chargesFromEstimates
                           : undefined,
+                      supplier:
+                        firstSupplier != null
+                          ? {
+                              supplier_code: String(
+                                firstSupplier.supplier_code ?? "",
+                              ),
+                              supplier_name: String(
+                                firstSupplier.supplier_name ?? "",
+                              ),
+                            }
+                          : null,
                       job_reference_1:
                         jobData?.job_id != null
                           ? String(jobData.job_id)
