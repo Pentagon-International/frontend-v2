@@ -5,9 +5,6 @@ import {
   Grid,
   Group,
   Text,
-  TextInput,
-  Textarea,
-  NumberInput,
   Stack,
   Loader,
   ScrollArea,
@@ -35,6 +32,9 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
 import { getAPICall } from "../../../service/getApiCall";
+import FormTextInput from "../../../components/FormTextInput";
+import FormNumberInput from "../../../components/FormNumberInput";
+import FormTextArea from "../../../components/FormTextArea";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -273,11 +273,6 @@ type ReversableDataResponse = {
   }>;
 };
 
-const inputStyles = {
-  input: { fontSize: "13px", fontFamily: "Inter", height: "36px" },
-  label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
-};
-
 function InvoiceReverse() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -346,6 +341,9 @@ function InvoiceReverse() {
       : undefined;
 
   const isReadOnly = invoiceIsPosted;
+  const reversalPageTitle = saveResponse?.id
+    ? "Edit Invoice Reversal"
+    : "Create Invoice Reversal";
 
   const form = useForm<InvoiceFormData>({
     initialValues: {
@@ -1035,12 +1033,15 @@ function InvoiceReverse() {
         };
       });
       const allChargesPayload = [...chargesPayload, ...taxCharges];
+      const addressLabelForPayload =
+        addressOptions.find((opt) => opt.value === values.address)?.label ??
+        values.address;
       const payload = {
         id: saveResponse.id,
         ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
         is_agent: isAgentInvoice,
-        address: values.address,
+        address: addressLabelForPayload,
         state_id: stateId,
         gstn: values.gstn || null,
         shipment_no: values.shipment_no,
@@ -1417,7 +1418,9 @@ function InvoiceReverse() {
         ...(jobId != null ? { job_id: jobId } : {}),
         bill_to: values.bill_to,
         is_agent: isAgentInvoice,
-        address: values.address,
+        address:
+          addressOptions.find((opt) => opt.value === values.address)?.label ??
+          values.address,
         state_id: stateId,
         gstn: values.gstn || null,
         shipment_no: values.shipment_no,
@@ -1554,7 +1557,7 @@ function InvoiceReverse() {
         <Stack gap="md">
           <Group justify="space-between">
             <Text size="xl" fw={600} c="#105476">
-              Invoice Reverse
+              {reversalPageTitle}
             </Text>
             <Button
               variant="outline"
@@ -1602,7 +1605,7 @@ function InvoiceReverse() {
       <Stack gap="md">
         <Group justify="space-between" mb="xs" wrap="nowrap">
           <Text size="xl" fw={600} c="#105476">
-            Invoice Reverse
+            {reversalPageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
             {saveResponse && (
@@ -1610,8 +1613,8 @@ function InvoiceReverse() {
                 <Group gap="xs" wrap="nowrap">
                   <Text size="sm" fw={500} c="dimmed">
                     {saveResponse.status?.toUpperCase() === "POSTED"
-                      ? "Reverse Invoice Number"
-                      : "Draft Reverse Invoice Number"}
+                      ? "Invoice Reversal Number"
+                      : "Draft Invoice Reversal Number"}
                   </Text>
                   <Badge
                     size="sm"
@@ -1699,18 +1702,6 @@ function InvoiceReverse() {
                 error={
                   form.errors.bill_to ? String(form.errors.bill_to) : undefined
                 }
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    height: "36px",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    marginBottom: "4px",
-                  },
-                }}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -1725,11 +1716,10 @@ function InvoiceReverse() {
                 // disabled={isStateLoading || isReadOnly}
                 readOnly={isStateLoading || isReadOnly}
                 error={form.errors.state}
-                styles={inputStyles}
               />
             </Grid.Col>
             <Grid.Col span={2}>
-              <TextInput
+              <FormTextInput
                 label="GSTN"
                 placeholder="GSTN"
                 value={form.values.gstn}
@@ -1737,11 +1727,10 @@ function InvoiceReverse() {
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 error={form.errors.gstn}
-                styles={inputStyles}
               />
             </Grid.Col>
             <Grid.Col span={2}>
-              <TextInput
+              <FormTextInput
                 label={isAgentInvoice ? "Job id" : "Shipment No"}
                 placeholder={isAgentInvoice ? "Job id" : "Shipment No"}
                 value={form.values.shipment_no}
@@ -1752,7 +1741,6 @@ function InvoiceReverse() {
                 readOnly={isReadOnly}
                 withAsterisk
                 error={form.errors.shipment_no}
-                styles={inputStyles}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -1769,7 +1757,6 @@ function InvoiceReverse() {
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 error={form.errors.daybook_id}
-                styles={inputStyles}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -1822,11 +1809,10 @@ function InvoiceReverse() {
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 error={form.errors.currency}
-                styles={inputStyles}
               />
             </Grid.Col>
             <Grid.Col span={2}>
-              <NumberInput
+              <FormNumberInput
                 label="ROE"
                 placeholder="ROE"
                 value={form.values.roe ?? undefined}
@@ -1846,11 +1832,10 @@ function InvoiceReverse() {
                 min={0}
                 decimalScale={4}
                 error={form.errors.roe}
-                styles={inputStyles}
               />
             </Grid.Col>
             <Grid.Col span={2}>
-              <TextInput
+              <FormTextInput
                 label="IRN No"
                 placeholder="IRN No"
                 value={form.values.irn_no}
@@ -1858,7 +1843,6 @@ function InvoiceReverse() {
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 error={form.errors.irn_no}
-                styles={inputStyles}
               />
             </Grid.Col>
             <Grid.Col span={6}>
@@ -1868,6 +1852,7 @@ function InvoiceReverse() {
                   placeholder="Select address"
                   data={addressOptions}
                   value={form.values.address}
+                  dropdownZIndex={1000}
                   onChange={(value) =>
                     form.setFieldValue("address", value || "")
                   }
@@ -1879,10 +1864,9 @@ function InvoiceReverse() {
                       ? String(form.errors.address)
                       : undefined
                   }
-                  styles={inputStyles}
                 />
               ) : (
-                <TextInput
+                <FormTextInput
                   label="Address"
                   placeholder="Address"
                   value={form.values.address}
@@ -1892,12 +1876,11 @@ function InvoiceReverse() {
                   readOnly={isReadOnly}
                   withAsterisk
                   error={form.errors.address}
-                  styles={inputStyles}
                 />
               )}
             </Grid.Col>
             <Grid.Col span={6}>
-              <Textarea
+              <FormTextArea
                 label="Narration"
                 placeholder="Narration"
                 value={form.values.narration}
@@ -1908,10 +1891,6 @@ function InvoiceReverse() {
                 readOnly={isReadOnly}
                 rows={2}
                 error={form.errors.narration}
-                styles={{
-                  input: { fontSize: "13px", fontFamily: "Inter" },
-                  label: inputStyles.label,
-                }}
               />
             </Grid.Col>
           </Grid>
@@ -2019,7 +1998,7 @@ function InvoiceReverse() {
                     >
                       {isAgentInvoice && (
                         <Grid.Col span={1}>
-                          <TextInput
+                          <FormTextInput
                             value={
                               charge.shipment_id ??
                               form.values.shipment_no ??
@@ -2113,13 +2092,6 @@ function InvoiceReverse() {
                           error={chargeErrors[index]?.charge_name}
                           minSearchLength={2}
                           dropdownZIndex={1000}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -2136,13 +2108,6 @@ function InvoiceReverse() {
                           searchable
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -2170,17 +2135,10 @@ function InvoiceReverse() {
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.currency}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.45}>
-                        <NumberInput
+                        <FormNumberInput
                           placeholder="ROE"
                           value={charge.roe ?? undefined}
                           onChange={(v) => {
@@ -2207,17 +2165,10 @@ function InvoiceReverse() {
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.roe}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.65}>
-                        <NumberInput
+                        <FormNumberInput
                           value={charge.no_of_unit ?? undefined}
                           onChange={(v) =>
                             form.setFieldValue(
@@ -2233,17 +2184,10 @@ function InvoiceReverse() {
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <NumberInput
+                        <FormNumberInput
                           value={charge.amount_per_unit ?? undefined}
                           onChange={(v) =>
                             form.setFieldValue(
@@ -2260,17 +2204,10 @@ function InvoiceReverse() {
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <NumberInput
+                        <FormNumberInput
                           placeholder="Currency Amount"
                           value={charge.amount ?? undefined}
                           onChange={(v) => {
@@ -2299,17 +2236,10 @@ function InvoiceReverse() {
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.amount}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>
-                        <NumberInput
+                        <FormNumberInput
                           value={charge.header_amount ?? undefined}
                           onChange={(v) =>
                             form.setFieldValue(
@@ -2326,17 +2256,10 @@ function InvoiceReverse() {
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.8}>
-                        <NumberInput
+                        <FormNumberInput
                           placeholder="Local Amount"
                           value={charge.amount_in_local ?? undefined}
                           onChange={(v) => {
@@ -2365,17 +2288,10 @@ function InvoiceReverse() {
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.amount_in_local}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.8}>
-                        <TextInput
+                        <FormTextInput
                           placeholder="SAC Code"
                           withAsterisk
                           // readOnly
@@ -2390,13 +2306,6 @@ function InvoiceReverse() {
                               <Loader size="xs" color="#105476" />
                             ) : null
                           }
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={0.55}>
@@ -2415,18 +2324,11 @@ function InvoiceReverse() {
                           }
                           // disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
                         />
                       </Grid.Col>
                       {headerSameState === true && (
                         <Grid.Col span={0.55}>
-                          <TextInput
+                          <FormTextInput
                             placeholder="CGST"
                             value={(() => {
                               const rate = gstRatesByChargeIndex[index]?.cgst;
@@ -2466,7 +2368,7 @@ function InvoiceReverse() {
                       )}
                       {headerSameState === true && (
                         <Grid.Col span={0.55}>
-                          <TextInput
+                          <FormTextInput
                             placeholder="SGST"
                             value={(() => {
                               const rate = gstRatesByChargeIndex[index]?.sgst;
@@ -2506,7 +2408,7 @@ function InvoiceReverse() {
                       )}
                       {headerSameState === false && (
                         <Grid.Col span={0.55}>
-                          <TextInput
+                          <FormTextInput
                             placeholder="IGST"
                             value={(() => {
                               const rate = gstRatesByChargeIndex[index]?.igst;

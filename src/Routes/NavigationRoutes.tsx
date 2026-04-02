@@ -195,6 +195,9 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
           <Route path="export-generation">
@@ -230,6 +233,9 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
         </Route>
@@ -281,6 +287,9 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
           <Route path="import-job">
@@ -292,6 +301,9 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
         </Route>

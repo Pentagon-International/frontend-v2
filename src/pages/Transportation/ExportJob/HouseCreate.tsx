@@ -4046,42 +4046,80 @@ function HouseCreate() {
                   ` (${chargesForm.values.charges.length})`}
               </Text>
               {location.state?.job?.id != null && (
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  onClick={() => {
-                    const fullDetail = getCurrentHousingDetail();
-                    const prepaidCharges = (fullDetail.charges ?? []).filter(
-                      (c: { pp_cc?: string }) =>
-                        String(c.pp_cc ?? "").trim() === "Prepaid",
-                    );
-                    const detailForInvoice = {
-                      ...fullDetail,
-                      charges: prepaidCharges,
-                    };
-                    navigate("/SeaExport/export-job/invoice", {
-                      state: {
-                        serviceType:
-                          location.state?.mblDetails?.service || "FCL",
-                        hawbDetails: [detailForInvoice],
-                        housingDetails: [detailForInvoice],
-                        is_agent: false,
-                        ...(location.state?.job && { job: location.state.job }),
-                        ...(location.state?.mblDetails && {
-                          mblDetails: location.state.mblDetails,
-                        }),
-                        ...(location.state?.carrierDetails && {
-                          carrierDetails: location.state.carrierDetails,
-                        }),
-                        ...(location.state?.routings && {
-                          routings: location.state.routings,
-                        }),
-                      },
-                    });
-                  }}
-                >
-                  Create Invoice
-                </Button>
+                <Group gap="xs">
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      const prepaidCharges = (fullDetail.charges ?? []).filter(
+                        (c: { pp_cc?: string }) =>
+                          String(c.pp_cc ?? "").trim() === "Prepaid",
+                      );
+                      const detailForInvoice = {
+                        ...fullDetail,
+                        charges: prepaidCharges,
+                      };
+                      navigate("/SeaExport/export-job/credit-note", {
+                        state: {
+                          serviceType:
+                            location.state?.mblDetails?.service || "FCL",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.mblDetails && {
+                            mblDetails: location.state.mblDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Credit Note
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      const prepaidCharges = (fullDetail.charges ?? []).filter(
+                        (c: { pp_cc?: string }) =>
+                          String(c.pp_cc ?? "").trim() === "Prepaid",
+                      );
+                      const detailForInvoice = {
+                        ...fullDetail,
+                        charges: prepaidCharges,
+                      };
+                      navigate("/SeaExport/export-job/invoice", {
+                        state: {
+                          serviceType:
+                            location.state?.mblDetails?.service || "FCL",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.mblDetails && {
+                            mblDetails: location.state.mblDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Invoice
+                  </Button>
+                </Group>
               )}
             </Group>
 
@@ -4736,6 +4774,19 @@ function HouseCreate() {
                           const hasReverseInvoices = reverseInvoices.length > 0;
 
                           const invoiceViewId = row.invoice_id ?? row.id;
+                          const isCreditNoteRow =
+                            String((row as any).document_type ?? "")
+                              .toUpperCase()
+                              .trim() === "CRN" ||
+                            String((row as any).dr_cr ?? (row as any).Dr_Cr ?? "")
+                              .toLowerCase()
+                              .trim() === "cr" ||
+                            String((row as any).day_book_name ?? "")
+                              .toLowerCase()
+                              .includes("credit");
+                          const invoiceRouteSegment = isCreditNoteRow
+                            ? "credit-note"
+                            : "invoice";
                           return (
                             <Fragment key={rowKey}>
                               <Table.Tr
@@ -4896,7 +4947,7 @@ function HouseCreate() {
                                         }}
                                         onClick={() =>
                                           navigate(
-                                            `/SeaExport/export-job/invoice/view/${invoiceViewId}`,
+                                            `/SeaExport/export-job/${invoiceRouteSegment}/view/${invoiceViewId}`,
                                             {
                                               state: {
                                                 invoiceData: row,
@@ -4950,7 +5001,7 @@ function HouseCreate() {
                                           }}
                                           onClick={() =>
                                             navigate(
-                                              `/SeaExport/export-job/invoice/edit/${row.invoice_id}`,
+                                              `/SeaExport/export-job/${invoiceRouteSegment}/edit/${row.invoice_id}`,
                                               {
                                                 state: {
                                                   invoiceData: row,
@@ -5259,9 +5310,43 @@ function HouseCreate() {
                                                           const targetId =
                                                             (rev.reverse_invoice_id ??
                                                               row.reverse_invoice_id) as number;
+                                                          const isReverseCreditNote =
+                                                            String(
+                                                              (rev as any)
+                                                                .document_type ??
+                                                                (row as any)
+                                                                  .document_type ??
+                                                                "",
+                                                            )
+                                                              .toUpperCase()
+                                                              .trim() === "CRN" ||
+                                                            String(
+                                                              (rev as any).dr_cr ??
+                                                                (rev as any).Dr_Cr ??
+                                                                (row as any)
+                                                                  .dr_cr ??
+                                                                (row as any)
+                                                                  .Dr_Cr ??
+                                                                "",
+                                                            )
+                                                              .toLowerCase()
+                                                              .trim() === "cr" ||
+                                                            String(
+                                                              (rev as any)
+                                                                .day_book_name ??
+                                                                (row as any)
+                                                                  .day_book_name ??
+                                                                "",
+                                                            )
+                                                              .toLowerCase()
+                                                              .includes("credit");
+                                                          const reverseRouteSegment =
+                                                            isReverseCreditNote
+                                                              ? "credit-note"
+                                                              : "invoice";
 
                                                           navigate(
-                                                            `/SeaExport/export-job/invoice/view/${targetId}`,
+                                                            `/SeaExport/export-job/${reverseRouteSegment}/view/${targetId}`,
                                                             {
                                                               state: {
                                                                 invoiceData: {

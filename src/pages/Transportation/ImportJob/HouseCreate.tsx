@@ -4001,45 +4001,86 @@ function HouseCreate() {
                   ` (${chargesForm.values.charges.length})`}
               </Text>
               {location.state?.job?.id != null && (
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  onClick={() => {
-                    const fullDetail = getCurrentHousingDetail();
-                    // For ocean import customer invoice, only Collect charges
-                    const collectCharges = (fullDetail.charges ?? []).filter(
-                      (c: { pp_cc?: string }) =>
-                        String(c.pp_cc ?? "").trim() === "Collect",
-                    );
-                    const detailForInvoice = {
-                      ...fullDetail,
-                      charges: collectCharges,
-                    };
-                    navigate("/SeaExport/import-job/invoice", {
-                      state: {
-                        serviceType:
-                          location.state?.mblDetails?.service || "FCL",
-                        hawbDetails: [detailForInvoice],
-                        housingDetails: [detailForInvoice],
-                        is_agent: false,
-                        // Explicitly indicate that Bill To / State / Address should come from consignee
-                        billToFrom: "consignee",
-                        ...(location.state?.job && { job: location.state.job }),
-                        ...(location.state?.mblDetails && {
-                          mblDetails: location.state.mblDetails,
-                        }),
-                        ...(location.state?.carrierDetails && {
-                          carrierDetails: location.state.carrierDetails,
-                        }),
-                        ...(location.state?.routings && {
-                          routings: location.state.routings,
-                        }),
-                      },
-                    });
-                  }}
-                >
-                  Create Invoice
-                </Button>
+                <Group gap="xs">
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      // For ocean import customer invoice, only Collect charges
+                      const collectCharges = (fullDetail.charges ?? []).filter(
+                        (c: { pp_cc?: string }) =>
+                          String(c.pp_cc ?? "").trim() === "Collect",
+                      );
+                      const detailForInvoice = {
+                        ...fullDetail,
+                        charges: collectCharges,
+                      };
+                      navigate("/SeaExport/import-job/credit-note", {
+                        state: {
+                          serviceType:
+                            location.state?.mblDetails?.service || "FCL",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          // Explicitly indicate that Bill To / State / Address should come from consignee
+                          billToFrom: "consignee",
+                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.mblDetails && {
+                            mblDetails: location.state.mblDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Credit Note
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      // For ocean import customer invoice, only Collect charges
+                      const collectCharges = (fullDetail.charges ?? []).filter(
+                        (c: { pp_cc?: string }) =>
+                          String(c.pp_cc ?? "").trim() === "Collect",
+                      );
+                      const detailForInvoice = {
+                        ...fullDetail,
+                        charges: collectCharges,
+                      };
+                      navigate("/SeaExport/import-job/invoice", {
+                        state: {
+                          serviceType:
+                            location.state?.mblDetails?.service || "FCL",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          // Explicitly indicate that Bill To / State / Address should come from consignee
+                          billToFrom: "consignee",
+                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.mblDetails && {
+                            mblDetails: location.state.mblDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Invoice
+                  </Button>
+                </Group>
               )}
             </Group>
 
