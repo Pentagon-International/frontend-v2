@@ -2498,9 +2498,16 @@ function HouseCreate() {
   return (
     <Box p="md" mx="auto">
       <Group justify="space-between" mb="lg">
-        <Text size="xl" fw={600} c="#105476">
-          {isEditMode ? "Edit HAWB Details" : "Create HAWB Details"}
-        </Text>
+        <Group gap="md">
+          <Text size="xl" fw={600} c="#105476">
+            {isEditMode ? "Edit HAWB Details" : "Create HAWB Details"}
+          </Text>
+          {isEditMode && editData?.shipment_id && (
+            <Badge color="#105476" size="md" variant="light">
+              Shipment ID: {editData.shipment_id}
+            </Badge>
+          )}
+        </Group>
         {/* Save button moved to top */}
         <Group>
           {/* <Button
@@ -2962,11 +2969,6 @@ function HouseCreate() {
             <Text size="md" fw={600} c="#105476">
               Shipment Details
             </Text>
-            {isEditMode && editData?.shipment_id && (
-              <Badge color="#105476" size="md" variant="light">
-                Shipment ID: {editData.shipment_id}
-              </Badge>
-            )}
           </Group>
 
           <Box mt="md">

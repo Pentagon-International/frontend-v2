@@ -428,6 +428,15 @@ function ExportJobMaster() {
         enableSorting: false,
       },
       {
+        accessorKey: "job_id",
+        header: "Job ID",
+        size: 150,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string | null>();
+          return value || "-";
+        },
+      },
+      {
         accessorKey: "mbl_number",
         header: "MBL No",
         size: 150,

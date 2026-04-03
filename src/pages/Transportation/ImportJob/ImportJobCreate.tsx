@@ -2538,13 +2538,20 @@ function ImportJobCreate() {
   return (
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
-        <Text size="xl" fw={600} c="#105476">
-          {mode === "view"
-            ? "View Import Job"
-            : mode === "edit"
-              ? "Edit Import Job"
-              : "Create Import Job"}
-        </Text>
+        <Group gap={"md"}>
+          <Text size="xl" fw={600} c="#105476">
+            {mode === "view"
+              ? "View Import Job"
+              : mode === "edit"
+                ? "Edit Import Job"
+                : "Create Import Job"}
+          </Text>
+          {jobData?.job_id && (
+            <Badge color="#105476" radius="md" size="md">
+              {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
+            </Badge>
+          )}
+        </Group>
         {!isReadOnly && (
           <Group gap="xs">
             <Button
@@ -5017,9 +5024,9 @@ function ImportJobCreate() {
                         Routed By : {house.routed_by}
                       </Badge>
                     )}
-                    {/* <Badge color="blue" variant="light">
-                      {house.trade}
-                    </Badge> */}
+                    <Badge color="#105476" variant="light">
+                      Shipment Id : {house.shipment_id}
+                    </Badge>
                   </Group>
                   {!isReadOnly && (
                     <Group gap="xs">

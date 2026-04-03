@@ -2358,13 +2358,20 @@ function AirExportJobCreate() {
   return (
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
-        <Text size="xl" fw={600} c="#105476">
-          {mode === "view"
-            ? "View Export Job"
-            : mode === "edit"
-              ? "Edit Export Job"
-              : "Create Export Job"}
-        </Text>
+        <Group gap="md">
+          <Text size="xl" fw={600} c="#105476">
+            {mode === "view"
+              ? "View Export Job"
+              : mode === "edit"
+                ? "Edit Export Job"
+                : "Create Export Job"}
+          </Text>
+          {jobData?.job_id && (
+            <Badge color="#105476" radius="md" size="md">
+              {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
+            </Badge>
+          )}
+        </Group>
         {!isReadOnly && (
           <Group gap="sm">
             <Button
@@ -4717,6 +4724,9 @@ function AirExportJobCreate() {
                         Routed By : {hawb.routed_by}
                       </Badge>
                     )}
+                    <Badge color="#105476" variant="light">
+                      Shipment Id : {hawb.shipment_id}
+                    </Badge>
                   </Group>
                   <Group gap="xs">
                     {!isReadOnly && (
