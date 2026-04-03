@@ -1097,6 +1097,20 @@ export default function ReceiptCreate({
     values: ReceiptFormValues,
     options: { status?: string } = {},
   ) => {
+    const rawAdjustments = values.adjustments ?? [];
+    const nonEmptyAdjustments = rawAdjustments.filter((a) => {
+      const hasInvoice = a.invoice_id != null && a.invoice_id > 0;
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasInvoice || hasAmounts || hasDocument;
+    });
+
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
@@ -1116,7 +1130,7 @@ export default function ReceiptCreate({
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
       chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
-      dr_cr: (receiptFromState?.dr_cr ?? "Cr").toString(),
+      dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
         subledger_code: d.customer_code ?? "",
@@ -1127,7 +1141,7 @@ export default function ReceiptCreate({
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Cr").toString(),
       })),
-      allocations: (values.adjustments ?? []).map((a) => ({
+      allocations: nonEmptyAdjustments.map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
         ...(a.invoice_id != null && a.invoice_id > 0
           ? { invoice_id: a.invoice_id }
@@ -1159,6 +1173,19 @@ export default function ReceiptCreate({
       detailsOverride?: DetailRow[];
     },
   ) => {
+    const rawAdjustments = values.adjustments ?? [];
+    const nonEmptyAdjustments = rawAdjustments.filter((a) => {
+      const hasInvoice = a.invoice_id != null && a.invoice_id > 0;
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasInvoice || hasAmounts || hasDocument;
+    });
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
@@ -1183,7 +1210,7 @@ export default function ReceiptCreate({
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
       chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
-      dr_cr: (receiptFromState?.dr_cr ?? "Cr").toString(),
+      dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
       // Party: label = customer_display (subledger_name from list / customer_name from search); payload = subledger_code (customer_code)
       parties: details.map((d) => ({
         subledger_code: d.customer_code ?? "",
@@ -1194,7 +1221,7 @@ export default function ReceiptCreate({
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Dr").toString(),
       })),
-      allocations: (values.adjustments ?? []).map((a) => ({
+      allocations: nonEmptyAdjustments.map((a) => ({
         location: a.location ?? "",
         subledger_code: a.subledger ?? "",
         day_book_id: Number(a.daybook_id) || 0,
@@ -1277,6 +1304,20 @@ export default function ReceiptCreate({
   };
 
   const handleSubmit = async (values: ReceiptFormValues) => {
+    const hasAdjustments = (values.adjustments ?? []).some((a) => {
+      const hasInvoice = a.invoice_id != null && a.invoice_id > 0;
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasInvoice || hasAmounts || hasDocument;
+    });
+
+    if (hasAdjustments) {
     const partyLocalTotal =
       (values.details ?? []).reduce(
         (sum, d) =>
@@ -1286,22 +1327,23 @@ export default function ReceiptCreate({
             : 0),
         0,
       ) ?? 0;
-    const adjLocalTotal =
-      (values.adjustments ?? []).reduce(
-        (sum, a) =>
-          sum +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
-            : 0),
-        0,
-      ) ?? 0;
-    if (partyLocalTotal > adjLocalTotal) {
-      ToastNotification({
-        type: "error",
-        message:
-          "The total Local Amount of Party Details cannot exceed the total Adj Local Amount of the Adjustments section.",
-      });
-      return;
+      const adjLocalTotal =
+        (values.adjustments ?? []).reduce(
+          (sum, a) =>
+            sum +
+            (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+              ? a.adj_local_amount
+              : 0),
+          0,
+        ) ?? 0;
+      if (partyLocalTotal < adjLocalTotal) {
+        ToastNotification({
+          type: "error",
+          message:
+            "The total Local Amount of Receipt cannot be less than the total Local Amount of Invoice.",
+        });
+        return;
+      }
     }
     setIsSubmitting(true);
     try {
