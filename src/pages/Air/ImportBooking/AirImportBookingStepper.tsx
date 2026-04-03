@@ -4684,7 +4684,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     label="Origin Agent Name"
                     placeholder="Type origin agent name"
                     withAsterisk
-                    apiEndpoint={URL.agent}
+                    apiEndpoint={URL.customerByTypes}
+                    additionalParams={{ types: "Agent,Coloader" }}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),

@@ -39,6 +39,7 @@ import {
 import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
+import { apiCallProtected } from "../../../api/axios";
 import {
   ToastNotification,
   SearchableSelect,
@@ -61,6 +62,10 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  extractJobDataFromPatchAxiosResponse,
+  housingEventsFromJobPatchData,
+} from "../../../utils/jobHousingEventsFromPatch";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -349,6 +354,15 @@ function ExportJobCreate() {
       ? location.state.housingDetails
       : [],
   );
+
+  /** Keeps `job.housing_details` aligned with `housingDetails` (events, etc.) without retriggering the job load effect. */
+  const jobWithMergedHousingDetails = useMemo(() => {
+    if (!jobData) return undefined;
+    if (housingDetails.length > 0) {
+      return { ...jobData, housing_details: housingDetails };
+    }
+    return jobData;
+  }, [jobData, housingDetails]);
 
   // PDF Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -1848,6 +1862,57 @@ function ExportJobCreate() {
     setHousingDetails(updated);
   };
 
+  const housingAlreadyHasEventType = (
+    events: unknown,
+    eventType: string,
+  ): boolean =>
+    Array.isArray(events) &&
+    events.some(
+      (e: { type?: string }) => String(e?.type ?? "") === eventType,
+    );
+
+  const patchHousingPdfReleasedEvent = async (
+    housingId: number | undefined,
+    eventType: string,
+    existingEvents: unknown,
+  ) => {
+    const jobId = jobData?.id;
+    if (!jobId || !housingId) return;
+    if (housingAlreadyHasEventType(existingEvents, eventType)) return;
+
+    const date = new Date().toISOString().slice(0, 10);
+
+    const res = await apiCallProtected.patch(
+      `${URL.importJob}${jobId}/`,
+      {
+        id: jobId,
+        housing_details: [
+          {
+            id: housingId,
+            events: [{ type: eventType, date }],
+          },
+        ],
+      },
+      API_HEADER,
+    );
+    const jobPayload = extractJobDataFromPatchAxiosResponse(res);
+    const nextEvents = housingEventsFromJobPatchData(jobPayload, housingId);
+    if (nextEvents) {
+      setHousingDetails((prev) =>
+        prev.map((h) =>
+          Number(h.id) === Number(housingId)
+            ? ({ ...h, events: nextEvents } as HousingDetail)
+            : h,
+        ),
+      );
+      setCurrentHousingForPreview((prev) =>
+        prev && Number(prev.id) === Number(housingId)
+          ? ({ ...prev, events: nextEvents } as HousingDetail)
+          : prev,
+      );
+    }
+  };
+
   // Generate Bill Of Lading PDF Preview
   const generateBillOfLadingPDFPreview = async (housing: HousingDetail) => {
     try {
@@ -1863,7 +1928,7 @@ function ExportJobCreate() {
 
       // Combine job data and housing data for PDF generation
       const combinedData = {
-        ...jobData,
+        ...(jobWithMergedHousingDetails ?? jobData),
         ...housing,
         mblDetails: {
           service: mblDetailsForm.values.service,
@@ -1895,6 +1960,11 @@ function ExportJobCreate() {
         country,
       );
       setPdfBlob(blobUrl);
+      void patchHousingPdfReleasedEvent(
+        typeof housing.id === "number" ? housing.id : undefined,
+        "BL Released",
+        (housing as { events?: unknown }).events,
+      ).catch((e) => console.error("Failed to patch PDF release event:", e));
     } catch (error) {
       console.error("Error generating PDF:", error);
       ToastNotification({
@@ -2083,7 +2153,9 @@ function ExportJobCreate() {
           housingDetails: housingDetails,
           ...(editIndex !== undefined && { editIndex }),
           ...(editData && { editData }),
-          ...(jobData && { job: jobData }),
+          ...(jobWithMergedHousingDetails && {
+            job: jobWithMergedHousingDetails,
+          }),
           mblDetails: {
             service: mblDetailsForm.values.service || "",
             is_direct: mblDetailsForm.values.is_direct,
@@ -2115,7 +2187,7 @@ function ExportJobCreate() {
       routingsForm.values.routings,
       estimatesForm.values.estimates,
       housingDetails,
-      jobData,
+      jobWithMergedHousingDetails,
     ],
   );
 
@@ -2837,7 +2909,9 @@ function ExportJobCreate() {
                             housingDetails: housingDetailsForInvoice,
                             is_agent: true,
                             fromJobLevel: true,
-                            ...(jobData && { job: jobData }),
+                            ...(jobWithMergedHousingDetails && {
+                              job: jobWithMergedHousingDetails,
+                            }),
                             ...(location.state?.mblDetails && {
                               mblDetails: location.state.mblDetails,
                             }),
@@ -4310,7 +4384,9 @@ function ExportJobCreate() {
                           : jobData?.id != null
                             ? String(jobData.id)
                             : "",
-                      ...(jobData && { job: jobData }),
+                      ...(jobWithMergedHousingDetails && {
+                        job: jobWithMergedHousingDetails,
+                      }),
                     },
                   });
                 }}

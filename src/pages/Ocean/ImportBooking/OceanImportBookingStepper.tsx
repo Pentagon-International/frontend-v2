@@ -5143,7 +5143,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Origin Agent Name"
                     placeholder="Type origin agent name"
-                    apiEndpoint={URL.agent}
+                    apiEndpoint={URL.customerByTypes}
+                    additionalParams={{ types: "Agent,Coloader" }}
                     withAsterisk
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({

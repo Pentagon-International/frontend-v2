@@ -18,6 +18,8 @@ export const URL = {
   transporter: "customer_master/customer-master/transporter/",
   consignee: "customer_master/customer-master/consignee/",
   agent: "customer_master/customer-master/agent/",
+  /** Agent + Coloader search for Origin Agent fields (same response shape as agent search). */
+  customerByTypes: "customer_master/customer-master/by-types/",
   supplierByType: "customer_master/customer-master/by-type/Supplier/",
   shipper: "customer_master/customer-master/shipper/",
   shipmentParty: "shipment-party/",

@@ -38,6 +38,7 @@ import {
 import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
+import { apiCallProtected } from "../../../api/axios";
 import {
   ToastNotification,
   SearchableSelect,
@@ -59,6 +60,10 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  extractJobDataFromPatchAxiosResponse,
+  housingEventsFromJobPatchData,
+} from "../../../utils/jobHousingEventsFromPatch";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 
@@ -322,6 +327,15 @@ function ImportJobCreate() {
       ? location.state.housingDetails
       : [],
   );
+
+  /** Keeps `job.housing_details` aligned with `housingDetails` (events, etc.) without retriggering the job load effect. */
+  const jobWithMergedHousingDetails = useMemo(() => {
+    if (!jobData) return undefined;
+    if (housingDetails.length > 0) {
+      return { ...jobData, housing_details: housingDetails };
+    }
+    return jobData;
+  }, [jobData, housingDetails]);
 
   // PDF Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -1839,7 +1853,9 @@ function ImportJobCreate() {
           housingDetails: housingDetails,
           ...(editIndex !== undefined && { editIndex }),
           ...(editData && { editData }),
-          ...(jobData && { job: jobData }),
+          ...(jobWithMergedHousingDetails && {
+            job: jobWithMergedHousingDetails,
+          }),
           mblDetails: {
             service: mblDetailsForm.values.service || "",
             origin_agent: mblDetailsForm.values.origin_agent || "",
@@ -1872,7 +1888,7 @@ function ImportJobCreate() {
       routingsForm.values.routings,
       estimatesForm.values.estimates,
       housingDetails,
-      jobData,
+      jobWithMergedHousingDetails,
     ],
   );
 
@@ -1915,6 +1931,112 @@ function ImportJobCreate() {
     housingDetails.length,
   ]);
 
+  const housingAlreadyHasEventType = (
+    events: unknown,
+    eventType: string,
+  ): boolean =>
+    Array.isArray(events) &&
+    events.some(
+      (e: { type?: string }) => String(e?.type ?? "") === eventType,
+    );
+
+  const patchHousingPdfReleasedEvent = async (
+    housingId: number | undefined,
+    eventType: string,
+  ) => {
+    const jobId = jobData?.id;
+    if (!jobId || !housingId) return;
+    const currentHousing = housingDetails.find(
+      (h) => Number(h.id) === Number(housingId),
+    );
+    if (
+      housingAlreadyHasEventType(
+        (currentHousing as { events?: unknown })?.events,
+        eventType,
+      )
+    )
+      return;
+
+    const date = new Date().toISOString().slice(0, 10);
+
+    // Optimistic update so the guard blocks re-clicks immediately
+    const optimisticEvent = { type: eventType, date };
+    setHousingDetails((prev) =>
+      prev.map((h) =>
+        Number(h.id) === Number(housingId)
+          ? ({
+              ...h,
+              events: [
+                ...((h as { events?: typeof optimisticEvent[] }).events ?? []),
+                optimisticEvent,
+              ],
+            } as HousingDetail)
+          : h,
+      ),
+    );
+    setCurrentHousingForPreview((prev) =>
+      prev && Number(prev.id) === Number(housingId)
+        ? ({
+            ...prev,
+            events: [
+              ...(
+                prev as { events?: typeof optimisticEvent[] }
+              ).events ?? [],
+              optimisticEvent,
+            ],
+          } as HousingDetail)
+        : prev,
+    );
+    setCurrentHousingForDoPreview((prev) =>
+      prev && Number(prev.id) === Number(housingId)
+        ? ({
+            ...prev,
+            events: [
+              ...(
+                prev as { events?: typeof optimisticEvent[] }
+              ).events ?? [],
+              optimisticEvent,
+            ],
+          } as HousingDetail)
+        : prev,
+    );
+
+    const res = await apiCallProtected.patch(
+      `${URL.importJob}${jobId}/`,
+      {
+        id: jobId,
+        housing_details: [
+          {
+            id: housingId,
+            events: [{ type: eventType, date }],
+          },
+        ],
+      },
+      API_HEADER,
+    );
+    const jobPayload = extractJobDataFromPatchAxiosResponse(res);
+    const nextEvents = housingEventsFromJobPatchData(jobPayload, housingId);
+    if (nextEvents) {
+      setHousingDetails((prev) =>
+        prev.map((h) =>
+          Number(h.id) === Number(housingId)
+            ? ({ ...h, events: nextEvents } as HousingDetail)
+            : h,
+        ),
+      );
+      setCurrentHousingForPreview((prev) =>
+        prev && Number(prev.id) === Number(housingId)
+          ? ({ ...prev, events: nextEvents } as HousingDetail)
+          : prev,
+      );
+      setCurrentHousingForDoPreview((prev) =>
+        prev && Number(prev.id) === Number(housingId)
+          ? ({ ...prev, events: nextEvents } as HousingDetail)
+          : prev,
+      );
+    }
+  };
+
   // Handle form submission
   // Generate Cargo Arrival Notice PDF
   const generateCargoArrivalNoticePDFPreview = async (
@@ -1933,7 +2055,7 @@ function ImportJobCreate() {
 
       // Combine job data and housing data for PDF generation
       const combinedData = {
-        ...jobData,
+        ...(jobWithMergedHousingDetails ?? jobData),
         ...housing,
         mawbDetails: {
           service: mblDetailsForm.values.service,
@@ -1965,6 +2087,10 @@ function ImportJobCreate() {
         country,
       );
       setPdfBlob(blobUrl);
+      void patchHousingPdfReleasedEvent(
+        typeof housing.id === "number" ? housing.id : undefined,
+        "CAN Released",
+      ).catch((e) => console.error("Failed to patch PDF release event:", e));
     } catch (error) {
       console.error("Error generating PDF:", error);
       ToastNotification({
@@ -2063,7 +2189,7 @@ function ImportJobCreate() {
 
       // Combine job data and housing data for PDF generation
       const combinedData = {
-        ...jobData,
+        ...(jobWithMergedHousingDetails ?? jobData),
         ...housing,
         mawbDetails: {
           service: mblDetailsForm.values.service,
@@ -2096,6 +2222,10 @@ function ImportJobCreate() {
       };
       const blobUrl = generateDeliveryOrderPDF(combinedData, housingDataForDo);
       setDoPdfBlob(blobUrl);
+      void patchHousingPdfReleasedEvent(
+        typeof housing.id === "number" ? housing.id : undefined,
+        "DO Released",
+      ).catch((e) => console.error("Failed to patch PDF release event:", e));
     } catch (error) {
       console.error("Error generating Delivery Order PDF:", error);
       ToastNotification({
@@ -2774,7 +2904,9 @@ function ImportJobCreate() {
                             housingDetails: housingDetailsForInvoice,
                             is_agent: true,
                             fromJobLevel: true,
-                            ...(jobData && { job: jobData }),
+                            ...(jobWithMergedHousingDetails && {
+                              job: jobWithMergedHousingDetails,
+                            }),
                             ...(location.state?.mblDetails && {
                               mblDetails: location.state.mblDetails,
                             }),
@@ -2966,7 +3098,8 @@ function ImportJobCreate() {
                   label="Origin Agent"
                   required
                   placeholder="Type agent name"
-                  apiEndpoint={URL.agent}
+                  apiEndpoint={URL.customerByTypes}
+                  additionalParams={{ types: "Agent,Coloader" }}
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({

@@ -45,6 +45,7 @@ import { useDebouncedCallback } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
+import { apiCallProtected } from "../../../api/axios";
 import { commonSearchAPI } from "../../../service/searchApi";
 import {
   SearchableSelect,
@@ -54,6 +55,12 @@ import {
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  eventsToEventModalRows,
+  extractJobDataFromPatchAxiosResponse,
+  housingEventsFromJobPatchData,
+  resolveHousingEventsForHouseForm,
+} from "../../../utils/jobHousingEventsFromPatch";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
@@ -499,6 +506,12 @@ function HouseCreate() {
     return "";
   };
 
+  const initialHousingEvents = resolveHousingEventsForHouseForm(
+    location.state?.job,
+    editData,
+    editIndex,
+  );
+
   // Form with all fields - pre-fill if in edit mode, auto-set from MAWB in create mode
   const form = useForm<HAWBDetailsForm>({
     initialValues: {
@@ -583,79 +596,8 @@ function HouseCreate() {
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
-      events: Array.isArray(
-        (editData as { events?: unknown } | undefined)?.events,
-      )
-        ? (
-            (
-              editData as
-                | {
-                    events?: Array<{
-                      id?: number;
-                      type?: string;
-                      date?: string;
-                    }>;
-                  }
-                | undefined
-            )?.events ?? []
-          ).map((e) => ({
-            id: e.id != null ? Number(e.id) : undefined,
-            type: String(e.type ?? ""),
-            date: String(e.date ?? ""),
-          }))
-        : (() => {
-            const jobEvents =
-              (
-                location.state?.job as {
-                  housing_details?: Array<{
-                    events?: Array<{
-                      id?: number;
-                      type?: string;
-                      date?: string;
-                    }>;
-                  }>;
-                }
-              )?.housing_details?.[editIndex ?? 0]?.events ?? [];
-            if (!Array.isArray(jobEvents)) return [];
-            return jobEvents.map((e) => ({
-              id: e.id != null ? Number(e.id) : undefined,
-              type: String(e.type ?? ""),
-              date: String(e.date ?? ""),
-            }));
-          })(),
-      event_modal_rows: [
-        ...(() => {
-          const sourceEvents =
-            (
-              editData as
-                | {
-                    events?: Array<{
-                      id?: number;
-                      type?: string;
-                      date?: string;
-                    }>;
-                  }
-                | undefined
-            )?.events ??
-            (
-              location.state?.job as {
-                housing_details?: Array<{
-                  events?: Array<{ id?: number; type?: string; date?: string }>;
-                }>;
-              }
-            )?.housing_details?.[editIndex ?? 0]?.events ??
-            [];
-          if (!Array.isArray(sourceEvents) || sourceEvents.length === 0) {
-            return [];
-          }
-          return sourceEvents.map((e) => ({
-            id: e.id != null ? Number(e.id) : undefined,
-            eventType: String(e.type ?? ""),
-            eventDate: e.date ? new Date(String(e.date)) : null,
-          }));
-        })(),
-        { id: undefined, eventType: null, eventDate: null },
-      ],
+      events: initialHousingEvents,
+      event_modal_rows: eventsToEventModalRows(initialHousingEvents),
     },
     validate: () => {
       // Validation handled in validateStep functions
@@ -2250,8 +2192,8 @@ function HouseCreate() {
     };
   };
 
-  // Handle save - navigate to ImportJobCreate with housing details
-  const handleSave = () => {
+  /** Builds HAWB list from current form (events, cargo, charges) for sync with Air Import Job. */
+  const buildUpdatedHousingDetailsFromForm = () => {
     // Prepare cargo details (container_number removed for Air)
     // Keep payload stable; only round known numeric cargo fields to 2dp
     const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
@@ -2342,22 +2284,28 @@ function HouseCreate() {
       updatedHousingDetails = [...existingHousingDetails, housingDetail];
     }
 
-    // Determine navigation path based on edit mode
+    return updatedHousingDetails;
+  };
+
+  const navigateToJobWithHousingList = (
+    updatedHousingDetails: typeof existingHousingDetails,
+  ) => {
     const isInEditMode = location.state?.job && location.state.job.id;
     const navigatePath = isInEditMode
       ? "/air/import-job/edit"
       : "/air/import-job/create";
 
-    // Navigate to ImportJobCreate with housing details
     navigate(navigatePath, {
       state: {
         fromHouseCreate: true,
         hawbDetails: updatedHousingDetails,
-        // Support legacy housingDetails key for backward compatibility
         housingDetails: updatedHousingDetails,
-        // Preserve any existing job data
-        ...(location.state?.job && { job: location.state.job }),
-        // Preserve form state when navigating back
+        ...(location.state?.job && {
+          job: {
+            ...location.state.job,
+            housing_details: updatedHousingDetails,
+          },
+        }),
         ...(location.state?.mawbDetails && {
           mawbDetails: location.state.mawbDetails,
         }),
@@ -2367,12 +2315,71 @@ function HouseCreate() {
         ...(location.state?.routings && {
           routings: location.state.routings,
         }),
-        // Preserve master-level estimates so they can be restored on the job screen
         ...(location.state?.estimates && {
           estimates: location.state.estimates,
         }),
       },
     });
+  };
+
+  const handleSave = () => {
+    navigateToJobWithHousingList(buildUpdatedHousingDetailsFromForm());
+  };
+
+  const housingAlreadyHasEventType = (
+    events: unknown,
+    eventType: string,
+  ): boolean =>
+    Array.isArray(events) &&
+    events.some(
+      (e: { type?: string }) => String(e?.type ?? "") === eventType,
+    );
+
+  const patchHousingPdfReleasedEvent = async (eventType: string) => {
+    const jobId = location.state?.job?.id;
+    const rawHousingId = editData?.id;
+    if (!jobId || rawHousingId == null) return;
+
+    const housingId =
+      typeof rawHousingId === "number" ? rawHousingId : Number(rawHousingId);
+    if (!housingId) return;
+    if (housingAlreadyHasEventType(form.values.events, eventType)) return;
+
+    const date = new Date().toISOString().slice(0, 10);
+
+    // Optimistic update: shows event in modal immediately and blocks re-clicks
+    const optimisticEvents = [
+      ...(form.values.events ?? []),
+      { type: eventType, date },
+    ];
+    form.setFieldValue("events", optimisticEvents);
+    form.setFieldValue(
+      "event_modal_rows",
+      eventsToEventModalRows(optimisticEvents),
+    );
+
+    const res = await apiCallProtected.patch(
+      `${URL.importJob}${jobId}/`,
+      {
+        id: jobId,
+        housing_details: [
+          {
+            id: housingId,
+            events: [{ type: eventType, date }],
+          },
+        ],
+      },
+      API_HEADER,
+    );
+    const jobPayload = extractJobDataFromPatchAxiosResponse(res);
+    const nextEvents = housingEventsFromJobPatchData(jobPayload, housingId);
+    if (nextEvents) {
+      form.setFieldValue("events", nextEvents);
+      form.setFieldValue(
+        "event_modal_rows",
+        eventsToEventModalRows(nextEvents),
+      );
+    }
   };
 
   // Generate PDF preview from current form data
@@ -2459,6 +2466,9 @@ function HouseCreate() {
         country,
       );
       setPdfBlob(blobUrl);
+      void patchHousingPdfReleasedEvent("CAN Released").catch((e) =>
+        console.error("Failed to patch PDF release event:", e),
+      );
     } catch (error) {
       console.error("Error generating PDF:", error);
       ToastNotification({
@@ -2721,8 +2731,16 @@ function HouseCreate() {
                   },
                 }}
                 onClick={() => {
-                  const existing = form.values.events;
+                  const existing =
+                    form.values.events.length > 0
+                      ? form.values.events
+                      : resolveHousingEventsForHouseForm(
+                          location.state?.job,
+                          editData,
+                          editIndex,
+                        );
                   if (existing.length > 0) {
+                    form.setFieldValue("events", existing);
                     form.setFieldValue("event_modal_rows", [
                       ...existing.map((e) => ({
                         id: e.id,
@@ -5414,36 +5432,13 @@ function HouseCreate() {
           color="#105476"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => {
-            // Determine navigation path based on edit mode
-            const isInEditMode = location.state?.job && location.state.job.id;
-            const navigatePath = isInEditMode
-              ? "/air/import-job/edit"
-              : "/air/import-job/create";
-
-            navigate(navigatePath, {
-              state: {
-                fromHouseCreate: true,
-                hawbDetails: existingHousingDetails,
-                // Support legacy housingDetails key for backward compatibility
-                housingDetails: existingHousingDetails,
-                // Preserve any existing job data
-                ...(location.state?.job && { job: location.state.job }),
-                // Preserve form state when navigating back
-                ...(location.state?.mawbDetails && {
-                  mawbDetails: location.state.mawbDetails,
-                }),
-                ...(location.state?.carrierDetails && {
-                  carrierDetails: location.state.carrierDetails,
-                }),
-                ...(location.state?.routings && {
-                  routings: location.state.routings,
-                }),
-                // Preserve master-level estimates so all estimates stepper fields are retained
-                ...(location.state?.estimates && {
-                  estimates: location.state.estimates,
-                }),
-              },
-            });
+            if (isEditMode && editIndex !== undefined) {
+              navigateToJobWithHousingList(
+                buildUpdatedHousingDetailsFromForm(),
+              );
+            } else {
+              navigateToJobWithHousingList(existingHousingDetails);
+            }
           }}
         >
           Back to Import Job

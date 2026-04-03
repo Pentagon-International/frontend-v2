@@ -20,6 +20,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { toTitleCase } from "../../../utils/textFormatter";
+import FormTextInput from "../../../components/FormTextInput";
 
 type CustomerTypeData = {
   customer_type_name: string;
@@ -34,7 +35,7 @@ function CustomerTypeNew() {
   });
 
   const form = useForm({
-    mode: "uncontrolled",
+    mode: "controlled",
     initialValues: {
       customer_type_name: "",
       status: "ACTIVE",
@@ -71,14 +72,13 @@ function CustomerTypeNew() {
       </Text>
 
       <Group grow mb="md">
-        <TextInput
+        <FormTextInput
           label="Customer Type Name"
           withAsterisk
           key={form.key("customer_type_name")}
           value={form.values.customer_type_name}
           onChange={(e) => {
-            const formattedValue = toTitleCase(e.target.value);
-            form.setFieldValue("customer_type_name", formattedValue);
+            form.setFieldValue("customer_type_name", e.target.value);
           }}
           error={form.errors.customer_type_name}
         />

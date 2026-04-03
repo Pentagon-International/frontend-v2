@@ -44,6 +44,7 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
+import { apiCallProtected } from "../../../api/axios";
 import {
   ToastNotification,
   SearchableSelect,
@@ -68,6 +69,10 @@ import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNotice
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  extractJobDataFromPatchAxiosResponse,
+  housingEventsFromJobPatchData,
+} from "../../../utils/jobHousingEventsFromPatch";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -183,6 +188,7 @@ type HAWBDetail = {
     cost_local_amount?: number | null;
   }>;
   mawb_charges?: Array<Record<string, unknown>>;
+  events?: Array<{ id?: number; type: string; date: string }>;
 };
 
 // Invoice-related types for Accounts tab
@@ -288,6 +294,15 @@ function AirImportJobCreate() {
         ? location.state.housingDetails
         : [],
   );
+
+  /** Aligns `job.housing_details` with current HAWB rows (events, etc.) without retriggering the job load effect. */
+  const jobWithMergedHousingDetails = useMemo(() => {
+    if (!jobData) return undefined;
+    if (hawbDetails.length > 0) {
+      return { ...jobData, housing_details: hawbDetails };
+    }
+    return jobData;
+  }, [jobData, hawbDetails]);
 
   // Track if forms have been initialized from jobData (one-time initialization)
   const formsInitializedFromJobDataRef = useRef(false);
@@ -997,6 +1012,33 @@ function AirImportJobCreate() {
                 // Air Export flow stores normalized charges; keep raw too for payload parity/debug.
                 charges: mappedCharges,
                 mawb_charges: mawbChargesRaw,
+                events: Array.isArray(
+                  (
+                    house as {
+                      events?: Array<{
+                        id?: number;
+                        type?: string;
+                        date?: string;
+                      }>;
+                    }
+                  ).events,
+                )
+                  ? (
+                      (
+                        house as {
+                          events?: Array<{
+                            id?: number;
+                            type?: string;
+                            date?: string;
+                          }>;
+                        }
+                      ).events ?? []
+                    ).map((e) => ({
+                      id: e.id != null ? Number(e.id) : undefined,
+                      type: String(e.type ?? ""),
+                      date: String(e.date ?? ""),
+                    }))
+                  : [],
               };
             },
           );
@@ -1844,7 +1886,9 @@ function AirImportJobCreate() {
           housingDetails: hawbDetails,
           ...(editIndex !== undefined && { editIndex }),
           ...(editData && { editData }),
-          ...(jobData && { job: jobData }),
+          ...(jobWithMergedHousingDetails && {
+            job: jobWithMergedHousingDetails,
+          }),
           // Preserve form state including origin_agent and origin_agent_data
           mawbDetails: mawbDetailsToPass,
           carrierDetails: carrierDetailsForm.values,
@@ -1865,7 +1909,7 @@ function AirImportJobCreate() {
       routingsForm.values.routings,
       estimatesForm.values.estimates,
       hawbDetails,
-      jobData,
+      jobWithMergedHousingDetails,
       location.state,
       navigate,
     ],
@@ -1973,6 +2017,72 @@ function AirImportJobCreate() {
     return true;
   };
 
+  const housingAlreadyHasEventType = (
+    events: unknown,
+    eventType: string,
+  ): boolean =>
+    Array.isArray(events) &&
+    events.some(
+      (e: { type?: string }) => String(e?.type ?? "") === eventType,
+    );
+
+  const patchHousingPdfReleasedEvent = async (
+    housingId: number | undefined,
+    eventType: string,
+  ) => {
+    const jobId = jobData?.id;
+    if (!jobId || !housingId) return;
+    const currentHawb = hawbDetails.find((h) => Number(h.id) === Number(housingId));
+    if (housingAlreadyHasEventType(currentHawb?.events, eventType)) return;
+
+    const date = new Date().toISOString().slice(0, 10);
+
+    // Optimistic update so the guard blocks re-clicks and the modal shows the event immediately
+    const optimisticEvent = { type: eventType, date };
+    setHawbDetails((prev) =>
+      prev.map((h) =>
+        Number(h.id) === Number(housingId)
+          ? ({ ...h, events: [...(h.events ?? []), optimisticEvent] } as HAWBDetail)
+          : h,
+      ),
+    );
+    setCurrentHawbForPreview((prev) =>
+      prev && Number(prev.id) === Number(housingId)
+        ? ({ ...prev, events: [...(prev.events ?? []), optimisticEvent] } as HAWBDetail)
+        : prev,
+    );
+
+    const res = await apiCallProtected.patch(
+      `${URL.importJob}${jobId}/`,
+      {
+        id: jobId,
+        housing_details: [
+          {
+            id: housingId,
+            events: [{ type: eventType, date }],
+          },
+        ],
+      },
+      API_HEADER,
+    );
+    const jobPayload = extractJobDataFromPatchAxiosResponse(res);
+    const nextEvents = housingEventsFromJobPatchData(jobPayload, housingId);
+    if (nextEvents) {
+      setHawbDetails((prev) =>
+        prev.map((h) =>
+          Number(h.id) === Number(housingId)
+            ? ({ ...h, events: nextEvents } as HAWBDetail)
+            : h,
+        ),
+      );
+      setCurrentHawbForPreview((prev) =>
+        prev && Number(prev.id) === Number(housingId)
+          ? ({ ...prev, events: nextEvents } as HAWBDetail)
+          : prev,
+      );
+    }
+  };
+
   // Generate Cargo Arrival Notice PDF
   const generateCargoArrivalNoticePDFPreview = async (hawb: HAWBDetail) => {
     try {
@@ -1988,7 +2098,7 @@ function AirImportJobCreate() {
 
       // Combine job data and hawb data for PDF generation
       const combinedData = {
-        ...jobData,
+        ...(jobWithMergedHousingDetails ?? jobData),
         ...hawb,
         mawbDetails: {
           service: mawbDetailsForm.values.service,
@@ -2018,6 +2128,10 @@ function AirImportJobCreate() {
         country,
       );
       setPdfBlob(blobUrl);
+      void patchHousingPdfReleasedEvent(
+        typeof hawb.id === "number" ? hawb.id : undefined,
+        "CAN Released",
+      ).catch((e) => console.error("Failed to patch PDF release event:", e));
     } catch (error) {
       console.error("Error generating PDF:", error);
       ToastNotification({
@@ -2755,7 +2869,9 @@ function AirImportJobCreate() {
                             housingDetails: housingDetailsForInvoice,
                             is_agent: true,
                             fromJobLevel: true,
-                            ...(jobData && { job: jobData }),
+                            ...(jobWithMergedHousingDetails && {
+                              job: jobWithMergedHousingDetails,
+                            }),
                             ...(location.state?.mawbDetails && {
                               mawbDetails: location.state.mawbDetails,
                             }),
@@ -2968,7 +3084,8 @@ function AirImportJobCreate() {
                   label="Origin Agent"
                   required
                   placeholder="Type agent name"
-                  apiEndpoint={URL.agent}
+                  apiEndpoint={URL.customerByTypes}
+                  additionalParams={{ types: "Agent,Coloader" }}
                   dropdownZIndex={1000}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
@@ -4153,8 +4270,8 @@ function AirImportJobCreate() {
                                               state: {
                                                 invoiceData: row,
                                                 fromJobLevel: true,
-                                                ...(jobData && {
-                                                  job: jobData,
+                                                ...(jobWithMergedHousingDetails && {
+                                                  job: jobWithMergedHousingDetails,
                                                 }),
                                               },
                                             },
@@ -4208,8 +4325,8 @@ function AirImportJobCreate() {
                                                 state: {
                                                   invoiceData: row,
                                                   fromJobLevel: true,
-                                                  ...(jobData && {
-                                                    job: jobData,
+                                                  ...(jobWithMergedHousingDetails && {
+                                                    job: jobWithMergedHousingDetails,
                                                   }),
                                                 },
                                               },
@@ -4263,8 +4380,8 @@ function AirImportJobCreate() {
                                                 state: {
                                                   document_no:
                                                     row.document_no ?? "",
-                                                  ...(jobData && {
-                                                    job: jobData,
+                                                  ...(jobWithMergedHousingDetails && {
+                                                    job: jobWithMergedHousingDetails,
                                                   }),
                                                 },
                                               },
@@ -4552,8 +4669,8 @@ function AirImportJobCreate() {
                                                                       row.day_book_name,
                                                                   },
                                                                   fromJobLevel: true,
-                                                                  ...(jobData && {
-                                                                    job: jobData,
+                                                                  ...(jobWithMergedHousingDetails && {
+                                                                    job: jobWithMergedHousingDetails,
                                                                   }),
                                                                 },
                                                               },
