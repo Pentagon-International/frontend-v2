@@ -4699,9 +4699,11 @@ function AirImportJobCreate() {
                         Routed By : {hawb.routed_by}
                       </Badge>
                     )}
-                  <Badge color="#105476" variant="light">
-                    Shipment Id : {hawb.shipment_id}
-                  </Badge>
+                    {hawb.shipment_id && (
+                      <Badge color="#105476" variant="light">
+                        Shipment Id : {hawb.shipment_id}
+                      </Badge>
+                    )}
                   </Group>
                   {!isReadOnly && (
                     <Group gap="xs">

@@ -5128,9 +5128,11 @@ function ExportJobCreate() {
                         Routed By : {house.routed_by}
                       </Badge>
                     )}
-                    <Badge color="#105476" variant="light">
-                      Shipment Id : {house.shipment_id}
-                    </Badge>
+                    {house.shipment_id && (
+                      <Badge color="#105476" variant="light">
+                        Shipment Id : {house.shipment_id}
+                      </Badge>
+                    )}
                   </Group>
                   {!isReadOnly && (
                     <Group gap="xs">
