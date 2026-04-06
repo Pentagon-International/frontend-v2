@@ -8,6 +8,7 @@ import {
   IconChartBar,
   IconReport,
   IconChartArcs3,
+  IconClockHour4,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import MasterCard from "../../components/MasterCard";
@@ -41,6 +42,11 @@ export default function ReportsPage() {
         {
           label: "Subledger Outstanding",
           icon: <IconFileAnalytics size={28} color="#105476" />,
+        },
+        {
+          label: "Aging Outstanding",
+          icon: <IconClockHour4 size={28} color="#105476" />,
+          path: "/reports/aging-outstanding",
         },
       ],
     },
