@@ -49,6 +49,7 @@ import {
   SearchableSelect,
   Dropdown,
   DateRangeInput,
+  SingleDateInput,
 } from "../../../components";
 import dayjs from "dayjs";
 import { postAPICall } from "../../../service/postApiCall";
@@ -5065,7 +5066,7 @@ function RFQCreate() {
                           // maw={300}
                           mx="auto"
                         >
-                          <DateInput
+                          <SingleDateInput
                             label={`${moduleLabel} Received Date`}
                             withAsterisk
                             placeholder="YYYY-MM-DD"
@@ -5094,45 +5095,6 @@ function RFQCreate() {
                             size="sm"
                             nextIcon={<IconChevronRight size={16} />}
                             previousIcon={<IconChevronLeft size={16} />}
-                            styles={{
-                              input: {
-                                height: "36px",
-                                fontSize: "13px",
-                                fontFamily: "Inter",
-                                fontStyle: "medium",
-                              },
-                              label: {
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                                fontStyle: "medium",
-                              },
-                              day: {
-                                width: "2.25rem",
-                                height: "2.25rem",
-                                fontSize: "0.9rem",
-                              },
-                              calendarHeaderLevel: {
-                                fontSize: "1rem",
-                                fontWeight: 500,
-                                marginBottom: "0.5rem",
-                                flex: 1,
-                                textAlign: "center",
-                              },
-                              calendarHeaderControl: {
-                                width: "2rem",
-                                height: "2rem",
-                                margin: "0 0.5rem",
-                              },
-                              calendarHeader: {
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: "0.5rem",
-                              },
-                            }}
                           />
                         </Box>
                       </Grid.Col>

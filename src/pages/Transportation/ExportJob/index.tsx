@@ -46,6 +46,7 @@ import { DateInput } from "@mantine/dates";
 import { ToastNotification } from "../../../components";
 import dayjs from "dayjs";
 import FormTextInput from "../../../components/FormTextInput";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 // Type definitions
 type ExportJobData = {
@@ -97,6 +98,8 @@ function ExportJobMaster() {
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const dateFormat = useDateFormat();
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -472,7 +475,7 @@ function ExportJobMaster() {
           const value = cell.getValue<string | null>();
           if (!value) return "-";
           try {
-            return dayjs(value).format("DD-MM-YYYY");
+            return dayjs(value).format(dateFormat);
           } catch {
             return value;
           }
@@ -486,7 +489,7 @@ function ExportJobMaster() {
           const value = cell.getValue<string | null>();
           if (!value) return "-";
           try {
-            return dayjs(value).format("DD-MM-YYYY");
+            return dayjs(value).format(dateFormat);
           } catch {
             return value;
           }

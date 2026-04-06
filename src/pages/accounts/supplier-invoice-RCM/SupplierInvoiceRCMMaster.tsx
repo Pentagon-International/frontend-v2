@@ -32,6 +32,10 @@ import { useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import useDateFormat from "../../../hooks/useDateFormat";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+dayjs.extend(customParseFormat)
 
 type SupplierInvoiceRow = Record<string, unknown> & {
   id?: number | string;
@@ -64,6 +68,7 @@ export default function SupplierInvoiceMaster() {
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
   const [search] = useState("");
+  const dateFormat = useDateFormat();
 
   const index = (listCurrentPage - 1) * listPageSize;
 
@@ -157,6 +162,13 @@ export default function SupplierInvoiceMaster() {
         accessorKey: "date",
         header: "Date",
         size: 140,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.date
+              ? dayjs(row.original.date, "DD-MM-YYYY").format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "Inv_crn_amount",

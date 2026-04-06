@@ -41,6 +41,8 @@ import {
   SingleDateInput,
 } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import useDateFormat from "../../../hooks/useDateFormat";
+import dayjs from "dayjs";
 
 const LIST_KEY = "GST_CHARGE_MAPPING_MASTER";
 
@@ -86,6 +88,7 @@ export default function GSTChargeMappingMasterList() {
     effective_from: null,
     status: "",
   };
+  const dateFormat = useDateFormat();
 
   const [draftFilters, setDraftFilters] =
     useState<GSTChargeMappingFilters>(DEFAULT_FILTERS);
@@ -264,7 +267,13 @@ export default function GSTChargeMappingMasterList() {
       { accessorKey: "service_name", header: "Service Name", size: 120 },
       { accessorKey: "charge_name", header: "Charge Name", size: 150 },
       { accessorKey: "sac_name", header: "SAC Name", size: 200 },
-      { accessorKey: "effective_from", header: "Effective From", size: 120 },
+      { accessorKey: "effective_from", header: "Effective From", size: 120, Cell:({ row }) => (
+                <Text size="sm">
+                  {row.original.effective_from
+                    ? dayjs(row.original.effective_from).format(dateFormat)
+                    : "-"}
+                </Text>
+              ), },
       {
         accessorKey: "status",
         header: "Status",

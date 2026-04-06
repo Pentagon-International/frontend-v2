@@ -57,6 +57,7 @@ import useAuthStore from "../../../store/authStore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateEnquiryPDF } from "../EnquiryPDFTemplate";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 type FilterState = {
   customer_code: string | null;
@@ -116,6 +117,7 @@ function RFQMaster() {
     moduleLabel === "Enquiry"
       ? "enquiries"
       : `${moduleLabel.toLowerCase()}s`;
+  const dateFormat = useDateFormat();
   const moduleFilteredPluralKey = `filtered${modulePluralLower.charAt(0).toUpperCase()}${modulePluralLower.slice(1)}`;
   // Get first day of current month and today's date
   const getDefaultFromDate = (): Date => {
@@ -899,6 +901,24 @@ function RFQMaster() {
           });
           return;
         }
+
+        if (col === "Enquiry Date") {
+          columnDefs.push({
+            accessorKey: "enquiry_date",
+            header: col,
+            size: 120,
+            Cell: ({ row }: any) => {
+              return (
+                <Text size="sm">
+                  {row.original.enquiry_date
+                    ? dayjs(row.original.enquiry_date).format(dateFormat)
+                    : "-"}
+                </Text>
+              );
+            },
+          });
+          return;
+        };
 
         // Skip Trade column (handled with Service)
         if (col === "Trade") {
@@ -2372,6 +2392,13 @@ function RFQMaster() {
         id: "enquiry_received_date",
         accessorKey: "enquiry_received_date",
         header: "Enquiry Date",
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.enquiry_received_date
+              ? dayjs(row.original.enquiry_received_date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         id: "status",

@@ -6,6 +6,7 @@ import {
   IconChevronRight,
   IconChevronLeft,
 } from "@tabler/icons-react";
+import useDateFormat from "../hooks/useDateFormat";
 
 export interface DateRangeInputProps {
   fromDate: Date | null;
@@ -34,8 +35,8 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
   onToDateChange,
   fromLabel = "From Date",
   toLabel = "To Date",
-  fromPlaceholder = "YYYY-MM-DD",
-  toPlaceholder = "YYYY-MM-DD",
+  fromPlaceholder,
+  toPlaceholder,
   allowDeselection = true,
   showRangeInCalendar = false,
   size = "sm",
@@ -46,10 +47,12 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
   inputWidth,
   hideLabels = false,
 }) => {
+  const dateFormat = useDateFormat();
+
   // Helper to check if date is selected
   const isDateSelected = (
     date: Date | null,
-    selectedDate: Date | null
+    selectedDate: Date | null,
   ): boolean => {
     if (!date || !selectedDate) return false;
     return (
@@ -65,17 +68,17 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
     const normalizedDate = new Date(
       date.getFullYear(),
       date.getMonth(),
-      date.getDate()
+      date.getDate(),
     ).getTime();
     const normalizedFrom = new Date(
       fromDate.getFullYear(),
       fromDate.getMonth(),
-      fromDate.getDate()
+      fromDate.getDate(),
     ).getTime();
     const normalizedTo = new Date(
       toDate.getFullYear(),
       toDate.getMonth(),
-      toDate.getDate()
+      toDate.getDate(),
     ).getTime();
     return normalizedDate >= normalizedFrom && normalizedDate <= normalizedTo;
   };
@@ -179,6 +182,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
       style={containerStyle}
     >
       <DateInput
+        key={`from-${dateFormat}`}
         style={inputWidth ? { width: inputWidth } : undefined}
         label={hideLabels ? undefined : fromLabel}
         labelProps={{
@@ -190,10 +194,10 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
             fontFamily: "Inter",
           },
         }}
-        placeholder={fromPlaceholder}
+        placeholder={dateFormat}
         value={fromDate}
         onChange={handleFromDateChange}
-        valueFormat="YYYY-MM-DD"
+        valueFormat={dateFormat}
         leftSection={<IconCalendar size={18} />}
         leftSectionPointerEvents="none"
         radius="md"
@@ -255,6 +259,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         }}
       />
       <DateInput
+        key={`to-${dateFormat}`}
         style={inputWidth ? { width: inputWidth } : undefined}
         label={hideLabels ? undefined : toLabel}
         labelProps={{
@@ -266,10 +271,10 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
             fontFamily: "Inter",
           },
         }}
-        placeholder={toPlaceholder}
+        placeholder={dateFormat}
         value={toDate}
         onChange={handleToDateChange}
-        valueFormat="YYYY-MM-DD"
+        valueFormat={dateFormat}
         leftSection={<IconCalendar size={18} />}
         leftSectionPointerEvents="none"
         radius="md"

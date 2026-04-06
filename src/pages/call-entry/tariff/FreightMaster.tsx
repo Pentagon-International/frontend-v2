@@ -40,6 +40,7 @@ import dayjs from "dayjs";
 import { apiCallProtected } from "../../../api/axios";
 import { DateInput } from "@mantine/dates";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 type Freight = {
   id: number;
@@ -64,6 +65,7 @@ export default function Freight() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const dateFormat = useDateFormat();
 
   // Add local search state
   const [localSearchTerm, setLocalSearchTerm] = useState("");
@@ -412,11 +414,25 @@ export default function Freight() {
         accessorKey: "valid_from",
         header: "Valid From",
         size: 100,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.valid_from
+              ? dayjs(row.original.valid_from).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "valid_to",
         header: "Valid To",
         size: 100,
+        Cell:({ row }) => (
+                  <Text size="sm">
+                    {row.original.valid_to
+                      ? dayjs(row.original.valid_to).format(dateFormat)
+                      : "-"}
+                  </Text>
+                ),
       },
       {
         id: "actions",

@@ -4,6 +4,7 @@ import {
   SearchableSelect,
   DownloadComponent,
   DateRangeInput,
+  SingleDateInput,
 } from "../../components";
 import { URL } from "../../api/serverUrls";
 import {
@@ -66,6 +67,7 @@ import { postAPICall } from "../../service/postApiCall";
 import { API_HEADER } from "../../store/storeKeys";
 import { getAPICall } from "../../service/getApiCall";
 import { putAPICall } from "../../service/putApiCall";
+import useDateFormat from "../../hooks/useDateFormat";
 
 type QuotationData = {
   id: number;
@@ -169,6 +171,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const getDefaultToDate = (): Date => {
     return new Date();
   };
+
+  const dateFormat = useDateFormat();
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [revisionHistoryData, setRevisionHistoryData] = useState<
@@ -2448,7 +2452,7 @@ console.log("currentQuotation: ", currentQuotation);
               ? quotations[0]?.created_at
               : null;
           return quoteCreatedAt
-            ? dayjs(quoteCreatedAt).format("YYYY-MM-DD")
+            ? dayjs(quoteCreatedAt).format(dateFormat)
             : "-";
         },
       },
@@ -2521,7 +2525,7 @@ console.log("currentQuotation: ", currentQuotation);
           return (
             <div style={{ lineHeight: "1.4" }}>
               {validUptoList.map((date, index) => (
-                <div key={index}>{date}</div>
+                <div key={index}>{dayjs(date).format(dateFormat)}</div>
               ))}
             </div>
           );
@@ -3159,7 +3163,7 @@ console.log("currentQuotation: ", currentQuotation);
 
               {/* Quote Date Filter */}
               <Grid.Col span={2.4}>
-                <DateInput
+                <SingleDateInput
                   key={`quote-date-${filters.valid_upto}`}
                   label="Quote Date"
                   placeholder="YYYY-MM-DD"
@@ -3175,67 +3179,6 @@ console.log("currentQuotation: ", currentQuotation);
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   clearable
-                  styles={
-                    {
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                      calendar: {
-                        padding: "1rem",
-                        gap: "0.5rem",
-                        minWidth: "300px",
-                      },
-                      day: {
-                        width: "2.5rem",
-                        height: "2.5rem",
-                        fontSize: "0.9rem",
-                        margin: "0.1rem",
-                      },
-                      calendarHeaderLevel: {
-                        fontSize: "1.1rem",
-                        fontWeight: 600,
-                        marginBottom: "0.8rem",
-                        flex: 1,
-                        textAlign: "center",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        height: "2.5rem",
-                      },
-                      calendarHeaderControl: {
-                        width: "2.5rem",
-                        height: "2.5rem",
-                        margin: "0 0.5rem",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      },
-                      calendarHeader: {
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "0.5rem",
-                        marginBottom: "0.5rem",
-                        padding: "0.5rem 0",
-                        height: "3rem",
-                      },
-                      monthsListControl: {
-                        width: "2.5rem",
-                        height: "2.5rem",
-                        fontSize: "0.9rem",
-                      },
-                      yearsListControl: {
-                        width: "2.5rem",
-                        height: "2.5rem",
-                        fontSize: "0.9rem",
-                      },
-                    } as any
-                  }
                 />
               </Grid.Col>
 

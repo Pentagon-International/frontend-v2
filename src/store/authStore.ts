@@ -316,7 +316,46 @@ const useAuthStore = create<AuthStore>((set) => ({
       };
     });
   },
+  updateUserProfile: (data) => {
+  set((state) => {
+    if (!state.user) return state;
 
+    const updatedBranches = state.user.branches.map((branch) => ({
+      ...branch,
+      is_default: branch.user_branch_id === data.branchId,
+    }));
+
+    const updatedUser = {
+      ...state.user,
+      branches: updatedBranches,
+      company: data.company
+        ? {
+            ...state.user.company,
+            company_name: data.company.company,
+            company_id: data.company.company_id,
+            company_code: data.company.company_code,
+          }
+        : state.user.company,
+      country: data.country
+        ? {
+            ...state.user.country,
+            country_name: data.country.country_name,
+            country_code: data.country.country_code,
+            country_id: data.country.country_id,
+          }
+        : state.user.country,
+    };
+
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+
+    invalidateBranchRelatedQueries();
+
+    return {
+      ...state,
+      user: updatedUser, // ✅ ALWAYS new reference
+    };
+  });
+},
   invalidateQueries: () => {
     invalidateBranchRelatedQueries();
   },
