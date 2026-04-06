@@ -52,6 +52,7 @@ export const URL = {
   chatbot: "chatbot/",
   enquiryWithoutQuote: "enquiry/enquiries-without-quotation/",
   jobProfit: "job-profit/",
+  reportsGenerate: "reports/generate/",
   localOutstanding: "local-outstanding/",
   getcharges: "comprehensive/",
   enquiryFilter: "enquiry/filter_enquiries/",

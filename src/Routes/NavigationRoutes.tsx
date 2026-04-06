@@ -178,6 +178,7 @@ import PipelineCreate from "../pages/dashboard/PipelineCreate";
 import useAuthStore from "../store/authStore";
 import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
+import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import ReportsPage from "../pages/reports/ReportsPage";
 
 const NavigationRoutes = () => {
@@ -314,6 +315,7 @@ const NavigationRoutes = () => {
         <Route path="/reports">
           <Route index element={<ReportsPage />} />
           <Route path="job-profit" element={<JobProfit />} />
+          <Route path="trial-balance" element={<TrialBalance />} />
         </Route>
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />

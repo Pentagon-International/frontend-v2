@@ -58,6 +58,7 @@ export default function ReportsPage() {
         {
           label: "Trial Balance",
           icon: <IconReport size={28} color="#105476" />,
+          path: "/reports/trial-balance",
         },
         {
           label: "Budget vs Actual",
