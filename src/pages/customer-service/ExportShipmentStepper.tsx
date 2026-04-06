@@ -27,7 +27,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { postAPICall } from "../../service/postApiCall";
 import { putAPICall } from "../../service/putApiCall";
-import { Dropdown, ToastNotification } from "../../components";
+import { Dropdown, SingleDateInput, ToastNotification } from "../../components";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
@@ -1270,7 +1270,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                {/* <DateInput
+                {/* <SingleDateInput
                   label="Date"
                   withAsterisk
                   placeholder="YYYY-MM-DD"
@@ -1285,7 +1285,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   radius="md"
                   size="sm"
                 /> */}
-                <DateInput
+                <SingleDateInput
                   label="Date"
                   placeholder="YYYY-MM-DD"
                   withAsterisk
@@ -1298,31 +1298,6 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   clearable
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1587,7 +1562,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <DateInput
+                <SingleDateInput
                   label="ETD (Estimated Time of Departure)"
                   // withAsterisk
                   placeholder="YYYY-MM-DD"
@@ -1603,35 +1578,10 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   size="sm"
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <DateInput
+                <SingleDateInput
                   label="ETA (Estimated Time of Arrival)"
                   // withAsterisk
                   placeholder="YYYY-MM-DD"
@@ -1647,31 +1597,6 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   size="sm"
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -1809,7 +1734,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                       />
                     </Grid.Col>
                     <Grid.Col span={1.25}>
-                      <DateInput
+                      <SingleDateInput
                         placeholder="YYYY-MM-DD"
                         // withAsterisk
                         value={
@@ -1828,35 +1753,10 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                         size="sm"
                         nextIcon={<IconChevronRight size={16} />}
                         previousIcon={<IconChevronLeft size={16} />}
-                        styles={{
-                          day: {
-                            width: "2.25rem",
-                            height: "2.25rem",
-                            fontSize: "0.9rem",
-                          },
-                          calendarHeaderLevel: {
-                            fontSize: "1rem",
-                            fontWeight: 500,
-                            marginBottom: "0.5rem",
-                            flex: 1,
-                            textAlign: "center",
-                          },
-                          calendarHeaderControl: {
-                            width: "2rem",
-                            height: "2rem",
-                            margin: "0 0.5rem",
-                          },
-                          calendarHeader: {
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "0.5rem",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1.25}>
-                      <DateInput
+                      <SingleDateInput
                         placeholder="YYYY-MM-DD"
                         // withAsterisk
                         value={
@@ -1875,31 +1775,6 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                         size="sm"
                         nextIcon={<IconChevronRight size={16} />}
                         previousIcon={<IconChevronLeft size={16} />}
-                        styles={{
-                          day: {
-                            width: "2.25rem",
-                            height: "2.25rem",
-                            fontSize: "0.9rem",
-                          },
-                          calendarHeaderLevel: {
-                            fontSize: "1rem",
-                            fontWeight: 500,
-                            marginBottom: "0.5rem",
-                            flex: 1,
-                            textAlign: "center",
-                          },
-                          calendarHeaderControl: {
-                            width: "2rem",
-                            height: "2rem",
-                            margin: "0 0.5rem",
-                          },
-                          calendarHeader: {
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "0.5rem",
-                          },
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={1.5}>
@@ -3003,7 +2878,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                 />
               </Grid.Col>
               <Grid.Col span={6}>
-                <DateInput
+                <SingleDateInput
                   label="Planned Pickup Date"
                   placeholder="YYYY-MM-DD"
                   defaultValue={new Date()}
@@ -3016,37 +2891,12 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   clearable
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
                 />
               </Grid.Col>
 
               {/* Row 3: Actual Pickup Date, Transporter Name, Transporter Email */}
               <Grid.Col span={4}>
-                <DateInput
+                <SingleDateInput
                   label="Actual Pickup Date"
                   placeholder="YYYY-MM-DD"
                   valueFormat="YYYY-MM-DD"
@@ -3058,31 +2908,6 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   clearable
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -3201,7 +3026,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
 
               {/* Planned & Actual Delivery Dates */}
               <Grid.Col span={6}>
-                <DateInput
+                <SingleDateInput
                   label="Planned Delivery Date"
                   placeholder="YYYY-MM-DD"
                   {...form.getInputProps("planned_delivery_date")}
@@ -3214,35 +3039,10 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   clearable
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
-                <DateInput
+                <SingleDateInput
                   label="Actual Delivery Date"
                   placeholder="YYYY-MM-DD"
                   defaultValue={new Date()}
@@ -3254,31 +3054,6 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   size="sm"
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
-                  styles={{
-                    day: {
-                      width: "2.25rem",
-                      height: "2.25rem",
-                      fontSize: "0.9rem",
-                    },
-                    calendarHeaderLevel: {
-                      fontSize: "1rem",
-                      fontWeight: 500,
-                      marginBottom: "0.5rem",
-                      flex: 1,
-                      textAlign: "center",
-                    },
-                    calendarHeaderControl: {
-                      width: "2rem",
-                      height: "2rem",
-                      margin: "0 0.5rem",
-                    },
-                    calendarHeader: {
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                    },
-                  }}
                 />
               </Grid.Col>
 

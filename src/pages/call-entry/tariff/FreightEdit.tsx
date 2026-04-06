@@ -17,7 +17,7 @@ import {
 } from "@mantine/core";
 import { IconArrowLeft, IconSave, IconAlertCircle } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ToastNotification } from "../../../components";
+import { SingleDateInput, ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -216,7 +216,7 @@ export default function FreightEdit() {
         </Grid.Col>
 
         <Grid.Col span={6}>
-          <DateInput
+          <SingleDateInput
             label="Valid From"
             placeholder="Select start date"
             value={formData.valid_from}
@@ -228,7 +228,7 @@ export default function FreightEdit() {
         </Grid.Col>
 
         <Grid.Col span={6}>
-          <DateInput
+          <SingleDateInput
             label="Valid To"
             placeholder="Select end date"
             value={formData.valid_to}

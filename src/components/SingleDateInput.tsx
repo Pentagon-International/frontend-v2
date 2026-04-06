@@ -5,6 +5,7 @@ import {
   IconChevronRight,
   IconChevronLeft,
 } from "@tabler/icons-react";
+import useDateFormat from "../hooks/useDateFormat";
 
 export interface SingleDateInputProps {
   label?: string;
@@ -23,7 +24,7 @@ export interface SingleDateInputProps {
 
 const SingleDateInput: React.FC<SingleDateInputProps> = ({
   label,
-  placeholder = "YYYY-MM-DD",
+  placeholder,
   value,
   onChange,
   allowDeselection = true,
@@ -35,6 +36,8 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
   error,
   withAsterisk,
 }) => {
+  const dateFormat = useDateFormat();
+
   // Helper to check if date is selected
   const isDateSelected = (
     date: Date | null,
@@ -142,11 +145,12 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
 
   return (
     <DateInput
+      key={`single-date-${dateFormat}`}
       label={label}
-      placeholder={placeholder}
+      placeholder={dateFormat}
       value={value}
       onChange={handleDateChange}
-      valueFormat="YYYY-MM-DD"
+      valueFormat={dateFormat}
       leftSection={<IconCalendar size={18} />}
       leftSectionPointerEvents="none"
       radius="sm"

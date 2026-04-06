@@ -58,6 +58,7 @@ import {
   ServiceDetailsSlider,
   Dropdown,
   SearchableSelect,
+  SingleDateInput,
 } from "../../components";
 import { useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -4400,7 +4401,7 @@ function QuotationCreate({
                     </Grid.Col>
                     <Grid.Col span={1.75}>
                       <Box maw={300} mx="auto">
-                        <DateInput
+                        <SingleDateInput
                           label="Date"
                           key={`${currentServiceId}-valid-upto`}
                           placeholder="YYYY-MM-DD"
@@ -4428,45 +4429,6 @@ function QuotationCreate({
                           readOnly={isViewMode}
                           disabled={isViewMode}
                           // dropdownType="popover"
-                          styles={{
-                            input: {
-                              height: "36px",
-                              fontSize: "14px",
-                              fontFamily: "Inter",
-                              fontStyle: "medium",
-                            },
-                            label: {
-                              fontSize: "14px",
-                              fontWeight: 500,
-                              color: "#424242",
-                              marginBottom: "4px",
-                              fontFamily: "Inter",
-                              fontStyle: "medium",
-                            },
-                            day: {
-                              width: "2.25rem",
-                              height: "2.25rem",
-                              fontSize: "0.9rem",
-                            },
-                            calendarHeaderLevel: {
-                              fontSize: "1rem",
-                              fontWeight: 500,
-                              marginBottom: "0.5rem",
-                              flex: 1,
-                              textAlign: "center",
-                            },
-                            calendarHeaderControl: {
-                              width: "2rem",
-                              height: "2rem",
-                              margin: "0 0.5rem",
-                            },
-                            calendarHeader: {
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: "0.5rem",
-                            },
-                          }}
                           error={quotationForm.errors.valid_upto}
                         />
                       </Box>
@@ -5831,7 +5793,7 @@ function QuotationCreate({
                   </Grid.Col>
                   <Grid.Col span={1.75}>
                     <Box maw={300} mx="auto">
-                      <DateInput
+                      <SingleDateInput
                         label="Date"
                         key={`${currentServiceId}-valid-upto`}
                         placeholder="YYYY-MM-DD"
@@ -5851,45 +5813,6 @@ function QuotationCreate({
                         leftSectionPointerEvents="none"
                         radius="sm"
                         size="sm"
-                        styles={{
-                          input: {
-                            height: "36px",
-                            fontSize: "14px",
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                          label: {
-                            fontSize: "16px",
-                            fontWeight: 500,
-                            color: "#424242",
-                            marginBottom: "4px",
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                          day: {
-                            width: "2.25rem",
-                            height: "2.25rem",
-                            fontSize: "0.9rem",
-                          },
-                          calendarHeaderLevel: {
-                            fontSize: "1rem",
-                            fontWeight: 500,
-                            marginBottom: "0.5rem",
-                            flex: 1,
-                            textAlign: "center",
-                          },
-                          calendarHeaderControl: {
-                            width: "2rem",
-                            height: "2rem",
-                            margin: "0 0.5rem",
-                          },
-                          calendarHeader: {
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "0.5rem",
-                          },
-                        }}
                         error={quotationForm.errors.valid_upto}
                       />
                     </Box>

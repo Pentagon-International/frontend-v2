@@ -223,6 +223,12 @@ interface CarrierOption {
   alias_code?: string;
 }
 
+interface ContainerTypeOption {
+  container_code: string;
+  container_name: string;
+  alias_code?: string;
+}
+
 type ModalState =
   | { type: "upload" }
   | { type: "detail"; record: FileRecord }
@@ -700,7 +706,7 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
 
 type DetailTab = "payload" | "raw";
 
-const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: CarrierOption[]; onClose: () => void }> = ({ record, ports, carriers, onClose }) => {
+const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: CarrierOption[]; containerTypes: ContainerTypeOption[]; onClose: () => void }> = ({ record, ports, carriers, containerTypes, onClose }) => {
   const [tab, setTab] = useState<DetailTab>("payload");
   const p = record.api_payload ?? record.extracted_data ?? {} as PayloadData;
 
@@ -730,7 +736,7 @@ const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: Carri
           ))}
         </div>
         <div className="tab-body">
-          {tab === "payload" && <PayloadFormBody p={p} ports={ports} carriers={carriers} />}
+          {tab === "payload" && <PayloadFormBody p={p} ports={ports} carriers={carriers} containerTypes={containerTypes} />}
           {tab === "raw" && (
             Object.keys(p).length
               ? <pre style={{ maxHeight: "calc(88vh - 200px)" }}>{JSON.stringify(p, null, 2)}</pre>
@@ -800,7 +806,10 @@ const PayloadFormBody: FC<{
   onFixHousingCode?: (idx: number) => void;
   carriers?: CarrierOption[];
   onFixCarrier?: () => void;
-}> = ({ p, ports = [], carriers = [], editPorts, editHousingPorts, onFieldChange, onHousingFieldChange, onFixCode, onFixHousingCode, onFixCarrier }) => {
+  containerTypes?: ContainerTypeOption[];
+  onContainerDetailChange?: (idx: number, code: string) => void;
+  onFixContainerType?: () => void;
+}> = ({ p, ports = [], carriers = [], containerTypes = [], editPorts, editHousingPorts, onFieldChange, onHousingFieldChange, onFixCode, onFixHousingCode, onFixCarrier, onContainerDetailChange, onFixContainerType }) => {
   if (!p || !Object.keys(p).length)
     return <div className="state-box"><div className="state-icon">📭</div><div className="state-text">No payload data</div></div>;
 
@@ -818,6 +827,7 @@ const PayloadFormBody: FC<{
 
   const resolvePort = (code?: string) => ports.find(pt => pt.alias_code === code || pt.port_code === code);
   const resolveCarrier = (code?: string) => carriers.find(c => c.alias_code === code || c.carrier_code === code);
+  const resolveContainerType = (code?: string) => containerTypes.find(ct => ct.alias_code === code || ct.container_code === code);
 
   const PortCodeView: FC<{ label: string; code?: string; span?: 1 | 2 | 3 | 4; onFix?: () => void }> = ({ label, code, span = 1, onFix }) => {
     const match = resolvePort(code as string | undefined);
@@ -883,6 +893,37 @@ const PayloadFormBody: FC<{
             </button>
           )}
         </div>
+      </div>
+    );
+  };
+
+  const ContainerTypeView: FC<{ code?: string; onFix?: () => void }> = ({ code, onFix }) => {
+    const match = resolveContainerType(code);
+    const isValid = !!match;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        <div className="fval mono" style={{ color: code ? (isValid ? "var(--green)" : "var(--red)") : undefined }}>
+          {code ?? "—"}
+        </div>
+        {code && (
+          <div style={{ fontSize: ".68rem", color: isValid ? "var(--muted)" : "var(--red)", fontFamily: "var(--sans)", paddingLeft: 2 }}>
+            {isValid ? match.container_name : "⚠ Not found in container type list"}
+          </div>
+        )}
+        {!isValid && code && onFix && (
+          <button
+            onClick={onFix}
+            style={{
+              alignSelf: "flex-start", marginTop: 2, padding: "2px 8px",
+              fontSize: ".6rem", fontWeight: 700, fontFamily: "var(--sans)",
+              background: "rgba(220,38,38,.08)", border: "1px solid rgba(220,38,38,.35)",
+              borderRadius: 4, color: "var(--red)", cursor: "pointer", display: "flex",
+              alignItems: "center", gap: 4,
+            }}
+          >
+            🔧 Fix Alias
+          </button>
+        )}
       </div>
     );
   };
@@ -957,7 +998,18 @@ const PayloadFormBody: FC<{
               {p.container_details.map((c, i) => (
                 <tr key={i}>
                   <td>{c.container_no ?? "—"}</td>
-                  <td>{c.container_type_input ?? c.container_type ?? "—"}</td>
+                  <td style={{ overflow: "visible" }}>
+                    {onContainerDetailChange ? (
+                      <ContainerTypeSearch
+                        value={c.container_type_input ?? c.container_type ?? ""}
+                        containerTypes={containerTypes}
+                        onChange={code => onContainerDetailChange(i, code)}
+                        onFix={onFixContainerType}
+                      />
+                    ) : (
+                      <ContainerTypeView code={c.container_type_input ?? c.container_type} onFix={onFixContainerType} />
+                    )}
+                  </td>
                   <td>{c.actual_seal_no ?? c.seal_no ?? "—"}</td>
                 </tr>
               ))}
@@ -1142,7 +1194,9 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
   const [ptab, setPtab] = useState<"form" | "raw">("form");
   const [ports, setPorts] = useState<PortOption[]>([]);
   const [carriers, setCarriers] = useState<CarrierOption[]>([]);
+  const [containerTypes, setContainerTypes] = useState<ContainerTypeOption[]>([]);
   const [fixTarget, setFixTarget] = useState<{ record: FileRecord } | null>(null);
+  const [containerTypeFixTarget, setContainerTypeFixTarget] = useState<{ record: FileRecord } | null>(null);
   const [carrierFixTarget, setCarrierFixTarget] = useState<{ record: FileRecord } | null>(null);
 
   // Seed all state immediately from inlineRecord (avoids blank form on first render)
@@ -1211,12 +1265,30 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    hblApi
+      .get<{ container_codes: ContainerTypeOption[] }>("/container-codes", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => setContainerTypes(r.data.container_codes ?? []))
+      .catch(() => {});
+  }, []);
+
   const reloadCarriers = useCallback(() => {
     hblApi
       .get<{ carriers: CarrierOption[] }>("/carriers", {
         headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
       })
       .then(r => { setCarriers(r.data.carriers ?? []); onRefreshList?.(); })
+      .catch(() => {});
+  }, [onRefreshList]);
+
+  const reloadContainerTypes = useCallback(() => {
+    hblApi
+      .get<{ container_codes: ContainerTypeOption[] }>("/container-codes", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => { setContainerTypes(r.data.container_codes ?? []); onRefreshList?.(); })
       .catch(() => {});
   }, [onRefreshList]);
 
@@ -1233,6 +1305,17 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
         : [];
       housing[idx] = { ...housing[idx], [field]: val };
       return { ...prev, housing_details: housing };
+    });
+  }, []);
+
+  const onContainerDetailChange = useCallback((idx: number, code: string) => {
+    setIsDirty(true);
+    setEditData(prev => {
+      const containers = Array.isArray(prev.container_details)
+        ? [...(prev.container_details as ContainerDetail[])]
+        : [];
+      containers[idx] = { ...containers[idx], container_type: code, container_type_input: code };
+      return { ...prev, container_details: containers };
     });
   }, []);
 
@@ -1301,9 +1384,9 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
               {rec && <Badge status={rec.status ?? "done"} />}
               {editData.document_type && <span className="pdf-tag">{editData.document_type}</span>}
               {/* Dirty indicator — shows when there are unsaved changes */}
-              {isDirty && (
-                <span className="dirty-indicator">● Unsaved changes</span>
-              )}
+              {/* {isDirty && ( */}
+                {/* <span className="dirty-indicator">● Unsaved changes</span> */}
+              {/* )} */}
             </div>
             <div style={{ fontSize: ".95rem", fontWeight: 700 }}>{rec?.filename ?? txn_id}</div>
             <div style={{ fontFamily: "var(--mono)", fontSize: ".65rem", color: "var(--muted)", marginTop: 2 }}>
@@ -1336,6 +1419,9 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
                 p={editData}
                 ports={ports}
                 carriers={carriers}
+                containerTypes={containerTypes}
+                onContainerDetailChange={onContainerDetailChange}
+                onFixContainerType={() => rec && setContainerTypeFixTarget({ record: rec })}
                 onFixCarrier={() => rec && setCarrierFixTarget({ record: rec })}
                 editPorts={{
                   ports,
@@ -1395,6 +1481,15 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
           carriers={carriers}
           onClose={() => setCarrierFixTarget(null)}
           onSaved={reloadCarriers}
+          showToast={showToast}
+        />
+      )}
+      {containerTypeFixTarget && (
+        <ContainerTypeFixModal
+          record={containerTypeFixTarget.record}
+          containerTypes={containerTypes}
+          onClose={() => setContainerTypeFixTarget(null)}
+          onSaved={reloadContainerTypes}
           showToast={showToast}
         />
       )}
@@ -1524,6 +1619,129 @@ const PortSearch: FC<{
               <span style={{ fontFamily: "var(--mono)", fontWeight: 600, color: "var(--accent)", minWidth: 64 }}>{p.port_code}</span>
               <span style={{ flex: 1 }}>{p.port_name}</span>
               <span style={{ fontSize: ".68rem", color: "var(--muted)", fontFamily: "var(--mono)" }}>{p.transport_mode}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Container Type Search ────────────────────────────────────────────────────
+
+const ContainerTypeSearch: FC<{
+  value: string;
+  containerTypes: ContainerTypeOption[];
+  onChange: (code: string) => void;
+  onFix?: () => void;
+  placeholder?: string;
+}> = ({ value, containerTypes, onChange, onFix, placeholder = "Search container type…" }) => {
+  const [inputText, setInputText] = useState(value);
+  const [open, setOpen] = useState(false);
+  const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!inputText && value) setInputText(value);
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => setOpen(false);
+    window.addEventListener("scroll", handler, true);
+    return () => window.removeEventListener("scroll", handler, true);
+  }, [open]);
+
+  const computePos = () => {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setDropPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 220) });
+    }
+  };
+
+  const handleFocus = () => { computePos(); setOpen(true); };
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+    computePos();
+    setOpen(true);
+  };
+
+  const filtered = useMemo(() => {
+    if (inputText.length < 1) return [];
+    const q = inputText.toLowerCase();
+    return containerTypes.filter(ct =>
+      ct.container_code.toLowerCase().includes(q) ||
+      ct.container_name.toLowerCase().includes(q) ||
+      (ct.alias_code ?? "").toLowerCase().includes(q)
+    ).slice(0, 60);
+  }, [inputText, containerTypes]);
+
+  const isValid = !!containerTypes.find(ct => ct.alias_code === value || ct.container_code === value);
+
+  return (
+    <div ref={wrapRef}>
+      <input
+        ref={inputRef}
+        placeholder={placeholder}
+        value={inputText}
+        autoComplete="off"
+        onChange={handleChange}
+        onFocus={handleFocus}
+        style={{
+          width: "100%", padding: "5px 8px", borderRadius: 5,
+          border: `1px solid ${value ? (isValid ? "var(--green)" : "var(--red)") : "var(--border2)"}`,
+          fontFamily: "var(--mono)", fontSize: ".78rem", outline: "none",
+          background: "var(--surface)",
+        }}
+      />
+      {value && (
+        <div style={{ fontSize: ".65rem", color: isValid ? "var(--green)" : "var(--red)", fontFamily: "var(--sans)", marginTop: 2 }}>
+          {isValid ? `✓ ${containerTypes.find(ct => ct.alias_code === value || ct.container_code === value)?.container_name ?? ""}` : "⚠ Not found in container type list"}
+        </div>
+      )}
+      {!isValid && value && onFix && (
+        <button
+          onClick={onFix}
+          style={{
+            marginTop: 3, padding: "2px 8px", fontSize: ".6rem", fontWeight: 700,
+            fontFamily: "var(--sans)", background: "rgba(220,38,38,.08)",
+            border: "1px solid rgba(220,38,38,.35)", borderRadius: 4,
+            color: "var(--red)", cursor: "pointer",
+          }}
+        >
+          🔧 Fix Alias
+        </button>
+      )}
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: "fixed", top: dropPos.top, left: dropPos.left, width: dropPos.width,
+          background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 7,
+          boxShadow: "0 8px 28px rgba(0,0,0,.13)", zIndex: 9999, maxHeight: 220, overflowY: "auto",
+        }}>
+          {filtered.map(ct => (
+            <div
+              key={ct.container_code}
+              onMouseDown={e => {
+                e.preventDefault();
+                setInputText(ct.container_code);
+                onChange(ct.container_code);
+                setOpen(false);
+              }}
+              style={{ padding: "7px 12px", cursor: "pointer", fontSize: ".78rem", display: "flex", gap: 8, alignItems: "center", borderBottom: "1px solid var(--border)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "")}
+            >
+              <span style={{ fontFamily: "var(--mono)", fontWeight: 600, color: "var(--accent)", minWidth: 56 }}>{ct.container_code}</span>
+              <span style={{ flex: 1 }}>{ct.container_name}</span>
             </div>
           ))}
         </div>
@@ -1839,6 +2057,119 @@ const CarrierFixModal: FC<{
   );
 };
 
+// ─── Container Type Fix Modal ─────────────────────────────────────────────────
+
+const ContainerTypeFixModal: FC<{
+  record: FileRecord;
+  containerTypes: ContainerTypeOption[];
+  onClose: () => void;
+  onSaved: () => void;
+  showToast: (msg: string, type?: ToastState["type"]) => void;
+}> = ({ record, containerTypes, onClose, onSaved, showToast }) => {
+  const payload = record.api_payload ?? record.extracted_data ?? {} as PayloadData;
+  const containers = Array.isArray(payload.container_details)
+    ? (payload.container_details as ContainerDetail[])
+    : [];
+
+  const isInvalid = (code?: string) =>
+    !!code && !containerTypes.some(ct => ct.alias_code === code || ct.container_code === code);
+
+  const invalidContainers = containers
+    .map((c, i) => ({ idx: i, code: c.container_type_input ?? c.container_type ?? "" }))
+    .filter(x => isInvalid(x.code));
+
+  const [fixes, setFixes] = useState<Record<number, string>>({});
+  const [texts, setTexts] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  const setFix = (idx: number, code: string, display: string) => {
+    setFixes(prev => ({ ...prev, [idx]: code }));
+    setTexts(prev => ({ ...prev, [idx]: display }));
+  };
+
+  const save = async () => {
+    const toSave = invalidContainers.filter(x => fixes[x.idx]);
+    if (!toSave.length) return;
+    setSaving(true);
+    try {
+      const headers = { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` };
+      await Promise.all(toSave.map(x =>
+        hblApi.post("/container-type-aliases/", {
+          alias_code: x.code,
+          container_code: fixes[x.idx],
+          status: "ACTIVE",
+        }, { headers })
+      ));
+      showToast("✅ Container type alias(es) created", "success");
+      onSaved();
+      onClose();
+    } catch {
+      showToast("❌ Save failed", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canSave = invalidContainers.some(x => fixes[x.idx]);
+
+  if (!invalidContainers.length) return null;
+
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <div className="modal-head">
+          <h2>🔧 Fix Invalid Container Types</h2>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{ overflow: "visible" }}>
+          {invalidContainers.map(({ idx, code }) => (
+            <div key={idx} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: ".68rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
+                Container {idx + 1}
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ flex: "0 0 130px" }}>
+                  <label style={{ fontSize: ".57rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", color: "var(--muted)", display: "block", marginBottom: 3 }}>
+                    Alias Code
+                  </label>
+                  <input
+                    value={code}
+                    readOnly
+                    style={{
+                      width: "100%", background: "var(--surface2)", border: "1px solid var(--border)",
+                      borderRadius: 5, padding: "6px 9px", fontSize: ".8rem", color: "var(--muted)",
+                      fontFamily: "var(--mono)", cursor: "not-allowed",
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1, overflow: "visible" }}>
+                  <ContainerTypeSearch
+                    value={fixes[idx] ?? ""}
+                    containerTypes={containerTypes}
+                    onChange={(ct_code) => setFix(idx, ct_code, ct_code)}
+                    placeholder="Search container type…"
+                  />
+                  {texts[idx] && fixes[idx] && (
+                    <div style={{ fontSize: ".7rem", color: "var(--green)", marginTop: 3, fontFamily: "var(--mono)" }}>
+                      ✓ {fixes[idx]}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || !canSave}>
+            {saving ? "Saving…" : "💾 Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const HBLDocumentManager: FC = () => {
@@ -1856,6 +2187,7 @@ const HBLDocumentManager: FC = () => {
   const [jobLoading, setJobLoading] = useState(false);
   const [ports, setPorts] = useState<PortOption[]>([]);
   const [carriers, setCarriers] = useState<CarrierOption[]>([]);
+  const [containerTypes, setContainerTypes] = useState<ContainerTypeOption[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1906,14 +2238,25 @@ const HBLDocumentManager: FC = () => {
       .catch(() => {});
   }, []);
 
+  const loadContainerTypes = useCallback(() => {
+    hblApi
+      .get<{ container_codes: ContainerTypeOption[] }>("/container-codes", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` },
+      })
+      .then(r => setContainerTypes(r.data.container_codes ?? []))
+      .catch(() => {});
+  }, []);
+
   const refreshAll = useCallback(() => {
     loadFiles();
     loadPorts();
     loadCarriers();
-  }, [loadFiles, loadPorts, loadCarriers]);
+    loadContainerTypes();
+  }, [loadFiles, loadPorts, loadCarriers, loadContainerTypes]);
 
   useEffect(() => { loadPorts(); }, [loadPorts]);
   useEffect(() => { loadCarriers(); }, [loadCarriers]);
+  useEffect(() => { loadContainerTypes(); }, [loadContainerTypes]);
 
   const hasCodeValidationError = (f: FileRecord): boolean => {
     const payload = f.api_payload ?? f.extracted_data;
@@ -1923,7 +2266,13 @@ const HBLDocumentManager: FC = () => {
     const carrier = payload.carrier_code as string | undefined;
     const invalidPort = (code?: string) => !!code && !ports.some(p => p.alias_code === code || p.port_code === code);
     const invalidCarrier = (code?: string) => !!code && !carriers.some(c => c.alias_code === code || c.carrier_code === code);
-    return invalidPort(origin) || invalidPort(dest) || invalidCarrier(carrier);
+    const invalidContainerType = (code?: string) => !!code && !containerTypes.some(ct => ct.alias_code === code || ct.container_code === code);
+    const containerIssue = Array.isArray(payload.container_details) &&
+      (payload.container_details as ContainerDetail[]).some(c => {
+        const code = c.container_type_input ?? c.container_type;
+        return invalidContainerType(code);
+      });
+    return invalidPort(origin) || invalidPort(dest) || invalidCarrier(carrier) || containerIssue;
   };
 
   useEffect(() => {
@@ -2000,7 +2349,7 @@ const HBLDocumentManager: FC = () => {
       return f ? hasCodeValidationError(f) : false;
     });
     if (invalid.length) {
-      showToast(`❌ ${invalid.length} record(s) have invalid port/carrier codes. Fix them before creating jobs.`, "error");
+      showToast(`❌ ${invalid.length} record(s) have invalid port/carrier/container type codes. Fix them before creating jobs.`, "error");
       return;
     }
     setJobLoading(true);
@@ -2056,7 +2405,7 @@ const HBLDocumentManager: FC = () => {
               className="btn btn-green"
               onClick={() => startJobs(Array.from(selected))}
               disabled={jobLoading || selectedHasValidationError}
-              title={selectedHasValidationError ? "Fix invalid port/carrier codes before creating jobs" : undefined}
+              title={selectedHasValidationError ? "Fix invalid port/carrier/container type codes before creating jobs" : undefined}
               style={selectedHasValidationError ? { opacity: .5, cursor: "not-allowed" } : undefined}
             >
               {jobLoading && (
@@ -2185,7 +2534,7 @@ const HBLDocumentManager: FC = () => {
           className="bar-btn green"
           onClick={() => startJobs(Array.from(selected))}
           disabled={jobLoading || selectedHasValidationError}
-          title={selectedHasValidationError ? "Fix invalid port/carrier codes before creating jobs" : undefined}
+          title={selectedHasValidationError ? "Fix invalid port/carrier/container type codes before creating jobs" : undefined}
           style={selectedHasValidationError ? { opacity: .5, cursor: "not-allowed" } : undefined}
         >
           {jobLoading ? "Starting…" : "▶ Start Jobs"}
@@ -2198,7 +2547,7 @@ const HBLDocumentManager: FC = () => {
       {toast && <Toast toast={toast} />}
 
       {modal?.type === "upload" && <UploadModal onClose={() => setModal(null)} onUploaded={loadFiles} showToast={showToast} />}
-      {modal?.type === "detail" && <DetailModal record={modal.record} ports={ports} carriers={carriers} onClose={() => setModal(null)} />}
+      {modal?.type === "detail" && <DetailModal record={modal.record} ports={ports} carriers={carriers} containerTypes={containerTypes} onClose={() => setModal(null)} />}
       {modal?.type === "payload" && (
         <PayloadModal
           txn_id={modal.txn_id}

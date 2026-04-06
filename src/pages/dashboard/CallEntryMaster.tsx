@@ -56,6 +56,7 @@ import {
   ToastNotification,
   SearchableSelect,
   DateRangeInput,
+  SingleDateInput,
 } from "../../components";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { searchAPI } from "../../service/searchApi";
@@ -63,6 +64,7 @@ import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { useListFilterStore } from "../../store/listFilterStore";
+import useDateFormat from "../../hooks/useDateFormat";
 
 type CompanyData = {
   id: number;
@@ -102,6 +104,8 @@ function CallEntry() {
   const getDefaultToDate = (): Date => {
     return new Date();
   };
+
+  const dateFormat = useDateFormat();
 
   const [rowCount, setRowCount] = useState(0);
   const [pageIndex, setPageIndex] = useState(0);
@@ -1282,6 +1286,13 @@ function CallEntry() {
         accessorKey: "call_date",
         header: "Call Date",
         size: 100,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.call_date
+              ? dayjs(row.original.call_date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "call_mode_name",
@@ -1292,6 +1303,13 @@ function CallEntry() {
         accessorKey: "followup_date",
         header: "Follow up Dates",
         size: 120,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.followup_date
+              ? dayjs(row.original.followup_date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "status",
@@ -1938,7 +1956,7 @@ function CallEntry() {
 
               {/* Follow-up Date Filter */}
               <Grid.Col span={2.4}>
-                <DateInput
+                <SingleDateInput
                   key={`followup-date-${filterForm.values.followup_date}`}
                   label="Follow-up Date"
                   placeholder="YYYY-MM-DD"
@@ -1951,62 +1969,6 @@ function CallEntry() {
                   nextIcon={<IconChevronRight size={16} />}
                   previousIcon={<IconChevronLeft size={16} />}
                   clearable
-                  styles={
-                    {
-                      input: {
-                        fontSize: "13px",
-                        height: "36px",
-                        fontFamily: "Inter",
-                      },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                      calendar: {
-                        padding: "1rem",
-                        gap: "0.5rem",
-                        minWidth: "300px",
-                      },
-                      day: {
-                        width: "2.5rem",
-                        height: "2.5rem",
-                        fontSize: "0.9rem",
-                        margin: "0.1rem",
-                      },
-                      calendarHeaderLevel: {
-                        fontSize: "1rem",
-                        fontWeight: 500,
-                        marginBottom: "0.8rem",
-                        flex: 1,
-                        textAlign: "center",
-                      },
-                      calendarHeaderControl: {
-                        width: "2.2rem",
-                        height: "2.2rem",
-                        margin: "0 0.5rem",
-                      },
-                      calendarHeader: {
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "0.5rem",
-                        marginBottom: "0.5rem",
-                      },
-                      monthsListControl: {
-                        width: "2.5rem",
-                        height: "2.5rem",
-                        fontSize: "0.9rem",
-                      },
-                      yearsListControl: {
-                        width: "2.5rem",
-                        height: "2.5rem",
-                        fontSize: "0.9rem",
-                      },
-                    } as any
-                  }
                 />
               </Grid.Col>
 

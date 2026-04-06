@@ -8,6 +8,7 @@ import {
   IconChevronLeft,
 } from "@tabler/icons-react";
 import dayjs from "dayjs";
+import useDateFormat from "../hooks/useDateFormat";
 
 export interface DateTimeInputProps {
   label?: string;
@@ -25,7 +26,7 @@ export interface DateTimeInputProps {
 
 const DateTimeInput: React.FC<DateTimeInputProps> = ({
   label,
-  placeholder = "YYYY-MM-DD",
+  placeholder,
   value,
   onChange,
   allowDeselection = true,
@@ -36,6 +37,8 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
   error,
   withAsterisk,
 }) => {
+  const dateFormat = useDateFormat();
+
   // Extract date and time from value
   const dateValue = value ? dayjs(value).toDate() : null;
   const timeValue = value ? dayjs(value).format("HH:mm") : "";
@@ -215,11 +218,12 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
   return (
     <Group gap="xs" align="flex-end" wrap="nowrap">
       <DateInput
+        key={`datetime-${dateFormat}`}
         label={label}
-        placeholder={placeholder}
+        placeholder={`${dateFormat}`}
         value={dateValue}
         onChange={handleDateChange}
-        valueFormat="YYYY-MM-DD"
+        valueFormat={`${dateFormat}`}
         leftSection={<IconCalendar size={18} />}
         leftSectionPointerEvents="none"
         radius="sm"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ToastNotification, SearchableSelect } from "../../../components";
+import { ToastNotification, SearchableSelect, SingleDateInput } from "../../../components";
 import { URL } from "../../../api/serverUrls";
 import {
   MantineReactTable,
@@ -36,6 +36,8 @@ import { apiCallProtected } from "../../../api/axios";
 import { useForm } from "@mantine/form";
 import { DateInput } from "@mantine/dates";
 import { IconChevronLeft as IconChevronLeftDate, IconChevronRight as IconChevronRightDate, IconCalendar } from "@tabler/icons-react";
+import useDateFormat from "../../../hooks/useDateFormat";
+import dayjs from "dayjs";
 
 type CoordinatorReassignationData = {
   id: number;
@@ -75,6 +77,7 @@ function CoordinatorReassignationMaster() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const dateFormat = useDateFormat();
 
   // Check user permissions from localStorage
   const hasManagerOrStaffAccess = useMemo(() => {
@@ -310,11 +313,25 @@ function CoordinatorReassignationMaster() {
         accessorKey: "from_date",
         header: "From Date",
         size: 150,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.from_date
+              ? dayjs(row.original.from_date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "to_date",
         header: "To Date",
         size: 150,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.to_date
+              ? dayjs(row.original.to_date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         id: "actions",
@@ -642,7 +659,7 @@ function CoordinatorReassignationMaster() {
 
             {/* From Date Filter */}
             <Grid.Col span={3}>
-              <DateInput
+              <SingleDateInput
                 label="From Date"
                 placeholder="Select from date"
                 size="xs"
@@ -655,24 +672,12 @@ function CoordinatorReassignationMaster() {
                 nextIcon={<IconChevronRightDate size={16} />}
                 previousIcon={<IconChevronLeftDate size={16} />}
                 clearable
-                styles={{
-                  input: { fontSize: "12px" },
-                  label: {
-                    fontSize: "12px",
-                    fontWeight: 500,
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                }}
               />
             </Grid.Col>
 
             {/* To Date Filter */}
             <Grid.Col span={3}>
-              <DateInput
+              <SingleDateInput
                 label="To Date"
                 placeholder="Select to date"
                 size="xs"
@@ -685,18 +690,6 @@ function CoordinatorReassignationMaster() {
                 nextIcon={<IconChevronRightDate size={16} />}
                 previousIcon={<IconChevronLeftDate size={16} />}
                 clearable
-                styles={{
-                  input: { fontSize: "12px" },
-                  label: {
-                    fontSize: "12px",
-                    fontWeight: 500,
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                }}
               />
             </Grid.Col>
           </Grid>

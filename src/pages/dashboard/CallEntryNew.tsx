@@ -50,6 +50,7 @@ import {
   SearchableSelect,
   Dropdown,
   DateRangeInput,
+  SingleDateInput,
 } from "../../components";
 import useAuthStore from "../../store/authStore";
 import { toTitleCase } from "../../utils/textFormatter";
@@ -424,6 +425,8 @@ function CallEntryNew() {
   const [totalOutstandingAmount, setTotalOutstandingAmount] =
     useState<number>(0);
   const [closeCallEntry, setCloseCallEntry] = useState<boolean>(false);
+  const [isSubmittingCallEntry, setIsSubmittingCallEntry] =
+    useState<boolean>(false);
 
   // Location state management
   const [location, setLocation] = useState<{
@@ -1293,6 +1296,7 @@ function CallEntryNew() {
     // }
 
     try {
+      setIsSubmittingCallEntry(true);
       let response;
 
       // Check if this is an edit operation
@@ -1436,6 +1440,8 @@ function CallEntryNew() {
         type: "error",
         message: `Error while ${callEntryId ? "updating" : "creating"} call entry: ${err.message}`,
       });
+    } finally {
+      setIsSubmittingCallEntry(false);
     }
   };
 
@@ -3509,7 +3515,7 @@ function CallEntryNew() {
                     />
                   </Grid.Col>
                   <Grid.Col span={4}>
-                    <DateInput
+                    <SingleDateInput
                       label="Date"
                       withAsterisk
                       placeholder="YYYY-MM-DD"
@@ -3534,27 +3540,6 @@ function CallEntryNew() {
                       size="sm"
                       nextIcon={<IconChevronRight size={16} />}
                       previousIcon={<IconChevronLeft size={16} />}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                        day: {
-                          width: "2.25rem",
-                          height: "2.25rem",
-                          fontSize: "0.9rem",
-                          fontFamily: "Inter, sans-serif",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={4}>
@@ -3649,7 +3634,7 @@ function CallEntryNew() {
                     />
                   </Grid.Col>
                   <Grid.Col span={4}>
-                    <DateInput
+                    <SingleDateInput
                       label="Follow-Up Date"
                       withAsterisk
                       placeholder="YYYY-MM-DD"
@@ -3676,27 +3661,6 @@ function CallEntryNew() {
                       size="sm"
                       nextIcon={<IconChevronRight size={16} />}
                       previousIcon={<IconChevronLeft size={16} />}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                          fontStyle: "medium",
-                        },
-                        day: {
-                          width: "2.25rem",
-                          height: "2.25rem",
-                          fontSize: "0.9rem",
-                          fontFamily: "Inter, sans-serif",
-                        },
-                      }}
                     />
                   </Grid.Col>
                   <Grid.Col span={4}>
@@ -3945,20 +3909,34 @@ function CallEntryNew() {
                       <Button
                         type="submit"
                         size="sm"
-                        disabled={locationPermission !== "granted"}
+                        disabled={
+                          locationPermission !== "granted" ||
+                          isSubmittingCallEntry
+                        }
                         style={{
                           backgroundColor: "#105476",
                           fontSize: "13px",
                           fontFamily: "Inter",
                           fontStyle: "medium",
                           cursor:
-                            locationPermission !== "granted"
+                            locationPermission !== "granted" ||
+                            isSubmittingCallEntry
                               ? "not-allowed"
                               : "pointer",
                         }}
-                        rightSection={<IconCheck size={16} />}
+                        rightSection={
+                          isSubmittingCallEntry ? (
+                            <Loader size={16} color="white" />
+                          ) : (
+                            <IconCheck size={16} />
+                          )
+                        }
                       >
-                        Submit
+                        {isSubmittingCallEntry
+                          ? callEntryId
+                            ? "Updating..."
+                            : "Submitting..."
+                          : "Submit"}
                       </Button>
                     </Box>
                   </Tooltip>

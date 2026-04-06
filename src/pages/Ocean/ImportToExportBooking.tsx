@@ -29,6 +29,8 @@ import { postAPICall } from "../../service/postApiCall";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
 import { ToastNotification } from "../../components";
+import useDateFormat from "../../hooks/useDateFormat";
+import dayjs from "dayjs";
 
 type ImportToExportBookingData = {
   id: number;
@@ -147,6 +149,8 @@ function OceanImportToExportBooking() {
     useState<ImportToExportBookingData | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("pending");
 
+  const dateFormat = useDateFormat();
+
   // Effect to refresh data when navigated to from import shipment page or statusFilter changes
   useEffect(() => {
     // Always refresh data when component mounts to ensure latest data
@@ -196,6 +200,13 @@ function OceanImportToExportBooking() {
         accessorKey: "date",
         header: "Date",
         size: 120,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.date
+              ? dayjs(row.original.date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "service",

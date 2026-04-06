@@ -30,7 +30,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { URL } from "../../api/serverUrls";
 import { searchAPI } from "../../service/searchApi";
-import { SearchableSelect, ToastNotification } from "../../components";
+import { SearchableSelect, SingleDateInput, ToastNotification } from "../../components";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../api/axios";
@@ -673,7 +673,7 @@ function ExportShipmentMaster() {
 
                     {/* Date Filter */}
                     <Grid.Col span={2.4}>
-                      <DateInput
+                      <SingleDateInput
                         key={`date-${filterForm.values.date}`}
                         label="Date"
                         placeholder="YYYY-MM-DD"
@@ -686,14 +686,6 @@ function ExportShipmentMaster() {
                         nextIcon={<IconChevronRight size={16} />}
                         previousIcon={<IconChevronLeft size={16} />}
                         clearable
-                        styles={{
-                          input: { fontSize: "12px" },
-                          label: {
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "#495057",
-                          },
-                        }}
                       />
                     </Grid.Col>
 

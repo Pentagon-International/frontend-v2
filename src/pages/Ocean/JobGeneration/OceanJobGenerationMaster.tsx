@@ -36,12 +36,14 @@ import {
   SearchableSelect,
   ToastNotification,
   Dropdown,
+  SingleDateInput,
 } from "../../../components";
 import { DateInput } from "@mantine/dates";
 import { URL } from "../../../api/serverUrls";
 import dayjs from "dayjs";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 // Type definitions based on API response
 type OceanJobData = {
@@ -97,6 +99,8 @@ function OceanJobGenerationMaster() {
     }
     return null;
   };
+
+  const dateFormat = useDateFormat();
 
   // States
   const [showFilters, setShowFilters] = useState(false);
@@ -325,7 +329,7 @@ function OceanJobGenerationMaster() {
         size: 120,
         Cell: ({ cell }) => {
           const date = cell.getValue<string>();
-          return date ? dayjs(date).format("YYYY-MM-DD") : "-";
+          return date ? dayjs(date).format(dateFormat) : "-";
         },
       },
       {
@@ -334,7 +338,7 @@ function OceanJobGenerationMaster() {
         size: 120,
         Cell: ({ cell }) => {
           const date = cell.getValue<string>();
-          return date ? dayjs(date).format("YYYY-MM-DD") : "-";
+          return date ? dayjs(date).format(dateFormat) : "-";
         },
       },
       {
@@ -343,7 +347,7 @@ function OceanJobGenerationMaster() {
         size: 120,
         Cell: ({ cell }) => {
           const date = cell.getValue<string>();
-          return date ? dayjs(date).format("YYYY-MM-DD") : "-";
+          return date ? dayjs(date).format(dateFormat) : "-";
         },
       },
 
@@ -677,7 +681,7 @@ function OceanJobGenerationMaster() {
 
                 {/* Cut Off Date Filter */}
                 <Grid.Col span={2.4}>
-                  <DateInput
+                  <SingleDateInput
                     key={`cut-off-${filterForm.values.cut_off_date}`}
                     label="Cut Off Date"
                     placeholder="YYYY-MM-DD"
@@ -690,37 +694,12 @@ function OceanJobGenerationMaster() {
                     nextIcon={<IconChevronRight size={16} />}
                     previousIcon={<IconChevronLeft size={16} />}
                     clearable
-                    styles={{
-                      day: {
-                        width: "2.25rem",
-                        height: "2.25rem",
-                        fontSize: "0.9rem",
-                      },
-                      calendarHeaderLevel: {
-                        fontSize: "1rem",
-                        fontWeight: 500,
-                        marginBottom: "0.5rem",
-                        flex: 1,
-                        textAlign: "center",
-                      },
-                      calendarHeaderControl: {
-                        width: "2rem",
-                        height: "2rem",
-                        margin: "0 0.5rem",
-                      },
-                      calendarHeader: {
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "0.5rem",
-                      },
-                    }}
                   />
                 </Grid.Col>
 
                 {/* ETA Filter */}
                 <Grid.Col span={2.4}>
-                  <DateInput
+                  <SingleDateInput
                     key={`eta-${filterForm.values.eta}`}
                     label="ETA"
                     placeholder="YYYY-MM-DD"
@@ -733,37 +712,12 @@ function OceanJobGenerationMaster() {
                     nextIcon={<IconChevronRight size={16} />}
                     previousIcon={<IconChevronLeft size={16} />}
                     clearable
-                    styles={{
-                      day: {
-                        width: "2.25rem",
-                        height: "2.25rem",
-                        fontSize: "0.9rem",
-                      },
-                      calendarHeaderLevel: {
-                        fontSize: "1rem",
-                        fontWeight: 500,
-                        marginBottom: "0.5rem",
-                        flex: 1,
-                        textAlign: "center",
-                      },
-                      calendarHeaderControl: {
-                        width: "2rem",
-                        height: "2rem",
-                        margin: "0 0.5rem",
-                      },
-                      calendarHeader: {
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "0.5rem",
-                      },
-                    }}
                   />
                 </Grid.Col>
 
                 {/* ETD Filter */}
                 <Grid.Col span={2.4}>
-                  <DateInput
+                  <SingleDateInput
                     key={`etd-${filterForm.values.etd}`}
                     label="ETD"
                     placeholder="YYYY-MM-DD"
@@ -776,31 +730,6 @@ function OceanJobGenerationMaster() {
                     nextIcon={<IconChevronRight size={16} />}
                     previousIcon={<IconChevronLeft size={16} />}
                     clearable
-                    styles={{
-                      day: {
-                        width: "2.25rem",
-                        height: "2.25rem",
-                        fontSize: "0.9rem",
-                      },
-                      calendarHeaderLevel: {
-                        fontSize: "1rem",
-                        fontWeight: 500,
-                        marginBottom: "0.5rem",
-                        flex: 1,
-                        textAlign: "center",
-                      },
-                      calendarHeaderControl: {
-                        width: "2rem",
-                        height: "2rem",
-                        margin: "0 0.5rem",
-                      },
-                      calendarHeader: {
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "0.5rem",
-                      },
-                    }}
                   />
                 </Grid.Col>
               </Grid>

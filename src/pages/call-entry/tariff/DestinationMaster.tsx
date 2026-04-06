@@ -49,6 +49,7 @@ import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../api/axios";
 import { DateInput } from "@mantine/dates";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 type Destination = {
   id: number;
@@ -73,6 +74,7 @@ export default function DestinationMaster() {
   const queryClient = useQueryClient();
 
   const isMountedRef = useRef(false);
+  const dateFormat = useDateFormat();
 
   // Initialize states from localStorage to persist across navigation
   const [showDestinationModal, setShowDestinationModal] = useState(() => {
@@ -568,11 +570,25 @@ export default function DestinationMaster() {
         accessorKey: "valid_from",
         header: "Valid From",
         size: 100,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.valid_from
+              ? dayjs(row.original.valid_from).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "valid_to",
         header: "Valid To",
         size: 100,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.valid_to
+              ? dayjs(row.original.valid_to).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         id: "actions",

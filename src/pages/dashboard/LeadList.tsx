@@ -47,6 +47,7 @@ import dayjs from "dayjs";
 import { useLayoutStore } from "../../store/useLayoutStore";
 import useAuthStore from "../../store/authStore";
 import { useListFilterStore } from "../../store/listFilterStore";
+import useDateFormat from "../../hooks/useDateFormat";
 
 const LIST_KEY = "LEAD_LIST";
 
@@ -109,6 +110,7 @@ function LeadList() {
   const location = useLocation();
   const { user } = useAuthStore();
   const { setActiveNav, setActiveSubNav, setTitle } = useLayoutStore();
+  const dateFormat = useDateFormat();
 
   // Ensure navigation state is set correctly on mount and refresh
   useEffect(() => {
@@ -1006,7 +1008,7 @@ function LeadList() {
         Cell: ({ row }) => (
           <Text size="sm">
             {row.original.created_at
-              ? dayjs(row.original.created_at).format("DD-MM-YYYY HH:mm")
+              ? dayjs(row.original.created_at).format(`${dateFormat} HH:mm`)
               : "-"}
           </Text>
         ),
@@ -1018,7 +1020,7 @@ function LeadList() {
         Cell: ({ row }) => (
           <Text size="sm">
             {row.original.updated_at
-              ? dayjs(row.original.updated_at).format("DD-MM-YYYY HH:mm")
+              ? dayjs(row.original.updated_at).format(`${dateFormat} HH:mm`)
               : "-"}
           </Text>
         ),

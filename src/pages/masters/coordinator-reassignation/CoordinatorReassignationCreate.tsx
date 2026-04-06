@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { ToastNotification } from "../../../components";
+import { SingleDateInput, ToastNotification } from "../../../components";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -276,7 +276,7 @@ function CoordinatorReassignationCreate() {
               />
             </Grid.Col>
             <Grid.Col span={6}>
-              <DateInput
+              <SingleDateInput
                 label="From Date"
                 placeholder="YYYY-MM-DD"
                 withAsterisk
@@ -291,35 +291,10 @@ function CoordinatorReassignationCreate() {
                 nextIcon={<IconChevronRight size={16} />}
                 previousIcon={<IconChevronLeft size={16} />}
                 clearable
-                styles={{
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
               />
             </Grid.Col>
             <Grid.Col span={6}>
-              <DateInput
+              <SingleDateInput
                 label="To Date"
                 placeholder="YYYY-MM-DD"
                 withAsterisk
@@ -334,31 +309,6 @@ function CoordinatorReassignationCreate() {
                 nextIcon={<IconChevronRight size={16} />}
                 previousIcon={<IconChevronLeft size={16} />}
                 clearable
-                styles={{
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                    flex: 1,
-                    textAlign: "center",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                    margin: "0 0.5rem",
-                  },
-                  calendarHeader: {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                  },
-                }}
               />
             </Grid.Col>
           </Grid>

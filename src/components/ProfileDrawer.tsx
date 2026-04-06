@@ -52,16 +52,14 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
-  const updateUserBranches = useAuthStore((state) => state.updateUserBranches);
-  const updateUserCompany = useAuthStore((state) => state.updateUserCompany);
-  const updateUserCountry = useAuthStore((state) => state.updateUserCountry);
+  const updateUserProfile = useAuthStore((state) => state.updateUserProfile);
 
   console.log("user data in store---", user?.branches);
   // Find the default branch
   const defaultBranch =
     user?.branches?.find((branch) => branch.is_default) || user?.branches?.[0];
   const [selectedBranch, setSelectedBranch] = useState(
-    defaultBranch?.user_branch_id || 0
+    defaultBranch?.user_branch_id || 0,
   );
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -73,7 +71,7 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
       const response = await apiCallProtected.post(
         URL.logoutUser,
         {},
-        API_HEADER
+        API_HEADER,
       );
 
       // If API call is successful (no error in response)
@@ -108,60 +106,57 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
   const handleUpdateProfile = async () => {
     if (!user || !selectedBranch) return;
 
-    // Check if the selected branch is different from the default branch
     const isNonActiveBranch = selectedBranch !== defaultBranch?.user_branch_id;
 
     if (!isNonActiveBranch) {
-      // If it's the active branch, no API call needed - just close the drawer
       onClose();
       return;
     }
 
     setIsUpdatingBranch(true);
+
     try {
       const payload = { is_default: true };
+
       const response = await apiCallProtected.patch(
         `${URL.userBranchMapping}${selectedBranch}/`,
         payload,
-        API_HEADER
+        API_HEADER,
       );
 
       if (response.data) {
         console.log("Branch updated successfully:", response);
-        // Update the store with the new default branch
-        updateUserBranches(selectedBranch);
 
-        // Update company information from API response
-        if (response?.data.company_id) {
-          updateUserCompany({
-            company_id: response?.data.company_id,
-            company: response?.data.company_name,
-            company_code: response?.data.company_code,
-          });
-        }
-        if (response.data.country_id) {
-          updateUserCountry({
-            country_id: response?.data.country_id,
-            country_name: response?.data.country_name,
-            country_code: response?.data.country_code,
-          });
-        }
+        // ✅ SINGLE STORE UPDATE (IMPORTANT FIX)
+        updateUserProfile({
+          branchId: selectedBranch,
+          company: response?.data?.company_id
+            ? {
+                company_id: response.data.company_id,
+                company: response.data.company_name,
+                company_code: response.data.company_code,
+              }
+            : undefined,
+          country: response?.data?.country_id
+            ? {
+                country_id: response.data.country_id,
+                country_name: response.data.country_name,
+                country_code: response.data.country_code,
+              }
+            : undefined,
+        });
       }
 
-      // Show success toast
       ToastNotification({
         type: "success",
         message: "Profile is updated",
       });
 
-      // Close the drawer
       onClose();
 
-      // Check if we're already on the dashboard
       const isOnDashboard = location.pathname === "/";
 
       if (isOnDashboard) {
-        // If already on dashboard, navigate with refresh flag to trigger data reload
         navigate("/", {
           replace: true,
           state: {
@@ -170,11 +165,11 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
           },
         });
       } else {
-        // If not on dashboard, navigate normally (this will trigger the company change effect)
         navigate("/", { replace: true });
       }
     } catch (error) {
       console.error("Error updating branch:", error);
+
       ToastNotification({
         type: "error",
         message: "Failed to update profile",

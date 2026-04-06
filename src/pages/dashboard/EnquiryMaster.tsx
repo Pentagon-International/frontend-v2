@@ -57,6 +57,7 @@ import useAuthStore from "../../store/authStore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateEnquiryPDF } from "./EnquiryPDFTemplate";
 import { useListFilterStore } from "../../store/listFilterStore";
+import useDateFormat from "../../hooks/useDateFormat";
 
 const LIST_KEY = "ENQUIRY_MASTER";
 const DETAILED_LIST_KEY = "ENQUIRY_MASTER_DETAILED";
@@ -101,6 +102,8 @@ function EnquiryMaster() {
   const getDefaultToDate = (): Date => {
     return new Date();
   };
+
+  const dateFormat = useDateFormat()
 
   const navigate = useNavigate();
   const location = useLocation(); // Add this line to get location
@@ -867,6 +870,24 @@ function EnquiryMaster() {
           });
           return;
         }
+
+        if (col === "Enquiry Date") {
+          columnDefs.push({
+            accessorKey: "enquiry_date",
+            header: col,
+            size: 120,
+            Cell: ({ row }: any) => {
+              return (
+                <Text size="sm">
+                  {row.original.enquiry_date
+                    ? dayjs(row.original.enquiry_date).format(dateFormat)
+                    : "-"}
+                </Text>
+              );
+            },
+          });
+          return;
+        };
 
         // Skip Trade column (handled with Service)
         if (col === "Trade") {
@@ -2342,6 +2363,13 @@ function EnquiryMaster() {
         id: "enquiry_received_date",
         accessorKey: "enquiry_received_date",
         header: "Enquiry Date",
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.enquiry_received_date
+              ? dayjs(row.original.enquiry_received_date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         id: "status",

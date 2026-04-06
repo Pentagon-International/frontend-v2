@@ -17,7 +17,7 @@ import dayjs from "dayjs";
 import { postAPICall } from "../../service/postApiCall";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
-import { ToastNotification } from "../../components";
+import { SingleDateInput, ToastNotification } from "../../components";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getAPICall } from "../../service/getApiCall";
@@ -163,7 +163,7 @@ function TariffCreate() {
           </Grid.Col>
           <Grid.Col span={2}>
             <Box maw={300} mx="auto">
-              <DateInput
+              <SingleDateInput
                 label="Valid from"
                 key={mainForm.key("valid_from")}
                 placeholder="YYYY-MM-DD"
@@ -181,32 +181,12 @@ function TariffCreate() {
                 radius="md"
                 size="md"
                 dropdownType="popover"
-                styles={{
-                  calendar: {
-                    padding: "0.5rem",
-                    gap: "0.25rem",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                  },
-                }}
               />
             </Box>
           </Grid.Col>
           <Grid.Col span={2}>
             <Box maw={300} mx="auto">
-              <DateInput
+              <SingleDateInput
                 label="Valid to"
                 key={mainForm.key("valid_to")}
                 placeholder="YYYY-MM-DD"
@@ -224,26 +204,6 @@ function TariffCreate() {
                 radius="md"
                 size="md"
                 dropdownType="popover"
-                styles={{
-                  calendar: {
-                    padding: "0.5rem",
-                    gap: "0.25rem",
-                  },
-                  day: {
-                    width: "2.25rem",
-                    height: "2.25rem",
-                    fontSize: "0.9rem",
-                  },
-                  calendarHeaderLevel: {
-                    fontSize: "1rem",
-                    fontWeight: 500,
-                    marginBottom: "0.5rem",
-                  },
-                  calendarHeaderControl: {
-                    width: "2rem",
-                    height: "2rem",
-                  },
-                }}
               />
             </Box>
           </Grid.Col>

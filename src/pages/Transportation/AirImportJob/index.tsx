@@ -32,6 +32,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 dayjs.extend(utc);
 
@@ -76,6 +77,8 @@ function AirImportJobMaster() {
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  const dateFormat = useDateFormat();
 
   // Fetch data using useQuery - filter for Air service
   const {
@@ -197,7 +200,7 @@ function AirImportJobMaster() {
           const value = cell.getValue<string | null>();
           if (!value) return "-";
           try {
-            return dayjs.utc(value).local().format("DD-MM-YYYY HH:mm");
+            return dayjs.utc(value).local().format(`${dateFormat} HH:mm`);
           } catch {
             return value;
           }
@@ -211,7 +214,7 @@ function AirImportJobMaster() {
           const value = cell.getValue<string | null>();
           if (!value) return "-";
           try {
-            return dayjs.utc(value).local().format("DD-MM-YYYY HH:mm");
+            return dayjs.utc(value).local().format(`${dateFormat} HH:mm`);
           } catch {
             return value;
           }

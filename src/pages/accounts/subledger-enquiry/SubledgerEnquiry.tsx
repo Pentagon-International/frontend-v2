@@ -23,6 +23,8 @@ import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import dayjs from "dayjs";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 type CoaItem = {
   id?: number;
@@ -96,9 +98,15 @@ function formatAmount(value: number | null | undefined): string {
 function formatSubledgerCell(
   key: keyof SubledgerEntryRow,
   value: unknown,
+  dateFormat: unknown
 ): string {
   if (value === null || value === undefined || value === "") return "";
   if (key === "sno") return String(value);
+  if (key === "date_document" || key === "due_date") {
+    const parsed = dayjs(value);
+    if (!parsed.isValid()) return String(value);
+    return parsed.format(dateFormat);
+  }
   if (
     key === "debit_local_amount" ||
     key === "credit_local_amount" ||
@@ -162,6 +170,7 @@ export default function SubledgerEnquiry() {
   const [isFetchingRows, setIsFetchingRows] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
+  const dateFormat = useDateFormat();
   const form = useForm<FilterFormValues>({
     initialValues: {
       fromDate: null,
@@ -532,7 +541,7 @@ export default function SubledgerEnquiry() {
                   {ENTRY_COLUMNS.map((col) => (
                     <Grid.Col key={col.key} span={col.span}>
                       <TextInput
-                        value={formatSubledgerCell(col.key, row[col.key])}
+                        value={formatSubledgerCell(col.key, row[col.key], dateFormat)}
                         readOnly
                         placeholder="—"
                         styles={readOnlyInputStyles}

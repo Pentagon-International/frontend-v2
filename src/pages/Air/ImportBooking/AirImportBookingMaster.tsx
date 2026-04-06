@@ -38,7 +38,7 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { URL } from "../../../api/serverUrls";
-import { SearchableSelect } from "../../../components";
+import { SearchableSelect, SingleDateInput } from "../../../components";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
@@ -48,6 +48,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification } from "../../../components";
 import dayjs from "dayjs";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 // Type definitions
 type ImportShipmentData = {
@@ -136,6 +137,8 @@ function AirImportBookingMaster() {
   const queryClient = useQueryClient();
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
+
+  const dateFormat = useDateFormat();
 
   // Pagination states
   const [pageIndex, setPageIndex] = useState(0); // 0-based index for API
@@ -671,6 +674,13 @@ function AirImportBookingMaster() {
         accessorKey: "date",
         header: "Date",
         size: 120,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.date
+              ? dayjs(row.original.date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "service",
@@ -1020,7 +1030,7 @@ function AirImportBookingMaster() {
 
                 {/* Date Filter */}
                 <Grid.Col span={2.4}>
-                  <DateInput
+                  <SingleDateInput
                     key={`date-${filterForm.values.date}`}
                     label="Date"
                     placeholder="YYYY-MM-DD"
@@ -1033,62 +1043,6 @@ function AirImportBookingMaster() {
                     nextIcon={<IconChevronRight size={16} />}
                     previousIcon={<IconChevronLeft size={16} />}
                     clearable
-                    styles={
-                      {
-                        input: {
-                          fontSize: "13px",
-                          height: "36px",
-                          fontFamily: "Inter",
-                        },
-                        label: {
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#000000",
-                          marginBottom: "4px",
-                          fontFamily: "Inter",
-                        },
-                        calendar: {
-                          padding: "1rem",
-                          gap: "0.5rem",
-                          minWidth: "300px",
-                        },
-                        day: {
-                          width: "2.5rem",
-                          height: "2.5rem",
-                          fontSize: "0.9rem",
-                          margin: "0.1rem",
-                        },
-                        calendarHeaderLevel: {
-                          fontSize: "1rem",
-                          fontWeight: 500,
-                          marginBottom: "0.8rem",
-                          flex: 1,
-                          textAlign: "center",
-                        },
-                        calendarHeaderControl: {
-                          width: "2.2rem",
-                          height: "2.2rem",
-                          margin: "0 0.5rem",
-                        },
-                        calendarHeader: {
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: "0.5rem",
-                          marginBottom: "0.5rem",
-                        },
-                        monthsListControl: {
-                          width: "2.5rem",
-                          height: "2.5rem",
-                          fontSize: "0.9rem",
-                        },
-                        yearsListControl: {
-                          width: "2.5rem",
-                          height: "2.5rem",
-                          fontSize: "0.9rem",
-                        },
-                      } as any
-                    }
                   />
                 </Grid.Col>
 
