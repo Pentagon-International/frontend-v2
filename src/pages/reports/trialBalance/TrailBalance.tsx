@@ -71,6 +71,39 @@ function buildCountryBranchMap(
   return countryMap;
 }
 
+/** Same scoping as SubledgerEnquiry / dashboard: branches for ProfileDrawer active country (`user.country`). */
+function branchesForProfileCountry(
+  branches: BranchWithCountry[],
+  activeCountryId: number | null | undefined,
+): BranchWithCountry[] {
+  if (!branches.length) return [];
+
+  const activeCountryIdStr =
+    activeCountryId !== null && activeCountryId !== undefined
+      ? String(activeCountryId)
+      : null;
+
+  const activeBranches = activeCountryIdStr
+    ? branches.filter((b) => {
+        const branchCountryId = b.country?.country_id;
+        if (branchCountryId === null || branchCountryId === undefined) {
+          return false;
+        }
+        return String(branchCountryId) === activeCountryIdStr;
+      })
+    : [];
+
+  const defaultOnly = branches.filter((b) => b.is_default);
+  const effectiveBranches =
+    activeBranches.length > 0
+      ? activeBranches
+      : defaultOnly.length > 0
+        ? defaultOnly
+        : branches;
+
+  return effectiveBranches;
+}
+
 type BranchScopeMode = "initial" | "country" | "branch";
 
 export default function TrialBalance() {
@@ -79,7 +112,12 @@ export default function TrialBalance() {
     useState<BranchScopeMode>("initial");
   const user = useAuthStore((s) => s.user);
 
-  const { countryOptions, allBranchOptions, branchCodesForCountry } = useMemo(() => {
+  const {
+    countryOptions,
+    allBranchOptions,
+    branchCodesForCountry,
+    scopedDefaultBranchCode,
+  } = useMemo(() => {
     const emptyBranches = () =>
       [] as { value: string; label: string }[];
 
@@ -88,34 +126,36 @@ export default function TrialBalance() {
         countryOptions: [] as { value: string; label: string }[],
         allBranchOptions: emptyBranches(),
         branchCodesForCountry: (_countryId: string | null) => [] as string[],
+        scopedDefaultBranchCode: null as string | null,
       };
     }
 
+    const profileCountryOption = {
+      value: String(user.country.country_id),
+      label: user.country.country_name,
+    };
+
     if (!user.branches?.length) {
       return {
-        countryOptions: [
-          {
-            value: String(user.country.country_id),
-            label: user.country.country_name,
-          },
-        ],
+        countryOptions: [profileCountryOption],
         allBranchOptions: emptyBranches(),
         branchCodesForCountry: (_countryId: string | null) => [] as string[],
+        scopedDefaultBranchCode: null as string | null,
       };
     }
 
     const branches = user.branches as BranchWithCountry[];
-    const countryMap = buildCountryBranchMap(branches, {
+    const scopedBranches = branchesForProfileCountry(
+      branches,
+      user.country.country_id,
+    );
+
+    const countryMap = buildCountryBranchMap(scopedBranches, {
       country_id: user.country.country_id,
       country_name: user.country.country_name,
     });
 
-    const countryOpts: { value: string; label: string }[] = [];
-    countryMap.forEach(({ countryName }, id) => {
-      countryOpts.push({ value: String(id), label: countryName });
-    });
-
-    const allBranchOpts = branches.map((b) => ({
+    const allBranchOpts = scopedBranches.map((b) => ({
       value: b.branch_code,
       label: b.branch_name,
     }));
@@ -127,18 +167,19 @@ export default function TrialBalance() {
       return entry ? entry.branches.map((b) => b.branch_code) : [];
     };
 
+    const def =
+      scopedBranches.find((b) => b.is_default) || scopedBranches[0] || null;
+
     return {
-      countryOptions: countryOpts,
+      countryOptions: [profileCountryOption],
       allBranchOptions: allBranchOpts,
       branchCodesForCountry: branchCodesForCountryFn,
+      scopedDefaultBranchCode: def?.branch_code ?? null,
     };
   }, [user]);
 
-  const defaultBranch =
-    user?.branches?.find((b) => b.is_default) || user?.branches?.[0];
-  const defaultBranchCode = defaultBranch?.branch_code ?? null;
-  const defaultBranchCodeRef = useRef(defaultBranchCode);
-  defaultBranchCodeRef.current = defaultBranchCode;
+  const defaultBranchCodeRef = useRef(scopedDefaultBranchCode);
+  defaultBranchCodeRef.current = scopedDefaultBranchCode;
 
   const form = useForm<TrialBalanceFormValues>({
     initialValues: {
@@ -149,7 +190,7 @@ export default function TrialBalance() {
       is_last_year_income: "true",
       currency_code: "INR",
       country_id: null,
-      branch_code: defaultBranchCode,
+      branch_code: scopedDefaultBranchCode,
     },
   });
 
