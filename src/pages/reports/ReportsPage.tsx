@@ -44,7 +44,7 @@ export default function ReportsPage() {
           icon: <IconFileAnalytics size={28} color="#105476" />,
         },
         {
-          label: "Aging Outstanding",
+          label: "Aging Report",
           icon: <IconClockHour4 size={28} color="#105476" />,
           path: "/reports/aging-outstanding",
         },

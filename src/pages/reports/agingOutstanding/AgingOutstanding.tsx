@@ -257,7 +257,7 @@ export default function AgingOutstanding() {
     const uiFormat = fmt.toLowerCase();
 
     const body = {
-      report_type: "aging_outstanding",
+      report_type: "local_outstanding",
       format: uiFormat,
       filters,
     };
@@ -339,7 +339,7 @@ export default function AgingOutstanding() {
     <Box>
       <Group justify="space-between" mb="md">
         <Title order={4} style={{ color: "#105476" }}>
-          Aging Outstanding
+          Aging Report
         </Title>
       </Group>
 

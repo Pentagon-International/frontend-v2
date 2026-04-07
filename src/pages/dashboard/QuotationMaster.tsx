@@ -2183,7 +2183,7 @@ console.log("currentQuotation: ", currentQuotation);
       const userCurrency = await getUserCurrencyCode(
         user?.country?.country_code
       );
-      const blobUrl = generateNewQuotationPDF(
+      const blobUrl = await generateNewQuotationPDF(
         rowData,
         defaultBranch,
         country,

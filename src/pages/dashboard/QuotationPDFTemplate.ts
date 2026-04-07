@@ -262,12 +262,87 @@ const getExchangeRates = (data: any) => {
     .join(", ");
 };
 
-export const generateNewQuotationPDF = (
+/** Fetch upcoming vessel schedules for a quotation. Returns empty array on any error. */
+const fetchUpcomingSchedules = async (
+  originCode: string,
+  destinationCode: string,
+  etdFrom: string,
+  carrierCode: string,
+): Promise<any[]> => {
+  if (!originCode || !destinationCode) return [];
+  try {
+    const accessToken = localStorage.getItem("accessToken");
+    const baseUrl =
+      (
+        import.meta as unknown as { env?: Record<string, string> }
+      ).env?.VITE_API_BASE_URL ?? "";
+    const res = await fetch(`${baseUrl}searates/schedules/vessel-saved/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({
+        origin_code: originCode,
+        destination_code: destinationCode,
+        etd_from: etdFrom,
+        vessel:4,
+        ...(carrierCode ? { carrier_code: carrierCode } : {}),
+      }),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json?.data) ? json.data : [];
+  } catch {
+    return [];
+  }
+};
+
+export const generateNewQuotationPDF = async (
   rowData: any,
   defaultBranch: any,
   country?: any,
   userCurrency?: any
-): string => {
+): Promise<string> => {
+  // ===== PRE-FETCH UPCOMING SCHEDULES =====
+  let upcomingSchedules: any[] = [];
+  try {
+    const firstQuotation =
+      Array.isArray(rowData?.quotation) && rowData.quotation.length > 0
+        ? rowData.quotation[0]
+        : null;
+
+    if (firstQuotation) {
+      const originCode =
+        String(firstQuotation.origin_code || firstQuotation.origin || "").trim();
+      const destinationCode =
+        String(
+          firstQuotation.destination_code || firstQuotation.destination || "",
+        ).trim();
+      const etdFrom = firstQuotation.created_at
+        ? (() => {
+            const d = new Date(firstQuotation.created_at);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+          })()
+        : "";
+      const carrierCode = String(
+        firstQuotation.carrier_code || firstQuotation.carrier || "",
+      ).trim();
+
+      upcomingSchedules = await fetchUpcomingSchedules(
+        originCode,
+        destinationCode,
+        etdFrom,
+        carrierCode,
+      );
+    }
+  } catch {
+    upcomingSchedules = [];
+  }
+
   try {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -1344,6 +1419,117 @@ export const generateNewQuotationPDF = (
 
       yPos += 5;
     } // End of TERMS & CONDITIONS section (only for non-Pentagon companies)
+
+    // ===== UPCOMING SCHEDULE SECTION =====
+    if (upcomingSchedules.length > 0) {
+      yPos += 5;
+
+      if (yPos > pageHeight - 40) {
+        doc.addPage();
+        yPos = 10;
+      }
+
+      // Section header – same black-filled style as CHARGES / CARGO DETAILS
+      doc.setFillColor(0, 0, 0);
+      doc.rect(margin, yPos, pageWidth - 2 * margin, 5, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("UPCOMING SCHEDULE", pageWidth / 2, yPos + 3.5, {
+        align: "center",
+      });
+      doc.setTextColor(0, 0, 0);
+      yPos += 5;
+
+      // Column definitions (total content width = pageWidth - 2*margin)
+      const schedColWidths = [50, 22, 22, 22, 54, 30]; // Vessel | ETD | ETA | Transit | Service | Type
+      const schedHeaders = [
+        "Vessel Name",
+        "ETD",
+        "ETA",
+        "Transit",
+        "Service",
+        "Type",
+      ];
+
+      // Column-header row (gray fill)
+      doc.setFillColor(220, 220, 220);
+      doc.rect(margin, yPos, pageWidth - 2 * margin, 6, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      let hx = margin + 2;
+      schedHeaders.forEach((h, i) => {
+        doc.text(h, hx, yPos + 4);
+        hx += schedColWidths[i];
+      });
+      yPos += 6;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setDrawColor(200, 200, 200);
+
+      upcomingSchedules.forEach((item: any) => {
+        const vesselName = String(item.schedule?.vessel_name || "N/A");
+        const etd = String(item.etd || item.schedule?.etd || "");
+        const eta = String(item.eta || "");
+        const transit = item.transit_time != null ? `${item.transit_time} days` : "-";
+        const service = String(item.schedule?.service_name || "");
+        const viaCode =
+          Array.isArray(item.routings) && item.routings.length > 0
+            ? String(item.routings[0]?.destination_code || "")
+            : "";
+        const type = item.direct ? "Direct" : viaCode ? `Via ${viaCode}` : "Transshipment";
+
+        // Calculate row height based on longest wrapped content
+        doc.setFontSize(7);
+        const vesselLines = doc.splitTextToSize(vesselName, schedColWidths[0] - 3);
+        const serviceLines = doc.splitTextToSize(service, schedColWidths[4] - 3);
+        const maxLines = Math.max(vesselLines.length, serviceLines.length, 1);
+        const rowH = Math.max(5, maxLines * 3.5 + 1.5);
+
+        // Page break check
+        if (yPos + rowH > pageHeight - 15) {
+          doc.addPage();
+          yPos = 10;
+          // Repeat column headers on new page
+          doc.setFillColor(220, 220, 220);
+          doc.rect(margin, yPos, pageWidth - 2 * margin, 6, "F");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7.5);
+          let rhx = margin + 2;
+          schedHeaders.forEach((h, i) => {
+            doc.text(h, rhx, yPos + 4);
+            rhx += schedColWidths[i];
+          });
+          yPos += 6;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(7);
+        }
+
+        // Row border
+        doc.rect(margin, yPos, pageWidth - 2 * margin, rowH);
+
+        // Cell content
+        let cx = margin + 2;
+        doc.text(vesselLines, cx, yPos + 3.5);
+        cx += schedColWidths[0];
+        doc.text(etd, cx, yPos + 3.5);
+        cx += schedColWidths[1];
+        doc.text(eta, cx, yPos + 3.5);
+        cx += schedColWidths[2];
+        doc.text(transit, cx, yPos + 3.5);
+        cx += schedColWidths[3];
+        doc.text(serviceLines, cx, yPos + 3.5);
+        cx += schedColWidths[4];
+        doc.text(type, cx, yPos + 3.5);
+
+        yPos += rowH;
+
+      });
+
+      yPos += 5;
+    }
+    // ===== END UPCOMING SCHEDULE SECTION =====
 
     // ===== APPROVAL FOOTER =====
     yPos += 10;
