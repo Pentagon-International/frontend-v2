@@ -1,5 +1,4 @@
 import {
-  Accordion,
   Box,
   Button,
   Card,
@@ -11,7 +10,6 @@ import {
   Loader,
   Modal,
   Radio,
-  Select,
   Stack,
   Text,
   TextInput,
@@ -33,7 +31,6 @@ import {
   IconTruckDelivery,
   IconCircleCheck,
   IconFileText,
-  IconPointFilled,
 } from "@tabler/icons-react";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -65,7 +62,6 @@ import FormNumberInput from "../../../components/FormNumberInput";
 import useAuthStore from "../../../store/authStore";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 import LastEnquiriesList from "../LastEnquiriesList";
-import SearchableMultiSelect from "../../../components/SearchableMultiSelect";
 import FormTextInput from "../../../components/FormTextInput";
 
 // Type definitions
@@ -224,26 +220,6 @@ const portMasterDisplayFormat = (item: any) => ({
   label: `${item.port_name} (${item.port_code})`,
 });
 
-function rfqPortCodesFromRow(
-  row: Record<string, unknown> | undefined,
-  side: "origin" | "destination"
-): string[] {
-  if (!row) return [];
-  if (side === "origin") {
-    const codes = row.origin_codes;
-    if (Array.isArray(codes) && codes.length > 0) {
-      return (codes as unknown[]).map((v) => String(v));
-    }
-    const o = row.origin_code;
-    return o ? [String(o)] : [];
-  }
-  const codes = row.destination_codes;
-  if (Array.isArray(codes) && codes.length > 0) {
-    return (codes as unknown[]).map((v) => String(v));
-  }
-  const d = row.destination_code;
-  return d ? [String(d)] : [];
-}
 
 function rfqPortPillLabelFromApi(name: string | undefined, code: string) {
   const c = String(code ?? "").trim();
@@ -252,153 +228,7 @@ function rfqPortPillLabelFromApi(name: string | undefined, code: string) {
   return n ? `${n} (${c})` : `(${c})`;
 }
 
-function rfqCodesFiltered(
-  row: Record<string, unknown> | undefined,
-  side: "origin" | "destination"
-): string[] {
-  return rfqPortCodesFromRow(row, side).map((c) => String(c).trim()).filter(Boolean);
-}
 
-function rfqIsMultiOrigin(sd: Record<string, unknown> | undefined): boolean {
-  return rfqCodesFiltered(sd, "origin").length > 1;
-}
-
-function rfqIsMultiDestination(sd: Record<string, unknown> | undefined): boolean {
-  return rfqCodesFiltered(sd, "destination").length > 1;
-}
-
-function syncPickupMapsForOrigins(
-  nextCodes: string[],
-  prevDetail: Record<string, unknown>
-): {
-  pickup_flags_by_origin: Record<string, "true" | "false">;
-  pickup_locations_by_origin: Record<string, string>;
-} {
-  const filtered = nextCodes.map((c) => String(c).trim()).filter(Boolean);
-  const prevCodes = rfqCodesFiltered(prevDetail, "origin");
-  const prevFlags = (prevDetail.pickup_flags_by_origin || {}) as Record<
-    string,
-    string
-  >;
-  const prevLocs = (prevDetail.pickup_locations_by_origin || {}) as Record<
-    string,
-    string
-  >;
-  const singlePickup = prevDetail.pickup === "true";
-  const singleLoc = String(prevDetail.pickup_location || "");
-
-  const pickup_flags_by_origin: Record<string, "true" | "false"> = {};
-  const pickup_locations_by_origin: Record<string, string> = {};
-
-  for (const code of filtered) {
-    if (prevFlags[code] === "true" || prevFlags[code] === "false") {
-      pickup_flags_by_origin[code] = prevFlags[code] as "true" | "false";
-      pickup_locations_by_origin[code] = prevLocs[code] || "";
-    } else if (prevCodes.length === 1 && code === prevCodes[0]) {
-      pickup_flags_by_origin[code] = singlePickup ? "true" : "false";
-      pickup_locations_by_origin[code] = singleLoc;
-    } else {
-      pickup_flags_by_origin[code] = "false";
-      pickup_locations_by_origin[code] = "";
-    }
-  }
-  return { pickup_flags_by_origin, pickup_locations_by_origin };
-}
-
-function syncDeliveryMapsForDestinations(
-  nextCodes: string[],
-  prevDetail: Record<string, unknown>
-): {
-  delivery_flags_by_destination: Record<string, "true" | "false">;
-  delivery_locations_by_destination: Record<string, string>;
-} {
-  const filtered = nextCodes.map((c) => String(c).trim()).filter(Boolean);
-  const prevCodes = rfqCodesFiltered(prevDetail, "destination");
-  const prevFlags = (prevDetail.delivery_flags_by_destination || {}) as Record<
-    string,
-    string
-  >;
-  const prevLocs = (prevDetail.delivery_locations_by_destination || {}) as Record<
-    string,
-    string
-  >;
-  const singleDel = prevDetail.delivery === "true";
-  const singleLoc = String(prevDetail.delivery_location || "");
-
-  const delivery_flags_by_destination: Record<string, "true" | "false"> = {};
-  const delivery_locations_by_destination: Record<string, string> = {};
-
-  for (const code of filtered) {
-    if (prevFlags[code] === "true" || prevFlags[code] === "false") {
-      delivery_flags_by_destination[code] = prevFlags[code] as "true" | "false";
-      delivery_locations_by_destination[code] = prevLocs[code] || "";
-    } else if (prevCodes.length === 1 && code === prevCodes[0]) {
-      delivery_flags_by_destination[code] = singleDel ? "true" : "false";
-      delivery_locations_by_destination[code] = singleLoc;
-    } else {
-      delivery_flags_by_destination[code] = "false";
-      delivery_locations_by_destination[code] = "";
-    }
-  }
-  return { delivery_flags_by_destination, delivery_locations_by_destination };
-}
-
-function validateRfqMultiPortPickupDelivery(
-  serviceDetails: unknown[],
-  setFieldError: (path: string, message: string) => void,
-  clearFieldError: (path: string) => void
-): boolean {
-  let hasErrors = false;
-  serviceDetails.forEach((serviceDetail, serviceIndex) => {
-    const ocodes = rfqCodesFiltered(
-      serviceDetail as Record<string, unknown>,
-      "origin"
-    );
-    const dcodes = rfqCodesFiltered(
-      serviceDetail as Record<string, unknown>,
-      "destination"
-    );
-    if (ocodes.length > 1) {
-      const flags = (serviceDetail as { pickup_flags_by_origin?: Record<string, string> })
-        .pickup_flags_by_origin || {};
-      const locs = (serviceDetail as { pickup_locations_by_origin?: Record<string, string> })
-        .pickup_locations_by_origin || {};
-      for (const code of ocodes) {
-        if (flags[code] === "true" && !(String(locs[code] || "").trim())) {
-          setFieldError(
-            `service_details.${serviceIndex}.pickup_locations_by_origin.${code}`,
-            "Pickup location is required"
-          );
-          hasErrors = true;
-        } else {
-          clearFieldError(
-            `service_details.${serviceIndex}.pickup_locations_by_origin.${code}`
-          );
-        }
-      }
-    }
-    if (dcodes.length > 1) {
-      const flags = (serviceDetail as { delivery_flags_by_destination?: Record<string, string> })
-        .delivery_flags_by_destination || {};
-      const locs = (serviceDetail as { delivery_locations_by_destination?: Record<string, string> })
-        .delivery_locations_by_destination || {};
-      for (const code of dcodes) {
-        if (flags[code] === "true" && !(String(locs[code] || "").trim())) {
-          setFieldError(
-            `service_details.${serviceIndex}.delivery_locations_by_destination.${code}`,
-            "Delivery location is required"
-          );
-          hasErrors = true;
-        } else {
-          clearFieldError(
-            `service_details.${serviceIndex}.delivery_locations_by_destination.${code}`
-          );
-        }
-      }
-    }
-  });
-  return hasErrors;
-}
 
 /** Shared with single-port Pickup/Delivery fields — labels, radios, inputs, accordion headers */
 const RFQ_FORM_FIELD_LABEL_STYLE = {
@@ -479,21 +309,20 @@ const RFQ_FORM_ACCORDION_STYLES = {
   },
 };
 
-/** When the other side has multiple ports, cap this side to one selection (RFQ rule). */
-function rfqMaxPillsForSide(
-  row: Record<string, unknown> | undefined,
-  side: "origin" | "destination"
-): number | undefined {
-  if (!row) return undefined;
-  const sd = row as Record<string, unknown>;
-  if (side === "origin") {
-    const dc = sd.destination_codes;
-    if (Array.isArray(dc) && dc.filter(Boolean).length > 1) return 1;
-    return undefined;
-  }
-  const oc = sd.origin_codes;
-  if (Array.isArray(oc) && oc.filter(Boolean).length > 1) return 1;
-  return undefined;
+/** Check if a service row has multiple origins (used by payload builder). */
+function rfqIsMultiOrigin(row: Record<string, unknown>): boolean {
+  const codes = Array.isArray(row.origin_codes)
+    ? (row.origin_codes as string[]).filter(Boolean)
+    : [];
+  return codes.length > 1;
+}
+
+/** Check if a service row has multiple destinations (used by payload builder). */
+function rfqIsMultiDestination(row: Record<string, unknown>): boolean {
+  const codes = Array.isArray(row.destination_codes)
+    ? (row.destination_codes as string[]).filter(Boolean)
+    : [];
+  return codes.length > 1;
 }
 
 /** Same expansion rules as submit payload (single logical service row). */
@@ -2551,16 +2380,6 @@ function RFQCreate() {
       }
     );
 
-    if (
-      validateRfqMultiPortPickupDelivery(
-        serviceForm.values.service_details,
-        (path, message) => serviceForm.setFieldError(path, message),
-        (path) => serviceForm.clearFieldError(path)
-      )
-    ) {
-      hasCargoErrors = true;
-    }
-
     // If there are cargo validation errors, navigate to service details step and return
     if (hasCargoErrors) {
       setActive(1);
@@ -2854,16 +2673,6 @@ function RFQCreate() {
     const hasServiceFormErrors =
       serviceFormResult.hasErrors || Object.keys(serviceForm.errors).length > 0;
     if (hasCustomerFormErrors || hasServiceFormErrors) return;
-
-    if (
-      validateRfqMultiPortPickupDelivery(
-        serviceForm.values.service_details,
-        (path, message) => serviceForm.setFieldError(path, message),
-        (path) => serviceForm.clearFieldError(path)
-      )
-    ) {
-      return;
-    }
 
     if (!enq?.id) {
       ToastNotification({
@@ -3285,10 +3094,24 @@ function RFQCreate() {
                 delivery: service.delivery ? "true" : "false",
                 pickup_location: service.pickup_location || "",
                 delivery_location: service.delivery_location || "",
-                pickup_flags_by_origin: {} as Record<string, "true" | "false">,
-                pickup_locations_by_origin: {} as Record<string, string>,
-                delivery_flags_by_destination: {} as Record<string, "true" | "false">,
-                delivery_locations_by_destination: {} as Record<string, string>,
+                pickup_flags_by_origin: (() => {
+                  const c = String(service.origin_code_read || service.origin_code || "").trim();
+                  const pval = (service.pickup ? "true" : "false") as "true" | "false";
+                  return c ? { [c]: pval } : {};
+                })(),
+                pickup_locations_by_origin: (() => {
+                  const c = String(service.origin_code_read || service.origin_code || "").trim();
+                  return c ? { [c]: service.pickup_location || "" } : {};
+                })(),
+                delivery_flags_by_destination: (() => {
+                  const c = String(service.destination_code_read || service.destination_code || "").trim();
+                  const dval = (service.delivery ? "true" : "false") as "true" | "false";
+                  return c ? { [c]: dval } : {};
+                })(),
+                delivery_locations_by_destination: (() => {
+                  const c = String(service.destination_code_read || service.destination_code || "").trim();
+                  return c ? { [c]: service.delivery_location || "" } : {};
+                })(),
                 service_remark: service.service_remark || "",
                 commodity: service.commodity || "",
                 shipment_terms_code:
@@ -3563,10 +3386,24 @@ function RFQCreate() {
                 delivery: service.delivery ? "true" : "false",
                 pickup_location: service.pickup_location || "",
                 delivery_location: service.delivery_location || "",
-                pickup_flags_by_origin: {} as Record<string, "true" | "false">,
-                pickup_locations_by_origin: {} as Record<string, string>,
-                delivery_flags_by_destination: {} as Record<string, "true" | "false">,
-                delivery_locations_by_destination: {} as Record<string, string>,
+                pickup_flags_by_origin: (() => {
+                  const c = String(service.origin_code_read || service.origin_code || "").trim();
+                  const pval = (service.pickup ? "true" : "false") as "true" | "false";
+                  return c ? { [c]: pval } : {};
+                })(),
+                pickup_locations_by_origin: (() => {
+                  const c = String(service.origin_code_read || service.origin_code || "").trim();
+                  return c ? { [c]: service.pickup_location || "" } : {};
+                })(),
+                delivery_flags_by_destination: (() => {
+                  const c = String(service.destination_code_read || service.destination_code || "").trim();
+                  const dval = (service.delivery ? "true" : "false") as "true" | "false";
+                  return c ? { [c]: dval } : {};
+                })(),
+                delivery_locations_by_destination: (() => {
+                  const c = String(service.destination_code_read || service.destination_code || "").trim();
+                  return c ? { [c]: service.delivery_location || "" } : {};
+                })(),
                 service_remark: service.service_remark || "",
                 commodity: service.commodity || "",
                 shipment_terms_code:
@@ -3773,6 +3610,10 @@ function RFQCreate() {
           );
         } else {
           // Legacy format: single service detail (backward compatibility)
+          const _legacyOriginCode = String(enq?.origin_code_read || enq?.origin_code || "").trim();
+          const _legacyDestCode = String(enq?.destination_code_read || enq?.destination_code || "").trim();
+          const _legacyPickup = (enq?.pickup ? "true" : "false") as "true" | "false";
+          const _legacyDelivery = (enq?.delivery ? "true" : "false") as "true" | "false";
           const serviceDetail = {
             id: enq.id,
             // Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -3780,15 +3621,27 @@ function RFQCreate() {
             trade: enq?.trade || "",
             service_code: enq?.service_code || "",
             service_name: enq?.service_name || "",
-            origin_code: enq?.origin_code_read || enq?.origin_code || "",
+            origin_code: _legacyOriginCode,
             origin_name: enq?.origin_name || "",
-            destination_code:
-              enq?.destination_code_read || enq?.destination_code || "",
+            origin_codes: _legacyOriginCode ? [_legacyOriginCode] : [] as string[],
+            origin_display_values: _legacyOriginCode ? {
+              [_legacyOriginCode]: rfqPortPillLabelFromApi(enq?.origin_name, _legacyOriginCode),
+            } : {} as Record<string, string>,
+            destination_code: _legacyDestCode,
             destination_name: enq?.destination_name || "",
+            destination_codes: _legacyDestCode ? [_legacyDestCode] : [] as string[],
+            destination_display_values: _legacyDestCode ? {
+              [_legacyDestCode]: rfqPortPillLabelFromApi(enq?.destination_name, _legacyDestCode),
+            } : {} as Record<string, string>,
+            rfq_port_pair_refs: [] as Array<{ id?: number | string; origin_code: string; destination_code: string }>,
             pickup: enq?.pickup ? "true" : "false",
             delivery: enq?.delivery ? "true" : "false",
             pickup_location: enq?.pickup_location || "",
             delivery_location: enq?.delivery_location || "",
+            pickup_flags_by_origin: _legacyOriginCode ? { [_legacyOriginCode]: _legacyPickup } : {} as Record<string, "true" | "false">,
+            pickup_locations_by_origin: _legacyOriginCode ? { [_legacyOriginCode]: enq?.pickup_location || "" } : {} as Record<string, string>,
+            delivery_flags_by_destination: _legacyDestCode ? { [_legacyDestCode]: _legacyDelivery } : {} as Record<string, "true" | "false">,
+            delivery_locations_by_destination: _legacyDestCode ? { [_legacyDestCode]: enq?.delivery_location || "" } : {} as Record<string, string>,
             shipment_terms_code:
               enq?.shipment_terms_code_read || enq?.shipment_terms_code || "",
             icd: enq?.icd || "",
@@ -5467,59 +5320,37 @@ function RFQCreate() {
 
                     {/* Dynamic Service Details */}
                     <Stack gap="lg" style={{ backgroundColor: "#F8F8F8" }}>
-                      {serviceForm.values.service_details.map(
-                        (serviceDetail, serviceIndex) => (
-                          <Box
-                            key={(serviceDetail as any).id || serviceIndex}
-                            style={{
-                              border: "1px solid #e9ecef",
-                              borderRadius: "8px",
-                              padding: "24px",
-                              backgroundColor: "#FFFFFF",
+                      <Box
+                        style={{
+                          border: "1px solid #e9ecef",
+                          borderRadius: "8px",
+                          padding: "24px",
+                          backgroundColor: "#FFFFFF",
+                        }}
+                      >
+                        <Text 
+                          size="lg"
+                          fw={600}
+                          c="#105476"
+                          style={{
+                            paddingBottom: "4px",
+                            fontFamily: "Inter",
+                            fontStyle: "semibold",
+                            fontSize: "16px",
+                            color: "#105476",
                             }}
                           >
-                            <Flex
-                              justify="space-between"
-                              align="center"
-                              mb="lg"
-                            >
-                              <Text
-                                size="md"
-                                fw={600}
-                                c="#333"
-                                style={{
-                                  fontFamily: "Inter",
-                                  fontStyle: "medium",
-                                  fontSize: "16px",
-                                  color: "#22252B",
-                                }}
-                              >
-                                {`Service ${serviceIndex + 1}`}
-                              </Text>
-                              {serviceForm.values.service_details.length >
-                                1 && (
-                                <Button
-                                  variant="subtle"
-                                  color="red"
-                                  size="xs"
-                                  p={0}
-                                  styles={{
-                                    root: { minWidth: "auto", height: "auto" },
-                                  }}
-                                  onClick={() => {
-                                    serviceForm.removeListItem(
-                                      "service_details",
-                                      serviceIndex
-                                    );
-                                  }}
-                                >
-                                  <IconTrash size={20} color="#dc3545" />
-                                </Button>
-                              )}
-                            </Flex>
-
+                            Service Details
+                          </Text>
+                        {/* SECTION A — Common Fields */}
+                        {(() => {
+                          const serviceIndex = 0;
+                          const serviceDetail = serviceForm.values.service_details[0];
+                          if (!serviceDetail) return null;
+                          return (
+                            <>
                             <Grid>
-                              <Grid.Col span={6}>
+                              <Grid.Col span={3}>
                                 <Dropdown
                                   label="Service"
                                   styles={{
@@ -5702,7 +5533,7 @@ function RFQCreate() {
                                   }
                                 />
                               </Grid.Col>
-                              <Grid.Col span={6}>
+                              <Grid.Col span={3}>
                                 {serviceForm.values.service_details[
                                   serviceIndex
                                 ]?.service === "OTHERS" ? (
@@ -5869,29 +5700,6 @@ function RFQCreate() {
                                 ) : (
                                   <Dropdown
                                     label="Trade"
-                                    styles={{
-                                      input: {
-                                        fontSize: "13px",
-                                        fontFamily: "Inter",
-                                        height: "36px",
-                                      },
-                                      label: {
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                        marginBottom: "4px",
-                                        fontFamily: "Inter",
-                                        fontStyle: "medium",
-                                      },
-                                      root: {
-                                        fontSize: "13px",
-                                        fontWeight: 500,
-                                        color: "#424242",
-                                        marginBottom: "4px",
-                                        fontFamily: "Inter",
-                                        fontStyle: "medium",
-                                      },
-                                    }}
                                     placeholder="Select Trade"
                                     searchable
                                     withAsterisk
@@ -5940,843 +5748,6 @@ function RFQCreate() {
                                     }
                                   />
                                 )}
-                              </Grid.Col>
-                              <Grid.Col span={6}>
-                                <SearchableMultiSelect
-                                  label="Origin"
-                                  required
-                                  apiEndpoint={URL.portMaster}
-                                  placeholder="Type origin code or name"
-                                  searchFields={["port_code", "port_name"]}
-                                  displayFormat={portMasterDisplayFormat}
-                                  displayValues={
-                                    ((serviceForm.values.service_details[serviceIndex] as any)
-                                      ?.origin_display_values as Record<string, string>) || {}
-                                  }
-                                  value={rfqPortCodesFromRow(
-                                    serviceForm.values.service_details[serviceIndex] as any,
-                                    "origin"
-                                  )}
-                                  onChange={(values, selectedData) => {
-                                    const map = (selectedData || []).reduce(
-                                      (acc: Record<string, string>, it) => {
-                                        acc[it.value] = it.label;
-                                        return acc;
-                                      },
-                                      {}
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.origin_codes` as any,
-                                      values
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.origin_code`,
-                                      values?.[0] || ""
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.origin_name`,
-                                      selectedData?.[0]?.label?.split(" (")[0] || ""
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.origin_display_values` as any,
-                                      map
-                                    );
-                                    const cur =
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ] as any;
-                                    const nextRow = {
-                                      ...cur,
-                                      origin_codes: values,
-                                      origin_code: values?.[0] || "",
-                                      origin_name:
-                                        selectedData?.[0]?.label?.split(" (")[0] ||
-                                        "",
-                                      origin_display_values: map,
-                                    };
-                                    const pairs =
-                                      computeRfqExpandedPortPairsFromServiceDetail(
-                                        nextRow
-                                      );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.rfq_port_pair_refs`,
-                                      pruneRfqPortPairRefs(
-                                        cur.rfq_port_pair_refs,
-                                        pairs
-                                      )
-                                    );
-                                    const v = (values || [])
-                                      .map((x) => String(x).trim())
-                                      .filter(Boolean);
-                                    const { pickup_flags_by_origin, pickup_locations_by_origin } =
-                                      syncPickupMapsForOrigins(v, nextRow as Record<string, unknown>);
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.pickup_flags_by_origin`,
-                                      pickup_flags_by_origin
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.pickup_locations_by_origin`,
-                                      pickup_locations_by_origin
-                                    );
-                                    if (v.length <= 1) {
-                                      const only = v[0];
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.pickup`,
-                                        only
-                                          ? pickup_flags_by_origin[only] || "false"
-                                          : "false"
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.pickup_location`,
-                                        only ? pickup_locations_by_origin[only] || "" : ""
-                                      );
-                                    } else {
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.pickup`,
-                                        "false"
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.pickup_location`,
-                                        ""
-                                      );
-                                    }
-                                  }}
-                                  error={
-                                    serviceForm.errors[
-                                      `service_details.${serviceIndex}.origin_code`
-                                    ] as string
-                                  }
-                                  minSearchLength={3}
-                                  additionalParams={(() => {
-                                    const serviceName =
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.service?.toLowerCase();
-                                    if (serviceName === "fcl" || serviceName === "lcl") {
-                                      return { transport_mode: "SEA" };
-                                    }
-                                    if (serviceName === "air") {
-                                      return { transport_mode: "AIR" };
-                                    }
-                                    return undefined;
-                                  })()}
-                                  maxValues={rfqMaxPillsForSide(
-                                    serviceForm.values.service_details[
-                                      serviceIndex
-                                    ] as any,
-                                    "origin"
-                                  )}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={6}>
-                                <Grid>
-                                  {!rfqIsMultiOrigin(
-                                    serviceForm.values.service_details[
-                                      serviceIndex
-                                    ] as Record<string, unknown>
-                                  ) ? (
-                                    <>
-                                      <Grid.Col
-                                        span={
-                                          serviceForm.values.service_details[
-                                            serviceIndex
-                                          ]?.pickup === "true"
-                                            ? 4
-                                            : 12
-                                        }
-                                      >
-                                        <Radio.Group
-                                          label="Pickup"
-                                          styles={{
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }}
-                                          key={serviceForm.key(
-                                            `service_details.${serviceIndex}.pickup`
-                                          )}
-                                          {...serviceForm.getInputProps(
-                                            `service_details.${serviceIndex}.pickup`
-                                          )}
-                                          onChange={(v) => {
-                                            serviceForm.setFieldValue(
-                                              `service_details.${serviceIndex}.pickup`,
-                                              v
-                                            );
-                                            if (v === "false") {
-                                              serviceForm.setFieldValue(
-                                                `service_details.${serviceIndex}.pickup_location`,
-                                                ""
-                                              );
-                                            }
-                                          }}
-                                        >
-                                          <Group mt={10}>
-                                            <Radio
-                                              value="true"
-                                              label="Yes"
-                                              styles={{
-                                                label: {
-                                                  fontSize: "13px",
-                                                  fontWeight: 500,
-                                                  color: "#424242",
-                                                  marginBottom: "4px",
-                                                  fontFamily: "Inter",
-                                                  fontStyle: "medium",
-                                                },
-                                              }}
-                                            />
-                                            <Radio
-                                              value="false"
-                                              label="No"
-                                              styles={{
-                                                label: {
-                                                  fontSize: "13px",
-                                                  fontWeight: 500,
-                                                  color: "#424242",
-                                                  marginBottom: "4px",
-                                                  fontFamily: "Inter",
-                                                  fontStyle: "medium",
-                                                },
-                                              }}
-                                            />
-                                          </Group>
-                                        </Radio.Group>
-                                      </Grid.Col>
-                                      {serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.pickup === "true" && (
-                                        <Grid.Col span={8}>
-                                          <TextInput
-                                            label="Pickup Location"
-                                            styles={{
-                                              input: {
-                                                fontSize: "13px",
-                                                fontFamily: "Inter",
-                                                height: "36px",
-                                              },
-                                              label: {
-                                                fontSize: "13px",
-                                                fontWeight: 500,
-                                                color: "#424242",
-                                                marginBottom: "4px",
-                                                fontFamily: "Inter",
-                                                fontStyle: "medium",
-                                              },
-                                            }}
-                                            key={serviceForm.key(
-                                              `service_details.${serviceIndex}.pickup_location`
-                                            )}
-                                            value={
-                                              serviceForm.values.service_details[
-                                                serviceIndex
-                                              ]?.pickup_location || ""
-                                            }
-                                            onChange={(e) => {
-                                              const formattedValue = toTitleCase(
-                                                e.target.value
-                                              );
-                                              serviceForm.setFieldValue(
-                                                `service_details.${serviceIndex}.pickup_location`,
-                                                formattedValue
-                                              );
-                                            }}
-                                            error={
-                                              serviceForm.errors[
-                                                `service_details.${serviceIndex}.pickup_location`
-                                              ] as string
-                                            }
-                                          />
-                                        </Grid.Col>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <Grid.Col span={12}>
-                                      <Stack gap={0} mt={4}>
-                                        <Text
-                                          component="div"
-                                          style={RFQ_FORM_FIELD_LABEL_STYLE}
-                                        >
-                                          Pickup
-                                        </Text>
-                                        <Accordion
-                                          mt={4}
-                                          variant="contained"
-                                          radius="sm"
-                                          multiple
-                                          chevronSize={16}
-                                          styles={RFQ_FORM_ACCORDION_STYLES}
-                                        >
-                                          {rfqCodesFiltered(
-                                            serviceForm.values.service_details[
-                                              serviceIndex
-                                            ] as Record<string, unknown>,
-                                            "origin"
-                                          ).map((code) => {
-                                            const sd = serviceForm.values
-                                              .service_details[serviceIndex] as any;
-                                            const header =
-                                              sd?.origin_display_values?.[code] ||
-                                              rfqPortPillLabelFromApi(undefined, code);
-                                            const flags =
-                                              sd?.pickup_flags_by_origin || {};
-                                            const locs =
-                                              sd?.pickup_locations_by_origin || {};
-                                            const pickupYes = flags[code] === "true";
-                                            const hasPickupAddress =
-                                              String(locs[code] ?? "").trim().length > 0;
-                                            return (
-                                              <Accordion.Item key={code} value={code}>
-                                                <Accordion.Control>
-                                                  <Flex
-                                                    align="center"
-                                                    gap={6}
-                                                    style={{ flex: 1, minWidth: 0 }}
-                                                  >
-                                                    <Text
-                                                      component="span"
-                                                      style={{
-                                                        fontSize: "13px",
-                                                        fontWeight: 500,
-                                                        color: "#424242",
-                                                        fontFamily: "Inter",
-                                                        fontStyle: "medium",
-                                                        overflow: "hidden",
-                                                        textOverflow: "ellipsis",
-                                                        whiteSpace: "nowrap",
-                                                        flex: 1,
-                                                        minWidth: 0,
-                                                      }}
-                                                    >
-                                                      {header}
-                                                    </Text>
-                                                    {hasPickupAddress && (
-                                                      <IconPointFilled
-                                                        size={8}
-                                                        color="#105476"
-                                                        aria-hidden
-                                                        style={{ flexShrink: 0 }}
-                                                      />
-                                                    )}
-                                                  </Flex>
-                                                </Accordion.Control>
-                                                <Accordion.Panel>
-                                                  <Grid gutter="xs" align="flex-start">
-                                                    <Grid.Col span={pickupYes ? 4 : 12}>
-                                                      <Radio.Group
-                                                        label="Pickup"
-                                                        value={flags[code] || "false"}
-                                                        styles={{
-                                                          ...RFQ_FORM_RADIO_GROUP_STYLES,
-                                                          root: { marginBottom: 4 },
-                                                        }}
-                                                        onChange={(val) => {
-                                                          const next = {
-                                                            ...(sd?.pickup_flags_by_origin ||
-                                                              {}),
-                                                            [code]: val,
-                                                          };
-                                                          serviceForm.setFieldValue(
-                                                            `service_details.${serviceIndex}.pickup_flags_by_origin`,
-                                                            next
-                                                          );
-                                                          if (val === "false") {
-                                                            const locNext = {
-                                                              ...(sd?.pickup_locations_by_origin ||
-                                                                {}),
-                                                              [code]: "",
-                                                            };
-                                                            serviceForm.setFieldValue(
-                                                              `service_details.${serviceIndex}.pickup_locations_by_origin`,
-                                                              locNext
-                                                            );
-                                                          }
-                                                        }}
-                                                      >
-                                                        <Group mt={4} gap="sm" wrap="nowrap">
-                                                          <Radio
-                                                            value="true"
-                                                            label="Yes"
-                                                            styles={RFQ_FORM_RADIO_OPTION_STYLES}
-                                                          />
-                                                          <Radio
-                                                            value="false"
-                                                            label="No"
-                                                            styles={RFQ_FORM_RADIO_OPTION_STYLES}
-                                                          />
-                                                        </Group>
-                                                      </Radio.Group>
-                                                    </Grid.Col>
-                                                    {pickupYes && (
-                                                      <Grid.Col span={8}>
-                                                        <TextInput
-                                                          label="Pickup Location"
-                                                          styles={{
-                                                            ...RFQ_FORM_TEXT_INPUT_STYLES,
-                                                            root: { marginBottom: 4 },
-                                                          }}
-                                                          value={locs[code] || ""}
-                                                          onChange={(e) => {
-                                                            const formattedValue =
-                                                              toTitleCase(e.target.value);
-                                                            const locNext = {
-                                                              ...(sd?.pickup_locations_by_origin ||
-                                                                {}),
-                                                              [code]: formattedValue,
-                                                            };
-                                                            serviceForm.setFieldValue(
-                                                              `service_details.${serviceIndex}.pickup_locations_by_origin`,
-                                                              locNext
-                                                            );
-                                                          }}
-                                                          error={
-                                                            serviceForm.errors[
-                                                              `service_details.${serviceIndex}.pickup_locations_by_origin.${code}`
-                                                            ] as string
-                                                          }
-                                                        />
-                                                      </Grid.Col>
-                                                    )}
-                                                  </Grid>
-                                                </Accordion.Panel>
-                                              </Accordion.Item>
-                                            );
-                                          })}
-                                        </Accordion>
-                                      </Stack>
-                                    </Grid.Col>
-                                  )}
-                                </Grid>
-                              </Grid.Col>
-
-                              <Grid.Col span={6}>
-                                <SearchableMultiSelect
-                                  label="Destination"
-                                  required
-                                  apiEndpoint={URL.portMaster}
-                                  placeholder="Type destination code or name"
-                                  searchFields={["port_code", "port_name"]}
-                                  displayFormat={portMasterDisplayFormat}
-                                  displayValues={
-                                    ((serviceForm.values.service_details[serviceIndex] as any)
-                                      ?.destination_display_values as Record<string, string>) ||
-                                    {}
-                                  }
-                                  value={rfqPortCodesFromRow(
-                                    serviceForm.values.service_details[serviceIndex] as any,
-                                    "destination"
-                                  )}
-                                  onChange={(values, selectedData) => {
-                                    const map = (selectedData || []).reduce(
-                                      (acc: Record<string, string>, it) => {
-                                        acc[it.value] = it.label;
-                                        return acc;
-                                      },
-                                      {}
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.destination_codes` as any,
-                                      values
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.destination_code`,
-                                      values?.[0] || ""
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.destination_name`,
-                                      selectedData?.[0]?.label?.split(" (")[0] || ""
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.destination_display_values` as any,
-                                      map
-                                    );
-                                    const cur =
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ] as any;
-                                    const nextRow = {
-                                      ...cur,
-                                      destination_codes: values,
-                                      destination_code: values?.[0] || "",
-                                      destination_name:
-                                        selectedData?.[0]?.label?.split(" (")[0] ||
-                                        "",
-                                      destination_display_values: map,
-                                    };
-                                    const pairs =
-                                      computeRfqExpandedPortPairsFromServiceDetail(
-                                        nextRow
-                                      );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.rfq_port_pair_refs`,
-                                      pruneRfqPortPairRefs(
-                                        cur.rfq_port_pair_refs,
-                                        pairs
-                                      )
-                                    );
-                                    const v = (values || [])
-                                      .map((x) => String(x).trim())
-                                      .filter(Boolean);
-                                    const {
-                                      delivery_flags_by_destination,
-                                      delivery_locations_by_destination,
-                                    } = syncDeliveryMapsForDestinations(
-                                      v,
-                                      nextRow as Record<string, unknown>
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.delivery_flags_by_destination`,
-                                      delivery_flags_by_destination
-                                    );
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.delivery_locations_by_destination`,
-                                      delivery_locations_by_destination
-                                    );
-                                    if (v.length <= 1) {
-                                      const only = v[0];
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.delivery`,
-                                        only
-                                          ? delivery_flags_by_destination[only] || "false"
-                                          : "false"
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.delivery_location`,
-                                        only
-                                          ? delivery_locations_by_destination[only] || ""
-                                          : ""
-                                      );
-                                    } else {
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.delivery`,
-                                        "false"
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.delivery_location`,
-                                        ""
-                                      );
-                                    }
-                                  }}
-                                  error={
-                                    serviceForm.errors[
-                                      `service_details.${serviceIndex}.destination_code`
-                                    ] as string
-                                  }
-                                  minSearchLength={3}
-                                  additionalParams={(() => {
-                                    const serviceName =
-                                      serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.service?.toLowerCase();
-                                    if (serviceName === "fcl" || serviceName === "lcl") {
-                                      return { transport_mode: "SEA" };
-                                    }
-                                    if (serviceName === "air") {
-                                      return { transport_mode: "AIR" };
-                                    }
-                                    return undefined;
-                                  })()}
-                                  maxValues={rfqMaxPillsForSide(
-                                    serviceForm.values.service_details[
-                                      serviceIndex
-                                    ] as any,
-                                    "destination"
-                                  )}
-                                />
-                              </Grid.Col>
-
-                              <Grid.Col span={6}>
-                                <Grid>
-                                  {!rfqIsMultiDestination(
-                                    serviceForm.values.service_details[
-                                      serviceIndex
-                                    ] as Record<string, unknown>
-                                  ) ? (
-                                    <>
-                                      <Grid.Col
-                                        span={
-                                          serviceForm.values.service_details[
-                                            serviceIndex
-                                          ]?.delivery === "true"
-                                            ? 4
-                                            : 12
-                                        }
-                                      >
-                                        <Radio.Group
-                                          label="Delivery"
-                                          styles={{
-                                            label: {
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                              marginBottom: "4px",
-                                              fontFamily: "Inter",
-                                              fontStyle: "medium",
-                                            },
-                                          }}
-                                          key={serviceForm.key(
-                                            `service_details.${serviceIndex}.delivery`
-                                          )}
-                                          value={
-                                            serviceForm.values.service_details[
-                                              serviceIndex
-                                            ]?.delivery
-                                          }
-                                          onChange={(value) => {
-                                            serviceForm.setFieldValue(
-                                              `service_details.${serviceIndex}.delivery`,
-                                              value
-                                            );
-
-                                            if (value === "false") {
-                                              serviceForm.setFieldValue(
-                                                `service_details.${serviceIndex}.delivery_location`,
-                                                ""
-                                              );
-                                            }
-                                          }}
-                                        >
-                                          <Group mt={10}>
-                                            <Radio
-                                              value="true"
-                                              label="Yes"
-                                              styles={{
-                                                label: {
-                                                  fontSize: "13px",
-                                                  fontWeight: 500,
-                                                  color: "#424242",
-                                                  marginBottom: "4px",
-                                                  fontFamily: "Inter",
-                                                  fontStyle: "medium",
-                                                },
-                                              }}
-                                            />
-                                            <Radio
-                                              value="false"
-                                              label="No"
-                                              styles={{
-                                                label: {
-                                                  fontSize: "13px",
-                                                  fontWeight: 500,
-                                                  color: "#424242",
-                                                  marginBottom: "4px",
-                                                  fontFamily: "Inter",
-                                                  fontStyle: "medium",
-                                                },
-                                              }}
-                                            />
-                                          </Group>
-                                        </Radio.Group>
-                                      </Grid.Col>
-                                      {serviceForm.values.service_details[
-                                        serviceIndex
-                                      ]?.delivery === "true" && (
-                                        <Grid.Col span={8}>
-                                          <TextInput
-                                            key={serviceForm.key(
-                                              `service_details.${serviceIndex}.delivery_location`
-                                            )}
-                                            label="Delivery Location"
-                                            styles={{
-                                              input: {
-                                                fontSize: "13px",
-                                                fontFamily: "Inter",
-                                                height: "36px",
-                                              },
-                                              label: {
-                                                fontSize: "13px",
-                                                fontWeight: 500,
-                                                color: "#424242",
-                                                marginBottom: "4px",
-                                                fontFamily: "Inter",
-                                                fontStyle: "medium",
-                                              },
-                                            }}
-                                            value={
-                                              serviceForm.values.service_details[
-                                                serviceIndex
-                                              ]?.delivery_location || ""
-                                            }
-                                            onChange={(e) => {
-                                              const formattedValue = toTitleCase(
-                                                e.target.value
-                                              );
-                                              serviceForm.setFieldValue(
-                                                `service_details.${serviceIndex}.delivery_location`,
-                                                formattedValue
-                                              );
-                                            }}
-                                            error={
-                                              serviceForm.errors[
-                                                `service_details.${serviceIndex}.delivery_location`
-                                              ] as string
-                                            }
-                                          />
-                                        </Grid.Col>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <Grid.Col span={12}>
-                                      <Stack gap={0} mt={4}>
-                                        <Text
-                                          component="div"
-                                          style={RFQ_FORM_FIELD_LABEL_STYLE}
-                                        >
-                                          Delivery
-                                        </Text>
-                                        <Accordion
-                                          mt={4}
-                                          variant="contained"
-                                          radius="sm"
-                                          multiple
-                                          chevronSize={16}
-                                          styles={RFQ_FORM_ACCORDION_STYLES}
-                                        >
-                                          {rfqCodesFiltered(
-                                            serviceForm.values.service_details[
-                                              serviceIndex
-                                            ] as Record<string, unknown>,
-                                            "destination"
-                                          ).map((code) => {
-                                            const sd = serviceForm.values
-                                              .service_details[serviceIndex] as any;
-                                            const header =
-                                              sd?.destination_display_values?.[code] ||
-                                              rfqPortPillLabelFromApi(undefined, code);
-                                            const flags =
-                                              sd?.delivery_flags_by_destination || {};
-                                            const locs =
-                                              sd?.delivery_locations_by_destination || {};
-                                            const deliveryYes = flags[code] === "true";
-                                            const hasDeliveryAddress =
-                                              String(locs[code] ?? "").trim().length > 0;
-                                            return (
-                                              <Accordion.Item key={code} value={code}>
-                                                <Accordion.Control>
-                                                  <Flex
-                                                    align="center"
-                                                    gap={6}
-                                                    style={{ flex: 1, minWidth: 0 }}
-                                                  >
-                                                    <Text
-                                                      component="span"
-                                                      style={{
-                                                        fontSize: "13px",
-                                                        fontWeight: 500,
-                                                        color: "#424242",
-                                                        fontFamily: "Inter",
-                                                        fontStyle: "medium",
-                                                        overflow: "hidden",
-                                                        textOverflow: "ellipsis",
-                                                        whiteSpace: "nowrap",
-                                                        flex: 1,
-                                                        minWidth: 0,
-                                                      }}
-                                                    >
-                                                      {header}
-                                                    </Text>
-                                                    {hasDeliveryAddress && (
-                                                      <IconPointFilled
-                                                        size={8}
-                                                        color="#105476"
-                                                        aria-hidden
-                                                        style={{ flexShrink: 0 }}
-                                                      />
-                                                    )}
-                                                  </Flex>
-                                                </Accordion.Control>
-                                                <Accordion.Panel>
-                                                  <Grid gutter="xs" align="flex-start">
-                                                    <Grid.Col span={deliveryYes ? 4 : 12}>
-                                                      <Radio.Group
-                                                        label="Delivery"
-                                                        value={flags[code] || "false"}
-                                                        styles={{
-                                                          ...RFQ_FORM_RADIO_GROUP_STYLES,
-                                                          root: { marginBottom: 4 },
-                                                        }}
-                                                        onChange={(val) => {
-                                                          const next = {
-                                                            ...(sd?.delivery_flags_by_destination ||
-                                                              {}),
-                                                            [code]: val,
-                                                          };
-                                                          serviceForm.setFieldValue(
-                                                            `service_details.${serviceIndex}.delivery_flags_by_destination`,
-                                                            next
-                                                          );
-                                                          if (val === "false") {
-                                                            const locNext = {
-                                                              ...(sd?.delivery_locations_by_destination ||
-                                                                {}),
-                                                              [code]: "",
-                                                            };
-                                                            serviceForm.setFieldValue(
-                                                              `service_details.${serviceIndex}.delivery_locations_by_destination`,
-                                                              locNext
-                                                            );
-                                                          }
-                                                        }}
-                                                      >
-                                                        <Group mt={4} gap="sm" wrap="nowrap">
-                                                          <Radio
-                                                            value="true"
-                                                            label="Yes"
-                                                            styles={RFQ_FORM_RADIO_OPTION_STYLES}
-                                                          />
-                                                          <Radio
-                                                            value="false"
-                                                            label="No"
-                                                            styles={RFQ_FORM_RADIO_OPTION_STYLES}
-                                                          />
-                                                        </Group>
-                                                      </Radio.Group>
-                                                    </Grid.Col>
-                                                    {deliveryYes && (
-                                                      <Grid.Col span={8}>
-                                                        <FormTextInput
-                                                          label="Delivery Location"
-                                                          styles={{
-                                                            ...RFQ_FORM_TEXT_INPUT_STYLES,
-                                                            root: { marginBottom: 4 },
-                                                          }}
-                                                          value={locs[code] || ""}
-                                                          onChange={(e) => {
-                                                            const formattedValue =
-                                                              toTitleCase(e.target.value);
-                                                            const locNext = {
-                                                              ...(sd?.delivery_locations_by_destination ||
-                                                                {}),
-                                                              [code]: formattedValue,
-                                                            };
-                                                            serviceForm.setFieldValue(
-                                                              `service_details.${serviceIndex}.delivery_locations_by_destination`,
-                                                              locNext
-                                                            );
-                                                          }}
-                                                          error={
-                                                            serviceForm.errors[
-                                                              `service_details.${serviceIndex}.delivery_locations_by_destination.${code}`
-                                                            ] as string
-                                                          }
-                                                        />
-                                                      </Grid.Col>
-                                                    )}
-                                                  </Grid>
-                                                </Accordion.Panel>
-                                              </Accordion.Item>
-                                            );
-                                          })}
-                                        </Accordion>
-                                      </Stack>
-                                    </Grid.Col>
-                                  )}
-                                </Grid>
                               </Grid.Col>
 
                               <Grid.Col span={3}>
@@ -6842,191 +5813,7 @@ function RFQCreate() {
                                   />
                                 </Grid.Col>
                               )}
-                              <Grid.Col span={6}>
-                                <Dropdown
-                                  key={serviceForm.key(
-                                    `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
-                                  )}
-                                  styles={{
-                                    input: {
-                                      fontSize: "13px",
-                                      fontFamily: "Inter",
-                                      height: "36px",
-                                    },
-                                    label: {
-                                      fontSize: "13px",
-                                      fontWeight: 500,
-                                      color: "#424242",
-                                      marginBottom: "4px",
-                                      fontFamily: "Inter",
-                                      fontStyle: "medium",
-                                    },
-                                  }}
-                                  searchable
-                                  label="Hazardous Cargo"
-                                  withAsterisk
-                                  placeholder="Select Hazardous"
-                                  data={["Yes", "No"]}
-                                  value={
-                                    serviceForm.values.service_details[
-                                      serviceIndex
-                                    ]?.cargo_details?.[0]?.hazardous_cargo
-                                  }
-                                  onChange={(value) => {
-                                    serviceForm.setFieldValue(
-                                      `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`,
-                                      value || ""
-                                    );
-
-                                    // Clear un_no, class, and pkg_group if "No" is selected
-                                    if (value === "No") {
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.cargo_details.0.un_no`,
-                                        null
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.cargo_details.0.class`,
-                                        null
-                                      );
-                                      serviceForm.setFieldValue(
-                                        `service_details.${serviceIndex}.cargo_details.0.pkg_group`,
-                                        null
-                                      );
-                                    }
-                                  }}
-                                  error={
-                                    serviceForm.errors[
-                                      `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
-                                    ] as string
-                                  }
-                                />
-                              </Grid.Col>
-                              {serviceForm.values.service_details[serviceIndex]
-                                ?.cargo_details?.[0]?.hazardous_cargo ===
-                                "Yes" && (
-                                <>
-                                  <Grid.Col span={6}>
-                                    <TextInput
-                                      key={serviceForm.key(
-                                        `service_details.${serviceIndex}.cargo_details.0.un_no`
-                                      )}
-                                      label="UN no"
-                                      withAsterisk
-                                      styles={{
-                                        input: {
-                                          fontSize: "13px",
-                                          fontFamily: "Inter",
-                                          height: "36px",
-                                        },
-                                        label: {
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          color: "#424242",
-                                          marginBottom: "4px",
-                                          fontFamily: "Inter",
-                                          fontStyle: "medium",
-                                        },
-                                      }}
-                                      value={
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.cargo_details?.[0]?.un_no || ""
-                                      }
-                                      onChange={(e) => {
-                                        serviceForm.setFieldValue(
-                                          `service_details.${serviceIndex}.cargo_details.0.un_no`,
-                                          e.target.value
-                                        );
-                                      }}
-                                      error={
-                                        serviceForm.errors[
-                                          `service_details.${serviceIndex}.cargo_details.0.un_no`
-                                        ] as string
-                                      }
-                                    />
-                                  </Grid.Col>
-                                  <Grid.Col span={6}>
-                                    <TextInput
-                                      key={serviceForm.key(
-                                        `service_details.${serviceIndex}.cargo_details.0.class`
-                                      )}
-                                      label="Class"
-                                      withAsterisk
-                                      styles={{
-                                        input: {
-                                          fontSize: "13px",
-                                          fontFamily: "Inter",
-                                          height: "36px",
-                                        },
-                                        label: {
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          color: "#424242",
-                                          marginBottom: "4px",
-                                          fontFamily: "Inter",
-                                          fontStyle: "medium",
-                                        },
-                                      }}
-                                      value={
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.cargo_details?.[0]?.class || ""
-                                      }
-                                      onChange={(e) => {
-                                        serviceForm.setFieldValue(
-                                          `service_details.${serviceIndex}.cargo_details.0.class`,
-                                          e.target.value
-                                        );
-                                      }}
-                                      error={
-                                        serviceForm.errors[
-                                          `service_details.${serviceIndex}.cargo_details.0.class`
-                                        ] as string
-                                      }
-                                    />
-                                  </Grid.Col>
-                                  <Grid.Col span={6}>
-                                    <TextInput
-                                      key={serviceForm.key(
-                                        `service_details.${serviceIndex}.cargo_details.0.pkg_group`
-                                      )}
-                                      label="PKG Group"
-                                      withAsterisk
-                                      styles={{
-                                        input: {
-                                          fontSize: "13px",
-                                          fontFamily: "Inter",
-                                          height: "36px",
-                                        },
-                                        label: {
-                                          fontSize: "13px",
-                                          fontWeight: 500,
-                                          color: "#424242",
-                                          marginBottom: "4px",
-                                          fontFamily: "Inter",
-                                          fontStyle: "medium",
-                                        },
-                                      }}
-                                      value={
-                                        serviceForm.values.service_details[
-                                          serviceIndex
-                                        ]?.cargo_details?.[0]?.pkg_group || ""
-                                      }
-                                      onChange={(e) => {
-                                        serviceForm.setFieldValue(
-                                          `service_details.${serviceIndex}.cargo_details.0.pkg_group`,
-                                          e.target.value
-                                        );
-                                      }}
-                                      error={
-                                        serviceForm.errors[
-                                          `service_details.${serviceIndex}.cargo_details.0.pkg_group`
-                                        ] as string
-                                      }
-                                    />
-                                  </Grid.Col>
-                                </>
-                              )}
+                              
                               
                               <Grid.Col span={6}>
                                 <TextInput
@@ -7142,23 +5929,961 @@ function RFQCreate() {
                                   )}
                                 />
                               </Grid.Col>
+                              <Grid.Col span={3}>
+                                <Dropdown
+                                  key={serviceForm.key(
+                                    `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
+                                  )}
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                      height: "36px",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                      fontStyle: "medium",
+                                    },
+                                  }}
+                                  searchable
+                                  label="Hazardous Cargo"
+                                  withAsterisk
+                                  placeholder="Select Hazardous"
+                                  data={["Yes", "No"]}
+                                  value={
+                                    serviceForm.values.service_details[
+                                      serviceIndex
+                                    ]?.cargo_details?.[0]?.hazardous_cargo
+                                  }
+                                  onChange={(value) => {
+                                    serviceForm.setFieldValue(
+                                      `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`,
+                                      value || ""
+                                    );
+
+                                    // Clear un_no, class, and pkg_group if "No" is selected
+                                    if (value === "No") {
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.cargo_details.0.un_no`,
+                                        null
+                                      );
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.cargo_details.0.class`,
+                                        null
+                                      );
+                                      serviceForm.setFieldValue(
+                                        `service_details.${serviceIndex}.cargo_details.0.pkg_group`,
+                                        null
+                                      );
+                                    }
+                                  }}
+                                  error={
+                                    serviceForm.errors[
+                                      `service_details.${serviceIndex}.cargo_details.0.hazardous_cargo`
+                                    ] as string
+                                  }
+                                />
+                              </Grid.Col>
+                              {serviceForm.values.service_details[serviceIndex]
+                                ?.cargo_details?.[0]?.hazardous_cargo ===
+                                "Yes" && (
+                                <>
+                                  <Grid.Col span={3}>
+                                    <TextInput
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.cargo_details.0.un_no`
+                                      )}
+                                      label="UN no"
+                                      withAsterisk
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.cargo_details?.[0]?.un_no || ""
+                                      }
+                                      onChange={(e) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.cargo_details.0.un_no`,
+                                          e.target.value
+                                        );
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.cargo_details.0.un_no`
+                                        ] as string
+                                      }
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={3}>
+                                    <TextInput
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.cargo_details.0.class`
+                                      )}
+                                      label="Class"
+                                      withAsterisk
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.cargo_details?.[0]?.class || ""
+                                      }
+                                      onChange={(e) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.cargo_details.0.class`,
+                                          e.target.value
+                                        );
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.cargo_details.0.class`
+                                        ] as string
+                                      }
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={3}>
+                                    <TextInput
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.cargo_details.0.pkg_group`
+                                      )}
+                                      label="PKG Group"
+                                      withAsterisk
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.cargo_details?.[0]?.pkg_group || ""
+                                      }
+                                      onChange={(e) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.cargo_details.0.pkg_group`,
+                                          e.target.value
+                                        );
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.cargo_details.0.pkg_group`
+                                        ] as string
+                                      }
+                                    />
+                                  </Grid.Col>
+                                </>
+                              )}
                             </Grid>
+                            </>
+                          );
+                        })()}
+
+                        {/* SECTION B — Port & Cargo Details */}
+                        <Divider my="lg" color="#105476" />
+
+                        {serviceForm.values.service_details.map(
+                          (serviceDetail, serviceIndex) => (
+                            <Box key={(serviceDetail as any).id || serviceIndex}>
+                                <Flex justify="space-between" mb="xs" gap="md">
+                                  <Text size="sm"
+                                      fw={600}
+                                      c="#105476"
+                                      style={{
+                                        paddingBottom: "4px",
+                                        fontFamily: "Inter",
+                                        fontStyle: "semibold",
+                                        fontSize: "16px",
+                                        color: "#105476",
+                                      }} >Port & Cargo Details {serviceForm.values.service_details.length > 1 && `(${serviceIndex + 1})`}</Text>
+                                  <Group gap={"sm"}>
+                                    <Button
+                                      variant="filled"
+                                      color="#105476"
+                                      size="xs"
+                                      leftSection={<IconPlus size={14} />}
+                                      styles={{
+                                        root: {
+                                          fontWeight: 500,
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                        },
+                                      }}
+                                      onClick={() => {
+                                        const cur =
+                                          serviceForm.values.service_details[0];
+                                        serviceForm.insertListItem(
+                                          "service_details",
+                                          {
+                                            id: "",
+                                            service: cur.service,
+                                            trade: cur.trade,
+                                            service_code: cur.service_code,
+                                            service_name: cur.service_name,
+                                            shipment_terms_code:
+                                              cur.shipment_terms_code,
+                                            icd: cur.icd,
+                                            service_remark: cur.service_remark,
+                                            commodity: cur.commodity,
+                                            origin_code: "",
+                                            origin_name: "",
+                                            origin_codes: [] as string[],
+                                            origin_display_values:
+                                              {} as Record<string, string>,
+                                            destination_code: "",
+                                            destination_name: "",
+                                            destination_codes: [] as string[],
+                                            destination_display_values:
+                                              {} as Record<string, string>,
+                                            rfq_port_pair_refs: [] as Array<{
+                                              id?: number | string;
+                                              origin_code: string;
+                                              destination_code: string;
+                                            }>,
+                                            pickup: "false",
+                                            delivery: "false",
+                                            pickup_location: "",
+                                            delivery_location: "",
+                                            pickup_flags_by_origin:
+                                              {} as Record<
+                                                string,
+                                                "true" | "false"
+                                              >,
+                                            pickup_locations_by_origin:
+                                              {} as Record<string, string>,
+                                            delivery_flags_by_destination:
+                                              {} as Record<
+                                                string,
+                                                "true" | "false"
+                                              >,
+                                            delivery_locations_by_destination:
+                                              {} as Record<string, string>,
+                                            dimension_unit: "Centimeter",
+                                            diemensions: [],
+                                            cargo_details: [
+                                              {
+                                                id: null,
+                                                no_of_packages: null,
+                                                gross_weight: null,
+                                                volume_weight: null,
+                                                chargable_weight: null,
+                                                volume: null,
+                                                chargable_volume: null,
+                                                container_type_code: null,
+                                                no_of_containers: null,
+                                                hazardous_cargo: cur.cargo_details?.[0]?.hazardous_cargo ?? "No",
+                                                un_no: cur.cargo_details?.[0]?.hazardous_cargo === "Yes" ? (cur.cargo_details?.[0]?.un_no ?? null) : null,
+                                                class: cur.cargo_details?.[0]?.hazardous_cargo === "Yes" ? (cur.cargo_details?.[0]?.class ?? null) : null,
+                                                pkg_group: cur.cargo_details?.[0]?.hazardous_cargo === "Yes" ? (cur.cargo_details?.[0]?.pkg_group ?? null) : null,
+                                                stackable: cur.cargo_details?.[0]?.stackable ?? "Yes",
+                                              },
+                                            ],
+                                          },
+                                          serviceForm.values.service_details.length
+                                        );
+                                      }}
+                                    >
+                                      Add Port Pair
+                                    </Button>
+                                    {serviceForm.values.service_details.length > 1 && (
+                                      <Button
+                                        variant="subtle"
+                                        color="red"
+                                        size="xs"
+                                        p={"xs"}
+                                        styles={{
+                                          root: { minWidth: "auto", height: "auto" },
+                                        }}
+                                        onClick={() => {
+                                          serviceForm.removeListItem(
+                                            "service_details",
+                                            serviceIndex
+                                          );
+                                        }}
+                                      >
+                                        <IconTrash size={20} color="#dc3545" />
+                                      </Button>
+                                    )}
+                                  </Group>
+                                </Flex>
+
+                                <Grid>
+                                  <Grid.Col span={6}>
+                                    <SearchableSelect
+                                      label="Origin"
+                                      required
+                                      apiEndpoint={URL.portMaster}
+                                      placeholder="Type origin code or name"
+                                      searchFields={["port_code", "port_name"]}
+                                      displayFormat={portMasterDisplayFormat}
+                                      dropdownZIndex={5}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.origin_code || null
+                                      }
+                                      displayValue={(() => {
+                                        const sd = serviceForm.values
+                                          .service_details[
+                                            serviceIndex
+                                          ] as any;
+                                        const code = sd?.origin_code || "";
+                                        if (!code) return "";
+                                        return (
+                                          sd?.origin_display_values?.[code] ||
+                                          rfqPortPillLabelFromApi(
+                                            sd?.origin_name,
+                                            code
+                                          ) ||
+                                          ""
+                                        );
+                                      })()}
+                                      onChange={(value, selectedData) => {
+                                        const label =
+                                          selectedData?.label || "";
+                                        const code = value || "";
+                                        const cur =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ] as any;
+                                        if (code) {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.origin_code`,
+                                            code
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.origin_codes` as any,
+                                            [code]
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.origin_name`,
+                                            label.split(" (")[0]
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.origin_display_values` as any,
+                                            { [code]: label }
+                                          );
+                                          const currentPickup = (
+                                            (cur?.pickup || "false") as "true" | "false"
+                                          );
+                                          const currentPickupLoc =
+                                            cur?.pickup_location || "";
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.pickup_flags_by_origin`,
+                                            { [code]: currentPickup }
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.pickup_locations_by_origin`,
+                                            { [code]: currentPickupLoc }
+                                          );
+                                          const nextRow = {
+                                            ...cur,
+                                            origin_code: code,
+                                            origin_codes: [code],
+                                            origin_name: label.split(" (")[0],
+                                            origin_display_values: {
+                                              [code]: label,
+                                            },
+                                          };
+                                          const pairs =
+                                            computeRfqExpandedPortPairsFromServiceDetail(
+                                              nextRow
+                                            );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.rfq_port_pair_refs`,
+                                            pruneRfqPortPairRefs(
+                                              cur.rfq_port_pair_refs,
+                                              pairs
+                                            )
+                                          );
+                                        } else {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.origin_code`,
+                                            ""
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.origin_codes` as any,
+                                            []
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.origin_name`,
+                                            ""
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.origin_display_values` as any,
+                                            {}
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.pickup_flags_by_origin`,
+                                            {}
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.pickup_locations_by_origin`,
+                                            {}
+                                          );
+                                          const nextRow = {
+                                            ...cur,
+                                            origin_code: "",
+                                            origin_codes: [],
+                                            origin_name: "",
+                                            origin_display_values: {},
+                                          };
+                                          const pairs =
+                                            computeRfqExpandedPortPairsFromServiceDetail(
+                                              nextRow
+                                            );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.rfq_port_pair_refs`,
+                                            pruneRfqPortPairRefs(
+                                              cur.rfq_port_pair_refs,
+                                              pairs
+                                            )
+                                          );
+                                        }
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.origin_code`
+                                        ] as string
+                                      }
+                                      minSearchLength={3}
+                                      additionalParams={(() => {
+                                        const serviceName =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.service?.toLowerCase();
+                                        if (
+                                          serviceName === "fcl" ||
+                                          serviceName === "lcl"
+                                        ) {
+                                          return { transport_mode: "SEA" };
+                                        }
+                                        if (serviceName === "air") {
+                                          return { transport_mode: "AIR" };
+                                        }
+                                        return undefined;
+                                      })()}
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                    />
+                                  </Grid.Col>
+                                  {/* <Grid.Col
+                                    span={2}
+                                  >
+                                    <Radio.Group
+                                      label="Pickup"
+                                      styles={{
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.pickup`
+                                      )}
+                                      {...serviceForm.getInputProps(
+                                        `service_details.${serviceIndex}.pickup`
+                                      )}
+                                      onChange={(v) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.pickup`,
+                                          v
+                                        );
+                                        if (v === "false") {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.pickup_location`,
+                                            ""
+                                          );
+                                        }
+                                        const code =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.origin_code || "";
+                                        if (code) {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.pickup_flags_by_origin`,
+                                            { [code]: v as "true" | "false" }
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <Group mt={10}>
+                                        <Radio
+                                          value="true"
+                                          label="Yes"
+                                          styles={{
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                        />
+                                        <Radio
+                                          value="false"
+                                          label="No"
+                                          styles={{
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                        />
+                                      </Group>
+                                    </Radio.Group>
+                                  </Grid.Col>
+                                  {serviceForm.values.service_details[
+                                    serviceIndex
+                                  ]?.pickup === "true" && (
+                                    <Grid.Col span={4}>
+                                      <TextInput
+                                        label="Pickup Location"
+                                        styles={{
+                                          input: {
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            height: "36px",
+                                          },
+                                          label: {
+                                            fontSize: "13px",
+                                            fontWeight: 500,
+                                            color: "#424242",
+                                            marginBottom: "4px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
+                                          },
+                                        }}
+                                        key={serviceForm.key(
+                                          `service_details.${serviceIndex}.pickup_location`
+                                        )}
+                                        value={
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.pickup_location || ""
+                                        }
+                                        onChange={(e) => {
+                                          const formattedValue = toTitleCase(
+                                            e.target.value
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.pickup_location`,
+                                            formattedValue
+                                          );
+                                          const code =
+                                            serviceForm.values.service_details[
+                                              serviceIndex
+                                            ]?.origin_code || "";
+                                          if (code) {
+                                            serviceForm.setFieldValue(
+                                              `service_details.${serviceIndex}.pickup_locations_by_origin`,
+                                              { [code]: formattedValue }
+                                            );
+                                          }
+                                        }}
+                                        error={
+                                          serviceForm.errors[
+                                            `service_details.${serviceIndex}.pickup_location`
+                                          ] as string
+                                        }
+                                      />
+                                    </Grid.Col>
+                                  )} */}
+                                  <Grid.Col span={6}>
+                                    <SearchableSelect
+                                      label="Destination"
+                                      required
+                                      apiEndpoint={URL.portMaster}
+                                      placeholder="Type destination code or name"
+                                      searchFields={["port_code", "port_name"]}
+                                      displayFormat={portMasterDisplayFormat}
+                                      dropdownZIndex={5}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.destination_code || null
+                                      }
+                                      displayValue={(() => {
+                                        const sd = serviceForm.values
+                                          .service_details[
+                                            serviceIndex
+                                          ] as any;
+                                        const code =
+                                          sd?.destination_code || "";
+                                        if (!code) return "";
+                                        return (
+                                          sd?.destination_display_values?.[
+                                            code
+                                          ] ||
+                                          rfqPortPillLabelFromApi(
+                                            sd?.destination_name,
+                                            code
+                                          ) ||
+                                          ""
+                                        );
+                                      })()}
+                                      onChange={(value, selectedData) => {
+                                        const label =
+                                          selectedData?.label || "";
+                                        const code = value || "";
+                                        const cur =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ] as any;
+                                        if (code) {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.destination_code`,
+                                            code
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.destination_codes` as any,
+                                            [code]
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.destination_name`,
+                                            label.split(" (")[0]
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.destination_display_values` as any,
+                                            { [code]: label }
+                                          );
+                                          const currentDelivery = (
+                                            (cur?.delivery ||
+                                              "false") as "true" | "false"
+                                          );
+                                          const currentDeliveryLoc =
+                                            cur?.delivery_location || "";
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_flags_by_destination`,
+                                            { [code]: currentDelivery }
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_locations_by_destination`,
+                                            { [code]: currentDeliveryLoc }
+                                          );
+                                          const nextRow = {
+                                            ...cur,
+                                            destination_code: code,
+                                            destination_codes: [code],
+                                            destination_name:
+                                              label.split(" (")[0],
+                                            destination_display_values: {
+                                              [code]: label,
+                                            },
+                                          };
+                                          const pairs =
+                                            computeRfqExpandedPortPairsFromServiceDetail(
+                                              nextRow
+                                            );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.rfq_port_pair_refs`,
+                                            pruneRfqPortPairRefs(
+                                              cur.rfq_port_pair_refs,
+                                              pairs
+                                            )
+                                          );
+                                        } else {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.destination_code`,
+                                            ""
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.destination_codes` as any,
+                                            []
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.destination_name`,
+                                            ""
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.destination_display_values` as any,
+                                            {}
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_flags_by_destination`,
+                                            {}
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_locations_by_destination`,
+                                            {}
+                                          );
+                                          const nextRow = {
+                                            ...cur,
+                                            destination_code: "",
+                                            destination_codes: [],
+                                            destination_name: "",
+                                            destination_display_values: {},
+                                          };
+                                          const pairs =
+                                            computeRfqExpandedPortPairsFromServiceDetail(
+                                              nextRow
+                                            );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.rfq_port_pair_refs`,
+                                            pruneRfqPortPairRefs(
+                                              cur.rfq_port_pair_refs,
+                                              pairs
+                                            )
+                                          );
+                                        }
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.destination_code`
+                                        ] as string
+                                      }
+                                      minSearchLength={3}
+                                      additionalParams={(() => {
+                                        const serviceName =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.service?.toLowerCase();
+                                        if (
+                                          serviceName === "fcl" ||
+                                          serviceName === "lcl"
+                                        ) {
+                                          return { transport_mode: "SEA" };
+                                        }
+                                        if (serviceName === "air") {
+                                          return { transport_mode: "AIR" };
+                                        }
+                                        return undefined;
+                                      })()}
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                    />
+                                  </Grid.Col>
+                                  {/* <Grid.Col
+                                    span={2}
+                                  >
+                                    <Radio.Group
+                                      label="Delivery"
+                                      styles={{
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.delivery`
+                                      )}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.delivery
+                                      }
+                                      onChange={(value) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.delivery`,
+                                          value
+                                        );
+                                        if (value === "false") {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_location`,
+                                            ""
+                                          );
+                                        }
+                                        const code =
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.destination_code || "";
+                                        if (code) {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_flags_by_destination`,
+                                            { [code]: value as "true" | "false" }
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <Group mt={10}>
+                                        <Radio
+                                          value="true"
+                                          label="Yes"
+                                          styles={{
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                        />
+                                        <Radio
+                                          value="false"
+                                          label="No"
+                                          styles={{
+                                            label: {
+                                              fontSize: "13px",
+                                              fontWeight: 500,
+                                              color: "#424242",
+                                              marginBottom: "4px",
+                                              fontFamily: "Inter",
+                                              fontStyle: "medium",
+                                            },
+                                          }}
+                                        />
+                                      </Group>
+                                    </Radio.Group>
+                                  </Grid.Col>
+                                  {serviceForm.values.service_details[
+                                    serviceIndex
+                                  ]?.delivery === "true" && (
+                                    <Grid.Col span={4}>
+                                      <TextInput
+                                        key={serviceForm.key(
+                                          `service_details.${serviceIndex}.delivery_location`
+                                        )}
+                                        label="Delivery Location"
+                                        styles={{
+                                          input: {
+                                            fontSize: "13px",
+                                            fontFamily: "Inter",
+                                            height: "36px",
+                                          },
+                                          label: {
+                                            fontSize: "13px",
+                                            fontWeight: 500,
+                                            color: "#424242",
+                                            marginBottom: "4px",
+                                            fontFamily: "Inter",
+                                            fontStyle: "medium",
+                                          },
+                                        }}
+                                        value={
+                                          serviceForm.values.service_details[
+                                            serviceIndex
+                                          ]?.delivery_location || ""
+                                        }
+                                        onChange={(e) => {
+                                          const formattedValue = toTitleCase(
+                                            e.target.value
+                                          );
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.delivery_location`,
+                                            formattedValue
+                                          );
+                                          const code =
+                                            serviceForm.values.service_details[
+                                              serviceIndex
+                                            ]?.destination_code || "";
+                                          if (code) {
+                                            serviceForm.setFieldValue(
+                                              `service_details.${serviceIndex}.delivery_locations_by_destination`,
+                                              { [code]: formattedValue }
+                                            );
+                                          }
+                                        }}
+                                        error={
+                                          serviceForm.errors[
+                                            `service_details.${serviceIndex}.delivery_location`
+                                          ] as string
+                                        }
+                                      />
+                                    </Grid.Col>
+                                  )} */}
+                                </Grid>
 
                             {/* Cargo Details for this specific service */}
-                            {serviceDetail.service &&
+                            {(serviceForm.values.service_details[0]?.service ||
+                              serviceDetail.service) &&
                               (() => {
                                 // Determine effective service type for rendering (for OTHERS, determine from selected service)
+                                const commonServiceDetail =
+                                  serviceForm.values.service_details[0] ||
+                                  serviceDetail;
                                 let effectiveServiceType =
-                                  serviceDetail.service;
+                                  commonServiceDetail.service;
                                 if (
-                                  serviceDetail.service === "OTHERS" &&
-                                  serviceDetail.service_code
+                                  commonServiceDetail.service === "OTHERS" &&
+                                  commonServiceDetail.service_code
                                 ) {
                                   const selectedOtherService =
                                     otherServicesData.find(
                                       (item) =>
                                         item.value ===
-                                        serviceDetail.service_code
+                                        commonServiceDetail.service_code
                                     );
                                   if (selectedOtherService) {
                                     const transportMode =
@@ -7187,7 +6912,7 @@ function RFQCreate() {
                                     align="center"
                                     justify="space-between"
                                     mt="lg"
-                                    mb="md"
+                                    mb="xs"
                                   >
                                     <Text
                                       size="md"
@@ -7205,17 +6930,20 @@ function RFQCreate() {
                                     </Text>
                                     {(() => {
                                       // Determine effective service type for rendering
+                                      const commonServiceDetail =
+                                        serviceForm.values.service_details[0] ||
+                                        serviceDetail;
                                       let effectiveServiceType =
-                                        serviceDetail.service;
+                                        commonServiceDetail.service;
                                       if (
-                                        serviceDetail.service === "OTHERS" &&
-                                        serviceDetail.service_code
+                                        commonServiceDetail.service === "OTHERS" &&
+                                        commonServiceDetail.service_code
                                       ) {
                                         const selectedOtherService =
                                           otherServicesData.find(
                                             (item) =>
                                               item.value ===
-                                              serviceDetail.service_code
+                                              commonServiceDetail.service_code
                                           );
                                         if (selectedOtherService) {
                                           const transportMode =
@@ -7243,17 +6971,20 @@ function RFQCreate() {
                                     })() === "AIR" ||
                                     (() => {
                                       // Determine effective service type for rendering
+                                      const commonServiceDetail =
+                                        serviceForm.values.service_details[0] ||
+                                        serviceDetail;
                                       let effectiveServiceType =
-                                        serviceDetail.service;
+                                        commonServiceDetail.service;
                                       if (
-                                        serviceDetail.service === "OTHERS" &&
-                                        serviceDetail.service_code
+                                        commonServiceDetail.service === "OTHERS" &&
+                                        commonServiceDetail.service_code
                                       ) {
                                         const selectedOtherService =
                                           otherServicesData.find(
                                             (item) =>
                                               item.value ===
-                                              serviceDetail.service_code
+                                              commonServiceDetail.service_code
                                           );
                                         if (selectedOtherService) {
                                           const transportMode =
@@ -7540,17 +7271,20 @@ function RFQCreate() {
                                   {/* Cargo Details Form */}
                                   {(() => {
                                     // Determine effective service type for rendering
+                                    const commonServiceDetail =
+                                      serviceForm.values.service_details[0] ||
+                                      serviceDetail;
                                     let effectiveServiceType =
-                                      serviceDetail.service;
+                                      commonServiceDetail.service;
                                     if (
-                                      serviceDetail.service === "OTHERS" &&
-                                      serviceDetail.service_code
+                                      commonServiceDetail.service === "OTHERS" &&
+                                      commonServiceDetail.service_code
                                     ) {
                                       const selectedOtherService =
                                         otherServicesData.find(
                                           (item) =>
                                             item.value ===
-                                            serviceDetail.service_code
+                                            commonServiceDetail.service_code
                                         );
                                       if (selectedOtherService) {
                                         const transportMode =
@@ -8209,17 +7943,20 @@ function RFQCreate() {
 
                                   {(() => {
                                     // Determine effective service type for rendering
+                                    const commonServiceDetail =
+                                      serviceForm.values.service_details[0] ||
+                                      serviceDetail;
                                     let effectiveServiceType =
-                                      serviceDetail.service;
+                                      commonServiceDetail.service;
                                     if (
-                                      serviceDetail.service === "OTHERS" &&
-                                      serviceDetail.service_code
+                                      commonServiceDetail.service === "OTHERS" &&
+                                      commonServiceDetail.service_code
                                     ) {
                                       const selectedOtherService =
                                         otherServicesData.find(
                                           (item) =>
                                             item.value ===
-                                            serviceDetail.service_code
+                                            commonServiceDetail.service_code
                                         );
                                       if (selectedOtherService) {
                                         const transportMode =
@@ -8922,17 +8659,20 @@ function RFQCreate() {
 
                                   {(() => {
                                     // Determine effective service type for rendering
+                                    const commonServiceDetail =
+                                      serviceForm.values.service_details[0] ||
+                                      serviceDetail;
                                     let effectiveServiceType =
-                                      serviceDetail.service;
+                                      commonServiceDetail.service;
                                     if (
-                                      serviceDetail.service === "OTHERS" &&
-                                      serviceDetail.service_code
+                                      commonServiceDetail.service === "OTHERS" &&
+                                      commonServiceDetail.service_code
                                     ) {
                                       const selectedOtherService =
                                         otherServicesData.find(
                                           (item) =>
                                             item.value ===
-                                            serviceDetail.service_code
+                                            commonServiceDetail.service_code
                                         );
                                       if (selectedOtherService) {
                                         const transportMode =
@@ -9131,86 +8871,14 @@ function RFQCreate() {
                                   )}
                                 </>
                               )}
-                          </Box>
-                        )
-                      )}
+                              {serviceIndex < serviceForm.values.service_details.length - 1 && (
+                                <Divider my="lg" color="#105476" />
+                              )}
+                            </Box>
+                          )
+                        )}
+                      </Box>
                     </Stack>
-                    <Flex justify="end" align="center" mb="md" mt="md">
-                      <Button
-                        variant="subtle"
-                        color="#105476"
-                        size="sm"
-                        leftSection={<IconPlus size={16} />}
-                        styles={{
-                          root: {
-                            color: "#105476",
-                            fontWeight: 500,
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                          label: {
-                            fontSize: "13px",
-                            fontWeight: 500,
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                        }}
-                        onClick={() =>
-                          serviceForm.insertListItem("service_details", {
-                            id: "",
-                            service: "",
-                            trade: "",
-                            service_code: "",
-                            service_name: "",
-                            origin_code: "",
-                            origin_name: "",
-                            origin_codes: [] as string[],
-                            origin_display_values: {} as Record<string, string>,
-                            destination_code: "",
-                            destination_name: "",
-                            destination_codes: [] as string[],
-                            destination_display_values: {} as Record<string, string>,
-                            rfq_port_pair_refs: [] as Array<{
-                              id?: number | string;
-                              origin_code: string;
-                              destination_code: string;
-                            }>,
-                            pickup: "false",
-                            delivery: "false",
-                            pickup_location: "",
-                            delivery_location: "",
-                            pickup_flags_by_origin: {} as Record<string, "true" | "false">,
-                            pickup_locations_by_origin: {} as Record<string, string>,
-                            delivery_flags_by_destination: {} as Record<string, "true" | "false">,
-                            delivery_locations_by_destination: {} as Record<string, string>,
-                            shipment_terms_code: "",
-                            dimension_unit: "Centimeter",
-                            diemensions: [],
-                            cargo_details: [
-                              {
-                                id: null,
-                                no_of_packages: null,
-                                gross_weight: null,
-                                volume_weight: null,
-                                chargable_weight: null,
-                                volume: null,
-                                chargable_volume: null,
-                                container_type_code: null,
-                                no_of_containers: null,
-                                hazardous_cargo: "No",
-                                un_no: null,
-                                class: null,
-                                pkg_group: null,
-                                stackable: "Yes",
-                              },
-                            ],
-                          })
-                        }
-                      >
-                        Add Service
-                      </Button>
-                    </Flex>
                   </Box>
 
                   {/* Buttons for Step 1 */}
