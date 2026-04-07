@@ -42,6 +42,7 @@ export default function ReportsPage() {
         {
           label: "Subledger Outstanding",
           icon: <IconFileAnalytics size={28} color="#105476" />,
+          path: "/reports/subledger-outstanding",
         },
         {
           label: "Aging Report",

@@ -1,4 +1,13 @@
-import { Box, Button, Card, Grid, Group, Select, Title } from "@mantine/core";
+import {
+  Box,
+  Button,
+  Card,
+  Grid,
+  Group,
+  Select,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { useMemo, useRef, useState } from "react";
@@ -31,6 +40,7 @@ type AgingOutstandingFormValues = {
   account_id: string | null;
   account_code: string;
   account_name: string;
+  subledger_code: string;
 };
 
 function extensionForFormat(
@@ -190,6 +200,7 @@ export default function AgingOutstanding() {
       account_id: null,
       account_code: "",
       account_name: "",
+      subledger_code: "",
     },
   });
 
@@ -249,6 +260,10 @@ export default function AgingOutstanding() {
 
     if (form.values.account_code?.trim()) {
       filters.account_code = form.values.account_code.trim();
+    }
+
+    if (form.values.subledger_code?.trim()) {
+      filters.subledger_code = form.values.subledger_code.trim();
     }
 
     if (branchScopeMode === "country" && form.values.country_id) {
@@ -350,8 +365,7 @@ export default function AgingOutstanding() {
     <Box>
       <Group justify="space-between" mb="md">
         <Title order={4} style={{ color: "#105476" }}>
-          Aging Report
-        </Title>
+         Subledger Outstanding Report       </Title>
       </Group>
 
       <Card withBorder radius="md" padding="lg">
@@ -394,6 +408,7 @@ export default function AgingOutstanding() {
                   form.setFieldValue("account_id", null);
                   form.setFieldValue("account_code", "");
                   form.setFieldValue("account_name", "");
+                  form.setFieldValue("subledger_code", "");
                   return;
                 }
                 form.setFieldValue("account_id", value);
@@ -411,6 +426,35 @@ export default function AgingOutstanding() {
                     ? String(originalData.account_name)
                     : "",
                 );
+                form.setFieldValue(
+                  "subledger_code",
+                  originalData.sl_code !== undefined && originalData.sl_code !== null
+                    ? String(originalData.sl_code)
+                    : "",
+                );
+              }}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 3 }}>
+            <TextInput
+              label="Subledger code"
+              placeholder="Subledger code"
+              value={form.values.subledger_code}
+              readOnly
+              styles={{
+                input: {
+                  fontSize: "13px",
+                  height: "36px",
+                  fontFamily: "Inter",
+                  backgroundColor: "var(--mantine-color-gray-0)",
+                },
+                label: {
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: "#424242",
+                  marginBottom: "4px",
+                  fontFamily: "Inter",
+                },
               }}
             />
           </Grid.Col>

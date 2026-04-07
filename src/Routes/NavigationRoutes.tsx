@@ -181,6 +181,7 @@ import JobProfit from "../pages/reports/JobProfit/JobProfit";
 import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
 import ReportsPage from "../pages/reports/ReportsPage";
+import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -318,6 +319,7 @@ const NavigationRoutes = () => {
           <Route path="job-profit" element={<JobProfit />} />
           <Route path="trial-balance" element={<TrialBalance />} />
           <Route path="aging-outstanding" element={<AgingOutstanding />} />
+          <Route path="subledger-outstanding" element={<SubledgerOutstanding />} />
         </Route>
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />
