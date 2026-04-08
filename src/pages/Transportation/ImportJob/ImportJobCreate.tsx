@@ -239,6 +239,7 @@ type HousingDetail = {
   shipment_id: string;
   hbl_number: string;
   house_date: Date | null;
+  booking_id?: number | null;
   routed: string;
   routed_by?: string;
   origin_code: string;
@@ -260,6 +261,8 @@ type HousingDetail = {
   notify1_customer_name: string;
   notify1_customer_address: string;
   notify1_customer_email: string;
+  // Backward-compat (older payload keys)
+  notify_customer1_name?: string;
   commodity_description: string;
   marks_no: string;
   item_no?: string;
@@ -2315,6 +2318,15 @@ function ImportJobCreate() {
     try {
       // Backend rejects numeric fields with more than 2 decimals.
       // Round right before we build the final create/edit payload.
+      const bookingIds = Array.from(
+        new Set(
+          (housingDetails ?? [])
+            .map((h) => (h as { booking_id?: unknown }).booking_id)
+            .map((v) => (v == null || v === "" ? null : Number(v)))
+            .filter((n): n is number => typeof n === "number" && !Number.isNaN(n)),
+        ),
+      );
+
       const payload = {
         service: mblDetailsForm.values.service,
         service_type: "Import", // Based on the example payload
@@ -2358,6 +2370,7 @@ function ImportJobCreate() {
             ? dayjs(carrierDetailsForm.values.mbl_date).format("YYYY-MM-DD")
             : null
           : null,
+        booking_ids: bookingIds,
         ocean_routings: routingsForm.values.routings.map((routing) => {
           // New format: all fields are nullable
           const routingPayload: Record<string, unknown> = {

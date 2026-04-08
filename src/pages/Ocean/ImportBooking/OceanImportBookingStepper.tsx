@@ -720,6 +720,17 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   // Memoized props to prevent unnecessary extra API calls in SearchableSelect
   // (SearchableSelect depends on function/object identity for its internal effects).
   const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
+  const customerSearchFields = useMemo(
+    () => ["customer_code", "customer_name"],
+    [],
+  );
+  const customerDisplayFormat = useCallback(
+    (item: Record<string, unknown>) => ({
+      value: String(item.customer_code),
+      label: String(item.customer_name),
+    }),
+    [],
+  );
   const portDisplayFormat = useCallback(
     (item: Record<string, unknown>) => ({
       value: String(item.port_code),
@@ -3996,11 +4007,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     required
                     apiEndpoint={URL.allCustomers}
                     placeholder="Type customer name"
-                    searchFields={["customer_code", "customer_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
+                    searchFields={customerSearchFields}
+                    displayFormat={customerDisplayFormat}
                     value={form.values.customer_code}
                     displayValue={form.values.customer_name}
                     returnOriginalData

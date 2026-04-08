@@ -766,6 +766,19 @@ const Navbar = ({
                     />
                     <SubNavLink
                       parent="Accounts"
+                      label="Document Allocation"
+                      icon={IconSearch}
+                      path="/document-allocation"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
                       label="Supplier Invoice RCM"
                       icon={IconReceiptTax}
                       path="/supplier-invoice-rcm"
