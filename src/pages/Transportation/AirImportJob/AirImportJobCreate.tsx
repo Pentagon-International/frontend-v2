@@ -126,6 +126,7 @@ type HAWBDetail = {
   id?: number;
   shipment_id: string;
   hawb_number: string;
+  booking_id?: number | null;
   routed: string;
   routed_by?: string;
   origin_code: string;
@@ -2252,6 +2253,15 @@ function AirImportJobCreate() {
       return;
     }
     try {
+      const bookingIds = Array.from(
+        new Set(
+          (hawbDetails ?? [])
+            .map((h) => (h as { booking_id?: unknown }).booking_id)
+            .map((v) => (v == null || v === "" ? null : Number(v)))
+            .filter((n): n is number => typeof n === "number" && !Number.isNaN(n)),
+        ),
+      );
+
       const payload = {
         service: mawbDetailsForm.values.service,
         service_type: "Import",
@@ -2302,6 +2312,7 @@ function AirImportJobCreate() {
             ? dayjs(carrierDetailsForm.values.mawb_date).format("YYYY-MM-DD")
             : null
           : null,
+        booking_ids: bookingIds,
         ocean_routings: routingsForm.values.routings.map((routing) => {
           const toIso = (d: Date | null) =>
             d && dayjs(d).isValid()

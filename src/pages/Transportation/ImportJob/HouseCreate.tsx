@@ -937,6 +937,7 @@ function HouseCreate() {
     string,
     unknown
   > | null>(null);
+  const [similarBookingId, setSimilarBookingId] = useState<number | null>(null);
 
   const fetchSimilarBookings = useCallback(
     async (hblNo: string, agentCode: string) => {
@@ -994,6 +995,12 @@ function HouseCreate() {
   const fillFormFromSimilarBooking = useCallback(() => {
     const b = similarBookingData;
     if (!b) return;
+    const bookingIdRaw = (b as { id?: unknown })?.id;
+    const bookingId =
+      bookingIdRaw == null || bookingIdRaw === ""
+        ? null
+        : Number(bookingIdRaw);
+    setSimilarBookingId(Number.isNaN(bookingId as number) ? null : bookingId);
     setSimilarBookingModalOpen(false);
     setSimilarBookingData(null);
 
@@ -1194,6 +1201,7 @@ function HouseCreate() {
   const dismissSimilarBookingModal = useCallback(() => {
     setSimilarBookingModalOpen(false);
     setSimilarBookingData(null);
+    setSimilarBookingId(null);
   }, []);
 
   // Auto-calculate chargeable weight when gross weight or volume changes
@@ -2066,6 +2074,7 @@ function HouseCreate() {
       events: form.values.events ?? [],
       cargo_details: cargoDetailsForPayload,
       charges: chargesForPayload,
+      ...(similarBookingId != null && { booking_id: similarBookingId }),
     };
 
     // Update existing housing details
