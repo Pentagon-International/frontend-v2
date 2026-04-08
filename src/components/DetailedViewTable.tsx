@@ -73,6 +73,7 @@ interface DetailedViewTableProps {
   initialSearch?: string; // Initial search value from parent
   onSearchChange?: (search: string) => void; // Callback when search changes
   selectedColumnType?: string | null; // Selected column type for dynamic header display
+  hideExpected?: boolean; // When true, hides the 'expected' column
 }
 
 const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
@@ -91,6 +92,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
   headerActions,
   onCellEdit,
   selectedColumnType,
+  hideExpected = false,
 }) => {
   // State to track which cell is being edited (rowIndex, columnKey)
   const [editingCell, setEditingCell] = useState<{
@@ -257,6 +259,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       data[0]?.id !== undefined
         ? ["id"]
         : []),
+
+      // Hide expected column when requested (Product and Region/Sector tabs)
+      ...(hideExpected ? ["expected"] : []),
     ]);
 
     // Helper function to capitalize headers properly (first letter of each word)
@@ -1137,6 +1142,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     editValue,
     originalCellValue,
     selectedColumnType,
+    hideExpected,
   ]);
 
   const columnOrder = useMemo(() => {

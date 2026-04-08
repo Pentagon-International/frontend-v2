@@ -276,7 +276,6 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const [activeTab, setActiveTab] = useState<string>(
     initialState?.activeTab ?? "salesperson"
   );
-  const canViewStaffTabs = user?.is_staff === true;
 
   // Helper function to convert service_type to title case (e.g., "IMPORT" -> "Import")
   const toTitleCase = (str: string): string => {
@@ -349,11 +348,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialState]);
 
-  useEffect(() => {
-    if (!canViewStaffTabs && activeTab !== "salesperson") {
-      setActiveTab("salesperson");
-    }
-  }, [activeTab, canViewStaffTabs]);
+  // activeTab guard no longer needed (tabs always visible)
 
   useEffect(() => {
     // Skip on initial mount
@@ -3171,6 +3166,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         showBackButton={productDrillLevel > 0}
         showCloseButton={productDrillLevel > 0}
         selectedColumnType={productDrillLevel === 2 ? selectedColumnType : null}
+        hideExpected={true}
         headerActions={
           <Group gap="sm" align="center">
             {/* <SegmentedControl
@@ -3240,6 +3236,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         showBackButton={sectorDrillLevel > 0}
         showCloseButton={sectorDrillLevel > 0}
         selectedColumnType={sectorDrillLevel === 2 ? selectedColumnType : null}
+        hideExpected={true}
         headerActions={
           <Group gap="sm" align="center">
             {/* <SegmentedControl
@@ -3375,32 +3372,28 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             >
               Salesperson
             </Tabs.Tab>
-            {canViewStaffTabs && (
-              <Tabs.Tab
-                value="product"
-                style={{
-                  backgroundColor:
-                    activeTab === "product" ? "#105476" : "transparent",
-                  color: activeTab === "product" ? "white" : "#105476",
-                  fontWeight: activeTab === "product" ? 600 : 400,
-                }}
-              >
-                Product
-              </Tabs.Tab>
-            )}
-            {canViewStaffTabs && (
-              <Tabs.Tab
-                value="region"
-                style={{
-                  backgroundColor:
-                    activeTab === "region" ? "#105476" : "transparent",
-                  color: activeTab === "region" ? "white" : "#105476",
-                  fontWeight: activeTab === "region" ? 600 : 400,
-                }}
-              >
-                Region/Sector
-              </Tabs.Tab>
-            )}
+            <Tabs.Tab
+              value="product"
+              style={{
+                backgroundColor:
+                  activeTab === "product" ? "#105476" : "transparent",
+                color: activeTab === "product" ? "white" : "#105476",
+                fontWeight: activeTab === "product" ? 600 : 400,
+              }}
+            >
+              Product
+            </Tabs.Tab>
+            <Tabs.Tab
+              value="region"
+              style={{
+                backgroundColor:
+                  activeTab === "region" ? "#105476" : "transparent",
+                color: activeTab === "region" ? "white" : "#105476",
+                fontWeight: activeTab === "region" ? 600 : 400,
+              }}
+            >
+              Region/Sector
+            </Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="salesperson" pt="md">
@@ -3430,8 +3423,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             </Box>
           </Tabs.Panel>
 
-          {canViewStaffTabs && (
-            <Tabs.Panel value="product" pt="md">
+          <Tabs.Panel value="product" pt="md">
             {onBack && (
               <Group justify="flex-end" mb="md">
                 <Button
@@ -3473,15 +3465,14 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 onBack={undefined}
                 showBackButton={false}
                 showCloseButton={false}
+                hideExpected={true}
                 headerActions={undefined}
                 onCellEdit={undefined}
               />
             </Box>
             </Tabs.Panel>
-          )}
 
-          {canViewStaffTabs && (
-            <Tabs.Panel value="region" pt="md">
+          <Tabs.Panel value="region" pt="md">
             {onBack && (
               <Group justify="flex-end" mb="md">
                 <Button
@@ -3523,12 +3514,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 onBack={undefined}
                 showBackButton={false}
                 showCloseButton={false}
+                hideExpected={true}
                 headerActions={undefined}
                 onCellEdit={handleSectorCellEdit}
               />
             </Box>
             </Tabs.Panel>
-          )}
         </Tabs>
       </Box>
     );
