@@ -1,0 +1,450 @@
+/* ============================================================
+   Booking Confirmation — A4 Portrait
+   · Inherits design tokens & structural conventions from
+     job-cost-report.css  (brand, ink, muted, line, etc.)
+   · Header: logo left | company centre | ref+page right
+   · Addressee box  →  intro line  →  details meta table
+   · Remarks block  →  CFS remark (LCL/FCL only)
+   · Running footer: ref left | Page X of Y right
+   ============================================================ */
+
+/* ── Page setup ──────────────────────────────────────────── */
+@page {
+  size: A4 portrait;
+  margin: 10mm 12mm 18mm 12mm;
+
+  @bottom-center {
+    content: element(running-footer);
+    vertical-align: bottom;
+  }
+}
+
+/* ── Design tokens (mirrors job-cost-report.css) ─────────── */
+:root {
+  --ink:         #111827;
+  --muted:       #4b5563;
+  --line:        #e5e7eb;
+  --line-strong: #cbd5e1;
+  --brand:       #0f5b7a;
+  --bg:          #ffffff;
+  --zebra:       #f9fafb;
+  --chip-bg:     #eef6fb;
+  --header-grp:  #daeaf4;
+  --header-sub:  #f1f5f9;
+  --section-bg:  #f1f5f9;
+  --total-bg:    #fafbfc;
+  --grand-bg:    #eef6fb;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #eceff4;
+  color: var(--ink);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── No-print controls ───────────────────────────────────── */
+.no-print {
+  width: 186mm;
+  margin: 12px auto 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.no-print button {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.no-print .btn-print { background: #fff;        color: var(--ink); }
+.no-print .btn-pdf   { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+/* ── Screen wrapper ──────────────────────────────────────── */
+.page-preview {
+  width: 186mm;           /* 210mm − 2×12mm side margins */
+  margin: 16px auto 60px;
+  background: var(--bg);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(17,24,39,.13);
+  overflow: hidden;
+  padding-bottom: 40px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   HEADER  (mirrors job-cost-report exactly)
+   Row 1: [logo] [company name + address lines] [ref + page]
+   Row 2: "Confirmation of Booking" title strip
+   ══════════════════════════════════════════════════════════ */
+.report-header {
+  padding: 10px 14px;
+}
+
+.header-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 0 10px;
+}
+
+/* Logo slot */
+.logo-slot {
+  flex-shrink: 0;
+  width: 64px;
+  height: 54px;
+  border: 1px dashed var(--line-strong);
+  background: var(--chip-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  color: #9ca3af;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 3px;
+}
+
+/* Company block */
+.company {
+  flex: 1;
+}
+
+.company h1 {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.company p {
+  margin: 0;
+  font-size: 8.5px;
+  color: var(--ink);
+  line-height: 1.65;
+}
+
+/* Title block (right) */
+.doc-title-block {
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 140px;
+}
+
+.ref-text {
+  font-size: 8.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.doc-currency {
+  font-size: 8.5px;
+  color: var(--muted);
+  margin-top: 4px;
+  text-align: right;
+}
+
+.email-link {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+/* Title strip */
+.header-strip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
+.doc-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Spacers */
+.table-gap  { height: 8px;  }
+.spacer-lg  { height: 24px; }
+.spacer-xl  { height: 48px; }
+
+/* ══════════════════════════════════════════════════════════
+   ADDRESSEE BOX  — "To" block mirroring the PDF layout
+   Left cell: shipper address  |  Right: ATTN/Phone/Fax  |  Date
+   ══════════════════════════════════════════════════════════ */
+.addr-wrap {
+  padding: 0 14px;
+}
+
+table.addr-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1.5px solid var(--line-strong);
+  font-size: 8.5px;
+}
+
+.addr-to-cell {
+  width: 45%;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-right: 1px solid var(--line);
+}
+
+.addr-attn-cell {
+  width: 35%;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-right: 1px solid var(--line);
+}
+
+.addr-date-cell {
+  width: 20%;
+  vertical-align: top;
+  padding: 8px 10px;
+  text-align: right;
+}
+
+.addr-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ink);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.addr-name {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+
+.addr-lines {
+  font-size: 8.5px;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.addr-field-label {
+  font-size: 8.5px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.addr-field-value {
+  font-size: 8.5px;
+  color: var(--ink);
+  margin-left: 4px;
+}
+
+.addr-date {
+  font-size: 8.5px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ══════════════════════════════════════════════════════════
+   INTRO LINE
+   ══════════════════════════════════════════════════════════ */
+.intro-wrap {
+  padding: 8px 14px 4px;
+}
+
+.intro-text {
+  margin: 0;
+  font-size: 8.5px;
+  color: var(--ink);
+  font-style: italic;
+}
+
+/* ══════════════════════════════════════════════════════════
+   META TABLE — booking details  (same tokens as job-cost)
+   ══════════════════════════════════════════════════════════ */
+.meta-wrap {
+  padding: 0 14px;
+}
+
+table.meta {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 8.5px;
+}
+
+table.meta td {
+  border-bottom: 1px solid var(--line);
+  padding: 5px 8px;
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+table.meta tr:last-child td { border-bottom: none; }
+
+table.meta td.k {
+  width: 22%;
+  color: var(--ink);
+  font-weight: 600;
+  white-space: nowrap;
+  font-size: 8.5px;
+}
+
+/* Colon separator — rendered via CSS pseudo-element */
+table.meta td.k::after {
+  content: " :";
+}
+
+table.meta td.v {
+  width: 78%;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* ETD cell: inline ETA on same row */
+.etd-cell .eta-inline {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ── Remarks table (no outer border, slightly different) ── */
+table.remarks-table {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+table.remarks-table td {
+  border-bottom: none;
+  padding: 6px 8px;
+  vertical-align: top;
+  font-size: 8.5px;
+}
+
+table.remarks-table td.k {
+  width: 12%;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+table.remarks-table td.k::after {
+  content: " :";
+}
+
+td.remark-val {
+  color: var(--ink);
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+/* ── Sign-off ──────────────────────────────────────────── */
+.signoff-wrap {
+  padding: 0 14px;
+}
+
+.signoff-line {
+  margin: 0 0 2px;
+  font-size: 8.5px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ══════════════════════════════════════════════════════════
+   RUNNING FOOTER — every page  (same structure as job-cost)
+   "Ref: R20018 on 08-APR-2026 by PENUSER-MUMBAI"  left
+   "Page X of Y"                                     right
+   ══════════════════════════════════════════════════════════ */
+.running-footer {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 12px;
+  padding: 7px 14px 0;
+  border-top: 0.5px solid var(--brand);
+  background: var(--bg);
+  /* Screen: fixed bottom */
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: 210mm;
+  margin: 0 auto;
+}
+
+.footer-left {
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.footer-right {
+  text-align: right;
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.page-no {
+  font-weight: 800;
+  font-size: 9.5px;
+  color: var(--ink);
+  margin-top: 3px;
+}
+
+.page-no-current::after { content: counter(page);  }
+.page-no-total::after   { content: counter(pages); }
+
+/* ══════════════════════════════════════════════════════════
+   PRINT OVERRIDES
+   ══════════════════════════════════════════════════════════ */
+@media print {
+  html, body {
+    background: var(--bg);
+    margin: 0;
+    padding: 0;
+  }
+
+  .no-print { display: none !important; }
+
+  .page-preview {
+    width: 100%;
+    margin: 0;
+    padding-bottom: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  /* WeasyPrint running element */
+  .running-footer {
+    position: running(running-footer);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    margin: 0;
+    padding: 7px 0 0;
+  }
+
+  table.meta td  { page-break-inside: avoid; break-inside: avoid; }
+  .addr-wrap     { page-break-inside: avoid; break-inside: avoid; }
+  .signoff-wrap  { page-break-inside: avoid; break-inside: avoid; }
+}

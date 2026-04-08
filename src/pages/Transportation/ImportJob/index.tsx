@@ -14,11 +14,12 @@ import {
   Box,
   Menu,
   ActionIcon,
-  UnstyledButton,
   Select,
   Loader,
   Grid,
   TextInput,
+  Modal,
+  Badge,
 } from "@mantine/core";
 import {
   IconPlus,
@@ -92,8 +93,23 @@ function ImportJobMaster() {
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [cancelConfirmRow, setCancelConfirmRow] = useState<ImportJobData | null>(
+    null
+  );
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const dateFormat = useDateFormat();
+  const getStatusBadge = (statusRaw: string | undefined | null) => {
+    const statusUpper = (statusRaw || "").toUpperCase();
+    const label =
+      statusUpper === "CANCEL"
+        ? "Cancel"
+        : statusUpper === "CLOSED"
+          ? "Closed"
+          : "Active";
+    const color = label === "Cancel" ? "red" : label === "Closed" ? "blue" : "green";
+    return { label, color } as const;
+  };
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -410,6 +426,36 @@ function ImportJobMaster() {
     });
   };
 
+  const handleConfirmCancel = async () => {
+    if (!cancelConfirmRow) return;
+    const rowToCancel = cancelConfirmRow;
+    setIsCancelling(true);
+    try {
+      const response = (await apiCallProtected.patch(
+        `${URL.importJob}${rowToCancel.id}/`,
+        { status: "CANCEL" },
+        API_HEADER
+      )) as any;
+      if (response?.status === false) {
+        throw new Error(response?.message || "Failed to cancel job");
+      }
+      setCancelConfirmRow(null);
+      ToastNotification({
+        type: "success",
+        message: "Job cancelled successfully",
+      });
+      if (filtersApplied) await refetchFilteredImportJobs();
+      else await refetchImportJobs();
+    } catch (err: any) {
+      ToastNotification({
+        type: "error",
+        message: err?.message || "Failed to cancel job",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   // Refetch when navigating from create/edit page - only once
   useEffect(() => {
     if (location.state?.refreshData && !isRefreshingFromEdit.current) {
@@ -512,36 +558,62 @@ function ImportJobMaster() {
         },
       },
       {
+        id: "status",
+        accessorKey: "status",
+        header: "Status",
+        size: 120,
+        Cell: ({ cell }) => {
+          const { label, color } = getStatusBadge(cell.getValue<string | null>());
+          return (
+            <Badge size="sm" variant="light" color={color}>
+              {label}
+            </Badge>
+          );
+        },
+      },
+      {
         id: "actions",
         header: "Actions",
         size: 80,
-        Cell: ({ row }) => (
-          <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton
+        Cell: ({ row }) => {
+          const statusUpper = (row.original.status ?? "").toUpperCase();
+          const isCancel = statusUpper === "CANCEL";
+          const canCancel = statusUpper !== "GENERATED" && !isCancel;
+          return (
+            <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+              <Menu.Target>
+                <ActionIcon variant="subtle" color="gray">
+                  <IconDotsVertical size={16} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconEdit size={14} />}
+                  disabled={isCancel}
                   onClick={() => {
-                    navigate(`/SeaExport/import-job/edit`, {
-                      state: { job: row.original },
-                    });
+                    if (!isCancel) {
+                      navigate(`/SeaExport/import-job/edit`, {
+                        state: { job: row.original },
+                      });
+                    }
                   }}
                 >
-                  <Group gap="sm">
-                    <IconEdit size={16} style={{ color: "#105476" }} />
-                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
-                      Edit
-                    </Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-            </Menu.Dropdown>
-          </Menu>
-        ),
+                  Edit
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconX size={14} />}
+                  color="red"
+                  disabled={!canCancel}
+                  onClick={() => {
+                    if (canCancel) setCancelConfirmRow(row.original);
+                  }}
+                >
+                  Cancel
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          );
+        },
       },
     ],
     [navigate]
@@ -1144,6 +1216,28 @@ function ImportJobMaster() {
           </Group>
         </>
       )}
+      <Modal
+        opened={!!cancelConfirmRow}
+        onClose={() => !isCancelling && setCancelConfirmRow(null)}
+        title="Cancel job"
+        centered
+      >
+        <Text size="sm" c="dimmed" mb="md">
+          Are you sure you want to cancel this job? This action cannot be undone.
+        </Text>
+        <Group justify="flex-end" gap="xs">
+          <Button
+            variant="subtle"
+            onClick={() => setCancelConfirmRow(null)}
+            disabled={isCancelling}
+          >
+            No
+          </Button>
+          <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
+            Yes, cancel
+          </Button>
+        </Group>
+      </Modal>
     </Card>
   );
 }

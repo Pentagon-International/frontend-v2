@@ -14,9 +14,10 @@ import {
   Box,
   Menu,
   ActionIcon,
-  UnstyledButton,
   Select,
   Loader,
+  Modal,
+  Badge,
 } from "@mantine/core";
 import {
   IconPlus,
@@ -24,12 +25,14 @@ import {
   IconEdit,
   IconChevronLeft,
   IconChevronRight,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
+import { ToastNotification } from "../../../components";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import useDateFormat from "../../../hooks/useDateFormat";
@@ -69,6 +72,7 @@ type AirImportJobData = {
   company_code?: string;
   created_at?: string;
   updated_at?: string;
+  status?: string;
 };
 
 function AirImportJobMaster() {
@@ -77,8 +81,23 @@ function AirImportJobMaster() {
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [cancelConfirmRow, setCancelConfirmRow] = useState<AirImportJobData | null>(
+    null
+  );
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const dateFormat = useDateFormat();
+  const getStatusBadge = (statusRaw: string | undefined | null) => {
+    const statusUpper = (statusRaw || "").toUpperCase();
+    const label =
+      statusUpper === "CANCEL"
+        ? "Cancel"
+        : statusUpper === "CLOSED"
+          ? "Closed"
+          : "Active";
+    const color = label === "Cancel" ? "red" : label === "Closed" ? "blue" : "green";
+    return { label, color } as const;
+  };
 
   // Fetch data using useQuery - filter for Air service
   const {
@@ -221,36 +240,62 @@ function AirImportJobMaster() {
         },
       },
       {
+        id: "status",
+        accessorKey: "status",
+        header: "Status",
+        size: 120,
+        Cell: ({ cell }) => {
+          const { label, color } = getStatusBadge(cell.getValue<string | null>());
+          return (
+            <Badge size="sm" variant="light" color={color}>
+              {label}
+            </Badge>
+          );
+        },
+      },
+      {
         id: "actions",
         header: "Action",
         size: 80,
-        Cell: ({ row }) => (
-          <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton
+        Cell: ({ row }) => {
+          const statusUpper = (row.original.status ?? "").toUpperCase();
+          const isCancel = statusUpper === "CANCEL";
+          const canCancel = statusUpper !== "GENERATED" && !isCancel;
+          return (
+            <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+              <Menu.Target>
+                <ActionIcon variant="subtle" color="gray">
+                  <IconDotsVertical size={16} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconEdit size={14} />}
+                  disabled={isCancel}
                   onClick={() => {
-                    navigate(`/air/import-job/edit`, {
-                      state: { job: row.original },
-                    });
+                    if (!isCancel) {
+                      navigate(`/air/import-job/edit`, {
+                        state: { job: row.original },
+                      });
+                    }
                   }}
                 >
-                  <Group gap="sm">
-                    <IconEdit size={16} style={{ color: "#105476" }} />
-                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
-                      Edit
-                    </Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-            </Menu.Dropdown>
-          </Menu>
-        ),
+                  Edit
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconX size={14} />}
+                  color="red"
+                  disabled={!canCancel}
+                  onClick={() => {
+                    if (canCancel) setCancelConfirmRow(row.original);
+                  }}
+                >
+                  Cancel
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          );
+        },
       },
     ],
     [navigate]
@@ -270,6 +315,35 @@ function AirImportJobMaster() {
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setCurrentPage(1); // Reset to first page when changing page size
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelConfirmRow) return;
+    const rowToCancel = cancelConfirmRow;
+    setIsCancelling(true);
+    try {
+      const response = (await apiCallProtected.patch(
+        `${URL.importJob}${rowToCancel.id}/`,
+        { status: "CANCEL" },
+        API_HEADER
+      )) as any;
+      if (response?.status === false) {
+        throw new Error(response?.message || "Failed to cancel job");
+      }
+      setCancelConfirmRow(null);
+      ToastNotification({
+        type: "success",
+        message: "Job cancelled successfully",
+      });
+      await refetchImportJobs();
+    } catch (err: any) {
+      ToastNotification({
+        type: "error",
+        message: err?.message || "Failed to cancel job",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const table = useMantineReactTable({
@@ -552,6 +626,28 @@ function AirImportJobMaster() {
           </Group>
         </>
       )}
+      <Modal
+        opened={!!cancelConfirmRow}
+        onClose={() => !isCancelling && setCancelConfirmRow(null)}
+        title="Cancel job"
+        centered
+      >
+        <Text size="sm" c="dimmed" mb="md">
+          Are you sure you want to cancel this job? This action cannot be undone.
+        </Text>
+        <Group justify="flex-end" gap="xs">
+          <Button
+            variant="subtle"
+            onClick={() => setCancelConfirmRow(null)}
+            disabled={isCancelling}
+          >
+            No
+          </Button>
+          <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
+            Yes, cancel
+          </Button>
+        </Group>
+      </Modal>
     </Card>
   );
 }

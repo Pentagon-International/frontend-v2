@@ -18,6 +18,7 @@ import {
   Box,
   Badge,
   Modal,
+  Tooltip,
 } from "@mantine/core";
 import {
   IconCalendar,
@@ -753,27 +754,40 @@ function AirExportBookingMaster() {
                 </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
-                <Menu.Item
-                  leftSection={<IconEdit size={14} />}
-                  disabled={isCancel}
-                  onClick={() => {
-                    if (!isCancel) {
-                      navigate(`./edit`, {
-                        state: { job: row.original },
-                      });
-                    }
-                  }}
+                <Tooltip
+                  label="Edit disabled because booking is cancelled"
+                  disabled={!isCancel}
                 >
-                  Edit
-                </Menu.Item>
-                {canCancel && (
                   <Menu.Item
-                    leftSection={<IconX size={14} />}
-                    color="red"
-                    onClick={() => setCancelConfirmRow(row.original)}
+                    leftSection={<IconEdit size={14} />}
+                    disabled={isCancel}
+                    onClick={() => {
+                      if (!isCancel) {
+                        navigate(`./edit`, {
+                          state: { job: row.original },
+                        });
+                      }
+                    }}
                   >
-                    Cancel
+                    Edit
                   </Menu.Item>
+                </Tooltip>
+                {canCancel && (
+                  <Tooltip
+                    label="This booking already has a job. If required, you can cancel the job."
+                    disabled={statusUpper !== "GENERATED"}
+                  >
+                    <Menu.Item
+                      leftSection={<IconX size={14} />}
+                      color="red"
+                      disabled={!canCancel}
+                      onClick={() => {
+                        if (canCancel) setCancelConfirmRow(row.original);
+                      }}
+                    >
+                      Cancel
+                    </Menu.Item>
+                  </Tooltip>
                 )}
               </Menu.Dropdown>
             </Menu>
