@@ -276,6 +276,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const [activeTab, setActiveTab] = useState<string>(
     initialState?.activeTab ?? "salesperson"
   );
+  const canViewStaffTabs = user?.is_staff === true;
 
   // Helper function to convert service_type to title case (e.g., "IMPORT" -> "Import")
   const toTitleCase = (str: string): string => {
@@ -347,6 +348,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialState]);
+
+  useEffect(() => {
+    if (!canViewStaffTabs && activeTab !== "salesperson") {
+      setActiveTab("salesperson");
+    }
+  }, [activeTab, canViewStaffTabs]);
 
   useEffect(() => {
     // Skip on initial mount
@@ -3368,28 +3375,32 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             >
               Salesperson
             </Tabs.Tab>
-            <Tabs.Tab
-              value="product"
-              style={{
-                backgroundColor:
-                  activeTab === "product" ? "#105476" : "transparent",
-                color: activeTab === "product" ? "white" : "#105476",
-                fontWeight: activeTab === "product" ? 600 : 400,
-              }}
-            >
-              Product
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="region"
-              style={{
-                backgroundColor:
-                  activeTab === "region" ? "#105476" : "transparent",
-                color: activeTab === "region" ? "white" : "#105476",
-                fontWeight: activeTab === "region" ? 600 : 400,
-              }}
-            >
-              Region/Sector
-            </Tabs.Tab>
+            {canViewStaffTabs && (
+              <Tabs.Tab
+                value="product"
+                style={{
+                  backgroundColor:
+                    activeTab === "product" ? "#105476" : "transparent",
+                  color: activeTab === "product" ? "white" : "#105476",
+                  fontWeight: activeTab === "product" ? 600 : 400,
+                }}
+              >
+                Product
+              </Tabs.Tab>
+            )}
+            {canViewStaffTabs && (
+              <Tabs.Tab
+                value="region"
+                style={{
+                  backgroundColor:
+                    activeTab === "region" ? "#105476" : "transparent",
+                  color: activeTab === "region" ? "white" : "#105476",
+                  fontWeight: activeTab === "region" ? 600 : 400,
+                }}
+              >
+                Region/Sector
+              </Tabs.Tab>
+            )}
           </Tabs.List>
 
           <Tabs.Panel value="salesperson" pt="md">
@@ -3419,7 +3430,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             </Box>
           </Tabs.Panel>
 
-          <Tabs.Panel value="product" pt="md">
+          {canViewStaffTabs && (
+            <Tabs.Panel value="product" pt="md">
             {onBack && (
               <Group justify="flex-end" mb="md">
                 <Button
@@ -3465,9 +3477,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 onCellEdit={undefined}
               />
             </Box>
-          </Tabs.Panel>
+            </Tabs.Panel>
+          )}
 
-          <Tabs.Panel value="region" pt="md">
+          {canViewStaffTabs && (
+            <Tabs.Panel value="region" pt="md">
             {onBack && (
               <Group justify="flex-end" mb="md">
                 <Button
@@ -3513,7 +3527,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 onCellEdit={handleSectorCellEdit}
               />
             </Box>
-          </Tabs.Panel>
+            </Tabs.Panel>
+          )}
         </Tabs>
       </Box>
     );
