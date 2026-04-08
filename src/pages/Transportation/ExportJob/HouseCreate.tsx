@@ -51,6 +51,7 @@ import {
   ToastNotification,
   SingleDateInput,
 } from "../../../components";
+import dayjs from "dayjs";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
@@ -74,6 +75,7 @@ import FormNumberInput from "../../../components/FormNumberInput";
 // Type definitions
 type HouseDetailsForm = {
   hbl_number: string;
+  house_date: Date | null;
   shipment_terms_code: string;
   shipment_terms_name: string;
   routed: string;
@@ -997,6 +999,9 @@ function HouseCreate() {
   const form = useForm<HouseDetailsForm>({
     initialValues: {
       hbl_number: editData?.hbl_number || "",
+      house_date: (editData as { house_date?: string | Date } | undefined)?.house_date
+        ? new Date(String((editData as { house_date?: string | Date }).house_date))
+        : null,
       shipment_terms_code: editData?.shipment_terms_code || "",
       shipment_terms_name: editData?.shipment_terms_name || "",
       routed: normalizeRoutedValue(editData?.routed),
@@ -1966,6 +1971,9 @@ function HouseCreate() {
       ...(isEditMode &&
         editData?.shipment_id && { shipment_id: editData.shipment_id }),
       hbl_number: form.values.hbl_number,
+      house_date: form.values.house_date
+        ? dayjs(form.values.house_date).format("YYYY-MM-DD")
+        : null,
       shipment_terms_code: form.values.shipment_terms_code,
       shipment_terms_name: form.values.shipment_terms_name,
       routed: form.values.routed,
@@ -2090,6 +2098,7 @@ function HouseCreate() {
     const v = form.values;
     return {
       hbl_number: v.hbl_number,
+      house_date: v.house_date ? dayjs(v.house_date).format("YYYY-MM-DD") : null,
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
       routed: v.routed,
@@ -2181,6 +2190,7 @@ function HouseCreate() {
         housing_details: [
           {
             id: housingId,
+            house_date: form.values.house_date ? dayjs(form.values.house_date).format("YYYY-MM-DD") : null,
             events: [{ type: "BL Released", date }],
           },
         ],
@@ -2206,6 +2216,7 @@ function HouseCreate() {
       const country = user?.country || null;
       const housingData = {
         hbl_number: form.values.hbl_number,
+        house_date: form.values.house_date ? dayjs(form.values.house_date).format("YYYY-MM-DD") : null,
         routed: form.values.routed,
         routed_by: form.values.routed_by,
         origin_code: form.values.origin_code,
@@ -2246,7 +2257,7 @@ function HouseCreate() {
           gross_weight: c.gross_weight,
           volume: c.volume,
           chargeable_weight: c.chargeable_weight,
-          haz: c.haz === true || c.haz === "Yes",
+          haz: c.haz === true || String(c.haz) === "Yes",
         })),
         mbl_charges: chargesForm.values.charges
           .filter((charge) => charge.charge_name || charge.charge_id != null)
@@ -2803,6 +2814,7 @@ function HouseCreate() {
                   label="Origin"
                   required
                   apiEndpoint={URL.portMaster}
+                  dropdownZIndex={10}
                   placeholder="Type origin code or name"
                   searchFields={["port_code", "port_name"]}
                   displayFormat={(item: Record<string, unknown>) => ({
@@ -2840,6 +2852,7 @@ function HouseCreate() {
                   label="Destination"
                   required
                   apiEndpoint={URL.portMaster}
+                  dropdownZIndex={10}
                   placeholder="Type destination code or name"
                   searchFields={["port_code", "port_name"]}
                   displayFormat={(item: Record<string, unknown>) => ({
@@ -2995,6 +3008,7 @@ function HouseCreate() {
                     required
                     placeholder="Type agent name"
                     apiEndpoint={URL.agent}
+                    dropdownZIndex={10}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_name),
@@ -3030,6 +3044,25 @@ function HouseCreate() {
                   error={form.errors.customer_service}
                 />
               </Grid.Col>
+
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Sub Item Number"
+                  placeholder="Enter Sub Item Number"
+                  {...form.getInputProps("sub_item_no")}
+                  error={form.errors.sub_item_no}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <SingleDateInput
+                  label="HBL Date"
+                  placeholder="Select HBL Date"
+                  value={form.values.house_date}
+                  onChange={(d) => form.setFieldValue("house_date", d)}
+                  size="sm"
+                />
+              </Grid.Col>
             </Grid>
           </Box>
         </Tabs.Panel>
@@ -3047,6 +3080,7 @@ function HouseCreate() {
                   required
                   placeholder="Type shipper name"
                   apiEndpoint={URL.shipper}
+                  dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code),
@@ -3611,6 +3645,7 @@ function HouseCreate() {
                   label="Destination Agent Name"
                   placeholder="Type agent name"
                   apiEndpoint={URL.agent}
+                  dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.customer_code), // Use code as value for API payload

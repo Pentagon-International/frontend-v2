@@ -261,6 +261,7 @@ type HousingDetail = {
   id?: number | string;
   shipment_id: string;
   hbl_number: string;
+  house_date: Date | null;
   routed: string;
   routed_by?: string;
   origin_code: string;
@@ -657,6 +658,7 @@ function ExportJobCreate() {
                 : undefined,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hbl_number: house.hbl_number ? String(house.hbl_number) : "",
+              house_date: house.house_date ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD") : null,
               routed: house.routed
                 ? String(house.routed).toLowerCase() === "self"
                   ? "self"
@@ -2397,6 +2399,7 @@ function ExportJobCreate() {
           ...(house.id && { id: house.id }),
           ...(house.shipment_id && { shipment_id: house.shipment_id }),
           hbl_number: house.hbl_number,
+          house_date: house.house_date ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD") : null,
           routed: house.routed,
           routed_by: house.routed_by || null,
           origin_code: house.origin_code,
@@ -3969,7 +3972,7 @@ function ExportJobCreate() {
                 {containerDetailsForm.values.containers.length > 1 &&
                   `(${containerDetailsForm.values.containers.length})`}
               </Text>
-              {!isReadOnly && (
+              {/* {!isReadOnly && (
                 <Group gap="sm">
                   <Button
                     variant="light"
@@ -3993,7 +3996,7 @@ function ExportJobCreate() {
                     Save Container
                   </Button>
                 </Group>
-              )}
+              )} */}
             </Group>
 
             {/* Static Header Row */}
@@ -4009,7 +4012,7 @@ function ExportJobCreate() {
                 <Grid.Col span={2.2}>
                   <RequiredLabel label="Container Type" required={false} />
                 </Grid.Col>
-                <Grid.Col span={2.2}>
+                <Grid.Col span={1.8}>
                   <RequiredLabel label="Container No" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1.8}>
@@ -4024,7 +4027,7 @@ function ExportJobCreate() {
                 <Grid.Col span={1.7}>
                   <RequiredLabel label="Unloading Date" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.6}>
+                <Grid.Col span={0.9}>
                   {containerDetailsForm.values.containers.length > 1 && (
                     <RequiredLabel label="Actions" required={false} />
                   )}
@@ -4054,7 +4057,7 @@ function ExportJobCreate() {
                       }
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.2}>
+                  <Grid.Col span={1.8}>
                     <FormTextInput
                       required
                       placeholder="Container number"
@@ -4177,10 +4180,12 @@ function ExportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.6}>
+                  <Grid.Col span={0.9} style={{display: 'flex', justifyContent: 'space-between'}}>  
                     {containerDetailsForm.values.containers.length > 1 &&
                       !isReadOnly && (
                         <Button
+                        size="sm"
+                        px={12}
                           variant="light"
                           color="red"
                           onClick={() => removeContainer(index)}
@@ -4188,6 +4193,17 @@ function ExportJobCreate() {
                           <IconTrash size={16} />
                         </Button>
                       )}
+                       {index === containerDetailsForm.values.containers.length - 1 && (
+                  <Button
+                  size="sm"
+                  px={12}
+                 variant="light"
+                 color="#105476"
+                 onClick={addContainer}
+               >
+                 <IconPlus size={16} />
+               </Button>
+                       )}
                   </Grid.Col>
                 </Grid>
               </Box>

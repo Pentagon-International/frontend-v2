@@ -656,28 +656,26 @@ export const generateCargoArrivalNoticePDF = (
     // Increased line spacing for better readability
     const lineSpacing = 4.5;
     
-    let leftColumnHeight = 4; // Top padding
+    let leftColumnHeight = boxPadding + 3; // Matches drawing: leftYPos = sectionStartY + boxPadding + 3
     // Consignee section (first)
     if (hasConsignee) {
       leftColumnHeight += 4; // Title
       if (consigneeName) leftColumnHeight += Math.max(1, consigneeNameLines.length) * lineSpacing;
       if (consigneeEmail) leftColumnHeight += Math.max(1, consigneeEmailLines.length) * lineSpacing;
       if (consigneeAddress) leftColumnHeight += Math.max(1, consigneeAddressLines.length) * lineSpacing;
-      leftColumnHeight += 2; // Section spacing
+      leftColumnHeight += 8; // Separator: +3 spacing + line + +5 after (matches drawing)
     }
-    // Notify Party section (second)
-    if (hasNotify) {
-      leftColumnHeight += 4; // Title
-      if (notifyName) leftColumnHeight += Math.max(1, notifyNameLines.length) * lineSpacing;
-      if (notifyEmail) leftColumnHeight += Math.max(1, notifyEmailLines.length) * lineSpacing;
-      if (notifyAddress) leftColumnHeight += Math.max(1, notifyAddressLines.length) * lineSpacing;
-      leftColumnHeight += 2; // Section spacing
-    }
+    // Notify Party section — always drawn in rendering (if-block commented out)
+    leftColumnHeight += 4; // Title
+    if (notifyName) leftColumnHeight += Math.max(1, notifyNameLines.length) * lineSpacing;
+    if (notifyEmail) leftColumnHeight += Math.max(1, notifyEmailLines.length) * lineSpacing;
+    if (notifyAddress) leftColumnHeight += Math.max(1, notifyAddressLines.length) * lineSpacing;
+    leftColumnHeight += 8; // Separator: +3 spacing + line + +5 after (matches drawing)
     // Shipper section
     leftColumnHeight += 4; // Title
     if (shipperName) leftColumnHeight += Math.max(1, shipperNameLines.length) * lineSpacing;
     if (shipperAddress) leftColumnHeight += Math.max(1, shipperAddressLines.length) * lineSpacing;
-    leftColumnHeight += 2; // Bottom padding
+    leftColumnHeight += 4; // Bottom padding
 
     // Calculate heights for right column sections
     const jobRefNoLines = doc.splitTextToSize(jobRefNo || "", rightHalfWidth - 2 * boxPadding - 30);
@@ -697,15 +695,15 @@ export const generateCargoArrivalNoticePDF = (
     const etaLines = doc.splitTextToSize(eta || "", rightHalfWidth - 2 * boxPadding - 25);
     const cargoLocationLines = doc.splitTextToSize(cargoLocation || "", rightHalfWidth - 2 * boxPadding - 30);
     
-    let rightColumnHeight = 4; // Top padding
+    let rightColumnHeight = 4; // Top padding (matches drawing: sectionStartY + boxPadding ≈ +3)
     // Invoice/Job Details section
-    rightColumnHeight += 4; // Title
+    rightColumnHeight += 4; // Title space
     rightColumnHeight += Math.max(1, jobRefNoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, dateLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, invoiceRefLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, fromLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, igmInfoLines.length) * lineSpacing;
-    rightColumnHeight += 2; // Section spacing
+    rightColumnHeight += 6; // Separator: +1 spacing + line + +5 after (matches drawing)
     // Shipment Details section
     rightColumnHeight += 4; // Title
     rightColumnHeight += Math.max(1, hawbInfoLines.length) * lineSpacing;
@@ -723,8 +721,10 @@ export const generateCargoArrivalNoticePDF = (
     // Extract cargo details, charges, and notes for height calculation
     // Support both Air (mawb_charges) and Ocean (mbl_charges)
     const cargoDetails = hawbData?.cargo_details || [];
+
     const cargoRowSpacing = 4.5; // Match charges table row spacing
     const charges = hawbData?.charges || hawbData?.mawb_charges || hawbData?.mbl_charges || [];
+
     const notes = jobInfo?.notes || [];
     const rowHeight = 5;
     
@@ -944,8 +944,8 @@ export const generateCargoArrivalNoticePDF = (
     yPos += 4;
 
     // ===== CARGO DETAILS SECTION (integrated with main box) =====
-    // Check if we need a new page before cargo section
-    const estimatedCargoHeight = cargoDetails.length > 0 ? Math.min(cargoDetails.length * cargoRowSpacing + 15, 100) : 20;
+    // Only check for enough space to draw the section header (title + col header); rows handle their own page breaks
+    const estimatedCargoHeight = 20;
     if (needsNewPage(yPos, estimatedCargoHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Add footer for current page
       const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
@@ -963,35 +963,109 @@ export const generateCargoArrivalNoticePDF = (
     
     sectionY = yPos;
     
-    // Table header
+    // Cargo table setup
     doc.setFontSize(7);
-    const cargoHeaders = ["Commodity", "No of Pcs", "Char. Weight (Kgs)", "Gr.Wt (Kgs)"];
-    const cargoColWidths = [80, 30, 40, 40];
-    let xPos = margin + boxPadding;
+    const cargoHeaders = [
+      "Commodity",
+      "No of Pcs",
+      "Char. Weight (Kgs)",
+      "Gr.Wt (Kgs)",
+    ];
+    const cargoTableX = margin + boxPadding;
+    const cargoTableW = pageWidth - 2 * margin - 2 * boxPadding;
+    const cargoColWidths = [
+      Math.round(cargoTableW * 0.46),
+      Math.round(cargoTableW * 0.16),
+      Math.round(cargoTableW * 0.19),
+      cargoTableW -
+        (Math.round(cargoTableW * 0.46) +
+          Math.round(cargoTableW * 0.16) +
+          Math.round(cargoTableW * 0.19)),
+    ];
+    const cargoHeaderH = 6;
+    const cargoRowH = 5;
+    const cellPadX = 1.6;
 
+    // Section title strip (absolute position — rect starts at sectionY)
+    doc.setFillColor(215, 215, 215);
+    doc.setDrawColor(170, 170, 170);
+    doc.rect(cargoTableX, sectionY, cargoTableW, cargoHeaderH, "FD");
     doc.setFont("helvetica", "bold");
-    cargoHeaders.forEach((header, index) => {
-      doc.text(header, xPos, sectionY);
-      xPos += cargoColWidths[index];
-    });
+    doc.setFontSize(7);
+    doc.setTextColor(30, 30, 30);
+    doc.text("CARGO DETAILS", cargoTableX + cellPadX, sectionY + 4.2);
+    doc.setTextColor(0, 0, 0);
+    sectionY += cargoHeaderH;
 
-    sectionY += 2;
-    doc.line(margin, sectionY, pageWidth - margin, sectionY);
-    sectionY += 4;
+    // Column header background + border (absolute position)
+    doc.setFillColor(235, 235, 235);
+    doc.setDrawColor(170, 170, 170);
+    doc.rect(cargoTableX, sectionY, cargoTableW, cargoHeaderH, "FD");
+
+    let xPos = cargoTableX;
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    cargoHeaders.forEach((header, index) => {
+      const w = cargoColWidths[index];
+      const isNumericHeader = index > 0;
+      if (isNumericHeader) {
+        doc.text(header, xPos + cellPadX, sectionY + 4.2);
+      } else {
+        doc.text(header, xPos + cellPadX, sectionY + 4.2);
+      }
+      if (index < cargoHeaders.length - 1) {
+        doc.line(xPos + w, sectionY, xPos + w, sectionY + cargoHeaderH);
+      }
+      xPos += w;
+    });
+    doc.setTextColor(0, 0, 0);
+
+    sectionY += cargoHeaderH;
 
     // Table rows with actual data
     doc.setFont("helvetica", "normal");
     const commodityDescription = hawbData?.commodity_description || "";
     
     if (cargoDetails.length > 0) {
-      cargoDetails.forEach((cargo: any) => {
-        // Check if we need a new page for each row
-        if (needsNewPage(sectionY, cargoRowSpacing + 2, fixedBoxEndY, bottomBorderPadding)) {
-          // Add footer for current page
+      // Compute totals across all cargo rows
+      const totalNoOfPcs = cargoDetails.reduce((sum: number, c: any) => {
+        const v = parseFloat(c.no_of_packages);
+        return sum + (isNaN(v) ? 0 : v);
+      }, 0);
+      const totalCharWeight = cargoDetails.reduce((sum: number, c: any) => {
+        const v = parseFloat(c.chargeable_weight);
+        return sum + (isNaN(v) ? 0 : v);
+      }, 0);
+      const totalGrossWeight = cargoDetails.reduce((sum: number, c: any) => {
+        const v = parseFloat(c.gross_weight);
+        return sum + (isNaN(v) ? 0 : v);
+      }, 0);
+
+      const commodity = commodityDescription;
+      const noOfPcs = totalNoOfPcs > 0 ? String(totalNoOfPcs) : "";
+      const charWeight = totalCharWeight > 0 ? String(totalCharWeight) : "";
+      const grossWeight = totalGrossWeight > 0 ? String(totalGrossWeight) : "";
+
+      // Split commodity into wrapped lines constrained to the column width
+      const allCommodityLines: string[] = doc.splitTextToSize(commodity || "", cargoColWidths[0] - 2 * cellPadX);
+      const safeCommodityLines: string[] = allCommodityLines.length > 0 ? allCommodityLines : [""];
+      let lineIdx = 0;
+      let isFirstSegment = true;
+
+      // Render commodity text page-segment by page-segment so long text never overflows the page
+      while (lineIdx < safeCommodityLines.length) {
+        // How many commodity lines fit in remaining space on this page?
+        // Row height for N lines = N * 3.5 + 1.5  →  N ≤ (space - 1.5) / 3.5
+        const pageSpaceAvailable = fixedBoxEndY - bottomBorderPadding - sectionY;
+        let maxLinesHere = Math.max(1, Math.floor((pageSpaceAvailable - 1.5) / 3.5));
+        let linesThisRow = Math.min(maxLinesHere, safeCommodityLines.length - lineIdx);
+        let segmentLines = safeCommodityLines.slice(lineIdx, lineIdx + linesThisRow);
+        let segmentRowH = Math.max(cargoRowH, Math.ceil(linesThisRow * 3.5 + 1.5));
+
+        // If this segment does not fit, break to a new page
+        if (needsNewPage(sectionY, segmentRowH + 2, fixedBoxEndY, bottomBorderPadding)) {
           const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
           addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, currentPage, totalPages);
-          
-          // Create new page
           currentPage++;
           totalPages++;
           const newPageInfo = createNewPage(doc, pageWidth, margin, boxPadding, branchInfo, logoImage);
@@ -999,44 +1073,105 @@ export const generateCargoArrivalNoticePDF = (
           boxStartY = newPageInfo.boxStartY;
           boxX = newPageInfo.boxX;
           boxWidth = newPageInfo.boxWidth;
-          
-          // Redraw table header on new page
-          xPos = margin + boxPadding;
+
+          // Redraw column header on new page
+          doc.setFontSize(7);
+          doc.setFillColor(235, 235, 235);
+          doc.setDrawColor(170, 170, 170);
+          doc.rect(cargoTableX, sectionY, cargoTableW, cargoHeaderH, "FD");
+          xPos = cargoTableX;
           doc.setFont("helvetica", "bold");
+          doc.setTextColor(40, 40, 40);
           cargoHeaders.forEach((header, index) => {
-            doc.text(header, xPos, sectionY);
-            xPos += cargoColWidths[index];
+            const w = cargoColWidths[index];
+            const isNumericHeader = index > 0;
+            if (isNumericHeader) {
+              doc.text(header, xPos + cellPadX, sectionY + 4.2);
+            } else {
+              doc.text(header, xPos + cellPadX, sectionY + 4.2);
+            }
+            if (index < cargoHeaders.length - 1) {
+              doc.line(xPos + w, sectionY, xPos + w, sectionY + cargoHeaderH);
+            }
+            xPos += w;
           });
-          sectionY += 2;
-          doc.line(margin, sectionY, pageWidth - margin, sectionY);
-          sectionY += 4;
+          doc.setTextColor(0, 0, 0);
+          sectionY += cargoHeaderH;
           doc.setFont("helvetica", "normal");
+
+          // Recalculate for the new (full) page
+          const newPageSpace = fixedBoxEndY - bottomBorderPadding - sectionY;
+          maxLinesHere = Math.max(1, Math.floor((newPageSpace - 1.5) / 3.5));
+          linesThisRow = Math.min(maxLinesHere, safeCommodityLines.length - lineIdx);
+          segmentLines = safeCommodityLines.slice(lineIdx, lineIdx + linesThisRow);
+          segmentRowH = Math.max(cargoRowH, Math.ceil(linesThisRow * 3.5 + 1.5));
         }
-        
-        xPos = margin + boxPadding;
-        // Use commodity_description from hawb level (same for all rows)
-        const commodity = commodityDescription;
-        const noOfPcs = cargo.no_of_packages !== null && cargo.no_of_packages !== undefined ? String(cargo.no_of_packages) : "";
-        const charWeight = cargo.chargeable_weight !== null && cargo.chargeable_weight !== undefined ? String(cargo.chargeable_weight) : "";
-        const grossWeight = cargo.gross_weight !== null && cargo.gross_weight !== undefined ? String(cargo.gross_weight) : "";
-        
-        const rowData = [commodity, noOfPcs, charWeight, grossWeight];
-        rowData.forEach((cell, index) => {
-          const cellText = doc.splitTextToSize(cell || "", cargoColWidths[index] - 2);
-          doc.text(cellText, xPos, sectionY);
-          xPos += cargoColWidths[index];
-        });
-        sectionY += cargoRowSpacing;
-      });
+
+        // Draw this segment's row background
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(190, 190, 190);
+        doc.rect(cargoTableX, sectionY, cargoTableW, segmentRowH, "FD");
+
+        // Commodity text — top-aligned so all lines in this segment are visible
+        doc.text(segmentLines, cargoTableX + cellPadX, sectionY + 3.5);
+
+        // Column separator after commodity column
+        doc.line(cargoTableX + cargoColWidths[0], sectionY, cargoTableX + cargoColWidths[0], sectionY + segmentRowH);
+
+        // Numeric values (No of Pcs, Char. Weight, Gr.Wt) — only on the first segment row, vertically centred
+        if (isFirstSegment) {
+          const numericY = sectionY + segmentRowH / 2 + 1;
+          let numX = cargoTableX + cargoColWidths[0];
+          [
+            { val: noOfPcs,    w: cargoColWidths[1] },
+            { val: charWeight, w: cargoColWidths[2] },
+            { val: grossWeight, w: cargoColWidths[3] },
+          ].forEach(({ val, w }, i, arr) => {
+            const textW = doc.getTextWidth(val);
+            doc.text(val, numX + w - cellPadX - textW, numericY);
+            if (i < arr.length - 1) {
+              doc.line(numX + w, sectionY, numX + w, sectionY + segmentRowH);
+            }
+            numX += w;
+          });
+        } else {
+          // Continuation segments: draw column separators for numeric columns but no values
+          let numX = cargoTableX + cargoColWidths[0];
+          [cargoColWidths[1], cargoColWidths[2]].forEach((w) => {
+            doc.line(numX + w, sectionY, numX + w, sectionY + segmentRowH);
+            numX += w;
+          });
+        }
+
+        sectionY += segmentRowH;
+        lineIdx += linesThisRow;
+        isFirstSegment = false;
+      }
     } else {
-      // Show placeholder if no cargo details
-      xPos = margin + boxPadding;
+      // Show placeholder if no cargo details (absolute position)
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(220, 220, 220);
+      doc.rect(cargoTableX, sectionY, cargoTableW, cargoRowH, "FD");
+      xPos = cargoTableX;
       const placeholderRow = [commodityDescription || "{commodity_description}", "{no_of_packages}", "{chargeable_weight}", "{gross_weight}"];
       placeholderRow.forEach((cell, index) => {
-        doc.text(cell, xPos, sectionY);
-        xPos += cargoColWidths[index];
+        const w = cargoColWidths[index];
+        if (index === 0) doc.text(cell, xPos + cellPadX, sectionY + 3.5);
+        else {
+          const textW = doc.getTextWidth(String(cell));
+          doc.text(String(cell), xPos + w - cellPadX - textW, sectionY + 3.5);
+        }
+        if (index < placeholderRow.length - 1) {
+          doc.line(
+            xPos + w,
+            sectionY,
+            xPos + w,
+            sectionY + cargoRowH,
+          );
+        }
+        xPos += w;
       });
-      sectionY += cargoRowSpacing;
+      sectionY += cargoRowH;
     }
 
     sectionY += 1;
@@ -1048,8 +1183,8 @@ export const generateCargoArrivalNoticePDF = (
     sectionY += 4;
 
     // ===== CHARGES SECTION (integrated with main box) =====
-    // Check if we need a new page before charges section
-    const estimatedChargesHeight = charges.length > 0 ? Math.min(charges.length * chargesRowSpacing + 15, 100) : 20;
+    // Only check for enough space to draw the section header (title + col header); rows handle their own page breaks
+    const estimatedChargesHeight = 20;
     if (needsNewPage(sectionY, estimatedChargesHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Add footer for current page
       const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
@@ -1065,29 +1200,87 @@ export const generateCargoArrivalNoticePDF = (
       boxWidth = newPageInfo.boxWidth;
     }
 
-    // Charges table header
+    // Charges table setup
     doc.setFontSize(7);
     const chargesHeaders = ["Charges", "Currency", "Units", "Per unit", "ROE", "Amt"];
-    const chargesColWidths = [60, 25, 20, 25, 20, 30];
-    xPos = margin + boxPadding;
+    const chargesTableX = margin + boxPadding;
+    const chargesTableW = pageWidth - 2 * margin - 2 * boxPadding;
+    const chargesColWidths = [
+      Math.round(chargesTableW * 0.38),
+      Math.round(chargesTableW * 0.14),
+      Math.round(chargesTableW * 0.12),
+      Math.round(chargesTableW * 0.14),
+      Math.round(chargesTableW * 0.10),
+      chargesTableW -
+        (Math.round(chargesTableW * 0.38) +
+          Math.round(chargesTableW * 0.14) +
+          Math.round(chargesTableW * 0.12) +
+          Math.round(chargesTableW * 0.14) +
+          Math.round(chargesTableW * 0.10)),
+    ];
+    const chargesHeaderH = 6;
+    const chargesRowH = 5;
 
+    // Section title strip (absolute position — rect starts at sectionY)
+    doc.setFillColor(215, 215, 215);
+    doc.setDrawColor(170, 170, 170);
+    doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
     doc.setFont("helvetica", "bold");
-    chargesHeaders.forEach((header, index) => {
-      doc.text(header, xPos, sectionY);
-      xPos += chargesColWidths[index];
-    });
+    doc.setFontSize(7);
+    doc.setTextColor(30, 30, 30);
+    doc.text("CHARGES", chargesTableX + cellPadX, sectionY + 4.2);
+    doc.setTextColor(0, 0, 0);
+    sectionY += chargesHeaderH;
 
-    sectionY += 2;
-    doc.line(margin, sectionY, pageWidth - margin, sectionY);
-    sectionY += 4;
+    // Column header background + border (absolute position)
+    doc.setFillColor(235, 235, 235);
+    doc.setDrawColor(170, 170, 170);
+    doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
+
+    xPos = chargesTableX;
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    chargesHeaders.forEach((header, index) => {
+      const w = chargesColWidths[index];
+      const isNumericChargesHeader = index >= 2;
+      if (isNumericChargesHeader) {
+        doc.text(header, xPos + cellPadX, sectionY + 4.2);
+      } else {
+        doc.text(header, xPos + cellPadX, sectionY + 4.2);
+      }
+      if (index < chargesHeaders.length - 1) {
+        doc.line(
+          xPos + w,
+          sectionY,
+          xPos + w,
+          sectionY + chargesHeaderH,
+        );
+      }
+      xPos += w;
+    });
+    doc.setTextColor(0, 0, 0);
+
+    sectionY += chargesHeaderH;
 
     // Charges table rows with actual data
     doc.setFont("helvetica", "normal");
     
     if (charges.length > 0) {
-      charges.forEach((charge: any) => {
+      charges.forEach((charge: any, rowIdx: number) => {
+        // Pre-calculate row data and dynamic height before the page-break check
+        const chargeName = charge.charge_name || "";
+        const currency = charge.currency_details?.currency_code || charge.currency || "";
+        const units = charge.no_of_unit !== null && charge.no_of_unit !== undefined ? String(charge.no_of_unit) : "";
+        const perUnit = charge.amount_per_unit !== null && charge.amount_per_unit !== undefined ? String(charge.amount_per_unit) : "";
+        const roe = charge.roe !== null && charge.roe !== undefined ? String(charge.roe) : "";
+        const amount = charge.amount !== null && charge.amount !== undefined ? String(charge.amount) : "";
+        const chargeNameCellText = doc.splitTextToSize(chargeName || "", chargesColWidths[0] - 2 * cellPadX);
+        const numChargeNameLines = Math.max(1, chargeNameCellText.length);
+        // Row expands to fit all wrapped charge name lines (3 mm per line + 2 mm padding)
+        const dynamicChargesRowH = Math.max(chargesRowH, numChargeNameLines * 3 + 2);
+
         // Check if we need a new page for each row
-        if (needsNewPage(sectionY, chargesRowSpacing + 2, fixedBoxEndY, bottomBorderPadding)) {
+        if (needsNewPage(sectionY, dynamicChargesRowH + 2, fixedBoxEndY, bottomBorderPadding)) {
           // Add footer for current page
           const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
           addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, currentPage, totalPages);
@@ -1101,48 +1294,99 @@ export const generateCargoArrivalNoticePDF = (
           boxX = newPageInfo.boxX;
           boxWidth = newPageInfo.boxWidth;
           
-          // Redraw table header on new page
-          xPos = margin + boxPadding;
-          doc.setFont("helvetica", "bold");
+          // Redraw table header on new page (absolute position)
           doc.setFontSize(7);
+          doc.setFillColor(235, 235, 235);
+          doc.setDrawColor(170, 170, 170);
+          doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
+          xPos = chargesTableX;
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(40, 40, 40);
           chargesHeaders.forEach((header, index) => {
-            doc.text(header, xPos, sectionY);
-            xPos += chargesColWidths[index];
+            const w = chargesColWidths[index];
+            const isNumericChargesHeader = index >= 2;
+            if (isNumericChargesHeader) {
+              doc.text(header, xPos + cellPadX, sectionY + 4.2);
+            } else {
+              doc.text(header, xPos + cellPadX, sectionY + 4.2);
+            }
+            if (index < chargesHeaders.length - 1) {
+              doc.line(
+                xPos + w,
+                sectionY,
+                xPos + w,
+                sectionY + chargesHeaderH,
+              );
+            }
+            xPos += w;
           });
-          sectionY += 2;
-          doc.line(margin, sectionY, pageWidth - margin, sectionY);
-          sectionY += 4;
+          doc.setTextColor(0, 0, 0);
+          sectionY += chargesHeaderH;
           doc.setFont("helvetica", "normal");
         }
         
-        xPos = margin + boxPadding;
-        const chargeName = charge.charge_name || "";
-        // Extract currency from currency_details if available, otherwise use currency field
-        const currency = charge.currency_details?.currency_code || charge.currency || "";
-        const units = charge.no_of_unit !== null && charge.no_of_unit !== undefined ? String(charge.no_of_unit) : "";
-        const perUnit = charge.amount_per_unit !== null && charge.amount_per_unit !== undefined ? String(charge.amount_per_unit) : "";
-        const roe = charge.roe !== null && charge.roe !== undefined ? String(charge.roe) : "";
-        const amount = charge.amount !== null && charge.amount !== undefined ? String(charge.amount) : "";
-        
+        // Zebra row fill — dynamic height so all charge name lines are visible
+        const fill = rowIdx % 2 === 0 ? 255 : 244;
+        doc.setFillColor(fill, fill, fill);
+        doc.setDrawColor(190, 190, 190);
+        doc.rect(chargesTableX, sectionY, chargesTableW, dynamicChargesRowH, "FD");
+
+        xPos = chargesTableX;
         const chargeRowData = [chargeName, currency, units, perUnit, roe, amount];
         chargeRowData.forEach((cell, index) => {
-          const cellText = doc.splitTextToSize(cell || "", chargesColWidths[index] - 2);
-          doc.text(cellText, xPos, sectionY);
-          xPos += chargesColWidths[index];
+          const w = chargesColWidths[index];
+          const cellText = doc.splitTextToSize(cell || "", w - 2 * cellPadX);
+          const isNumericCol = index >= 2; // Units..Amt
+
+          const txt =
+            Array.isArray(cellText) && cellText.length > 0 ? String(cellText[0]) : "";
+          if (isNumericCol) {
+            const textW = doc.getTextWidth(txt);
+            doc.text(txt, xPos + w - cellPadX - textW, sectionY + 3.5);
+          } else {
+            doc.text(cellText, xPos + cellPadX, sectionY + 3.5);
+          }
+
+          // Column separators span the full dynamic row height
+          if (index < chargeRowData.length - 1) {
+            doc.line(
+              xPos + w,
+              sectionY,
+              xPos + w,
+              sectionY + dynamicChargesRowH,
+            );
+          }
+          xPos += w;
         });
-        sectionY += chargesRowSpacing;
+        sectionY += dynamicChargesRowH;
       });
     } else {
-      // Show placeholder if no charges
-      xPos = margin + boxPadding;
+      // Show placeholder if no charges (absolute position)
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(220, 220, 220);
+      doc.rect(chargesTableX, sectionY, chargesTableW, chargesRowH, "FD");
+      xPos = chargesTableX;
       const placeholderCharge = ["{charge_name}", "{currency}", "{no_of_unit}", "{amount_per_unit}", "{roe}", "{amount}"];
       placeholderCharge.forEach((cell, index) => {
-        doc.text(cell, xPos, sectionY);
-        xPos += chargesColWidths[index];
+        const w = chargesColWidths[index];
+        if (index < 2) doc.text(String(cell), xPos + cellPadX, sectionY + 3.5);
+        else {
+          const textW = doc.getTextWidth(String(cell));
+          doc.text(String(cell), xPos + w - cellPadX - textW, sectionY + 3.5);
+        }
+        if (index < placeholderCharge.length - 1) {
+          doc.line(
+            xPos + w,
+            sectionY,
+            xPos + w,
+            sectionY + chargesRowH,
+          );
+        }
+        xPos += w;
       });
-      sectionY += chargesRowSpacing;
+      sectionY += chargesRowH;
     }
-    doc.line(margin, sectionY - 2, pageWidth - margin, sectionY - 2);
+    doc.line(margin, sectionY, pageWidth - margin, sectionY);
 
     sectionY += 10;
 
@@ -1309,7 +1553,7 @@ export const generateCargoArrivalNoticePDF = (
     // Get FRT value
     let frtValue = "";
     if (freightCharge) {
-      const currency = freightCharge.currency_details?.currency_code || freightCharge.currency || "";
+      const currency = (freightCharge as any).currency_details?.currency_code || (freightCharge as any).currency || "";
       const amount = freightCharge.amount !== null && freightCharge.amount !== undefined ? String(freightCharge.amount) : "";
       frtValue = currency && amount ? `${currency} ${amount}` : "";
     }
@@ -1317,7 +1561,7 @@ export const generateCargoArrivalNoticePDF = (
     // Get EXW value
     let exwValue = "";
     if (exWorksCharge) {
-      const currency = exWorksCharge.currency_details?.currency_code || exWorksCharge.currency || "";
+      const currency = (exWorksCharge as any).currency_details?.currency_code || (exWorksCharge as any).currency || "";
       const amount = exWorksCharge.amount !== null && exWorksCharge.amount !== undefined ? String(exWorksCharge.amount) : "";
       exwValue = currency && amount ? `${currency} ${amount}` : "";
     }
