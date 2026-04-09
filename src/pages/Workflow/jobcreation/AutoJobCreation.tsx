@@ -569,9 +569,9 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
         },
       });
       setProgress(100);
-      setResults(data);
       setHbl([]); setMbl([]);
       onUploaded();
+      onClose();
     } catch {
       setResults({ uploaded: [], error: true });
     } finally {
@@ -1448,8 +1448,7 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
           )}
         </div>
 
-        {/* ── FIX 4: Footer with Save button ── */}
-       {/* <div className="modal-foot">
+        <div className="modal-foot">
           <button className="btn btn-ghost" onClick={onClose}>
             Cancel
           </button>
@@ -1462,7 +1461,7 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
               ? <><span style={{ width: 13, height: 13, border: "2px solid rgba(255,255,255,.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "hbl-spin .7s linear infinite", display: "inline-block" }} /> Saving…</>
               : "💾 Save Payload"}
           </button>
-        </div> */}
+        </div>
 
       </div>
 
@@ -2121,7 +2120,7 @@ const ContainerTypeFixModal: FC<{
           <h2>🔧 Fix Invalid Container Types</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body" style={{ overflow: "visible" }}>
+        <div className="modal-body" style={{ overflowY: "auto", maxHeight: "60vh" }}>
           {invalidContainers.map(({ idx, code }) => (
             <div key={idx} style={{ marginBottom: 16 }}>
               <div style={{ fontSize: ".68rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
@@ -2476,13 +2475,11 @@ const HBLDocumentManager: FC = () => {
                     {/* {f.status === "done" && (
                       <button className="act-btn dl" onClick={() => window.open(`/files/${f.txn_id}/download`, "_blank")}>↓ JSON</button>
                     )} */}
-                    { (f.status === "done" || f.status === "job_created") && (
-                      <button
-                        className="act-btn payload"
-                        onClick={() => setModal({ type: "payload", txn_id: f.txn_id, record: f })}
-                        style={hasCodeValidationError(f) ? { color: "var(--red)", borderColor: "var(--red)", background: "rgba(220,38,38,.06)" } : undefined}
-                      >⊞ View</button>
-                    )}
+                    <button
+                      className="act-btn payload"
+                      onClick={() => setModal({ type: "payload", txn_id: f.txn_id, record: f })}
+                      style={hasCodeValidationError(f) ? { color: "var(--red)", borderColor: "var(--red)", background: "rgba(220,38,38,.06)" } : undefined}
+                    >⊞ View</button>
                   </div>
                 </td>
               </tr>
