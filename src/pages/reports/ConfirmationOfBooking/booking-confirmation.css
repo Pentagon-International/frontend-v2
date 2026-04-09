@@ -11,7 +11,7 @@
 /* ── Page setup ──────────────────────────────────────────── */
 @page {
   size: A4 portrait;
-  margin: 10mm 12mm 18mm 12mm;
+  margin: 10mm 10mm 10mm 10mm;
 
   @bottom-center {
     content: element(running-footer);
@@ -71,6 +71,22 @@ html, body {
 .no-print .btn-print { background: #fff;        color: var(--ink); }
 .no-print .btn-pdf   { background: var(--brand); color: #fff; border-color: var(--brand); }
 
+.type-switcher-label {
+  font-size: 11px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.type-switcher {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
 /* ── Screen wrapper ──────────────────────────────────────── */
 .page-preview {
   width: 186mm;           /* 210mm − 2×12mm side margins */
@@ -123,17 +139,17 @@ html, body {
 
 .company h1 {
   margin: 0 0 2px;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.1px;
   text-transform: uppercase;
   line-height: 1.3;
-  color: var(--ink);
+  color: var(--brand);
 }
 
 .company p {
   margin: 0;
-  font-size: 8.5px;
+  font-size: 9px;
   color: var(--ink);
   line-height: 1.65;
 }
@@ -152,8 +168,8 @@ html, body {
 }
 
 .doc-currency {
-  font-size: 8.5px;
-  color: var(--muted);
+  font-size: 9px;
+  color: var(--ink);
   margin-top: 4px;
   text-align: right;
 }
@@ -168,23 +184,23 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 8px 0 4px;
+  padding: 10px 0 2px;
   border-top: 1px solid var(--line);
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .doc-title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--ink);
+  color: var(--brand);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.1px;
 }
 
 /* Spacers */
-.table-gap  { height: 8px;  }
+.table-gap  { height: 10px; }
 .spacer-lg  { height: 24px; }
-.spacer-xl  { height: 48px; }
+.spacer-xl  { height: 90px; }
 
 /* ══════════════════════════════════════════════════════════
    ADDRESSEE BOX  — "To" block mirroring the PDF layout
@@ -202,24 +218,17 @@ table.addr-table {
 }
 
 .addr-to-cell {
-  width: 45%;
+  width: 50%;
   vertical-align: top;
   padding: 8px 10px;
   border-right: 1px solid var(--line);
 }
 
 .addr-attn-cell {
-  width: 35%;
+  width: 50%;
   vertical-align: top;
   padding: 8px 10px;
   border-right: 1px solid var(--line);
-}
-
-.addr-date-cell {
-  width: 20%;
-  vertical-align: top;
-  padding: 8px 10px;
-  text-align: right;
 }
 
 .addr-label {
@@ -232,6 +241,7 @@ table.addr-table {
 
 .addr-name {
   font-size: 9px;
+  padding-left: 8px;
   font-weight: 700;
   color: var(--ink);
   margin-bottom: 3px;
@@ -239,6 +249,7 @@ table.addr-table {
 
 .addr-lines {
   font-size: 8.5px;
+  padding-left: 8px;
   color: var(--ink);
   line-height: 1.6;
 }
@@ -266,11 +277,13 @@ table.addr-table {
    ══════════════════════════════════════════════════════════ */
 .intro-wrap {
   padding: 8px 14px 4px;
+  margin-bottom: 8px;
 }
 
 .intro-text {
   margin: 0;
   font-size: 8.5px;
+  font-weight: 600;
   color: var(--ink);
   font-style: italic;
 }
@@ -287,29 +300,35 @@ table.meta {
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 8.5px;
+  border: 1.5px solid var(--line-strong);
 }
 
 table.meta td {
   border-bottom: 1px solid var(--line);
-  padding: 5px 8px;
+  border-right: 1px solid var(--line);
+  padding: 4px 8px;
   vertical-align: top;
   line-height: 1.5;
 }
 
 table.meta tr:last-child td { border-bottom: none; }
+table.meta td:last-child    { border-right: none; }
 
 table.meta td.k {
   width: 22%;
-  color: var(--ink);
-  font-weight: 600;
+  color: var(--muted);
+  font-weight: 700;
   white-space: nowrap;
-  font-size: 8.5px;
+  font-size: 7.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: var(--header-sub);
 }
 
 /* Colon separator — rendered via CSS pseudo-element */
-table.meta td.k::after {
+/* table.meta td.k::after {
   content: " :";
-}
+} */
 
 table.meta td.v {
   width: 78%;
@@ -318,35 +337,37 @@ table.meta td.v {
   overflow-wrap: anywhere;
 }
 
-/* ETD cell: inline ETA on same row */
-.etd-cell .eta-inline {
-  color: var(--ink);
-  font-weight: 500;
-}
-
 /* ── Remarks table (no outer border, slightly different) ── */
 table.remarks-table {
   margin-top: 4px;
-  border-top: 1px solid var(--line);
+  border: 1.5px solid var(--line-strong);
 }
 
 table.remarks-table td {
-  border-bottom: none;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
   padding: 6px 8px;
   vertical-align: top;
   font-size: 8.5px;
 }
 
+table.remarks-table tr:last-child td { border-bottom: none; }
+table.remarks-table td:last-child    { border-right: none; }
+
 table.remarks-table td.k {
-  width: 12%;
-  font-weight: 600;
+  width: 22%;
+  font-weight: 700;
   white-space: nowrap;
-  color: var(--ink);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-size: 7.5px;
+  background: var(--header-sub);
 }
 
-table.remarks-table td.k::after {
+/* table.remarks-table td.k::after {
   content: " :";
-}
+} */
 
 td.remark-val {
   color: var(--ink);
@@ -375,7 +396,7 @@ td.remark-val {
   display: grid;
   grid-template-columns: 1.5fr 1fr;
   gap: 12px;
-  padding: 7px 14px 0;
+  padding: 7px 0 0;
   border-top: 0.5px solid var(--brand);
   background: var(--bg);
   /* Screen: fixed bottom */
@@ -435,16 +456,30 @@ td.remark-val {
 
   /* WeasyPrint running element */
   .running-footer {
-    position: running(running-footer);
-    left: 0;
-    right: 0;
+    position: fixed;
+    left: 5mm;
+    right: 5mm;
     bottom: 0;
     width: auto;
     margin: 0;
-    padding: 7px 0 0;
+    padding: 7px 14px 0;
+    z-index: 10;
   }
 
-  table.meta td  { page-break-inside: avoid; break-inside: avoid; }
+  table.meta,
+  table.remarks-table {
+    page-break-inside: auto;
+    break-inside: auto;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  table.meta td,
+  table.remarks-table td {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
   .addr-wrap     { page-break-inside: avoid; break-inside: avoid; }
   .signoff-wrap  { page-break-inside: avoid; break-inside: avoid; }
 }

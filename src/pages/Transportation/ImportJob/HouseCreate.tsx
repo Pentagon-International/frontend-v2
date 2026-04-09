@@ -2532,12 +2532,66 @@ function HouseCreate() {
 
   const resolveDoAttentionTo = (type: DoTypeOption) => {
     if (type === "carrier_agent") {
-      return location.state?.carrierDetails?.carrier_name || "";
+      const partyDetails = location.state?.mblDetails as
+        | { carrier_agent_name?: string; carrier_agent_address?: string }
+        | undefined;
+      const name = partyDetails?.carrier_agent_name || "";
+      const address = partyDetails?.carrier_agent_address || "";
+      return [name, address].filter(Boolean).join("\n\n");
     }
-    const firstCfsName = (location.state?.containerDetails || []).find(
-      (container: { cfs_name?: string }) => (container.cfs_name || "").trim(),
-    )?.cfs_name;
-    return firstCfsName || "";
+
+    const allContainerSources = [
+      ...(location.state?.containerDetails || []),
+      ...((location.state?.job as { container_details?: unknown[] } | undefined)
+        ?.container_details || []),
+    ] as Array<{
+      cfs_name?: string;
+      cfs_address?: string;
+      address?: string;
+      cfs_details?: { address?: string; cfs_address?: string };
+    }>;
+
+    const mappedContainerIds = (cargoDetails || [])
+      .map((cargo) => String(cargo.container_id ?? "").trim())
+      .filter(Boolean);
+    const mappedContainerNos = (cargoDetails || [])
+      .map((cargo) => String(cargo.container_number ?? "").trim())
+      .filter(Boolean);
+
+    const matchedHouseContainer = allContainerSources.find((container) => {
+      const containerId = String(
+        (container as { id?: number | string }).id ?? "",
+      ).trim();
+      const containerNo = String(
+        (container as { container_no?: string | number }).container_no ?? "",
+      ).trim();
+      const hasCfs = String(container.cfs_name || "").trim();
+      return (
+        !!hasCfs &&
+        (mappedContainerIds.includes(containerId) ||
+          mappedContainerNos.includes(containerNo))
+      );
+    });
+
+    const firstContainerWithCfs = allContainerSources.find(
+      (container: {
+        cfs_name?: string;
+        cfs_address?: string;
+        address?: string;
+        cfs_details?: { address?: string; cfs_address?: string };
+      }) => (container.cfs_name || "").trim(),
+    );
+
+    const sourceContainer = matchedHouseContainer || firstContainerWithCfs;
+    const cfsName = sourceContainer?.cfs_name || "";
+    const cfsAddress =
+      sourceContainer?.cfs_address ||
+      sourceContainer?.address ||
+      sourceContainer?.cfs_details?.address ||
+      sourceContainer?.cfs_details?.cfs_address ||
+      "";
+
+    return [cfsName, cfsAddress].filter(Boolean).join("\n\n");
   };
 
   const resolveDoDeliverTo = (deliverTo: DoDeliverToOption) => {
