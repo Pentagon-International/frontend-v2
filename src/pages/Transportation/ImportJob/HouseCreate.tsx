@@ -1011,6 +1011,16 @@ function HouseCreate() {
 
     const rb = b as Record<string, unknown>;
 
+    // Shipment terms
+    form.setFieldValue(
+      "shipment_terms_code",
+      String(rb.shipment_terms_code || ""),
+    );
+    form.setFieldValue(
+      "shipment_terms_name",
+      String(rb.shipment_terms_name || ""),
+    );
+
     // Party details
     const shipperCode = rb.shipper_code || "";
     const shipperName = rb.shipper_name || "";
@@ -1019,6 +1029,7 @@ function HouseCreate() {
     // keep codes for UI only; payload uses name/address/email
     form.setFieldValue("shipper_code", String(shipperCode || ""));
     form.setFieldValue("shipper_name", String(shipperName || ""));
+    setShipperSearch(String(shipperName || ""));
     form.setFieldValue("consignee_code", String(consigneeCode || ""));
     form.setFieldValue("consignee_name", String(consigneeName || ""));
     form.setFieldValue(
@@ -1047,23 +1058,28 @@ function HouseCreate() {
     if (consigneeEmail)
       form.setFieldValue("consignee_email", String(consigneeEmail));
 
-    // Notify customer name / address / email (payload keys: notify1_customer_*)
-    if (rb.notify_customer) {
-      form.setFieldValue("notify1_customer_name", String(rb.notify_customer));
-    }
-    if (rb.notify_customer_address) {
-      form.setFieldValue(
-        "notify1_customer_address",
-        String(rb.notify_customer_address),
-      );
-    }
-    if (rb.notify_customer_email) {
-      form.setFieldValue(
-        "notify1_customer_email",
-        String(rb.notify_customer_email),
-      );
-    }
+    // Notify customer name / address / email (supports both notify1_* and legacy notify_*)
+    form.setFieldValue(
+      "notify1_customer_name",
+      String(rb.notify1_customer_name || rb.notify_customer || ""),
+    );
+    form.setFieldValue(
+      "notify1_customer_address",
+      String(rb.notify1_customer_address || rb.notify_customer_address || ""),
+    );
+    form.setFieldValue(
+      "notify1_customer_email",
+      String(rb.notify1_customer_email || rb.notify_customer_email || ""),
+    );
 
+    // Origin agent fields (import booking maps via destination_agent_* keys)
+    form.setFieldValue(
+      "agent_name",
+      String(rb.destination_agent_name || rb.destination_agent || ""),
+    );
+    if (rb.destination_agent_code) {
+      form.setFieldValue("agent_code", String(rb.destination_agent_code));
+    }
     // Agent address and email (booking uses destination_agent_* for import)
     if (rb.destination_agent_address) {
       form.setFieldValue("agent_address", String(rb.destination_agent_address));
@@ -1071,6 +1087,11 @@ function HouseCreate() {
     if (rb.destination_agent_email) {
       form.setFieldValue("agent_email", String(rb.destination_agent_email));
     }
+
+    // CHA fields
+    form.setFieldValue("cha_code", String(rb.cha_code || ""));
+    form.setFieldValue("cha_name", String(rb.cha || rb.cha_name || ""));
+    form.setFieldValue("cha_address", String(rb.cha_address || ""));
 
     // Customer service name, routed, routed_by
     if (rb.customer_service_name) {
@@ -1109,42 +1130,107 @@ function HouseCreate() {
       Array.isArray(cargoDetailsData) &&
       cargoDetailsData.length > 0
     ) {
-      const mapped = cargoDetailsData.map((c) => ({
-        container_number: String(c.container_no ?? c.container_number ?? ""),
-        // FCL API uses no_of_containers; map to No of Packages
-        no_of_packages: toNum(
-          c.no_of_containers ?? c.no_of_packages ?? rb.no_of_packages,
-        ),
-        gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
-        // Volume left null - user will enter manually
-        volume: null,
-        chargeable_weight: null,
-        haz: (c.haz as boolean) ?? hazValue,
-      }));
+      const mappedFromContainers = cargoDetailsData.flatMap((c) => {
+        const nested = Array.isArray(c.containers)
+          ? (c.containers as Array<Record<string, unknown>>)
+          : [];
+        if (nested.length === 0) return [];
+        return nested.map((cn) => ({
+          container_number: String(cn.container_no ?? ""),
+          no_of_packages: toNum(
+            cn.no_of_packages ??
+              c.no_of_packages ??
+              c.no_of_containers ??
+              rb.no_of_packages,
+          ),
+          gross_weight: toNum(cn.gross_weight ?? c.gross_weight ?? rb.gross_weight),
+          volume: toNum(
+            cn.volume ?? c.volume ?? c.volume_weight ?? rb.volume ?? rb.volume_weight,
+          ),
+          chargeable_weight: toNum(
+            cn.chargeable_weight ??
+              cn.chargeable_volume ??
+              c.chargeable_weight ??
+              c.chargeable_volume ??
+              rb.chargeable_weight ??
+              rb.chargeable_volume,
+          ),
+          haz: (cn.haz as boolean) ?? (c.haz as boolean) ?? hazValue,
+        }));
+      });
+      const mapped =
+        mappedFromContainers.length > 0
+          ? mappedFromContainers
+          : cargoDetailsData.map((c) => ({
+              container_number: String(c.container_no ?? c.container_number ?? ""),
+              // FCL API uses no_of_containers; map to No of Packages
+              no_of_packages: toNum(
+                c.no_of_containers ?? c.no_of_packages ?? rb.no_of_packages,
+              ),
+              gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
+              volume: toNum(c.volume ?? c.volume_weight ?? rb.volume),
+              chargeable_weight: toNum(
+                c.chargeable_weight ??
+                  c.chargeable_volume ??
+                  rb.chargeable_weight ??
+                  rb.chargeable_volume,
+              ),
+              haz: (c.haz as boolean) ?? hazValue,
+            }));
       setCargoDetails(mapped.length > 0 ? mapped : []);
     } else if (
       cargoDetailsData &&
       Array.isArray(cargoDetailsData) &&
       cargoDetailsData.length > 0
     ) {
-      const mapped = cargoDetailsData.map((c) => ({
-        container_number: String(c.container_no ?? c.container_number ?? ""),
-        no_of_packages: toNum(
-          c.no_of_packages ?? c.no_of_containers ?? rb.no_of_packages,
-        ),
-        gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
-        volume:
-          toNum(c.volume) ??
-          toNum(c.volume_weight) ??
-          toNum(rb.volume) ??
-          toNum(rb.volume_weight),
-        chargeable_weight:
-          toNum(c.chargeable_volume) ??
-          toNum(c.chargeable_weight) ??
-          toNum(rb.chargeable_volume) ??
-          toNum(rb.chargeable_weight),
-        haz: (c.haz as boolean) ?? hazValue,
-      }));
+      const mappedFromContainers = cargoDetailsData.flatMap((c) => {
+        const nested = Array.isArray(c.containers)
+          ? (c.containers as Array<Record<string, unknown>>)
+          : [];
+        if (nested.length === 0) return [];
+        return nested.map((cn) => ({
+          container_number: String(cn.container_no ?? ""),
+          no_of_packages: toNum(
+            cn.no_of_packages ?? c.no_of_packages ?? rb.no_of_packages,
+          ),
+          gross_weight: toNum(cn.gross_weight ?? c.gross_weight ?? rb.gross_weight),
+          volume:
+            toNum(cn.volume) ??
+            toNum(c.volume) ??
+            toNum(c.volume_weight) ??
+            toNum(rb.volume) ??
+            toNum(rb.volume_weight),
+          chargeable_weight:
+            toNum(cn.chargeable_weight) ??
+            toNum(cn.chargeable_volume) ??
+            toNum(c.chargeable_volume) ??
+            toNum(c.chargeable_weight) ??
+            toNum(rb.chargeable_volume) ??
+            toNum(rb.chargeable_weight),
+          haz: (c.haz as boolean) ?? hazValue,
+        }));
+      });
+      const mapped =
+        mappedFromContainers.length > 0
+          ? mappedFromContainers
+          : cargoDetailsData.map((c) => ({
+              container_number: String(c.container_no ?? c.container_number ?? ""),
+              no_of_packages: toNum(
+                c.no_of_packages ?? c.no_of_containers ?? rb.no_of_packages,
+              ),
+              gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
+              volume:
+                toNum(c.volume) ??
+                toNum(c.volume_weight) ??
+                toNum(rb.volume) ??
+                toNum(rb.volume_weight),
+              chargeable_weight:
+                toNum(c.chargeable_volume) ??
+                toNum(c.chargeable_weight) ??
+                toNum(rb.chargeable_volume) ??
+                toNum(rb.chargeable_weight),
+              haz: (c.haz as boolean) ?? hazValue,
+            }));
       setCargoDetails(mapped.length > 0 ? mapped : []);
     } else {
       const row = {
@@ -1441,14 +1527,22 @@ function HouseCreate() {
   // Format container numbers from location state into dropdown options
   const containerNumberOptions = useMemo(() => {
     const containerNumbers = location.state?.containerNumbers || [];
-    if (!Array.isArray(containerNumbers)) return [];
-    return containerNumbers
+    const fromState = Array.isArray(containerNumbers)
+      ? containerNumbers
+          .filter((no) => no && String(no).trim() !== "")
+          .map((no) => String(no))
+      : [];
+    const fromAutofill = cargoDetails
+      .map((cargo) => String(cargo.container_number || "").trim())
+      .filter((no) => no.length > 0);
+    const merged = Array.from(new Set([...fromState, ...fromAutofill]));
+    return merged
       .filter((no) => no && String(no).trim() !== "")
       .map((no) => ({
         value: String(no),
         label: String(no),
       }));
-  }, [location.state?.containerNumbers]);
+  }, [location.state?.containerNumbers, cargoDetails]);
 
   // Auto-set routed_by when routed is "self" and user data is available
   useEffect(() => {

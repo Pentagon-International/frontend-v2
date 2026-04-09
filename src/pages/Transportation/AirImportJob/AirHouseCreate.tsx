@@ -780,6 +780,20 @@ function HouseCreate() {
     );
     form.setFieldValue("marks_no", String(rb.marks_no || ""));
 
+    // Shipment terms (auto-fill)
+    if (rb.shipment_terms_code) {
+      form.setFieldValue(
+        "shipment_terms_code",
+        String(rb.shipment_terms_code || ""),
+      );
+    }
+    if (rb.shipment_terms_name) {
+      form.setFieldValue(
+        "shipment_terms_name",
+        String(rb.shipment_terms_name || ""),
+      );
+    }
+
     // Customer service name, routed, routed_by
     if (rb.customer_service_name) {
       form.setFieldValue("customer_service", String(rb.customer_service_name));
@@ -796,20 +810,30 @@ function HouseCreate() {
     }
 
     // Notify customer name / address / email (payload keys: notify1_customer_*)
-    if (rb.notify_customer) {
-      form.setFieldValue("notify1_customer_name", String(rb.notify_customer));
+    if (rb.notify1_customer_name || rb.notify_customer) {
+      form.setFieldValue(
+        "notify1_customer_name",
+        String(rb.notify1_customer_name || rb.notify_customer || ""),
+      );
     }
-    if (rb.notify_customer_address) {
+    if (rb.notify1_customer_address || rb.notify_customer_address) {
       form.setFieldValue(
         "notify1_customer_address",
-        String(rb.notify_customer_address),
+        String(rb.notify1_customer_address || rb.notify_customer_address || ""),
       );
     }
-    if (rb.notify_customer_email) {
+    if (rb.notify1_customer_email || rb.notify_customer_email) {
       form.setFieldValue(
         "notify1_customer_email",
-        String(rb.notify_customer_email),
+        String(rb.notify1_customer_email || rb.notify_customer_email || ""),
       );
+    }
+
+    // CHA (auto-fill)
+    if (rb.cha_code) form.setFieldValue("cha_code", String(rb.cha_code || ""));
+    if (rb.cha) form.setFieldValue("cha_name", String(rb.cha || ""));
+    if (rb.cha_address) {
+      form.setFieldValue("cha_address", String(rb.cha_address || ""));
     }
 
     // Shipper/consignee addresses - try addresses from API if available
@@ -830,6 +854,9 @@ function HouseCreate() {
     if (consigneeEmail) {
       form.setFieldValue("consignee_email", String(consigneeEmail));
     }
+
+    // Keep shipper search input in sync so UI shows the autofilled value
+    if (shipperName) setShipperSearch(String(shipperName));
 
     // Origin agent address and email (booking uses destination_agent_* for import)
     if (rb.destination_agent_address) {
