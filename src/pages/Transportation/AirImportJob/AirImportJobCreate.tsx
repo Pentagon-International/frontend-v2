@@ -89,6 +89,21 @@ type MAWBDetailsForm = {
   ata: Date | null;
   igm_no: string;
   igm_date: Date | null;
+  shipper_id: string;
+  shipper_name: string;
+  shipper_email: string;
+  shipper_address_id: string;
+  shipper_address: string;
+  consignee_id: string;
+  consignee_name: string;
+  consignee_email: string;
+  consignee_address_id: string;
+  consignee_address: string;
+  carrier_agent_id: string;
+  carrier_agent_name: string;
+  carrier_agent_email: string;
+  carrier_agent_address_id: string;
+  carrier_agent_address: string;
 };
 
 type CarrierDetailsForm = {
@@ -190,6 +205,32 @@ type HAWBDetail = {
   }>;
   mawb_charges?: Array<Record<string, unknown>>;
   events?: Array<{ id?: number; type: string; date: string }>;
+};
+
+type PartyAddressOption = {
+  value: string;
+  label: string;
+  email: string;
+  address: string;
+};
+
+const getAddressOptions = (
+  originalData?: Record<string, unknown> | null,
+): PartyAddressOption[] => {
+  const addresses = Array.isArray(originalData?.addresses_data)
+    ? (originalData.addresses_data as Array<Record<string, unknown>>)
+    : [];
+  return addresses
+    .map((item) => ({
+      value: String(item.id ?? ""),
+      label: String(item.address ?? ""),
+      email: String(item.email ?? ""),
+      address: String(item.address ?? ""),
+      isPrimary: String(item.address_type ?? "").toLowerCase() === "primary",
+    }))
+    .filter((item) => item.value && item.address)
+    .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+    .map(({ value, label, email, address }) => ({ value, label, email, address }));
 };
 
 // Invoice-related types for Accounts tab
@@ -465,6 +506,68 @@ function AirImportJobCreate() {
                 ?.igm_date as string,
             ).toDate()
           : (location.state?.mawbDetails?.igm_date as Date | null) || null,
+      shipper_id: location.state?.mawbDetails?.shipper_id || "",
+      shipper_name:
+        String((jobData as Record<string, unknown> | undefined)?.shipper_name || "") ||
+        location.state?.mawbDetails?.shipper_name ||
+        "",
+      shipper_email:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.shipper_email || "",
+        ) ||
+        location.state?.mawbDetails?.shipper_email ||
+        "",
+      shipper_address_id: location.state?.mawbDetails?.shipper_address_id || "",
+      shipper_address:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.shipper_address || "",
+        ) ||
+        location.state?.mawbDetails?.shipper_address ||
+        "",
+      consignee_id: location.state?.mawbDetails?.consignee_id || "",
+      consignee_name:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.consignee_name || "",
+        ) ||
+        location.state?.mawbDetails?.consignee_name ||
+        "",
+      consignee_email:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.consignee_email || "",
+        ) ||
+        location.state?.mawbDetails?.consignee_email ||
+        "",
+      consignee_address_id:
+        location.state?.mawbDetails?.consignee_address_id || "",
+      consignee_address:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.consignee_address || "",
+        ) ||
+        location.state?.mawbDetails?.consignee_address ||
+        "",
+      carrier_agent_id: location.state?.mawbDetails?.carrier_agent_id || "",
+      carrier_agent_name:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.carrier_agent_name || "",
+        ) ||
+        location.state?.mawbDetails?.carrier_agent_name ||
+        "",
+      carrier_agent_email:
+        String(
+          (jobData as Record<string, unknown> | undefined)
+            ?.carrier_agent_email || "",
+        ) ||
+        location.state?.mawbDetails?.carrier_agent_email ||
+        "",
+      carrier_agent_address_id:
+        location.state?.mawbDetails?.carrier_agent_address_id || "",
+      carrier_agent_address:
+        String(
+          (jobData as Record<string, unknown> | undefined)
+            ?.carrier_agent_address || "",
+        ) ||
+        location.state?.mawbDetails?.carrier_agent_address ||
+        "",
     },
     validate: yupResolver(mawbDetailsSchema),
   });
@@ -508,6 +611,24 @@ function AirImportJobCreate() {
     },
     validate: yupResolver(carrierDetailsSchema),
   });
+
+  const partyDetailsForm = mawbDetailsForm;
+  const [shipperAddressOptions, setShipperAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [carrierAgentAddressOptions, setCarrierAgentAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [shipperAddressSearch, setShipperAddressSearch] = useState("");
+  const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
+  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] = useState("");
+  const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
+  const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
+  const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
+    useState(false);
 
   // Routings Form - Using useForm like charges in QuotationCreate
   // Initialize with location.state.routings if available (for create mode restoration)
@@ -1466,6 +1587,26 @@ function AirImportJobCreate() {
               eta: mawbDetailsForm.values.eta || null,
               atd: mawbDetailsForm.values.atd || null,
               ata: mawbDetailsForm.values.ata || null,
+              shipper_id: mawbDetailsForm.values.shipper_id || "",
+              shipper_name: mawbDetailsForm.values.shipper_name || "",
+              shipper_email: mawbDetailsForm.values.shipper_email || "",
+              shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+              shipper_address: mawbDetailsForm.values.shipper_address || "",
+              consignee_id: mawbDetailsForm.values.consignee_id || "",
+              consignee_name: mawbDetailsForm.values.consignee_name || "",
+              consignee_email: mawbDetailsForm.values.consignee_email || "",
+              consignee_address_id:
+                mawbDetailsForm.values.consignee_address_id || "",
+              consignee_address: mawbDetailsForm.values.consignee_address || "",
+              carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
+              carrier_agent_name:
+                mawbDetailsForm.values.carrier_agent_name || "",
+              carrier_agent_email:
+                mawbDetailsForm.values.carrier_agent_email || "",
+              carrier_agent_address_id:
+                mawbDetailsForm.values.carrier_agent_address_id || "",
+              carrier_agent_address:
+                mawbDetailsForm.values.carrier_agent_address || "",
               origin_agent_data: originAgentDataRef.current || null,
             },
             // Save current Carrier form values
@@ -1487,6 +1628,8 @@ function AirImportJobCreate() {
         setActive(1);
       }
     } else if (active === 1) {
+      setActive(2);
+    } else if (active === 2) {
       if (validateStep2()) {
         // Save ALL current form values before moving to Estimates
         navigate(location.pathname, {
@@ -1506,6 +1649,26 @@ function AirImportJobCreate() {
               eta: mawbDetailsForm.values.eta || null,
               atd: mawbDetailsForm.values.atd || null,
               ata: mawbDetailsForm.values.ata || null,
+              shipper_id: mawbDetailsForm.values.shipper_id || "",
+              shipper_name: mawbDetailsForm.values.shipper_name || "",
+              shipper_email: mawbDetailsForm.values.shipper_email || "",
+              shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+              shipper_address: mawbDetailsForm.values.shipper_address || "",
+              consignee_id: mawbDetailsForm.values.consignee_id || "",
+              consignee_name: mawbDetailsForm.values.consignee_name || "",
+              consignee_email: mawbDetailsForm.values.consignee_email || "",
+              consignee_address_id:
+                mawbDetailsForm.values.consignee_address_id || "",
+              consignee_address: mawbDetailsForm.values.consignee_address || "",
+              carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
+              carrier_agent_name:
+                mawbDetailsForm.values.carrier_agent_name || "",
+              carrier_agent_email:
+                mawbDetailsForm.values.carrier_agent_email || "",
+              carrier_agent_address_id:
+                mawbDetailsForm.values.carrier_agent_address_id || "",
+              carrier_agent_address:
+                mawbDetailsForm.values.carrier_agent_address || "",
               origin_agent_data: originAgentDataRef.current || null,
             },
             // Save current Carrier form values
@@ -1524,9 +1687,9 @@ function AirImportJobCreate() {
             ...(location.state?.job && { job: location.state.job }),
           },
         });
-        setActive(2);
+        setActive(3);
       }
-    } else if (active === 2) {
+    } else if (active === 3) {
       // Save ALL current form values before submitting
       navigate(location.pathname, {
         replace: true,
@@ -1544,6 +1707,25 @@ function AirImportJobCreate() {
             eta: mawbDetailsForm.values.eta || null,
             atd: mawbDetailsForm.values.atd || null,
             ata: mawbDetailsForm.values.ata || null,
+            shipper_id: mawbDetailsForm.values.shipper_id || "",
+            shipper_name: mawbDetailsForm.values.shipper_name || "",
+            shipper_email: mawbDetailsForm.values.shipper_email || "",
+            shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+            shipper_address: mawbDetailsForm.values.shipper_address || "",
+            consignee_id: mawbDetailsForm.values.consignee_id || "",
+            consignee_name: mawbDetailsForm.values.consignee_name || "",
+            consignee_email: mawbDetailsForm.values.consignee_email || "",
+            consignee_address_id:
+              mawbDetailsForm.values.consignee_address_id || "",
+            consignee_address: mawbDetailsForm.values.consignee_address || "",
+            carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
+            carrier_agent_name: mawbDetailsForm.values.carrier_agent_name || "",
+            carrier_agent_email:
+              mawbDetailsForm.values.carrier_agent_email || "",
+            carrier_agent_address_id:
+              mawbDetailsForm.values.carrier_agent_address_id || "",
+            carrier_agent_address:
+              mawbDetailsForm.values.carrier_agent_address || "",
             origin_agent_data: originAgentDataRef.current || null,
           },
           carrierDetails: carrierDetailsForm.values,
@@ -1583,6 +1765,25 @@ function AirImportJobCreate() {
             eta: mawbDetailsForm.values.eta || null,
             atd: mawbDetailsForm.values.atd || null,
             ata: mawbDetailsForm.values.ata || null,
+            shipper_id: mawbDetailsForm.values.shipper_id || "",
+            shipper_name: mawbDetailsForm.values.shipper_name || "",
+            shipper_email: mawbDetailsForm.values.shipper_email || "",
+            shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+            shipper_address: mawbDetailsForm.values.shipper_address || "",
+            consignee_id: mawbDetailsForm.values.consignee_id || "",
+            consignee_name: mawbDetailsForm.values.consignee_name || "",
+            consignee_email: mawbDetailsForm.values.consignee_email || "",
+            consignee_address_id:
+              mawbDetailsForm.values.consignee_address_id || "",
+            consignee_address: mawbDetailsForm.values.consignee_address || "",
+            carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
+            carrier_agent_name: mawbDetailsForm.values.carrier_agent_name || "",
+            carrier_agent_email:
+              mawbDetailsForm.values.carrier_agent_email || "",
+            carrier_agent_address_id:
+              mawbDetailsForm.values.carrier_agent_address_id || "",
+            carrier_agent_address:
+              mawbDetailsForm.values.carrier_agent_address || "",
             origin_agent_data: originAgentDataRef.current || null,
           },
           // Save current Carrier form values
@@ -1711,6 +1912,52 @@ function AirImportJobCreate() {
               dayjs(savedMawbDetails.igm_date).isValid()
                 ? dayjs(savedMawbDetails.igm_date).toDate()
                 : mawbDetailsForm.values.igm_date || null,
+            shipper_id:
+              (savedMawbDetails as { shipper_id?: string } | undefined)
+                ?.shipper_id || "",
+            shipper_name:
+              (savedMawbDetails as { shipper_name?: string } | undefined)
+                ?.shipper_name || "",
+            shipper_email:
+              (savedMawbDetails as { shipper_email?: string } | undefined)
+                ?.shipper_email || "",
+            shipper_address_id:
+              (savedMawbDetails as { shipper_address_id?: string } | undefined)
+                ?.shipper_address_id || "",
+            shipper_address:
+              (savedMawbDetails as { shipper_address?: string } | undefined)
+                ?.shipper_address || "",
+            consignee_id:
+              (savedMawbDetails as { consignee_id?: string } | undefined)
+                ?.consignee_id || "",
+            consignee_name:
+              (savedMawbDetails as { consignee_name?: string } | undefined)
+                ?.consignee_name || "",
+            consignee_email:
+              (savedMawbDetails as { consignee_email?: string } | undefined)
+                ?.consignee_email || "",
+            consignee_address_id:
+              (savedMawbDetails as { consignee_address_id?: string } | undefined)
+                ?.consignee_address_id || "",
+            consignee_address:
+              (savedMawbDetails as { consignee_address?: string } | undefined)
+                ?.consignee_address || "",
+            carrier_agent_id:
+              (savedMawbDetails as { carrier_agent_id?: string } | undefined)
+                ?.carrier_agent_id || "",
+            carrier_agent_name:
+              (savedMawbDetails as { carrier_agent_name?: string } | undefined)
+                ?.carrier_agent_name || "",
+            carrier_agent_email:
+              (savedMawbDetails as { carrier_agent_email?: string } | undefined)
+                ?.carrier_agent_email || "",
+            carrier_agent_address_id:
+              (
+                savedMawbDetails as { carrier_agent_address_id?: string } | undefined
+              )?.carrier_agent_address_id || "",
+            carrier_agent_address:
+              (savedMawbDetails as { carrier_agent_address?: string } | undefined)
+                ?.carrier_agent_address || "",
           });
 
           // Update origin agent data ref if available in location state
@@ -1865,6 +2112,22 @@ function AirImportJobCreate() {
         ata: mawbDetailsForm.values.ata || null,
         igm_no: mawbDetailsForm.values.igm_no || "",
         igm_date: mawbDetailsForm.values.igm_date || null,
+        shipper_id: mawbDetailsForm.values.shipper_id || "",
+        shipper_name: mawbDetailsForm.values.shipper_name || "",
+        shipper_email: mawbDetailsForm.values.shipper_email || "",
+        shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+        shipper_address: mawbDetailsForm.values.shipper_address || "",
+        consignee_id: mawbDetailsForm.values.consignee_id || "",
+        consignee_name: mawbDetailsForm.values.consignee_name || "",
+        consignee_email: mawbDetailsForm.values.consignee_email || "",
+        consignee_address_id: mawbDetailsForm.values.consignee_address_id || "",
+        consignee_address: mawbDetailsForm.values.consignee_address || "",
+        carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
+        carrier_agent_name: mawbDetailsForm.values.carrier_agent_name || "",
+        carrier_agent_email: mawbDetailsForm.values.carrier_agent_email || "",
+        carrier_agent_address_id:
+          mawbDetailsForm.values.carrier_agent_address_id || "",
+        carrier_agent_address: mawbDetailsForm.values.carrier_agent_address || "",
         // Use ref first (most recent), then fallback to location.state
         origin_agent_data:
           originAgentDataRef.current ||
@@ -2312,6 +2575,15 @@ function AirImportJobCreate() {
             ? dayjs(carrierDetailsForm.values.mawb_date).format("YYYY-MM-DD")
             : null
           : null,
+        shipper_name: partyDetailsForm.values.shipper_name || "",
+        shipper_email: partyDetailsForm.values.shipper_email || "",
+        shipper_address: partyDetailsForm.values.shipper_address || "",
+        consignee_name: partyDetailsForm.values.consignee_name || "",
+        consignee_email: partyDetailsForm.values.consignee_email || "",
+        consignee_address: partyDetailsForm.values.consignee_address || "",
+        carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
+        carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
+        carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
         booking_ids: bookingIds,
         ocean_routings: routingsForm.values.routings.map((routing) => {
           const toIso = (d: Date | null) =>
@@ -2611,9 +2883,9 @@ function AirImportJobCreate() {
     }
   };
 
-  // Fetch invoice list when Accounts tab (active === 3) is active
+  // Fetch invoice list when Accounts tab (active === 4) is active
   useEffect(() => {
-    if (active !== 3) return;
+    if (active !== 4) return;
     if (!jobData?.id) return;
     setInvoiceListLoading(true);
     postAPICall(
@@ -3034,7 +3306,7 @@ function AirImportJobCreate() {
               fontWeight: active === 1 ? 600 : 400,
             }}
           >
-            Routings
+            Party Details
           </Tabs.Tab>
           <Tabs.Tab
             value="2"
@@ -3048,19 +3320,33 @@ function AirImportJobCreate() {
               fontWeight: active === 2 ? 600 : 400,
             }}
           >
+            Routings
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="3"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 3 ? 600 : 400,
+            }}
+          >
             Estimates
           </Tabs.Tab>
           {jobData?.id != null && (
             <Tabs.Tab
-              value="3"
+              value="4"
               style={{
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 3 ? "3px solid #105476" : "none",
+                borderBottom: active === 4 ? "3px solid #105476" : "none",
                 color: "#105476",
                 fontSize: 16,
-                fontWeight: active === 3 ? 600 : 400,
+                fontWeight: active === 4 ? 600 : 400,
               }}
             >
               Accounts
@@ -3389,8 +3675,414 @@ function AirImportJobCreate() {
           </Box>
         </Tabs.Panel>
 
-        {/* Tab 2: Routings */}
         <Tabs.Panel value="1">
+          <Box mt="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
+              Party Details
+            </Text>
+            <Grid gutter="sm" mb="md">
+              <Grid.Col span={12}>
+                <Text fw={600} c="#105476">
+                  Shipper Details
+                </Text>
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <SearchableSelect
+                  label="Shipper Name"
+                  dropdownZIndex={1000}
+                  apiEndpoint={URL.shipper}
+                  placeholder="Type shipper name"
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.id ?? ""),
+                    label: String(item.customer_name ?? ""),
+                  })}
+                  value={partyDetailsForm.values.shipper_id || null}
+                  displayValue={partyDetailsForm.values.shipper_name || null}
+                  onChange={(value, selectedData, originalData) => {
+                    const options = getAddressOptions(originalData);
+                    const primary = options[0];
+                    partyDetailsForm.setFieldValue("shipper_id", value || "");
+                    partyDetailsForm.setFieldValue(
+                      "shipper_name",
+                      selectedData?.label || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "shipper_email",
+                      primary?.email || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "shipper_address_id",
+                      primary?.value || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "shipper_address",
+                      primary?.address || "",
+                    );
+                    if (!value) {
+                      partyDetailsForm.setFieldValue("shipper_name", "");
+                      partyDetailsForm.setFieldValue("shipper_email", "");
+                      partyDetailsForm.setFieldValue("shipper_address_id", "");
+                      partyDetailsForm.setFieldValue("shipper_address", "");
+                    }
+                    setShipperAddressOptions(value ? options : []);
+                    setShipperAddressSearch("");
+                    setShipperAddressCustom(false);
+                  }}
+                  minSearchLength={2}
+                  returnOriginalData={true}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Shipper Email"
+                  value={partyDetailsForm.values.shipper_email}
+                  onChange={(e) =>
+                    partyDetailsForm.setFieldValue(
+                      "shipper_email",
+                      e.currentTarget.value,
+                    )
+                  }
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                {shipperAddressCustom ||
+                (!!partyDetailsForm.values.shipper_address &&
+                  (!partyDetailsForm.values.shipper_address_id ||
+                    !shipperAddressOptions.some(
+                      (item) =>
+                        item.value === partyDetailsForm.values.shipper_address_id,
+                    ))) ? (
+                  <FormTextInput
+                    label="Shipper Address"
+                    value={partyDetailsForm.values.shipper_address}
+                    onChange={(e) => {
+                      const nextValue = e.currentTarget.value;
+                      partyDetailsForm.setFieldValue("shipper_address", nextValue);
+                      if (!nextValue.trim()) {
+                        setShipperAddressCustom(false);
+                        setShipperAddressSearch("");
+                        partyDetailsForm.setFieldValue("shipper_address_id", "");
+                      }
+                    }}
+                  />
+                ) : (
+                  <Dropdown
+                    label="Shipper Address"
+                    data={shipperAddressOptions.map((item) => ({
+                      value: item.value,
+                      label: item.label,
+                    }))}
+                    value={partyDetailsForm.values.shipper_address_id || null}
+                    searchValue={shipperAddressSearch}
+                    onSearchChange={(value) => {
+                      setShipperAddressSearch(value);
+                      const hasMatch = shipperAddressOptions.some(
+                        (item) =>
+                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                      );
+                      if (value.trim() && !hasMatch) {
+                        setShipperAddressCustom(true);
+                        partyDetailsForm.setFieldValue("shipper_address_id", "");
+                        partyDetailsForm.setFieldValue("shipper_address", value);
+                      }
+                    }}
+                    onChange={(value) => {
+                      const selected = shipperAddressOptions.find(
+                        (item) => item.value === value,
+                      );
+                      partyDetailsForm.setFieldValue(
+                        "shipper_address_id",
+                        value || "",
+                      );
+                      partyDetailsForm.setFieldValue(
+                        "shipper_address",
+                        selected?.address || "",
+                      );
+                    }}
+                    searchable
+                    clearable
+                  />
+                )}
+              </Grid.Col>
+            </Grid>
+            <Grid gutter="sm" mb="md">
+              <Grid.Col span={12}>
+                <Text fw={600} c="#105476">
+                  Consignee Details
+                </Text>
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <SearchableSelect
+                  label="Consignee Name"
+                  dropdownZIndex={1000}
+                  apiEndpoint={URL.consignee}
+                  placeholder="Type consignee name"
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.id ?? ""),
+                    label: String(item.customer_name ?? ""),
+                  })}
+                  value={partyDetailsForm.values.consignee_id || null}
+                  displayValue={partyDetailsForm.values.consignee_name || null}
+                  onChange={(value, selectedData, originalData) => {
+                    const options = getAddressOptions(originalData);
+                    const primary = options[0];
+                    partyDetailsForm.setFieldValue("consignee_id", value || "");
+                    partyDetailsForm.setFieldValue(
+                      "consignee_name",
+                      selectedData?.label || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "consignee_email",
+                      primary?.email || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "consignee_address_id",
+                      primary?.value || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "consignee_address",
+                      primary?.address || "",
+                    );
+                    if (!value) {
+                      partyDetailsForm.setFieldValue("consignee_name", "");
+                      partyDetailsForm.setFieldValue("consignee_email", "");
+                      partyDetailsForm.setFieldValue("consignee_address_id", "");
+                      partyDetailsForm.setFieldValue("consignee_address", "");
+                    }
+                    setConsigneeAddressOptions(value ? options : []);
+                    setConsigneeAddressSearch("");
+                    setConsigneeAddressCustom(false);
+                  }}
+                  minSearchLength={2}
+                  returnOriginalData={true}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Consignee Email"
+                  value={partyDetailsForm.values.consignee_email}
+                  onChange={(e) =>
+                    partyDetailsForm.setFieldValue(
+                      "consignee_email",
+                      e.currentTarget.value,
+                    )
+                  }
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                {consigneeAddressCustom ||
+                (!!partyDetailsForm.values.consignee_address &&
+                  (!partyDetailsForm.values.consignee_address_id ||
+                    !consigneeAddressOptions.some(
+                      (item) =>
+                        item.value === partyDetailsForm.values.consignee_address_id,
+                    ))) ? (
+                  <FormTextInput
+                    label="Consignee Address"
+                    value={partyDetailsForm.values.consignee_address}
+                    onChange={(e) => {
+                      const nextValue = e.currentTarget.value;
+                      partyDetailsForm.setFieldValue("consignee_address", nextValue);
+                      if (!nextValue.trim()) {
+                        setConsigneeAddressCustom(false);
+                        setConsigneeAddressSearch("");
+                        partyDetailsForm.setFieldValue("consignee_address_id", "");
+                      }
+                    }}
+                  />
+                ) : (
+                  <Dropdown
+                    label="Consignee Address"
+                    data={consigneeAddressOptions.map((item) => ({
+                      value: item.value,
+                      label: item.label,
+                    }))}
+                    value={partyDetailsForm.values.consignee_address_id || null}
+                    searchValue={consigneeAddressSearch}
+                    onSearchChange={(value) => {
+                      setConsigneeAddressSearch(value);
+                      const hasMatch = consigneeAddressOptions.some(
+                        (item) =>
+                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                      );
+                      if (value.trim() && !hasMatch) {
+                        setConsigneeAddressCustom(true);
+                        partyDetailsForm.setFieldValue("consignee_address_id", "");
+                        partyDetailsForm.setFieldValue("consignee_address", value);
+                      }
+                    }}
+                    onChange={(value) => {
+                      const selected = consigneeAddressOptions.find(
+                        (item) => item.value === value,
+                      );
+                      partyDetailsForm.setFieldValue(
+                        "consignee_address_id",
+                        value || "",
+                      );
+                      partyDetailsForm.setFieldValue(
+                        "consignee_address",
+                        selected?.address || "",
+                      );
+                    }}
+                    searchable
+                    clearable
+                  />
+                )}
+              </Grid.Col>
+            </Grid>
+            <Grid gutter="sm" mb="md">
+              <Grid.Col span={12}>
+                <Text fw={600} c="#105476">
+                  Carrier Agent Details
+                </Text>
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <SearchableSelect
+                  label="Carrier Agent Name"
+                  dropdownZIndex={1000}
+                  apiEndpoint={URL.customerByTypes}
+                  additionalParams={{ types: "Carrier-agent" }}
+                  placeholder="Type carrier agent name"
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.id ?? ""),
+                    label: String(item.customer_name ?? ""),
+                  })}
+                  value={partyDetailsForm.values.carrier_agent_id || null}
+                  displayValue={partyDetailsForm.values.carrier_agent_name || null}
+                  onChange={(value, selectedData, originalData) => {
+                    const options = getAddressOptions(originalData);
+                    const primary = options[0];
+                    partyDetailsForm.setFieldValue(
+                      "carrier_agent_id",
+                      value || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "carrier_agent_name",
+                      selectedData?.label || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "carrier_agent_email",
+                      primary?.email || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "carrier_agent_address_id",
+                      primary?.value || "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "carrier_agent_address",
+                      primary?.address || "",
+                    );
+                    if (!value) {
+                      partyDetailsForm.setFieldValue("carrier_agent_name", "");
+                      partyDetailsForm.setFieldValue("carrier_agent_email", "");
+                      partyDetailsForm.setFieldValue(
+                        "carrier_agent_address_id",
+                        "",
+                      );
+                      partyDetailsForm.setFieldValue("carrier_agent_address", "");
+                    }
+                    setCarrierAgentAddressOptions(value ? options : []);
+                    setCarrierAgentAddressSearch("");
+                    setCarrierAgentAddressCustom(false);
+                  }}
+                  minSearchLength={2}
+                  returnOriginalData={true}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Carrier Agent Email"
+                  value={partyDetailsForm.values.carrier_agent_email}
+                  onChange={(e) =>
+                    partyDetailsForm.setFieldValue(
+                      "carrier_agent_email",
+                      e.currentTarget.value,
+                    )
+                  }
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                {carrierAgentAddressCustom ||
+                (!!partyDetailsForm.values.carrier_agent_address &&
+                  (!partyDetailsForm.values.carrier_agent_address_id ||
+                    !carrierAgentAddressOptions.some(
+                      (item) =>
+                        item.value ===
+                        partyDetailsForm.values.carrier_agent_address_id,
+                    ))) ? (
+                  <FormTextInput
+                    label="Carrier Agent Address"
+                    value={partyDetailsForm.values.carrier_agent_address}
+                    onChange={(e) => {
+                      const nextValue = e.currentTarget.value;
+                      partyDetailsForm.setFieldValue(
+                        "carrier_agent_address",
+                        nextValue,
+                      );
+                      if (!nextValue.trim()) {
+                        setCarrierAgentAddressCustom(false);
+                        setCarrierAgentAddressSearch("");
+                        partyDetailsForm.setFieldValue(
+                          "carrier_agent_address_id",
+                          "",
+                        );
+                      }
+                    }}
+                  />
+                ) : (
+                  <Dropdown
+                    label="Carrier Agent Address"
+                    data={carrierAgentAddressOptions.map((item) => ({
+                      value: item.value,
+                      label: item.label,
+                    }))}
+                    value={partyDetailsForm.values.carrier_agent_address_id || null}
+                    searchValue={carrierAgentAddressSearch}
+                    onSearchChange={(value) => {
+                      setCarrierAgentAddressSearch(value);
+                      const hasMatch = carrierAgentAddressOptions.some(
+                        (item) =>
+                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                      );
+                      if (value.trim() && !hasMatch) {
+                        setCarrierAgentAddressCustom(true);
+                        partyDetailsForm.setFieldValue(
+                          "carrier_agent_address_id",
+                          "",
+                        );
+                        partyDetailsForm.setFieldValue(
+                          "carrier_agent_address",
+                          value,
+                        );
+                      }
+                    }}
+                    onChange={(value) => {
+                      const selected = carrierAgentAddressOptions.find(
+                        (item) => item.value === value,
+                      );
+                      partyDetailsForm.setFieldValue(
+                        "carrier_agent_address_id",
+                        value || "",
+                      );
+                      partyDetailsForm.setFieldValue(
+                        "carrier_agent_address",
+                        selected?.address || "",
+                      );
+                    }}
+                    searchable
+                    clearable
+                  />
+                )}
+              </Grid.Col>
+            </Grid>
+          </Box>
+        </Tabs.Panel>
+
+        {/* Tab 3: Routings */}
+        <Tabs.Panel value="2">
           <Box mt="md">
             <Text size="lg" fw={600} c="#105476" mb="md">
               Routings
@@ -3914,8 +4606,8 @@ function AirImportJobCreate() {
           </Box>
         </Tabs.Panel>
 
-        {/* Tab 3: Estimates */}
-        <Tabs.Panel value="2">
+        {/* Tab 4: Estimates */}
+        <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
               <Text size="lg" fw={600} c="#105476">
@@ -4049,7 +4741,7 @@ function AirImportJobCreate() {
         </Tabs.Panel>
 
         {jobData?.id != null && (
-          <Tabs.Panel value="3">
+          <Tabs.Panel value="4">
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -4740,7 +5432,7 @@ function AirImportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 || active === 2) && !isReadOnly && (
+          {(active === 1 || active === 2 || active === 3) && !isReadOnly && (
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
@@ -4783,6 +5475,15 @@ function AirImportJobCreate() {
           )}
 
           {active === 2 && !isReadOnly && (
+            <Button
+              rightSection={<IconChevronRight size={16} />}
+              color="#105476"
+              onClick={handleNext}
+            >
+              Next
+            </Button>
+          )}
+          {active === 3 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"

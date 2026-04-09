@@ -14,45 +14,46 @@
     <link rel="stylesheet" href="booking-confirmation.css" />
   </head>
 
-  <body data-service="AIR">
+  <body>
     <!-- ══ NO-PRINT CONTROLS ════════════════════════════════════════ -->
     <div class="no-print">
-      <label style="font-size:11px;font-family:Inter,sans-serif;display:flex;align-items:center;gap:6px;">
-        Service:
-        <select id="svc-switcher" style="font-size:11px;padding:4px 8px;border-radius:4px;border:1px solid #cbd5e1;">
-          <option value="AIR">AIR Export</option>
-          <option value="LCL">LCL Export</option>
-          <option value="FCL">FCL Export</option>
-        </select>
-      </label>
+      <label class="type-switcher-label" for="type-switcher">Type:</label>
+      <select id="type-switcher" class="type-switcher">
+        <option value="AIR" selected>AIR</option>
+        <option value="FCL">FCL</option>
+        <option value="LCL">LCL</option>
+      </select>
       <button class="btn-print" onclick="window.print()">🖨 Print</button>
-      <button class="btn-pdf"   onclick="window.print()">⬇ Save PDF</button>
+      <button class="btn-pdf" onclick="window.print()">⬇ Save PDF</button>
     </div>
 
     <div class="page-preview">
-
       <!-- ══ HEADER ════════════════════════════════════════════════ -->
       <header class="report-header">
         <div class="header-top">
-
           <!-- Logo slot (left) -->
-          <div class="logo-slot">Company<br/>Logo</div>
+          <div class="logo-slot">Company<br />Logo</div>
 
           <!-- Company info (centre) -->
           <div class="company">
             <h1>Pentagon International Freight Solutions Pvt Ltd</h1>
             <p>
-              204, Satellite Silver Co Op Premises Soc., Ltd, Andheri Kurla Road,<br/>
-              Marol Naka, Andheri-East, Mumbai, Maharashtra, 400059 India,<br/>
-              Tel:- +91 22 4596 6999 &nbsp;&nbsp;
-              Email :- <a href="mailto:info@pentagonindia.net" class="email-link">info@pentagonindia.net</a>
+              204, Satellite Silver Co Op Premises Soc., Ltd, Andheri Kurla
+              Road,<br />
+              Marol Naka, Andheri-East, Mumbai, Maharashtra, 400059 India,<br />
+              Tel:- +91 22 4596 6999 &nbsp;&nbsp; Email :-
+              <a href="mailto:info@pentagonindia.net" class="email-link"
+                >info@pentagonindia.net</a
+              >
             </p>
           </div>
 
           <!-- Doc title block (right) -->
           <div class="doc-title-block">
-            <div class="ref-text" id="hdr-ref">Ref: R20018 on 08-APR-2026 by PENUSER-MUMBAI</div>
-            <div class="doc-currency" id="hdr-page">Page 1 of 1</div>
+            <div class="ref-text">
+              Ref: R20018 on 08-APR-2026 by PENUSER-MUMBAI
+            </div>
+            <span class="addr-date">Date : 08-APR-26</span>
           </div>
         </div>
 
@@ -71,26 +72,23 @@
             <tr>
               <td class="addr-to-cell">
                 <span class="addr-label">To</span>
-                <div class="addr-name" id="addr-name">MOXY STEEL IMPEX</div>
-                <div class="addr-lines" id="addr-lines">
-                  101/102, 42, NEO PEARL BLDG,<br/>
-                  2ND CARPENTER STREET,<br/>
-                  1ST FLOOR, MUMBAI-400004<br/>
+                <div class="addr-name">MOXY STEEL IMPEX</div>
+                <div class="addr-lines">
+                  101/102, 42, NEO PEARL BLDG,<br />
+                  2ND CARPENTER STREET,<br />
+                  1ST FLOOR, MUMBAI-400004<br />
                   INDIA.
                 </div>
               </td>
               <td class="addr-attn-cell">
                 <span class="addr-field-label">ATTN :</span>
-                <span class="addr-field-value" id="addr-attn"></span>
-                <br/><br/>
+                <span class="addr-field-value"></span>
+                <br /><br />
                 <span class="addr-field-label">Phone :</span>
-                <span class="addr-field-value" id="addr-phone"></span>
-                <br/>
+                <span class="addr-field-value"></span>
+                <br />
                 <span class="addr-field-label">Fax :</span>
-                <span class="addr-field-value" id="addr-fax"></span>
-              </td>
-              <td class="addr-date-cell">
-                <span class="addr-date" id="addr-date">Date : 08-APR-26</span>
+                <span class="addr-field-value"></span>
               </td>
             </tr>
           </tbody>
@@ -101,13 +99,42 @@
 
       <!-- ══ INTRO LINE ════════════════════════════════════════════ -->
       <div class="intro-wrap">
-        <p class="intro-text">We are pleased to confirm your booking with details as follows:-</p>
+        <p class="intro-text">
+          We are pleased to confirm your booking with details as follows:-
+        </p>
       </div>
 
       <!-- ══ DETAILS TABLE ═════════════════════════════════════════ -->
       <div class="meta-wrap">
-        <table class="meta" id="details-table">
-          <!-- Rows injected by JS -->
+        <table class="meta">
+          <tbody>
+            <tr><td class="k">Booking No</td><td class="v" colspan="4">382116001240</td></tr>
+            <tr><td class="k">Booking Person</td><td class="v" colspan="4">ARIF KHATRI</td></tr>
+            <tr><td class="k" id="lbl-hawb">HAWB No</td><td class="v" colspan="4">382116001240</td></tr>
+            <tr><td class="k" id="lbl-flight">Flight No</td><td class="v" colspan="4">EK-EK</td></tr>
+            <tr><td class="k">ETD</td><td class="v" colspan="4">09-APR-26 (MUMBAI)</td></tr>
+            <tr><td class="k">ETA</td><td class="v" colspan="4">09-APR-26 (CASABLANCA MO)</td></tr>
+            <tr><td class="k">Carrier Name</td><td class="v" colspan="4">EMIRATES AIRLINES</td></tr>
+            <tr><td class="k" id="lbl-mawb">MAWB</td><td class="v" colspan="4">176-28857673</td></tr>
+            <tr><td class="k">Shipper Name</td><td class="v" colspan="4">MOXY STEEL IMPEX</td></tr>
+            <tr><td class="k">Consignee Name</td><td class="v" colspan="4">TO THE ORDER MSI BKI 016 MOROCCO</td></tr>
+            <tr><td class="k">Port of Receipt</td><td class="v" colspan="4">MUMBAI</td></tr>
+            <tr><td class="k">Port of Loading</td><td class="v" colspan="4">MUMBAI</td></tr>
+            <tr><td class="k">Port of Discharge</td><td class="v" colspan="4">CASABLANCA MOHAMED V.</td></tr>
+            <tr><td class="k">Final Destination</td><td class="v" colspan="4">CASABLANCA MOHAMED V.</td></tr>
+            <tr><td class="k">Packages</td><td class="v" colspan="4">1 PACKAGE(S)</td></tr>
+            <tr><td class="k" id="lbl-gross">Gross Weight</td><td class="v" colspan="4">281</td></tr>
+            <tr><td class="k" id="lbl-chargeable">Chargeable Weight</td><td class="v" colspan="4">281</td></tr>
+            <tr>
+              <td class="k">Commodity</td>
+              <td class="v" colspan="4">HEX NUT ECROU HEX<br />HSN CODE - 73181500</td>
+            </tr>
+            <tr id="row-container-type"><td class="k">Container Type</td><td class="v" colspan="4">&nbsp;</td></tr>
+            <tr><td class="k">Terms Of Shipment</td><td class="v" colspan="4">CFR</td></tr>
+            <tr id="row-yard" style="display: none"><td class="k">Yard</td><td class="v" colspan="4">&nbsp;</td></tr>
+            <tr id="row-loading" style="display: none"><td class="k">Loading</td><td class="v" colspan="4">&nbsp;</td></tr>
+            <tr id="row-cfs" style="display: none"><td class="k">CFS Remark</td><td class="v" colspan="4">&nbsp;</td></tr>
+          </tbody>
         </table>
       </div>
 
@@ -118,13 +145,8 @@
         <table class="meta remarks-table">
           <tbody>
             <tr>
-              <td class="k" style="width:12%">Remarks</td>
-              <td class="v remark-val" id="remarks-val" style="width:88%"></td>
-            </tr>
-            <!-- LCL / FCL only -->
-            <tr class="cfs-row" id="cfs-row">
-              <td class="k">CFS Remark</td>
-              <td class="v remark-val" id="cfs-val"></td>
+              <td class="k" style="width: 22%">Remarks</td>
+              <td class="v remark-val" style="width: 78%"></td>
             </tr>
           </tbody>
         </table>
@@ -137,239 +159,59 @@
         <p class="signoff-line">Thanks and Regards</p>
         <p class="signoff-line">PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PV</p>
       </div>
-
-    </div><!-- /.page-preview -->
+    </div>
+    <!-- /.page-preview -->
 
     <!-- ══ RUNNING FOOTER ════════════════════════════════════════════ -->
     <div class="running-footer" role="contentinfo">
-      <div class="footer-left" id="footer-ref">
+      <div class="footer-left">
         Ref: R20018 on 08-APR-2026 by PENUSER-MUMBAI
       </div>
       <div class="footer-right">
         <div class="page-no">
-          Page&nbsp;<span class="page-no-current"></span>&nbsp;of&nbsp;<span class="page-no-total"></span>
+          Page&nbsp;<span class="page-no-current"></span>&nbsp;of&nbsp;<span
+            class="page-no-total"
+          ></span>
         </div>
       </div>
     </div>
 
-    <!-- ══ DATA & RENDER LOGIC ════════════════════════════════════════ -->
     <script>
-    /* ----------------------------------------------------------------
-       BOOKING DATA — edit these objects to populate the document
-    ---------------------------------------------------------------- */
-    const BOOKINGS = {
+      (function () {
+        const switcher = document.getElementById("type-switcher");
+        const labels = {
+          hawb: document.getElementById("lbl-hawb"),
+          flight: document.getElementById("lbl-flight"),
+          mawb: document.getElementById("lbl-mawb"),
+          gross: document.getElementById("lbl-gross"),
+          chargeable: document.getElementById("lbl-chargeable"),
+        };
+        const seaRows = [
+          document.getElementById("row-yard"),
+          document.getElementById("row-loading"),
+          document.getElementById("row-cfs"),
+        ];
+        const containerTypeRow = document.getElementById("row-container-type");
 
-      AIR: {
-        ref:          "R20018 on 08-APR-2026 by PENUSER-MUMBAI",
-        date:         "Date : 08-APR-26",
-        toName:       "MOXY STEEL IMPEX",
-        toAddress:    "101/102, 42, NEO PEARL BLDG,<br/>2ND CARPENTER STREET,<br/>1ST FLOOR, MUMBAI-400004<br/>INDIA.",
-        attn:         "",
-        phone:        "",
-        fax:          "",
-        remarks:      "",
-        cfsRemark:    null,   // null = hide row
-        fields: [
-          // Each sub-array = one two-column pair: [label, value]
-          // Pass as many pairs as needed; renderer auto-wraps at 2 per row
-          ["Booking No",       "382116001240"],
-          ["Booking Person",   "ARIF KHATRI"],
-          ["HAWB No",          "382116001240"],
-          ["Flight No",        "EK-EK"],
-          ["ETD",              "09-APR-26 (MUMBAI)"],
-          ["ETA",              "09-APR-26 (CASABLANCA MO"],
-          ["Carrier Name",     "EMIRATES AIRLINES"],
-          ["MAWB",             "176-28857673"],
-          ["Shipper Name",     "MOXY STEEL IMPEX"],
-          ["Consignee Name",   "TO THE ORDER MSI BKI 016 MOROCCO"],
-          ["Port of Receipt",  "MUMBAI"],
-          ["Port of Loading",  "MUMBAI"],
-          ["Port of Discharge","CASABLANCA MOHAMED V."],
-          ["Final Destination","CASABLANCA MOHAMED V."],
-          ["Packages",         "1 PACKAGE(S)"],
-          ["Gross Weight",     "281"],
-          ["Chargeable Weight","281"],
-          ["Commodity",        "HEX NUT ECROU HEX<br/>HSN CODE - 73181500"],
-          ["Container Type",   ""],
-          ["Terms Of Shipment","CFR"],
-        ]
-      },
-
-      LCL: {
-        ref:          "R20018 on 08-APR-2026 by PENUSER-MUMBAI",
-        date:         "Date : 08-APR-26",
-        toName:       "ONCERA HEALTHCARE PRIVATE LIMITED",
-        toAddress:    "8-2-603/B/33/A/3/C SECOND FLOOR,<br/>SINDHU SHREET, BANJARA HILLS, ROAD NO. 10,<br/>HYDERABAD<br/>TELNGANA",
-        attn:         "",
-        phone:        "",
-        fax:          "",
-        remarks:      "",
-        cfsRemark:    "",
-        fields: [
-          ["Booking No",        "382116001258"],
-          ["Booking Person",    "JESON RAMTIJE EXPORT"],
-          ["HBL No",            "382116001258"],
-          ["Vessel/Voyage",     "MAERSK CUANZA / 613W"],
-          ["ETD",               "08-APR-26 (NHAVA SHEVA (JNPT))"],
-          ["ETA",               "28-APR-26 (COTONOU)"],
-          ["Carrier Name",      "MAERSK LINE INDIA PRIVATE LIMITED"],
-          ["Carrier Booking No",""],
-          ["Shipper Name",      "ONCERA HEALTHCARE PRIVATE LIMITED"],
-          ["Consignee Name",    "IOGO GUEMIC"],
-          ["Port of Receipt",   "NHAVA SHEVA (JNPT)"],
-          ["Port of Loading",   "NHAVA SHEVA (JNPT)"],
-          ["Port of Discharge", "COTONOU"],
-          ["Final Destination", "COTONOU"],
-          ["Packages",          "0 PACKAGE(S)"],
-          ["Weight",            "10398.46"],
-          ["Booking Volume",    "0"],
-          ["Commodity",         "PHARMACEUTICAL GOODS"],
-          ["Container Type",    ""],
-          ["Terms Of Shipment", "CIF"],
-          ["Yard",              ""],
-          ["Loading",           ""],
-        ]
-      },
-
-      FCL: {
-        ref:          "R20018 on 08-APR-2026 by PENUSER-MUMBAI",
-        date:         "Date : 08-APR-26",
-        toName:       "CHARMINAR POLYMERS",
-        toAddress:    "NAND NAGAR INDUSTRIAL ESTATE,<br/>PHASE -1, PLOT NO. 40,<br/>MAHUA KHERA GANJ, KASHIPUR,<br/>UTTARAKHAND-244713. INDIA",
-        attn:         "",
-        phone:        "",
-        fax:          "",
-        remarks:      "This is only a booking information and subsequent milestones will be updated.",
-        cfsRemark:    "",
-        fields: [
-          ["Booking No",        "382116001245"],
-          ["Booking Person",    "MAHENDRA KANSE"],
-          ["HBL No",            "382116001245"],
-          ["Vessel/Voyage",     ""],
-          ["ETD",               "(NHAVA SHEVA (JNPT))"],
-          ["ETA",               "(COLOMBO)"],
-          ["Carrier Name",      ""],
-          ["Carrier Booking No",""],
-          ["Shipper Name",      "CHARMINAR POLYMERS"],
-          ["Consignee Name",    "REPLAST INNOVATION PVT LTD"],
-          ["Port of Receipt",   "NHAVA SHEVA (JNPT)"],
-          ["Port of Loading",   "NHAVA SHEVA (JNPT)"],
-          ["Port of Discharge", "COLOMBO"],
-          ["Final Destination", "COLOMBO"],
-          ["Packages",          "80 BOX(S)"],
-          ["Weight",            "2208"],
-          ["Booking Volume",    "0"],
-          ["Commodity",         "TOTAL 80 BOXES<br/>( TOTAL EIGHTY BOXES ONLY )"],
-          ["Container Type",    ""],
-          ["Terms Of Shipment", "FOB"],
-          ["Yard",              ""],
-          ["Loading",           ""],
-        ]
-      }
-    };
-
-    /* ----------------------------------------------------------------
-       RENDERER
-    ---------------------------------------------------------------- */
-    function render(serviceType) {
-      const d = BOOKINGS[serviceType];
-      if (!d) return;
-
-      // Update <body> attribute for CSS targeting
-      document.body.setAttribute("data-service", serviceType);
-
-      // Header ref + page
-      document.getElementById("hdr-ref").textContent  = "Ref: " + d.ref;
-      document.getElementById("footer-ref").textContent = "Ref: " + d.ref;
-
-      // Addressee block
-      document.getElementById("addr-name").textContent    = d.toName;
-      document.getElementById("addr-lines").innerHTML     = d.toAddress;
-      document.getElementById("addr-attn").textContent    = d.attn  || "";
-      document.getElementById("addr-phone").textContent   = d.phone || "";
-      document.getElementById("addr-fax").textContent     = d.fax   || "";
-      document.getElementById("addr-date").textContent    = d.date;
-
-      // Remarks
-      document.getElementById("remarks-val").innerHTML = d.remarks || "";
-
-      // CFS row
-      const cfsRow = document.getElementById("cfs-row");
-      if (d.cfsRemark === null) {
-        cfsRow.style.display = "none";
-      } else {
-        cfsRow.style.display = "";
-        document.getElementById("cfs-val").innerHTML = d.cfsRemark || "";
-      }
-
-      // Details table — 2 label-value pairs per row
-      const tbody = document.querySelector("#details-table");
-      tbody.innerHTML = "";
-
-      // Special handling: ETD+ETA on same row (inline)
-      // We'll pair fields as given; if label is "ETA" and previous was "ETD", put them on same row
-      const fields = d.fields;
-      let html = "<tbody>";
-      let i = 0;
-      while (i < fields.length) {
-        const [k1, v1] = fields[i];
-        // Check if next field should pair on same row with this one
-        // ETD+ETA: place on same row as two-cell group
-        if (k1 === "ETD" && i + 1 < fields.length && fields[i+1][0] === "ETA") {
-          const [k2, v2] = fields[i+1];
-          html += `<tr>
-            <td class="k">${k1}</td>
-            <td class="v etd-cell" colspan="2"><span>${v1 || "&nbsp;"}</span><span class="eta-inline">&nbsp;&nbsp;&nbsp;&nbsp;ETA :&nbsp; ${v2 || "&nbsp;"}</span></td>
-            <td class="k"></td><td class="v"></td>
-          </tr>`;
-          i += 2;
-          continue;
+        function setType(type) {
+          const isSea = type === "FCL" || type === "LCL";
+          labels.hawb.textContent = isSea ? "HBL No" : "HAWB No";
+          labels.flight.textContent = isSea ? "Vessel/Voyage" : "Flight No";
+          labels.mawb.textContent = isSea ? "Carrier Booking No" : "MAWB";
+          labels.gross.textContent = isSea ? "Weight" : "Gross Weight";
+          labels.chargeable.textContent = isSea ? "Booking Volume" : "Chargeable Weight";
+          seaRows.forEach(function (row) {
+            row.style.display = isSea ? "" : "none";
+          });
+          containerTypeRow.style.display = type === "FCL" ? "" : "none";
         }
-        // Gross Weight + Chargeable Weight on same row (AIR)
-        if ((k1 === "Gross Weight" || k1 === "Weight") && i + 1 < fields.length &&
-            (fields[i+1][0] === "Chargeable Weight" || fields[i+1][0] === "Booking Volume")) {
-          const [k2, v2] = fields[i+1];
-          html += `<tr>
-            <td class="k">${k1}</td>
-            <td class="v">${v1 || "&nbsp;"}</td>
-            <td class="k">${k2}</td>
-            <td class="v" colspan="2">${v2 || "&nbsp;"}</td>
-          </tr>`;
-          i += 2;
-          continue;
-        }
-        // Yard + Loading on same row (LCL/FCL)
-        if (k1 === "Yard" && i + 1 < fields.length && fields[i+1][0] === "Loading") {
-          const [k2, v2] = fields[i+1];
-          html += `<tr>
-            <td class="k">${k1}</td>
-            <td class="v">${v1 || "&nbsp;"}</td>
-            <td class="k">${k2}</td>
-            <td class="v" colspan="2">${v2 || "&nbsp;"}</td>
-          </tr>`;
-          i += 2;
-          continue;
-        }
-        // Standard single pair per row
-        html += `<tr>
-          <td class="k">${k1}</td>
-          <td class="v" colspan="4">${v1 || "&nbsp;"}</td>
-        </tr>`;
-        i++;
-      }
-      html += "</tbody>";
-      tbody.innerHTML = html;
-    }
 
-    // Initial render from body attribute
-    const initial = document.body.getAttribute("data-service") || "AIR";
-    document.getElementById("svc-switcher").value = initial;
-    render(initial);
+        switcher.addEventListener("change", function (e) {
+          setType(e.target.value);
+        });
 
-    // Switcher
-    document.getElementById("svc-switcher").addEventListener("change", function() {
-      render(this.value);
-    });
+        setType(switcher.value);
+      })();
     </script>
   </body>
 </html>

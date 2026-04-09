@@ -3,11 +3,13 @@ import { Select, SelectProps } from "@mantine/core";
 
 type DropdownProps = Omit<
   SelectProps,
-  "onKeyDown" | "onFocus" | "onBlur" | "onSearchChange" | "searchValue"
+  "onKeyDown" | "onFocus" | "onBlur"
 > & {
   searchable?: boolean;
   dropdownZIndex?: number;
   styles?: Record<string, any>; // SAME API as SearchableSelect
+  onSearchChange?: (value: string) => void;
+  searchValue?: string;
 };
 
 interface NormalizedItem {
@@ -22,6 +24,8 @@ export default function Dropdown({
   searchable = false,
   dropdownZIndex = 5,
   styles,
+  onSearchChange: onSearchChangeProp,
+  searchValue: searchValueProp,
   ...props
 }: DropdownProps) {
   const [activeIndex, setActiveIndex] = useState<number>(-1);
@@ -47,18 +51,20 @@ export default function Dropdown({
     });
   }, [data]);
 
+  const effectiveSearch = searchValueProp ?? search;
+
   const filteredData = useMemo<NormalizedItem[]>(() => {
-    if (!searchable || !search.trim() || !isSearchMode) {
+    if (!searchable || !effectiveSearch.trim() || !isSearchMode) {
       return normalizedData;
     }
 
-    const searchLower = search.toLowerCase().trim();
+    const searchLower = effectiveSearch.toLowerCase().trim();
     return normalizedData.filter((item) => {
       const labelMatch = item.label.toLowerCase().includes(searchLower);
       const valueMatch = item.value.toLowerCase().includes(searchLower);
       return labelMatch || valueMatch;
     });
-  }, [normalizedData, search, searchable, isSearchMode]);
+  }, [normalizedData, effectiveSearch, searchable, isSearchMode]);
 
   const displayData = searchable ? filteredData : normalizedData;
 
@@ -107,6 +113,7 @@ export default function Dropdown({
   const handleSearchChange = (val: string) => {
     searchRef.current = val;
     setSearch(val);
+    onSearchChangeProp?.(val);
 
     if (!val.trim()) {
       setSelectedItem(null);
@@ -230,7 +237,7 @@ export default function Dropdown({
       onFocus={handleFocus}
       onBlur={handleBlur}
       searchable={searchable}
-      searchValue={search}
+      searchValue={effectiveSearch}
       onSearchChange={handleSearchChange}
     />
   );
