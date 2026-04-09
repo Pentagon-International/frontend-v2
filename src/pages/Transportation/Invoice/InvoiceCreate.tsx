@@ -2224,15 +2224,6 @@ function InvoiceCreate({
         setIsPosting(false);
         return;
       }
-      const total = values.charges.reduce(
-        (sum, c) => sum + (c.header_amount ?? 0),
-        0,
-      );
-      const header_total = total;
-      const local_total = values.charges.reduce(
-        (sum, c) => sum + (c.amount_in_local ?? 0),
-        0,
-      );
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -2406,6 +2397,17 @@ function InvoiceCreate({
       const allChargesPayload = isAgentPost
         ? chargesPayload
         : [...chargesPayload, ...taxCharges];
+
+      // Recompute totals from final charges payload (base charges + appended tax rows)
+      const total = allChargesPayload.reduce(
+        (sum, c) => sum + (Number(c.amount_in_header) || 0),
+        0,
+      );
+      const header_total = total;
+      const local_total = allChargesPayload.reduce(
+        (sum, c) => sum + (Number(c.amount_in_local) || 0),
+        0,
+      );
       const jobForPost = (
         location.state as { job?: { job_id?: number; id?: number } } | null
       )?.job;
