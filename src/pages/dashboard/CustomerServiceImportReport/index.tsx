@@ -310,7 +310,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 120,
         maxSize:150,
         Cell: ({ row }) => (
-          <Text truncate size="sm">{row.original.enquiry_id ?? "-"}</Text>
+          <Text truncate size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.enquiry_id ?? "-"}</Text>
         ),
       },
       {
@@ -320,13 +320,13 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         maxSize:100,
         Cell: ({ row }) => {
           const id = row.original.quotation_primary_key;
-          if (!id) return <Text size="sm">-</Text>;
+          if (!id) return <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>-</Text>;
           return (
             <Badge
               size="xs"
               bg="#105476"
               c="white"
-              style={{ cursor: "pointer", textDecoration: "none" }}
+              style={{ cursor: "pointer", textDecoration: "none", fontFamily:'Inter' }}
               onClick={() =>
                 navigate(`/quotation-create/${id}`, {
                   state: {
@@ -347,7 +347,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 120,
         maxSize:150,
         Cell: ({ row }) => (
-          <Text truncate maw={150} size="sm">
+          <Text truncate maw={150} size="sm" style={{fontSize:13, fontFamily:'Inter'}}>
             {row.original.customer_details?.customer_name ?? "-"}
           </Text>
         ),
@@ -359,13 +359,13 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         maxSize:110,
         Cell: ({ row }) => {
           const sd = row.original.service_details;
-          if (!sd?.length) return <Text size="sm">-</Text>;
+          if (!sd?.length) return <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>-</Text>;
           const first = sd[0];
           const service =
             first?.service && first?.trade
               ? `${first.service} ${first.trade}`
               : (first?.service ?? "-");
-          return <Text size="sm">{service}</Text>;
+          return <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{service}</Text>;
         },
       },
       {
@@ -374,7 +374,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 90,
         maxSize:110,
         Cell: ({ row }) => (
-          <Text size="sm">{row.original.quotation_date ?? "-"}</Text>
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.quotation_date ?? "-"}</Text>
         ),
       },
       {
@@ -383,7 +383,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 100,
         maxSize:120,
         Cell: ({ row }) => (
-          <Text truncate size="sm">{row.original.customer_service_details ?? "-"}</Text>
+          <Text truncate size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.customer_service_details ?? "-"}</Text>
         ),
       },
       {
@@ -392,7 +392,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 90,
         maxSize:110,
         Cell: ({ row }) => (
-          <Text truncate size="sm">
+          <Text truncate size="sm" style={{fontSize:13, fontFamily:'Inter'}}>
             {row.original.sales_details?.sales_person ?? "-"}
           </Text>
         ),
@@ -403,7 +403,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 90,
         maxSize:110,
         Cell: ({ row }) => (
-          <Text size="sm">{row.original.gained_date ?? "-"}</Text>
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.gained_date ?? "-"}</Text>
         ),
       },
     ],
@@ -440,7 +440,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
               size="xs"
               bg="#105476"
               c="white"
-              style={{ cursor: "pointer", textDecoration: "none" }}
+              style={{ cursor: "pointer", textDecoration: "none", fontFamily:'Inter' }}
               onClick={() =>
                 navigate(path, {
                   state: {
@@ -462,7 +462,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 120,
         maxSize:150,
         Cell: ({ row }) => (
-          <Text truncate size="sm">
+          <Text truncate size="sm" style={{fontSize:13, fontFamily:'Inter'}}>
             {row.original.customer_details?.customer_name ?? "-"}
           </Text>
         ),
@@ -472,7 +472,18 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         header: "Service",
         minSize: 90,
         maxSize:110,
-        Cell: ({ row }) => <Text size="sm">{row.original.service ?? "-"}</Text>,
+        Cell: ({ row }) => <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.service ?? "-"}</Text>,
+      },
+      {
+        id: "houseno",
+        header: "House No",
+        minSize: 80,
+        maxSize: 100,
+        Cell: ({ row }) => (
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>
+            {(row.original as PendingJobItem & { houseno?: string }).houseno ?? "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "customer_service_person",
@@ -480,7 +491,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 100,
         maxSize:120,
         Cell: ({ row }) => (
-          <Text truncate size="sm">{row.original.customer_service_person ?? "-"}</Text>
+          <Text truncate size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.customer_service_person ?? "-"}</Text>
         ),
       },
       {
@@ -489,7 +500,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 90,
         maxSize:110,
         Cell: ({ row }) => (
-          <Text size="sm">{row.original.booking_date ?? "-"}</Text>
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.booking_date ?? "-"}</Text>
         ),
       },
     ],
@@ -506,7 +517,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 80,
         maxSize: 120,
         Cell: ({ row }) => (
-          <Text size="sm">{row.original.booking_id ?? "-"}</Text>
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.booking_id ?? "-"}</Text>
         ),
       },
       {
@@ -517,11 +528,11 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         Cell: ({ row }) => {
           const jobId = row.original.job_id;
           const path = getJobEditPath(row.original.service);
-          if (!jobId || !path) return <Text size="sm">{jobId ?? "-"}</Text>;
+          if (!jobId || !path) return <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{jobId ?? "-"}</Text>;
           return (
             <Badge
               size="xs"
-              style={{ cursor: "pointer", textDecoration: "none", backgroundColor: "#105476", color:"white" }}
+              style={{ cursor: "pointer", textDecoration: "none", backgroundColor: "#105476", color:"white", fontFamily:'Inter' }}
               onClick={() =>
                 navigate(path, {
                   state: {
@@ -543,7 +554,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 80,
         maxSize: 100,
         Cell: ({ row }) => (
-          <Text size="sm">{row.original.service ?? "-"}</Text>
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.service ?? "-"}</Text>
         ),
       },
       {
@@ -552,7 +563,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 80,
         maxSize: 100,
         Cell: ({ row }) => (
-          <Text size="sm">{row.original.houseno ?? "-"}</Text>
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{row.original.houseno ?? "-"}</Text>
         ),
       },
       {
@@ -561,7 +572,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 120,
         maxSize: 150,
         Cell: ({ row }) => (
-          <Text truncate size="sm">
+          <Text truncate size="sm" style={{fontSize:13, fontFamily:'Inter'}}>
             {row.original.customer_details?.customer_name ?? "-"}
           </Text>
         ),
@@ -572,7 +583,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 90,
         maxSize: 110,
         Cell: ({ row }) => (
-          <Text size="sm">
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>
             {row.original.etd
               ? dayjs(row.original.etd).format("YYYY-MM-DD")
               : "-"}
@@ -585,7 +596,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         minSize: 90,
         maxSize: 110,
         Cell: ({ row }) => (
-          <Text size="sm">
+          <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>
             {row.original.eta
               ? dayjs(row.original.eta).format("YYYY-MM-DD")
               : "-"}
@@ -791,7 +802,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         }}
       >
         <Group justify="space-between" align="center" mb="md" wrap="nowrap" style={{ flexShrink: 0 }}>
-          <Text size="md" fw={500} c="#424242" style={{ fontFamily: "Geist, sans-serif" }}>
+          <Text size="md" fw={500} c="#424242" style={{ fontFamily: "Inter, sans-serif" }}>
             {title}
           </Text>
           <Button
@@ -800,6 +811,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
             variant="outline"
             size="xs"
             color="#105476"
+            style={{fontFamily:'Inter'}}
           >
             Back
           </Button>
@@ -854,7 +866,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
           >
             <Group justify="space-between" align="center" mb="md">
               <Group gap="sm" align="center" >
-                <Text size="md" fw={500} c="Black">
+                <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Gained Quotations - Pending for Bookings
                 </Text>
                 <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
@@ -870,7 +882,8 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
                   textDecoration: "none",
                   cursor: "pointer",
                   padding:"4px 8px",
-                  borderRadius:24
+                  borderRadius:24,
+                  fontFamily:'Inter'
                 }}
                 onClick={handleViewAllBookings}
               >
@@ -883,7 +896,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
               </Center>
             ) : bookingsPreview.length === 0 ? (
               <Center py="xl">
-                <Text c="dimmed">No data available</Text>
+                <Text c="dimmed" style={{fontFamily:'Inter'}}>No data available</Text>
               </Center>
             ) : (
               <Box style={{ overflow: "hidden", maxHeight: 200 }}>
@@ -906,7 +919,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
           >
             <Group justify="space-between" align="center" mb="md">
               <Group gap="sm" align="center">
-                <Text size="md" fw={500} c="Black">
+                <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Bookings Created - Pending for Jobs
                 </Text>
                 <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
@@ -922,7 +935,8 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
                   textDecoration: "none",
                   cursor: "pointer",
                   padding:"4px 8px",
-                  borderRadius:24
+                  borderRadius:24,
+                  fontFamily:'Inter'
                 }}
                 onClick={handleViewAllJobs}
               >
@@ -935,7 +949,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
               </Center>
             ) : jobsPreview.length === 0 ? (
               <Center py="xl">
-                <Text c="dimmed">No data available</Text>
+                <Text c="dimmed" style={{fontFamily:'Inter'}}>No data available</Text>
               </Center>
             ) : (
               <Box style={{ overflow: "hidden", maxHeight: 200 }}>
@@ -958,7 +972,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
           >
             <Group justify="space-between" align="center" mb="md">
               <Group gap="sm" align="center">
-                <Text size="md" fw={500} c="Black">
+                <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Jobs - CAN Not Released
                 </Text>
                 <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
@@ -975,6 +989,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
                   cursor: "pointer",
                   padding: "4px 8px",
                   borderRadius: 24,
+                  fontFamily:'Inter'
                 }}
                 onClick={handleViewAllJobsWithoutBL}
               >
@@ -987,7 +1002,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
               </Center>
             ) : jobsWithoutBLPreview.length === 0 ? (
               <Center py="xl">
-                <Text c="dimmed">No data available</Text>
+                <Text c="dimmed" style={{fontFamily:'Inter'}}>No data available</Text>
               </Center>
             ) : (
               <Box style={{ overflow: "hidden", maxHeight: 200 }}>
@@ -1010,7 +1025,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
           >
             <Group justify="space-between" align="center" mb="md">
               <Group gap="sm" align="center">
-                <Text size="md" fw={500} c="Black">
+                <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Jobs - DO Not Released
                 </Text>
                 <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
@@ -1027,6 +1042,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
                   cursor: "pointer",
                   padding: "4px 8px",
                   borderRadius: 24,
+                  fontFamily:'Inter'
                 }}
                 onClick={handleViewAllPodNotUpdated}
               >
@@ -1039,7 +1055,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
               </Center>
             ) : podNotUpdatedPreview.length === 0 ? (
               <Center py="xl">
-                <Text c="dimmed">No data available</Text>
+                <Text c="dimmed" style={{fontFamily:'Inter'}} >No data available</Text>
               </Center>
             ) : (
               <Box style={{ overflow: "hidden", maxHeight: 200 }}>
@@ -1062,7 +1078,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
           >
             <Group justify="space-between" align="center" mb="md">
               <Group gap="sm" align="center">
-                <Text size="md" fw={500} c="Black">
+                <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Jobs - Invoice Not Raised
                 </Text>
                 <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
@@ -1079,6 +1095,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
                   cursor: "pointer",
                   padding: "4px 8px",
                   borderRadius: 24,
+                  fontFamily:'Inter'
                 }}
                 onClick={handleViewAllInvoiceNotRaised}
               >
@@ -1091,7 +1108,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
               </Center>
             ) : invoiceNotRaisedPreview.length === 0 ? (
               <Center py="xl">
-                <Text c="dimmed">No data available</Text>
+                <Text c="dimmed" style={{fontFamily:'Inter'}}>No data available</Text>
               </Center>
             ) : (
               <Box style={{ overflow: "hidden", maxHeight: 200 }}>
