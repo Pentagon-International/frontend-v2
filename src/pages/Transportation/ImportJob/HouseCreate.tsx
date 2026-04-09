@@ -943,6 +943,8 @@ function HouseCreate() {
     unknown
   > | null>(null);
   const [similarBookingId, setSimilarBookingId] = useState<number | null>(null);
+  const [similarBookingApplyLoading, setSimilarBookingApplyLoading] =
+    useState(false);
 
   const fetchSimilarBookings = useCallback(
     async (hblNo: string, agentCode: string) => {
@@ -1288,6 +1290,23 @@ function HouseCreate() {
       chargesForm.setValues({ charges: mappedCharges });
     }
   }, [similarBookingData, form, chargesForm]);
+
+  const handleConfirmSimilarBooking = useCallback(async () => {
+    setSimilarBookingApplyLoading(true);
+    try {
+      // Ensure overlay is rendered before field updates start.
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+      fillFormFromSimilarBooking();
+      // Keep loader until autofilled values are committed to UI.
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    } finally {
+      setSimilarBookingApplyLoading(false);
+    }
+  }, [fillFormFromSimilarBooking]);
 
   const dismissSimilarBookingModal = useCallback(() => {
     setSimilarBookingModalOpen(false);
@@ -5545,12 +5564,32 @@ function HouseCreate() {
         </Group>
       </Group>
 
+      {similarBookingApplyLoading && (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 3000,
+            backgroundColor: "rgba(255, 255, 255, 0.7)",
+          }}
+        >
+          <Center h="100%">
+            <Loader size="lg" color="#105476" />
+          </Center>
+        </Box>
+      )}
+
       {/* Similar booking found modal */}
       <Modal
         opened={similarBookingModalOpen}
-        onClose={dismissSimilarBookingModal}
+        onClose={
+          similarBookingApplyLoading ? () => undefined : dismissSimilarBookingModal
+        }
         title="Similar booking found"
         centered
+        closeOnClickOutside={!similarBookingApplyLoading}
+        closeOnEscape={!similarBookingApplyLoading}
+        withCloseButton={!similarBookingApplyLoading}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
@@ -5558,10 +5597,19 @@ function HouseCreate() {
             it to the house?
           </Text>
           <Group justify="flex-end" mt="md">
-            <Button variant="outline" onClick={dismissSimilarBookingModal}>
+            <Button
+              variant="outline"
+              onClick={dismissSimilarBookingModal}
+              disabled={similarBookingApplyLoading}
+            >
               No
             </Button>
-            <Button color="#105476" onClick={fillFormFromSimilarBooking}>
+            <Button
+              color="#105476"
+              onClick={() => void handleConfirmSimilarBooking()}
+              loading={similarBookingApplyLoading}
+              disabled={similarBookingApplyLoading}
+            >
               Yes
             </Button>
           </Group>
