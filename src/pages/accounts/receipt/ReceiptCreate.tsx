@@ -113,7 +113,7 @@ const fetchDaybookRPTREV = async () => {
 // Adjustments section daybook: all flows (receipt and receipt reversal)
 const fetchDaybookINV = async () => {
   try {
-    const payload = { filters: { document_type: "INV" } };
+    const payload = { filters: { document_type: "" } };
     const response = await postAPICall(URL.daybook, payload, API_HEADER);
     return (response as { data?: unknown[] })?.data ?? [];
   } catch (error) {
@@ -1126,7 +1126,6 @@ export default function ReceiptCreate({
   ) => {
     const rawAdjustments = values.adjustments ?? [];
     const nonEmptyAdjustments = rawAdjustments.filter((a) => {
-      const hasInvoice = a.invoice_id != null && a.invoice_id > 0;
       const hasAmounts =
         (a.adj_local_amount != null &&
           Number.isFinite(a.adj_local_amount) &&
@@ -1135,7 +1134,7 @@ export default function ReceiptCreate({
           Number.isFinite(a.adj_curr_amount) &&
           a.adj_curr_amount !== 0);
       const hasDocument = (a.document_no ?? "").trim() !== "";
-      return hasInvoice || hasAmounts || hasDocument;
+      return hasAmounts || hasDocument;
     });
 
     const dayBookId = Number(values.daybook_id) || 0;
@@ -1170,9 +1169,6 @@ export default function ReceiptCreate({
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
-        ...(a.invoice_id != null && a.invoice_id > 0
-          ? { invoice_id: a.invoice_id }
-          : {}),
         location: a.location ?? "",
         subledger_code: a.subledger ?? "",
         day_book_id: Number(a.daybook_id) || 0,
@@ -1202,7 +1198,6 @@ export default function ReceiptCreate({
   ) => {
     const rawAdjustments = values.adjustments ?? [];
     const nonEmptyAdjustments = rawAdjustments.filter((a) => {
-      const hasInvoice = a.invoice_id != null && a.invoice_id > 0;
       const hasAmounts =
         (a.adj_local_amount != null &&
           Number.isFinite(a.adj_local_amount) &&
@@ -1211,7 +1206,7 @@ export default function ReceiptCreate({
           Number.isFinite(a.adj_curr_amount) &&
           a.adj_curr_amount !== 0);
       const hasDocument = (a.document_no ?? "").trim() !== "";
-      return hasInvoice || hasAmounts || hasDocument;
+      return hasAmounts || hasDocument;
     });
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
@@ -1332,7 +1327,6 @@ export default function ReceiptCreate({
 
   const handleSubmit = async (values: ReceiptFormValues) => {
     const hasAdjustments = (values.adjustments ?? []).some((a) => {
-      const hasInvoice = a.invoice_id != null && a.invoice_id > 0;
       const hasAmounts =
         (a.adj_local_amount != null &&
           Number.isFinite(a.adj_local_amount) &&
@@ -1341,7 +1335,7 @@ export default function ReceiptCreate({
           Number.isFinite(a.adj_curr_amount) &&
           a.adj_curr_amount !== 0);
       const hasDocument = (a.document_no ?? "").trim() !== "";
-      return hasInvoice || hasAmounts || hasDocument;
+      return hasAmounts || hasDocument;
     });
 
     if (hasAdjustments) {
