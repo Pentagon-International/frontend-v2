@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
+  MRT_PaginationState,
   useMantineReactTable,
 } from "mantine-react-table";
 import {
@@ -14,40 +15,51 @@ import {
   Box,
   Menu,
   ActionIcon,
-  Select,
   Loader,
   Modal,
   Badge,
+  Grid,
+  TextInput,
 } from "@mantine/core";
 import {
   IconPlus,
   IconDotsVertical,
   IconEdit,
-  IconChevronLeft,
-  IconChevronRight,
   IconX,
+  IconSearch,
+  IconFilter,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
-import { ToastNotification } from "../../../components";
+import {
+  ToastNotification,
+  SearchableSelect,
+  SingleDateInput,
+  Dropdown,
+} from "../../../components";
+import FormTextInput from "../../../components/FormTextInput";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useDebouncedValue } from "@mantine/hooks";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { useListFilterStore } from "../../../store/listFilterStore";
 
 dayjs.extend(utc);
 
-// Type definitions
+const LIST_KEY = "AIR_IMPORT_JOB_MASTER";
+
 type AirImportJobData = {
   id: number;
   service: string;
   service_type: string;
   agent_code: string | null;
   agent_name: string | null;
-  origin_agent_code: string | null; // Deprecated, use agent_code
-  origin_agent_name: string | null; // Deprecated, use agent_name
+  origin_agent_code: string | null;
+  origin_agent_name: string | null;
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -73,14 +85,60 @@ type AirImportJobData = {
   created_at?: string;
   updated_at?: string;
   status?: string;
+  job_id?: string;
+};
+
+type AirImportJobFilters = {
+  job_id: string;
+  mawb_no: string;
+  agent_code: string;
+  agent_name: string;
+  origin_code: string;
+  origin_name: string;
+  destination_code: string;
+  destination_name: string;
+  etd: string;
+  eta: string;
+  status: string;
 };
 
 function AirImportJobMaster() {
   const navigate = useNavigate();
   const location = useLocation();
-  const queryClient = useQueryClient();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const DEFAULT_FILTERS: AirImportJobFilters = {
+    job_id: "",
+    mawb_no: "",
+    agent_code: "",
+    agent_name: "",
+    origin_code: "",
+    origin_name: "",
+    destination_code: "",
+    destination_name: "",
+    etd: "",
+    eta: "",
+    status: "",
+  };
+  const [draftFilters, setDraftFilters] = useState<AirImportJobFilters>(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] =
+    useState<AirImportJobFilters>(DEFAULT_FILTERS);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
   const [cancelConfirmRow, setCancelConfirmRow] = useState<AirImportJobData | null>(
     null
   );
@@ -99,70 +157,133 @@ function AirImportJobMaster() {
     return { label, color } as const;
   };
 
-  // Fetch data using useQuery - filter for Air service
-  const {
-    data: importJobData,
-    isLoading,
-    isFetching,
-    refetch: refetchImportJobs,
-  } = useQuery<{ data: AirImportJobData[]; total_count: number }>({
-    queryKey: ["airImportJobs"],
-    queryFn: async () => {
-      try {
-        const response = await apiCallProtected.post(
-          URL.filterJobCreate,
-          { filters: { service: "AIR", service_type: "Import" } },
-          API_HEADER
-        );
-        const result = response as unknown as {
-          status: boolean;
-          message: string;
-          data: AirImportJobData[];
-          total_count: number;
-        };
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+    setIsInitialLoad(true);
 
-        // Handle response format: { status, message, data, total_count }
-        if (result?.status && Array.isArray(result?.data)) {
-          return {
-            data: result.data,
-            total_count: result.total_count || result.data.length,
-          };
-        }
-        return { data: [], total_count: 0 };
-      } catch (error) {
-        console.error("Error fetching air import jobs:", error);
-        return { data: [], total_count: 0 };
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const restored = { ...DEFAULT_FILTERS, ...stored.filters };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key]);
+
+  const currentPage = pagination.pageIndex + 1;
+  const index = pagination.pageIndex * pagination.pageSize;
+
+  const handlePageSizeChange = (size: number) => {
+    setPagination({ pageIndex: 0, pageSize: size });
+  };
+
+  const handlePageChange = (page: number) => {
+    setPagination((prev) => ({ ...prev, pageIndex: page - 1 }));
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
+  };
+
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
+  };
+
+  const buildFiltersPayload = (
+    filters: AirImportJobFilters,
+    searchValue: string,
+  ): Record<string, string> => {
+    const cleaned: Record<string, string> = {};
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (key === "agent_name" || key === "origin_name" || key === "destination_name") {
+        return;
       }
+      if (!value) return;
+      if (value.trim() !== "") {
+        cleaned[key] = key === "status" ? value.toUpperCase() : value;
+      }
+    });
+
+    if (searchValue?.trim()) cleaned.search = searchValue;
+
+    return cleaned;
+  };
+
+  const {
+    data: importJobData = [],
+    isLoading: importJobLoading,
+    isFetching: importJobFetching,
+    refetch: refetchImportJobs,
+  } = useQuery({
+    queryKey: [
+      "airImportJobs",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(appliedFilters),
+      debouncedSearch,
+    ],
+    queryFn: async (): Promise<AirImportJobData[]> => {
+      const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
+
+      const payload =
+        Object.keys(filtersPayload).length > 0
+          ? {
+              filters: {
+                service: "AIR",
+                service_type: "Import",
+                ...filtersPayload,
+              },
+            }
+          : {
+              filters: {
+                service: "AIR",
+                service_type: "Import",
+              },
+            };
+
+      setIsInitialLoad(false);
+      const response = await apiCallProtected.post(
+        `${URL.filterJobCreate}?index=${index}&limit=${pagination.pageSize}`,
+        payload,
+        API_HEADER
+      );
+      setShowFilters(false);
+
+      const result = response as any;
+      const list = Array.isArray(result?.data) ? result.data : [];
+      setTotalRecords(result?.total_count ?? list.length);
+
+      return list;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    enabled: !isRestoring && search === debouncedSearch,
+    staleTime: 0,
     refetchOnWindowFocus: false,
-    refetchOnMount: !!location.state?.refreshData,
+    refetchOnMount: true,
   });
 
-  const data = useMemo(() => importJobData?.data || [], [importJobData]);
-  const totalRecords = useMemo(
-    () => importJobData?.total_count || 0,
-    [importJobData]
-  );
+  const isLoading = importJobFetching || importJobLoading || isInitialLoad;
 
-  // Refetch when navigating from create page
-  useEffect(() => {
-    if (location.state?.refreshData) {
-      queryClient.invalidateQueries({ queryKey: ["airImportJobs"] });
-      refetchImportJobs();
-      // Clear the refresh flag
-      navigate(location.pathname, { replace: true, state: {} });
-    }
-  }, [
-    location.state?.refreshData,
-    navigate,
-    location.pathname,
-    queryClient,
-    refetchImportJobs,
-  ]);
-
-  // Columns definition
   const columns = useMemo<MRT_ColumnDef<AirImportJobData>[]>(
     () => [
       {
@@ -274,6 +395,9 @@ function AirImportJobMaster() {
                   disabled={isCancel}
                   onClick={() => {
                     if (!isCancel) {
+                      setStoreFilters(LIST_KEY, appliedFilters);
+                      setStoreSearch(LIST_KEY, search);
+                      setShouldRestore(LIST_KEY, true);
                       navigate(`/air/import-job/edit`, {
                         state: { job: row.original },
                       });
@@ -298,24 +422,8 @@ function AirImportJobMaster() {
         },
       },
     ],
-    [navigate]
+    [navigate, appliedFilters, search, setStoreFilters, setStoreSearch, setShouldRestore]
   );
-
-  // Paginate data
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    return data.slice(start, end);
-  }, [data, currentPage, pageSize]);
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    setPageSize(size);
-    setCurrentPage(1); // Reset to first page when changing page size
-  };
 
   const handleConfirmCancel = async () => {
     if (!cancelConfirmRow) return;
@@ -348,15 +456,21 @@ function AirImportJobMaster() {
 
   const table = useMantineReactTable({
     columns,
-    data: paginatedData,
+    data: importJobData,
     enableColumnFilters: false,
-    enablePagination: false,
+    enablePagination: true,
     enableTopToolbar: false,
     enableBottomToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
+    manualPagination: true,
+    onPaginationChange: setPagination,
+    rowCount: totalRecords,
+    state: {
+      pagination,
+    },
     initialState: {
       columnPinning: { right: ["actions"] },
     },
@@ -482,29 +596,327 @@ function AirImportJobMaster() {
           >
             Air Import Job List
           </Text>
-
-          <Button
-            leftSection={<IconPlus size={16} />}
-            size="sm"
-            styles={{
-              root: {
-                backgroundColor: "#105476",
-                borderRadius: "4px",
-                color: "#FFFFFF",
-                fontSize: "14px",
-                fontFamily: "Inter",
-                fontStyle: "semibold",
-                "&:hover": {
-                  backgroundColor: "#105476",
+          <Group gap="xs" wrap="nowrap">
+            <TextInput
+              placeholder="Search..."
+              leftSection={<IconSearch size={16} />}
+              rightSection={
+                search ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size="sm"
+                    onClick={() => setSearch("")}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <IconX size={16} />
+                  </ActionIcon>
+                ) : null
+              }
+              w={248}
+              size="sm"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              styles={{
+                input: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  color: "#333740",
+                  minWidth: "24px",
+                  minHeight: "24px",
+                  width: "248px",
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  "&:focus": {
+                    border: "1px solid #105476",
+                  },
                 },
-              },
-            }}
-            onClick={() => navigate("/air/import-job/create")}
-          >
-            Create New
-          </Button>
+              }}
+            />
+            <ActionIcon
+              variant={showFilters ? "filled" : "outline"}
+              size={36}
+              color={showFilters ? "#E0F5FF" : "gray"}
+              onClick={() => setShowFilters(!showFilters)}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                  border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  "&:active": {
+                    border: "1px solid #105476",
+                    color: "#FFFFFF",
+                  },
+                },
+              }}
+            >
+              <IconFilter size={18} />
+            </ActionIcon>
+            <Button
+              leftSection={<IconPlus size={16} />}
+              size="sm"
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  color: "#FFFFFF",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontStyle: "semibold",
+                  "&:hover": {
+                    backgroundColor: "#105476",
+                  },
+                },
+              }}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/air/import-job/create");
+              }}
+            >
+              Create New
+            </Button>
+          </Group>
         </Group>
       </Box>
+
+      {showFilters && (
+        <Box
+          tt="capitalize"
+          mb="sm"
+          p="sm"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+            flexShrink: 0,
+            height: "fit-content",
+          }}
+        >
+          <Group
+            justify="space-between"
+            align="center"
+            mb="sm"
+            px="md"
+            style={{
+              backgroundColor: "#FAFAFA",
+              padding: "4px 8px",
+            }}
+          >
+            <Text
+              size="sm"
+              fw={600}
+              c="#000000"
+              style={{ fontFamily: "Inter", fontSize: "14px" }}
+            >
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
+          </Group>
+
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
+            <Grid.Col span={3}>
+              <FormTextInput
+                label="Job ID"
+                placeholder="Type Job ID"
+                size="xs"
+                value={draftFilters.job_id}
+                onChange={(e) =>
+                  setDraftFilters((prev) => ({ ...prev, job_id: e.currentTarget.value }))
+                }
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <FormTextInput
+                label="MAWB No"
+                placeholder="Type MAWB No"
+                size="xs"
+                value={draftFilters.mawb_no}
+                onChange={(e) =>
+                  setDraftFilters((prev) => ({ ...prev, mawb_no: e.currentTarget.value }))
+                }
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SearchableSelect
+                apiEndpoint={URL.agent}
+                label="Agent"
+                placeholder="Type Agent"
+                size="xs"
+                value={draftFilters.agent_code}
+                displayValue={draftFilters.agent_name}
+                onChange={(value, selectedData, originalData) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    agent_code: value || "",
+                    agent_name:
+                      selectedData?.label ||
+                      String(
+                        originalData?.customer_name ?? originalData?.name ?? value ?? ""
+                      ),
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.customer_code ?? item.id ?? ""),
+                  label: String(item.customer_name ?? item.name ?? ""),
+                })}
+                searchFields={["customer_code", "customer_name", "name"]}
+                returnOriginalData
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SearchableSelect
+                apiEndpoint={URL.portMaster}
+                additionalParams={{ transport_mode: "AIR" }}
+                label="Origin"
+                placeholder="Type Origin"
+                size="xs"
+                value={draftFilters.origin_code}
+                displayValue={draftFilters.origin_name}
+                onChange={(value, selectedData, originalData) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    origin_code: value || "",
+                    origin_name:
+                      selectedData?.label ||
+                      String(originalData?.port_name ?? value ?? ""),
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                searchFields={["port_code", "port_name"]}
+                returnOriginalData
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SearchableSelect
+                apiEndpoint={URL.portMaster}
+                label="Destination"
+                placeholder="Type Destination"
+                additionalParams={{ transport_mode: "AIR" }}
+                size="xs"
+                value={draftFilters.destination_code}
+                displayValue={draftFilters.destination_name}
+                onChange={(value, selectedData, originalData) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    destination_code: value || "",
+                    destination_name:
+                      selectedData?.label ||
+                      String(originalData?.port_name ?? value ?? ""),
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                searchFields={["port_code", "port_name"]}
+                returnOriginalData
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="ETD"
+                size="xs"
+                value={draftFilters.etd ? dayjs(draftFilters.etd).toDate() : null}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                  }))
+                }
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="ETA"
+                size="xs"
+                value={draftFilters.eta ? dayjs(draftFilters.eta).toDate() : null}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                  }))
+                }
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <Dropdown
+                label="Status"
+                placeholder="Select Status"
+                size="xs"
+                data={["Active", "Closed", "Cancel"]}
+                searchable
+                value={draftFilters.status || null}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({ ...prev, status: value || "" }))
+                }
+              />
+            </Grid.Col>
+          </Grid>
+
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={clearAllFilters}
+              leftSection={<IconX size={16} />}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  color: "#444955",
+                },
+              }}
+            >
+              Clear Filters
+            </Button>
+            <Button
+              size="sm"
+              onClick={applyFilters}
+              loading={isLoading}
+              disabled={isLoading}
+              leftSection={<IconFilter size={16} />}
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  "&:hover": {
+                    backgroundColor: "#0d4261",
+                  },
+                },
+              }}
+            >
+              Apply Filters
+            </Button>
+          </Group>
+        </Box>
+      )}
 
       {isLoading ? (
         <Center py="xl">
@@ -517,8 +929,16 @@ function AirImportJobMaster() {
         </Center>
       ) : (
         <>
-          <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-            {isFetching && (
+          <div
+            style={{
+              position: "relative",
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {importJobFetching && (
               <div
                 style={{
                   position: "absolute",
@@ -545,85 +965,14 @@ function AirImportJobMaster() {
             <MantineReactTable table={table} />
           </div>
 
-          <Group
-            w="100%"
-            justify="space-between"
-            align="center"
-            p="xs"
-            wrap="nowrap"
-            pt="md"
-          >
-            <Group gap="sm" align="center" wrap="nowrap">
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                Rows per page
-              </Text>
-              <Select
-                size="xs"
-                data={["10", "25", "50"]}
-                value={String(pageSize)}
-                onChange={(val) => {
-                  if (!val) return;
-                  handlePageSizeChange(Number(val));
-                }}
-                w={110}
-                styles={
-                  {
-                    input: {
-                      fontSize: "13px",
-                      height: "36px",
-                      fontFamily: "Inter",
-                    },
-                  } as Record<string, unknown>
-                }
-              />
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                {(() => {
-                  const total = totalRecords || 0;
-                  if (total === 0) return "0–0 of 0";
-                  const start = (currentPage - 1) * pageSize + 1;
-                  const end = Math.min(currentPage * pageSize, total);
-                  return `${start}–${end} of ${total}`;
-                })()}
-              </Text>
-            </Group>
-
-            <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-              >
-                <IconChevronLeft size={16} />
-              </ActionIcon>
-              <Text size="sm" ta="center" style={{ width: 26, fontFamily: "Inter, sans-serif" }}>
-                {currentPage}
-              </Text>
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                of {Math.max(1, Math.ceil(totalRecords / pageSize))}
-              </Text>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  const totalPages = Math.max(
-                    1,
-                    Math.ceil(totalRecords / pageSize)
-                  );
-                  handlePageChange(Math.min(totalPages, currentPage + 1));
-                }}
-                disabled={(() => {
-                  const totalPages = Math.max(
-                    1,
-                    Math.ceil(totalRecords / pageSize)
-                  );
-                  return currentPage >= totalPages;
-                })()}
-              >
-                <IconChevronRight size={16} />
-              </ActionIcon>
-            </Group>
-          </Group>
+          <PaginationBar
+            pageSize={pagination.pageSize}
+            currentPage={currentPage}
+            totalRecords={totalRecords}
+            onPageSizeChange={handlePageSizeChange}
+            onPageChange={handlePageChange}
+            pageSizeOptions={["10", "25", "50"]}
+          />
         </>
       )}
       <Modal

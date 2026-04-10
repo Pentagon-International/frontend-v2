@@ -100,6 +100,7 @@ export const URL = {
   pipeline: "pipeline/",
   pipelineFilter: "pipeline/filter/",
   unitMasterFilter: "unit-master/filter/",
+  daybookGet: "day-book-master/",
   daybook: "filter/day-book-master/",
   quotationDefaultChargesFilter: "quotation-default-charges/filter/",
   conditionalNotes: "conditions/conditional-notes/",
