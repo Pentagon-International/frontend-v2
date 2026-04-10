@@ -149,6 +149,8 @@ function clampAmount(value: number | null | undefined): number | null {
 type DetailRow = {
   id?: number | null;
   subledger_id?: string | null;
+  /** GL account code (used for allocations lookup) */
+  account_code: string;
   customer_code: string;
   customer_display: string;
   narration: string;
@@ -181,26 +183,26 @@ type InvoiceCombinedItem = {
   document_date?: string;
   due_date?: string;
   total?: number | string;
+  document_amount?: number | string;
   daybook_id?: number | string;
   day_book_id?: number | string;
   daybook_name?: string;
   day_book_type?: string;
+  day_book_document_type?: string;
   currency_id?: number | string;
   currency_code?: string;
+  roe?: number | string;
+  amount?: number | string;
+  amount_in_local?: number | string;
   [key: string]: unknown;
 };
 
-const fetchFilterInvoice = async (
-  billTo: string,
-): Promise<InvoiceCombinedItem[]> => {
-  const response = await postAPICall(
-    URL.filterInvoice,
-    { filters: { status: "POSTED", bill_to: billTo,"is_agent": false} },
-    API_HEADER,
-  );
-  const res = response as
-    | { data?: InvoiceCombinedItem[] }
-    | InvoiceCombinedItem[];
+const fetchOutstandingAllocations = async (payload: {
+  account_code: string;
+  subledger_code: string;
+}): Promise<InvoiceCombinedItem[]> => {
+  const response = await postAPICall(URL.outstandingAllocations, payload, API_HEADER);
+  const res = response as { data?: InvoiceCombinedItem[] } | InvoiceCombinedItem[];
   const data = Array.isArray(res) ? res : res?.data;
   return Array.isArray(data) ? data : [];
 };
@@ -302,6 +304,7 @@ type ReceiptFormValues = {
 
 const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
   subledger_id: null,
+  account_code: "",
   customer_code: "",
   customer_display: "",
   narration: "",
@@ -473,10 +476,9 @@ export default function ReceiptCreate({
   const [invoiceModalDetailRowIndex, setInvoiceModalDetailRowIndex] = useState<
     number | null
   >(null);
-  /** When set, invoice combined API is triggered (or served from cache) for this billTo */
-  const [invoiceModalBillTo, setInvoiceModalBillTo] = useState<string | null>(
-    null,
-  );
+  /** When set, allocations API is triggered (or served from cache) for this filter */
+  const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
+    useState<{ account_code: string; subledger_code: string } | null>(null);
   const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
@@ -559,9 +561,16 @@ export default function ReceiptCreate({
     isFetching: filterInvoiceFetching,
     isError: filterInvoiceError,
   } = useQuery({
-    queryKey: ["filterInvoice", invoiceModalBillTo ?? ""],
-    queryFn: () => fetchFilterInvoice(invoiceModalBillTo!),
-    enabled: invoiceModalOpen && !!invoiceModalBillTo,
+    queryKey: [
+      "outstandingAllocationsForReceipt",
+      invoiceModalAllocationFilter?.account_code ?? "",
+      invoiceModalAllocationFilter?.subledger_code ?? "",
+    ],
+    queryFn: () => fetchOutstandingAllocations(invoiceModalAllocationFilter!),
+    enabled:
+      invoiceModalOpen &&
+      !!invoiceModalAllocationFilter?.account_code &&
+      !!invoiceModalAllocationFilter?.subledger_code,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -662,7 +671,9 @@ export default function ReceiptCreate({
       parties.length > 0
         ? parties.map((p) => ({
             id: p.id ?? null,
-            subledger_id: p.subledger_id ?? null,
+            subledger_id:
+              p.subledger_id != null ? String(p.subledger_id) : null,
+            account_code: "",
             customer_code: String(p.subledger_code ?? "").trim(),
             customer_display: String(p.subledger_name ?? "").trim(),
             narration: String(p.narration ?? "").trim(),
@@ -940,10 +951,14 @@ export default function ReceiptCreate({
 
   const openInvoiceModal = (detailRowIndex: number) => {
     const row = form.values.details[detailRowIndex];
-    const billTo = row?.customer_display?.trim() || row?.customer_code?.trim();
-    if (!billTo) return;
+    const accountCode = (row?.account_code ?? "").toString().trim();
+    const subledgerCode = (row?.customer_code ?? "").toString().trim();
+    if (!accountCode || !subledgerCode) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
-    setInvoiceModalBillTo(billTo);
+    setInvoiceModalAllocationFilter({
+      account_code: accountCode,
+      subledger_code: subledgerCode,
+    });
     setInvoiceModalOpen(true);
     setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
@@ -993,7 +1008,7 @@ export default function ReceiptCreate({
     if (sorted.length === 0) {
       ToastNotification({
         type: "warning",
-        message: "Please select at least one invoice",
+        message: "Please select at least one document",
       });
       return;
     }
@@ -1019,19 +1034,31 @@ export default function ReceiptCreate({
           ? parseDocumentDate(inv.document_date as string)
           : null;
       const totalNum =
-        typeof inv.total === "number"
-          ? inv.total
-          : typeof inv.total === "string"
-            ? parseFloat(inv.total) || null
-            : null;
-      const localTotalNum =
-        inv.local_total != null
-          ? typeof inv.local_total === "number"
-            ? inv.local_total
-            : typeof inv.local_total === "string"
-              ? parseFloat(inv.local_total) || null
+        inv.amount != null
+          ? typeof inv.amount === "number"
+            ? inv.amount
+            : typeof inv.amount === "string"
+              ? parseFloat(inv.amount) || null
               : null
-          : null;
+          : typeof inv.total === "number"
+            ? inv.total
+            : typeof inv.total === "string"
+              ? parseFloat(inv.total) || null
+              : null;
+      const localTotalNum =
+        inv.amount_in_local != null
+          ? typeof inv.amount_in_local === "number"
+            ? inv.amount_in_local
+            : typeof inv.amount_in_local === "string"
+              ? parseFloat(inv.amount_in_local) || null
+              : null
+          : inv.local_total != null
+            ? typeof inv.local_total === "number"
+              ? inv.local_total
+              : typeof inv.local_total === "string"
+                ? parseFloat(inv.local_total) || null
+                : null
+            : null;
       const invRoe =
         inv.roe != null
           ? typeof inv.roe === "number"
@@ -1043,7 +1070,7 @@ export default function ReceiptCreate({
       const daybookId = inv.day_book_id ?? inv.daybook_id;
       return {
         location: branchCode,
-        type: (inv.day_book_type as string) ?? "",
+        type: (inv.day_book_document_type as string) ?? (inv.day_book_type as string) ?? "",
         subledger: detailRow?.customer_code ?? "",
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
@@ -1081,7 +1108,7 @@ export default function ReceiptCreate({
     syncPartyDetailsFromAllocations(nextAdjustments);
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
-    setInvoiceModalBillTo(null);
+    setInvoiceModalAllocationFilter(null);
     setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
     // ToastNotification({
@@ -2130,7 +2157,7 @@ payload.is_agent = false;
                           <SearchableSelect
                             key={partyKey}
                             placeholder="Account Name"
-                            apiEndpoint={URL.allCustomers}
+                            apiEndpoint={URL.chartOfAccounts}
                             value={row?.customer_code || null}
                             displayValue={row?.customer_display || null}
                             disabled={
@@ -2142,13 +2169,13 @@ payload.is_agent = false;
                               setLoadedDetails(null);
                               const orig = originalData as {
                                 id?: number;
-                                customer_code?: string;
-                                customer_name?: string;
-                                name?: string;
+                                gl_account_code?: string;
+                                sl_code?: string;
+                                account_name?: string;
                               };
-                              const name =
-                                orig?.customer_name ?? orig?.name ?? "";
-                              const code = orig?.customer_code ?? "";
+                              const name = orig?.account_name ?? "";
+                              const subledgerCode = orig?.sl_code ?? "";
+                              const glAccountCode = orig?.gl_account_code ?? "";
                               const sid =
                                 orig?.id != null
                                   ? orig.id
@@ -2161,8 +2188,12 @@ payload.is_agent = false;
                                 sid,
                               );
                               form.setFieldValue(
+                                `details.${idx}.account_code`,
+                                glAccountCode,
+                              );
+                              form.setFieldValue(
                                 `details.${idx}.customer_code`,
-                                code || (value ?? ""),
+                                subledgerCode || (value ?? ""),
                               );
                               form.setFieldValue(
                                 `details.${idx}.customer_display`,
@@ -2178,18 +2209,18 @@ payload.is_agent = false;
                             displayFormat={(item) => {
                               const i = item as {
                                 id?: number;
-                                customer_code?: string;
-                                customer_name?: string;
-                                name?: string;
+                                gl_account_code?: string;
+                                account_name?: string;
                               };
+                              const id = String(i.id ?? "").trim();
+                              const gl = String(i.gl_account_code ?? "").trim();
+                              const name = String(i.account_name ?? "").trim();
                               return {
-                                value: String(i?.id ?? i?.customer_code ?? ""),
-                                label: String(
-                                  i?.customer_name ?? i?.name ?? "",
-                                ),
+                                value: id,
+                                label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
                               };
                             }}
-                            searchFields={["customer_name", "customer_code"]}
+                            searchFields={["gl_account_code", "account_name", "id"]}
                             returnOriginalData
                             styles={partyFieldStyles}
                           />
@@ -2367,7 +2398,7 @@ payload.is_agent = false;
                                 type="button"
                                 variant="subtle"
                                 size="sm"
-                                title="Get invoice details"
+                                title="Get document details"
                                 disabled={
                                   isReadOnly ||
                                   (invoiceModalDetailRowIndex === idx &&
@@ -2641,17 +2672,17 @@ payload.is_agent = false;
             onClose={() => {
               setInvoiceModalOpen(false);
               setInvoiceModalDetailRowIndex(null);
-              setInvoiceModalBillTo(null);
+              setInvoiceModalAllocationFilter(null);
               setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
             }}
-            title="Select Invoice"
+            title="Select Document"
             size="lg"
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
-                Loading invoices...
+                Loading documents...
               </Text>
             ) : (
               <>
@@ -2665,9 +2696,10 @@ payload.is_agent = false;
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th style={{ width: 40 }}></Table.Th>
-                      <Table.Th>Invoice Number</Table.Th>
+                      <Table.Th>Document Number</Table.Th>
+                      <Table.Th>Document Doc Type</Table.Th>
                       <Table.Th>Document Date</Table.Th>
-                      <Table.Th>Total</Table.Th>
+                      <Table.Th>Document Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -2681,16 +2713,25 @@ payload.is_agent = false;
                         </Table.Td>
                         <Table.Td>{inv.document_no ?? "—"}</Table.Td>
                         <Table.Td>
+                          {String(
+                            inv.day_book_document_type ?? inv.day_book_type ?? "—",
+                          )}
+                        </Table.Td>
+                        <Table.Td>
                           {formatDocumentDateDisplay(
                             inv.document_date as string,
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {inv.total != null
-                            ? typeof inv.total === "number"
-                              ? inv.total.toFixed(2)
-                              : String(inv.total)
-                            : "—"}
+                          {inv.document_amount != null
+                            ? typeof inv.document_amount === "number"
+                              ? inv.document_amount.toFixed(2)
+                              : String(inv.document_amount)
+                            : inv.total != null
+                              ? typeof inv.total === "number"
+                                ? inv.total.toFixed(2)
+                                : String(inv.total)
+                              : "—"}
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -2700,7 +2741,7 @@ payload.is_agent = false;
                   !filterInvoiceLoading &&
                   !filterInvoiceFetching && (
                     <Text size="sm" c="dimmed" mt="sm">
-                      No posted invoices found for this customer.
+                      No posted documents found for this customer.
                     </Text>
                   )}
                 <Group justify="flex-end" mt="md">
@@ -2710,7 +2751,7 @@ payload.is_agent = false;
                     onClick={() => {
                       setInvoiceModalOpen(false);
                       setInvoiceModalDetailRowIndex(null);
-                      setInvoiceModalBillTo(null);
+                      setInvoiceModalAllocationFilter(null);
                       setInvoiceList([]);
                       setSelectedInvoiceIndices(new Set());
                     }}
