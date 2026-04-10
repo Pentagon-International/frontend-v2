@@ -133,7 +133,8 @@ const formatDateForApi = (date: Date | null): string => {
 const fetchDocumentAllocation = async (payload: {
   account_code: string;
   subledger_code: string;
-  date?: string;
+  /** Optional filter; omitted when user leaves date empty */
+  document_date?: string;
 }): Promise<DocumentAllocationResponse> => {
   try {
     const response = await postAPICall(
@@ -486,7 +487,9 @@ export default function DocumentAllocation() {
       const res = await fetchDocumentAllocation({
         account_code: selectedGlAccountCode,
         subledger_code: selectedSlCode,
-        ...(selectedDate ? { date: formatDateForApi(selectedDate) } : {}),
+        ...(selectedDate != null
+          ? { document_date: formatDateForApi(selectedDate) }
+          : {}),
       });
       const list = Array.isArray(res?.data) ? res.data : [];
       setHasFetched(true);
