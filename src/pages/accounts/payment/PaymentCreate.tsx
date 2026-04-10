@@ -81,7 +81,7 @@ function getRoeValue(
   return 1;
 }
 
-// Header daybook: document_type PMT for Payment
+// Header daybook: create payment flow (document_type PMT)
 const fetchDaybookPMT = async () => {
   try {
     const payload = { filters: { document_type: "PMT" } };
@@ -96,7 +96,7 @@ const fetchDaybookPMT = async () => {
 // Adjustments/allocations section daybook: document_type CRJ for Payment
 const fetchDaybookCRJ = async () => {
   try {
-    const payload = { filters: { document_type: "CRJ" } };
+    const payload = { filters: { document_type: "" } };
     const response = await postAPICall(URL.daybook, payload, API_HEADER);
     return (response as { data?: unknown[] })?.data ?? [];
   } catch (error) {
@@ -105,7 +105,7 @@ const fetchDaybookCRJ = async () => {
   }
 };
 
-// Payment reversal header daybook: document_type PMTREV
+// Header daybook: create payment reversal flow only (document_type PMTREV)
 const fetchDaybookPMTREV = async () => {
   try {
     const payload = { filters: { document_type: "PMTREV" } };
@@ -141,6 +141,8 @@ function clampAmount(value: number | null | undefined): number | null {
 type DetailRow = {
   id?: number | null;
   subledger_id?: string | null;
+  /** GL account code from chart-of-accounts (used for allocations modal filter) */
+  account_code: string;
   customer_code: string;
   customer_display: string;
   narration: string;
@@ -167,31 +169,38 @@ type AdjustmentRow = {
   adj_local_amount: number | null;
 };
 
-/** Supplier invoice item from filter/supplier-invoice response */
-type SupplierInvoiceItem = {
+type InvoiceCombinedItem = {
   id?: number;
-  crj_number?: string;
-  date?: string;
-  approved_amount?: string | number;
-  Inv_crn_amount?: string | number;
+  document_no?: string;
+  document_date?: string;
+  due_date?: string;
+  total?: number | string;
+  document_amount?: number | string;
+  daybook_id?: number | string;
+  day_book_id?: number | string;
+  daybook_name?: string;
+  day_book_type?: string;
+  day_book_document_type?: string;
+  currency_id?: number | string;
   currency_code?: string;
-  day_book_id?: number;
-  agent_name?: string;
-  agent_code?: string;
+  roe?: number | string;
+  amount?: number | string;
+  amount_in_local?: number | string;
   [key: string]: unknown;
 };
 
-const fetchFilterSupplierInvoice = async (
-  agentName: string,
-): Promise<SupplierInvoiceItem[]> => {
+const fetchOutstandingAllocations = async (payload: {
+  account_code: string;
+  subledger_code: string;
+}): Promise<InvoiceCombinedItem[]> => {
   const response = await postAPICall(
-    URL.supplierInvoiceFilter,
-    { filters: { status: "POSTED", agent_name: agentName } },
+    URL.outstandingAllocations,
+    payload,
     API_HEADER,
   );
   const res = response as
-    | { data?: SupplierInvoiceItem[] }
-    | SupplierInvoiceItem[];
+    | { data?: InvoiceCombinedItem[] }
+    | InvoiceCombinedItem[];
   const data = Array.isArray(res) ? res : res?.data;
   return Array.isArray(data) ? data : [];
 };
@@ -286,6 +295,7 @@ type PaymentFormValues = {
 
 const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
   subledger_id: null,
+  account_code: "",
   customer_code: "",
   customer_display: "",
   narration: "",
@@ -420,13 +430,12 @@ export default function PaymentCreate({
   const { user } = useAuthStore();
   const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
   const sourcePaymentNoRef = useRef<string>("");
-  const [reversePaymentSaveResponse, setReversePaymentSaveResponse] =
-    useState<{
-      id?: number;
-      payment_no?: string;
-      reverse_payment_no?: string;
-      status?: string;
-    } | null>(null);
+  const [reversePaymentSaveResponse, setReversePaymentSaveResponse] = useState<{
+    id?: number;
+    payment_no?: string;
+    reverse_payment_no?: string;
+    status?: string;
+  } | null>(null);
 
   const defaultBranch =
     user?.branches?.find((b) => b.is_default) || user?.branches?.[0];
@@ -456,12 +465,10 @@ export default function PaymentCreate({
   const [invoiceModalDetailRowIndex, setInvoiceModalDetailRowIndex] = useState<
     number | null
   >(null);
-  const [invoiceModalBillTo, setInvoiceModalBillTo] = useState<string | null>(
-    null,
-  );
-  const [supplierInvoiceList, setSupplierInvoiceList] = useState<
-    SupplierInvoiceItem[]
-  >([]);
+  /** When set, allocations API is triggered (or served from cache) for this filter */
+  const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
+    useState<{ account_code: string; subledger_code: string } | null>(null);
+  const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
@@ -509,6 +516,7 @@ export default function PaymentCreate({
     staleTime: Infinity,
   });
 
+  // Header daybook: PMT for create payment, PMTREV for create payment reverse (same as Receipt RPT + RPTREV)
   const { data: daybookDataPMT = [] } = useQuery({
     queryKey: ["daybook", "PMT"],
     queryFn: fetchDaybookPMT,
@@ -519,7 +527,6 @@ export default function PaymentCreate({
     queryKey: ["daybook", "PMTREV"],
     queryFn: fetchDaybookPMTREV,
     staleTime: Infinity,
-    enabled: _isReversal,
   });
 
   const { data: daybookDataForAdjustments = [] } = useQuery({
@@ -529,14 +536,21 @@ export default function PaymentCreate({
   });
 
   const {
-    data: filterSupplierInvoiceData,
-    isLoading: filterSupplierInvoiceLoading,
-    isFetching: filterSupplierInvoiceFetching,
-    isError: filterSupplierInvoiceError,
+    data: filterInvoiceData,
+    isLoading: filterInvoiceLoading,
+    isFetching: filterInvoiceFetching,
+    isError: filterInvoiceError,
   } = useQuery({
-    queryKey: ["filterSupplierInvoice", invoiceModalBillTo ?? ""],
-    queryFn: () => fetchFilterSupplierInvoice(invoiceModalBillTo!),
-    enabled: invoiceModalOpen && !!invoiceModalBillTo,
+    queryKey: [
+      "outstandingAllocations",
+      invoiceModalAllocationFilter?.account_code ?? "",
+      invoiceModalAllocationFilter?.subledger_code ?? "",
+    ],
+    queryFn: () => fetchOutstandingAllocations(invoiceModalAllocationFilter!),
+    enabled:
+      invoiceModalOpen &&
+      !!invoiceModalAllocationFilter?.account_code &&
+      !!invoiceModalAllocationFilter?.subledger_code,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -603,9 +617,9 @@ export default function PaymentCreate({
   const pathname = location.pathname;
   const isReversalEditOrView =
     _isReversal &&
-    (pathname.includes("/reversal/edit") || pathname.includes("/reversal/view"));
-  const isReversalCreate =
-    _isReversal && pathname.includes("/reversal/create");
+    (pathname.includes("/reversal/edit") ||
+      pathname.includes("/reversal/view"));
+  const isReversalCreate = _isReversal && pathname.includes("/reversal/create");
 
   // Load from list: state is payment row (Payment Master or Reversal list) or source payment (reversal create from Payment Master)
   useEffect(() => {
@@ -651,6 +665,7 @@ export default function PaymentCreate({
               id: pAny.id ?? null,
               subledger_id:
                 pAny.subledger_id != null ? String(pAny.subledger_id) : null,
+              account_code: String(pAny.account_code ?? "").trim(),
               customer_code: String(
                 pAny.subledger_code ?? pAny.account_code ?? "",
               ).trim(),
@@ -702,7 +717,9 @@ export default function PaymentCreate({
                     : null,
               location: String(aAny.location ?? "").trim(),
               type: String(aAny.type ?? aAny.type_name ?? "").trim(),
-              subledger: String(aAny.subledger_code ?? aAny.subledger ?? "").trim(),
+              subledger: String(
+                aAny.subledger_code ?? aAny.subledger ?? "",
+              ).trim(),
               subledger_display: String(
                 aAny.subledger_name ?? aAny.subledger ?? "",
               ).trim(),
@@ -720,12 +737,11 @@ export default function PaymentCreate({
 
     setLoadedDetails(details);
     form.setValues({
-      daybook_id:
-        isReversalCreate
-          ? ""
-          : paymentFromState.day_book_id != null
-            ? String(paymentFromState.day_book_id)
-            : "",
+      daybook_id: isReversalCreate
+        ? ""
+        : paymentFromState.day_book_id != null
+          ? String(paymentFromState.day_book_id)
+          : "",
       type: (paymentFromState.type ?? "CASH").toString().trim(),
       date: dateVal ?? new Date(),
       currency: (paymentFromState.currency_code ?? localCurrency)
@@ -746,7 +762,8 @@ export default function PaymentCreate({
 
     const docNo = (
       paymentFromState.payment_no ??
-      (paymentFromState as { reverse_payment_no?: string }).reverse_payment_no ??
+      (paymentFromState as { reverse_payment_no?: string })
+        .reverse_payment_no ??
       (paymentFromState as { document_no?: string }).document_no ??
       ""
     ).toString();
@@ -780,8 +797,7 @@ export default function PaymentCreate({
       const mapped = rawDocs.map((doc: any) => ({
         name: (doc.document_name ?? doc.file_name ?? "").toString(),
         file: null as File | null,
-        document_url:
-           doc.document_url ?? doc.document ?? "",
+        document_url: doc.document_url ?? doc.document ?? "",
         document_id: doc.id ?? undefined,
         original_document_name: (
           doc.document_name ??
@@ -945,20 +961,23 @@ export default function PaymentCreate({
 
   const openInvoiceModal = (detailRowIndex: number) => {
     const row = form.values.details[detailRowIndex];
-    const agentName =
-      row?.customer_display?.trim() || row?.customer_code?.trim();
-    if (!agentName) return;
+    const accountCode = (row?.account_code ?? "").toString().trim();
+    const subledgerCode = (row?.customer_code ?? "").toString().trim();
+    if (!accountCode || !subledgerCode) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
-    setInvoiceModalBillTo(agentName);
+    setInvoiceModalAllocationFilter({
+      account_code: accountCode,
+      subledger_code: subledgerCode,
+    });
     setInvoiceModalOpen(true);
-    setSupplierInvoiceList([]);
+    setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
   };
 
   useEffect(() => {
-    if (!invoiceModalOpen || !filterSupplierInvoiceData) return;
-    const list = filterSupplierInvoiceData;
-    setSupplierInvoiceList(list);
+    if (!invoiceModalOpen || !filterInvoiceData) return;
+    const list = filterInvoiceData;
+    setInvoiceList(list);
     const existingDocNos = new Set(
       form.values.adjustments
         .map((a) => (a.document_no ?? "").toString().trim())
@@ -967,22 +986,22 @@ export default function PaymentCreate({
     const alreadySelected = new Set<number>();
     existingDocNos.forEach((docNo) => {
       const idx = list.findIndex(
-        (inv) => (inv.crj_number ?? "").toString().trim() === docNo,
+        (inv) => (inv.document_no ?? "").toString().trim() === docNo,
       );
       if (idx >= 0) alreadySelected.add(idx);
     });
     setSelectedInvoiceIndices(alreadySelected);
-  }, [invoiceModalOpen, filterSupplierInvoiceData]);
+  }, [invoiceModalOpen, filterInvoiceData]);
 
   useEffect(() => {
-    if (invoiceModalOpen && filterSupplierInvoiceError) {
+    if (invoiceModalOpen && filterInvoiceError) {
       ToastNotification({
         type: "error",
-        message: "Failed to load supplier invoices",
+        message: "Failed to load documents",
       });
-      setSupplierInvoiceList([]);
+      setInvoiceList([]);
     }
-  }, [invoiceModalOpen, filterSupplierInvoiceError]);
+  }, [invoiceModalOpen, filterInvoiceError]);
 
   const toggleInvoiceSelection = (idx: number) => {
     setSelectedInvoiceIndices((prev) => {
@@ -993,13 +1012,13 @@ export default function PaymentCreate({
     });
   };
 
-  const handleSelectSupplierInvoice = () => {
+  const handleSelectInvoice = () => {
     if (invoiceModalDetailRowIndex == null) return;
     const sorted = Array.from(selectedInvoiceIndices).sort((a, b) => a - b);
     if (sorted.length === 0) {
       ToastNotification({
         type: "warning",
-        message: "Please select at least one supplier invoice",
+        message: "Please select at least one document",
       });
       return;
     }
@@ -1012,41 +1031,66 @@ export default function PaymentCreate({
       (partyDisplay &&
         (a.subledger_display ?? "").toString().trim() === partyDisplay);
     const managedDocNos = new Set(
-      supplierInvoiceList
-        .map((inv) => (inv.crj_number ?? "").toString().trim())
+      invoiceList
+        .map((inv) => (inv.document_no ?? "").toString().trim())
         .filter(Boolean),
     );
     const isManagedRow = (a: AdjustmentRow) =>
       managedDocNos.has((a.document_no ?? "").toString().trim());
     const newRows: AdjustmentRow[] = sorted.map((listIdx) => {
-      const inv = supplierInvoiceList[listIdx];
-      const docDate = inv.date != null ? parseDocumentDate(inv.date) : null;
-      const approvedNum =
-        typeof inv.approved_amount === "number"
-          ? inv.approved_amount
-          : typeof inv.approved_amount === "string"
-            ? parseFloat(inv.approved_amount) || null
-            : null;
-      const invCrnNum =
-        typeof inv.Inv_crn_amount === "number"
-          ? inv.Inv_crn_amount
-          : typeof inv.Inv_crn_amount === "string"
-            ? parseFloat(inv.Inv_crn_amount) || null
-            : null;
-      const amountNum = approvedNum ?? invCrnNum;
-      const daybookId = inv.day_book_id;
+      const inv = invoiceList[listIdx];
+      const docDate =
+        inv.document_date != null
+          ? parseDocumentDate(inv.document_date as string)
+          : null;
+      const totalNum =
+        inv.amount != null
+          ? typeof inv.amount === "number"
+            ? inv.amount
+            : typeof inv.amount === "string"
+              ? parseFloat(inv.amount) || null
+              : null
+          : typeof inv.total === "number"
+            ? inv.total
+            : typeof inv.total === "string"
+              ? parseFloat(inv.total) || null
+              : null;
+      const localTotalNum =
+        inv.amount_in_local != null
+          ? typeof inv.amount_in_local === "number"
+            ? inv.amount_in_local
+            : typeof inv.amount_in_local === "string"
+              ? parseFloat(inv.amount_in_local) || null
+              : null
+          : null;
+      const invRoe =
+        inv.roe != null
+          ? typeof inv.roe === "number"
+            ? inv.roe
+            : typeof inv.roe === "string"
+              ? parseFloat(inv.roe) || null
+              : null
+          : null;
+      const daybookId = inv.day_book_id ?? inv.daybook_id;
       return {
         location: branchCode,
-        type: "Supplier Invoice",
+        type: ((inv.day_book_document_type as string) ??
+          (inv.day_book_type as string) ??
+          "") as string,
         subledger: detailRow?.customer_code ?? "",
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
-        document_no: (inv.crj_number ?? "").toString(),
+        document_no: (inv.document_no ?? "").toString(),
         doc_date: docDate,
         currency: (inv.currency_code ?? localCurrency).toString().trim(),
-        roe: 1,
-        adj_curr_amount: amountNum,
-        adj_local_amount: amountNum,
+        roe: invRoe,
+        adj_curr_amount: totalNum,
+        adj_local_amount:
+          localTotalNum != null
+            ? localTotalNum
+            : totalNum != null && invRoe != null
+              ? clampAmount(totalNum * invRoe)
+              : totalNum,
         invoice_id: inv.id != null ? Number(inv.id) : null,
       };
     });
@@ -1070,8 +1114,8 @@ export default function PaymentCreate({
     syncPartyDetailsFromAllocations(nextAdjustments);
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
-    setInvoiceModalBillTo(null);
-    setSupplierInvoiceList([]);
+    setInvoiceModalAllocationFilter(null);
+    setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
   };
 
@@ -1079,6 +1123,19 @@ export default function PaymentCreate({
     values: PaymentFormValues,
     options: { status?: string } = {},
   ) => {
+    const rawAdjustments = values.adjustments ?? [];
+    const nonEmptyAdjustments = rawAdjustments.filter((a) => {
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasAmounts || hasDocument;
+    });
+
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
@@ -1108,7 +1165,7 @@ export default function PaymentCreate({
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Cr").toString(),
       })),
-      allocations: (values.adjustments ?? []).map((a) => ({
+      allocations: nonEmptyAdjustments.map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
         location: a.location ?? "",
         subledger_code: a.subledger ?? a.subledger_display ?? "",
@@ -1117,9 +1174,6 @@ export default function PaymentCreate({
         document_no: a.document_no ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
-        ...(a.invoice_id != null && a.invoice_id > 0
-          ? { supplier_invoice_id: a.invoice_id }
-          : {}),
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: a.adj_local_amount ?? 0,
       })),
@@ -1140,14 +1194,29 @@ export default function PaymentCreate({
       detailsOverride?: DetailRow[];
     },
   ) => {
+    const rawAdjustments = values.adjustments ?? [];
+    const nonEmptyAdjustments = rawAdjustments.filter((a) => {
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasAmounts || hasDocument;
+    });
+
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
-    const paymentNo =
-      options?.paymentNo ?? sourcePaymentNoRef.current ?? "";
+    const paymentNo = options?.paymentNo ?? sourcePaymentNoRef.current ?? "";
     const isUpdate = options?.reversalId != null && options.reversalId > 0;
     const details = options?.detailsOverride ?? values.details ?? [];
-    const source = paymentFromState as Record<string, unknown> | null | undefined;
+    const source = paymentFromState as
+      | Record<string, unknown>
+      | null
+      | undefined;
     const base: Record<string, unknown> = {
       payment_no: paymentNo,
       date: formatDateDDMMYYYY(values.date),
@@ -1175,7 +1244,7 @@ export default function PaymentCreate({
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Cr").toString(),
       })),
-      allocations: (values.adjustments ?? []).map((a) => ({
+      allocations: nonEmptyAdjustments.map((a) => ({
         location: a.location ?? "",
         subledger_code: a.subledger ?? a.subledger_display ?? "",
         day_book_id: Number(a.daybook_id) || 0,
@@ -1183,9 +1252,6 @@ export default function PaymentCreate({
         document_no: a.document_no ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
-        ...(a.invoice_id != null && a.invoice_id > 0
-          ? { supplier_invoice_id: a.invoice_id }
-          : {}),
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: a.adj_local_amount ?? 0,
       })),
@@ -1386,7 +1452,7 @@ export default function PaymentCreate({
       const payload = isUpdate
         ? buildPaymentPayload(values, { status: "UNPOSTED" })
         : buildPaymentPayload(values);
-payload.is_agent = false ;
+      payload.is_agent = false;
       if (isUpdate) {
         const fd = buildPaymentFormData(payload);
         const raw = (await apiCallProtected.put(
@@ -1409,10 +1475,13 @@ payload.is_agent = false ;
               res.documents.map((doc: any) => ({
                 name: (doc.document_name ?? doc.file_name ?? "").toString(),
                 file: null,
-                document_url:
-                   doc.document_url ?? doc.document ?? "",
+                document_url: doc.document_url ?? doc.document ?? "",
                 document_id: doc.id ?? undefined,
-                original_document_name: (doc.document_name ?? doc.file_name ?? "").toString(),
+                original_document_name: (
+                  doc.document_name ??
+                  doc.file_name ??
+                  ""
+                ).toString(),
               })),
             );
           }
@@ -1466,10 +1535,13 @@ payload.is_agent = false ;
               data.documents.map((doc: any) => ({
                 name: (doc.document_name ?? doc.file_name ?? "").toString(),
                 file: null,
-                document_url:
-                   doc.document_url ?? doc.document ?? "",
+                document_url: doc.document_url ?? doc.document ?? "",
                 document_id: doc.id ?? undefined,
-                original_document_name: (doc.document_name ?? doc.file_name ?? "").toString(),
+                original_document_name: (
+                  doc.document_name ??
+                  doc.file_name ??
+                  ""
+                ).toString(),
               })),
             );
           }
@@ -1613,13 +1685,15 @@ payload.is_agent = false ;
       ? reversalNonEditableStyles
       : readOnlyFieldStyles
     : fieldStyles;
+  // Party details: same read-only styling rule as Receipt (isReadOnly || reversalFormDisabled)
   const partyFieldStyles =
-    headerOtherDisabled
+    isReadOnly || reversalFormDisabled
       ? useNonEditableStyleOnly
         ? reversalNonEditableStyles
         : readOnlyFieldStyles
       : fieldStyles;
   const adjustmentFieldStyles = reversalNonEditableStyles;
+  // On reversal page, header daybook and date are editable; all other fields disabled (same as Receipt).
   const isHeaderDaybookEditable = _isReversal && !isReadOnly;
   const headerDaybookStyles = isHeaderDaybookEditable
     ? fieldStyles
@@ -1723,50 +1797,52 @@ payload.is_agent = false ;
             {_isReversal &&
               (reversePaymentSaveResponse ||
                 (isReversalEditOrView && paymentFromState)) && (
-              <Group gap="sm" wrap="nowrap">
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">
-                    Reverse Payment No:
-                  </Text>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color="#105476"
-                    styles={{ root: { textTransform: "none" } }}
-                  >
-                    {(reversePaymentSaveResponse?.reverse_payment_no ??
-                      reversePaymentSaveResponse?.payment_no ??
-                      (paymentFromState as { reverse_payment_no?: string })
-                        ?.reverse_payment_no ??
-                      (paymentFromState as { payment_no?: string })?.payment_no ??
-                      (reversePaymentSaveResponse?.id != null
-                        ? String(reversePaymentSaveResponse.id)
-                        : paymentFromState?.id != null
-                          ? String(paymentFromState.id)
-                          : "")) || "—"}
-                  </Badge>
+                <Group gap="sm" wrap="nowrap">
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm" fw={500} c="dimmed">
+                      Reverse Payment No:
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color="#105476"
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {(reversePaymentSaveResponse?.reverse_payment_no ??
+                        reversePaymentSaveResponse?.payment_no ??
+                        (paymentFromState as { reverse_payment_no?: string })
+                          ?.reverse_payment_no ??
+                        (paymentFromState as { payment_no?: string })
+                          ?.payment_no ??
+                        (reversePaymentSaveResponse?.id != null
+                          ? String(reversePaymentSaveResponse.id)
+                          : paymentFromState?.id != null
+                            ? String(paymentFromState.id)
+                            : "")) ||
+                        "—"}
+                    </Badge>
+                  </Group>
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm" fw={500} c="dimmed">
+                      Status:
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color={
+                        reversalStatusUpper === "UNPOSTED"
+                          ? "gray"
+                          : reversalStatusUpper === "POSTED"
+                            ? "green"
+                            : "#105476"
+                      }
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {reversalStatusUpper || "—"}
+                    </Badge>
+                  </Group>
                 </Group>
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">
-                    Status:
-                  </Text>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color={
-                      reversalStatusUpper === "UNPOSTED"
-                        ? "gray"
-                        : reversalStatusUpper === "POSTED"
-                          ? "green"
-                          : "#105476"
-                    }
-                    styles={{ root: { textTransform: "none" } }}
-                  >
-                    {reversalStatusUpper || "—"}
-                  </Badge>
-                </Group>
-              </Group>
-            )}
+              )}
             <Button
               variant="outline"
               color="#105476"
@@ -1924,7 +2000,9 @@ payload.is_agent = false ;
                     placeholder="Bank"
                     {...form.getInputProps("bank")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -1933,7 +2011,9 @@ payload.is_agent = false ;
                     placeholder="Branch"
                     {...form.getInputProps("branch")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -1942,7 +2022,9 @@ payload.is_agent = false ;
                     placeholder="Cheque No"
                     {...form.getInputProps("cheque_no")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -2038,27 +2120,23 @@ payload.is_agent = false ;
                           <SearchableSelect
                             key={partyKey}
                             placeholder="Account Name"
-                            apiEndpoint={URL.supplierByType}
+                            apiEndpoint={URL.chartOfAccounts}
                             value={row?.customer_code || null}
                             displayValue={row?.customer_display || null}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                             onChange={(value, _selected, originalData) => {
                               setLoadedDetails(null);
                               const orig = originalData as {
                                 id?: number;
-                                customer_code?: string;
-                                customer_name?: string;
-                                agent_code?: string;
-                                agent_name?: string;
-                                name?: string;
+                                gl_account_code?: string;
+                                sl_code?: string;
+                                account_name?: string;
                               };
-                              const name =
-                                orig?.agent_name ??
-                                orig?.customer_name ??
-                                orig?.name ??
-                                "";
-                              const code =
-                                orig?.agent_code ?? orig?.customer_code ?? "";
+                              const name = orig?.account_name ?? "";
+                              const subledgerCode = orig?.sl_code ?? "";
+                              const glAccountCode = orig?.gl_account_code ?? "";
                               const sid =
                                 orig?.id != null
                                   ? orig.id
@@ -2071,8 +2149,12 @@ payload.is_agent = false ;
                                 sid,
                               );
                               form.setFieldValue(
+                                `details.${idx}.account_code`,
+                                glAccountCode,
+                              );
+                              form.setFieldValue(
                                 `details.${idx}.customer_code`,
-                                code || (value ?? ""),
+                                subledgerCode || (value ?? ""),
                               );
                               form.setFieldValue(
                                 `details.${idx}.customer_display`,
@@ -2088,32 +2170,20 @@ payload.is_agent = false ;
                             displayFormat={(item) => {
                               const i = item as {
                                 id?: number;
-                                customer_code?: string;
-                                customer_name?: string;
-                                agent_code?: string;
-                                agent_name?: string;
-                                name?: string;
+                                gl_account_code?: string;
+                                account_name?: string;
                               };
                               return {
-                                value: String(
-                                  i?.id ??
-                                    i?.agent_code ??
-                                    i?.customer_code ??
-                                    "",
-                                ),
+                                value: String(i?.id ?? ""),
                                 label: String(
-                                  i?.agent_name ??
-                                    i?.customer_name ??
-                                    i?.name ??
-                                    "",
+                                  `${String(i?.gl_account_code ?? "").trim()} - ${String(i?.account_name ?? "").trim()}`.trim(),
                                 ),
                               };
                             }}
                             searchFields={[
-                              "agent_name",
-                              "agent_code",
-                              "customer_name",
-                              "customer_code",
+                              "account_name",
+                              "gl_account_code",
+                              "sl_code",
                             ]}
                             returnOriginalData
                             styles={partyFieldStyles}
@@ -2123,7 +2193,9 @@ payload.is_agent = false ;
                           <TextInput
                             placeholder="Narration"
                             {...form.getInputProps(`details.${idx}.narration`)}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                             styles={partyFieldStyles}
                           />
                         </Grid.Col>
@@ -2162,7 +2234,9 @@ payload.is_agent = false ;
                             decimalScale={4}
                             max={ROE_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2196,7 +2270,9 @@ payload.is_agent = false ;
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2218,7 +2294,9 @@ payload.is_agent = false ;
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2233,7 +2311,9 @@ payload.is_agent = false ;
                               )
                             }
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1.5}>
@@ -2265,21 +2345,21 @@ payload.is_agent = false ;
                               type="button"
                               variant="subtle"
                               size="sm"
-                              title="Get supplier invoice details"
+                              title="Get document details"
                               disabled={
                                 isReadOnly ||
                                 _isReversal ||
                                 (invoiceModalDetailRowIndex === idx &&
-                                  (filterSupplierInvoiceLoading ||
-                                    filterSupplierInvoiceFetching)) ||
-                                (!form.values.details[idx].customer_code &&
-                                  !form.values.details[idx].customer_display)
+                                  (filterInvoiceLoading ||
+                                    filterInvoiceFetching)) ||
+                                !form.values.details[idx].account_code ||
+                                !form.values.details[idx].customer_code
                               }
                               onClick={() => openInvoiceModal(idx)}
                               leftSection={
                                 invoiceModalDetailRowIndex === idx &&
-                                (filterSupplierInvoiceLoading ||
-                                  filterSupplierInvoiceFetching) ? (
+                                (filterInvoiceLoading ||
+                                  filterInvoiceFetching) ? (
                                   <Loader size="xs" color="#105476" />
                                 ) : (
                                   <IconFileInvoice size={18} />
@@ -2526,17 +2606,17 @@ payload.is_agent = false ;
             onClose={() => {
               setInvoiceModalOpen(false);
               setInvoiceModalDetailRowIndex(null);
-              setInvoiceModalBillTo(null);
-              setSupplierInvoiceList([]);
+              setInvoiceModalAllocationFilter(null);
+              setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
             }}
-            title="Select Supplier Invoice"
+            title="Select Document"
             size="lg"
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
-            {filterSupplierInvoiceLoading || filterSupplierInvoiceFetching ? (
+            {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
-                Loading supplier invoices...
+                Loading documents...
               </Text>
             ) : (
               <>
@@ -2550,12 +2630,14 @@ payload.is_agent = false ;
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th style={{ width: 40 }}></Table.Th>
-                      <Table.Th>CRJ Number</Table.Th>
-                      <Table.Th>Date</Table.Th>
+                      <Table.Th>Document Number</Table.Th>
+                      <Table.Th>Document Doc Type</Table.Th>
+                      <Table.Th>Document Date</Table.Th>
+                      <Table.Th>Document Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {supplierInvoiceList.map((inv, idx) => (
+                    {invoiceList.map((inv, idx) => (
                       <Table.Tr key={idx}>
                         <Table.Td>
                           <Checkbox
@@ -2563,19 +2645,43 @@ payload.is_agent = false ;
                             onChange={() => toggleInvoiceSelection(idx)}
                           />
                         </Table.Td>
-                        <Table.Td>{inv.crj_number ?? "—"}</Table.Td>
+                        <Table.Td>{inv.document_no ?? "—"}</Table.Td>
                         <Table.Td>
-                          {formatDocumentDateDisplay(inv.date)}
+                          {String(
+                            inv.day_book_document_type ??
+                              inv.day_book_type ??
+                              "—",
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatDocumentDateDisplay(
+                            inv.document_date as string,
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {inv.document_amount != null
+                            ? typeof inv.document_amount === "number"
+                              ? inv.document_amount.toFixed(2)
+                              : String(inv.document_amount)
+                            : inv.total != null
+                              ? typeof inv.total === "number"
+                                ? inv.total.toFixed(2)
+                                : String(inv.total)
+                              : inv.amount != null
+                                ? typeof inv.amount === "number"
+                                  ? inv.amount.toFixed(2)
+                                  : String(inv.amount)
+                                : "—"}
                         </Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
                 </Table>
-                {supplierInvoiceList.length === 0 &&
-                  !filterSupplierInvoiceLoading &&
-                  !filterSupplierInvoiceFetching && (
+                {invoiceList.length === 0 &&
+                  !filterInvoiceLoading &&
+                  !filterInvoiceFetching && (
                     <Text size="sm" c="dimmed" mt="sm">
-                      No posted supplier invoices found for this agent.
+                      No documents found for this account.
                     </Text>
                   )}
                 <Group justify="flex-end" mt="md">
@@ -2585,8 +2691,8 @@ payload.is_agent = false ;
                     onClick={() => {
                       setInvoiceModalOpen(false);
                       setInvoiceModalDetailRowIndex(null);
-                      setInvoiceModalBillTo(null);
-                      setSupplierInvoiceList([]);
+                      setInvoiceModalAllocationFilter(null);
+                      setInvoiceList([]);
                       setSelectedInvoiceIndices(new Set());
                     }}
                   >
@@ -2594,7 +2700,7 @@ payload.is_agent = false ;
                   </Button>
                   <Button
                     color="#105476"
-                    onClick={handleSelectSupplierInvoice}
+                    onClick={handleSelectInvoice}
                     disabled={selectedInvoiceIndices.size === 0}
                   >
                     Select
@@ -2654,7 +2760,8 @@ payload.is_agent = false ;
                             }
                             if (file.size > MAX_FILE_SIZE) {
                               const newErrors = { ...fileErrors };
-                              newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                              newErrors[index] =
+                                `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
                               setFileErrors(newErrors);
                               ToastNotification({
                                 type: "error",
@@ -2936,7 +3043,8 @@ payload.is_agent = false ;
                   const newErrors: { [key: number]: string } = {};
                   form.values.supporting_documents.forEach((doc, idx) => {
                     if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                      newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                      newErrors[idx] =
+                        `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                     }
                   });
                   setFileErrors(newErrors);
@@ -2975,28 +3083,28 @@ payload.is_agent = false ;
                 {_isReversal
                   ? reversePaymentSaveResponse &&
                     reversalStatusUpper === "UNPOSTED" && (
-                    <Button
-                      type="button"
-                      color="black"
-                      variant="filled"
-                      loading={isPosting}
-                      onClick={handlePostPayment}
-                    >
-                      Post Payment Reversal
-                    </Button>
-                  )
+                      <Button
+                        type="button"
+                        color="black"
+                        variant="filled"
+                        loading={isPosting}
+                        onClick={handlePostPayment}
+                      >
+                        Post Payment Reversal
+                      </Button>
+                    )
                   : saveResponse &&
                     statusUpper === "UNPOSTED" && (
-                    <Button
-                      type="button"
-                      color="black"
-                      variant="filled"
-                      loading={isPosting}
-                      onClick={handlePostPayment}
-                    >
-                      Post Payment
-                    </Button>
-                  )}
+                      <Button
+                        type="button"
+                        color="black"
+                        variant="filled"
+                        loading={isPosting}
+                        onClick={handlePostPayment}
+                      >
+                        Post Payment
+                      </Button>
+                    )}
               </>
             )}
           </Group>
