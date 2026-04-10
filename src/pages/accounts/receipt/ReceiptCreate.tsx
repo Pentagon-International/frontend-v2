@@ -201,8 +201,14 @@ const fetchOutstandingAllocations = async (payload: {
   account_code: string;
   subledger_code: string;
 }): Promise<InvoiceCombinedItem[]> => {
-  const response = await postAPICall(URL.outstandingAllocations, payload, API_HEADER);
-  const res = response as { data?: InvoiceCombinedItem[] } | InvoiceCombinedItem[];
+  const response = await postAPICall(
+    URL.outstandingAllocations,
+    payload,
+    API_HEADER,
+  );
+  const res = response as
+    | { data?: InvoiceCombinedItem[] }
+    | InvoiceCombinedItem[];
   const data = Array.isArray(res) ? res : res?.data;
   return Array.isArray(data) ? data : [];
 };
@@ -425,6 +431,18 @@ function parseDocumentDate(value: string | null | undefined): Date | null {
 function formatDocumentDateDisplay(value: string | null | undefined): string {
   const d = parseDocumentDate(value);
   return d ? d.toLocaleDateString() : "—";
+}
+
+/** First non-empty trimmed string — API often returns `receipt_no: ""` where `??` would not fall back. */
+function firstNonEmptyString(
+  ...candidates: Array<string | number | null | undefined>
+): string {
+  for (const c of candidates) {
+    if (c == null) continue;
+    const s = String(c).trim();
+    if (s !== "") return s;
+  }
+  return "";
 }
 
 type ReceiptCreateProps = {
@@ -753,7 +771,10 @@ export default function ReceiptCreate({
           status: (receiptFromState.status ?? "UNPOSTED").toString(),
         });
         sourceReceiptIdForReversalRef.current = null;
-        sourceReceiptNoForReversalRef.current = "";
+        // Original receipt no for API `receipt_no` (same as list row); do not clear — used when save/post response omits it.
+        sourceReceiptNoForReversalRef.current = (
+          receiptFromState.receipt_no ?? ""
+        ).toString();
       } else {
         sourceReceiptIdForReversalRef.current =
           Number(receiptFromState.id) || null;
@@ -779,13 +800,14 @@ export default function ReceiptCreate({
       form.setFieldValue(
         "supporting_documents",
         rawDocs.map((doc: any) => ({
-          name:
-            (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+          name: (
+            doc.document_name ??
+            doc.file_name ??
+            doc.name ??
+            ""
+          ).toString(),
           file: null,
-          document_url:
-            doc.document_url ??
-            doc.url ??
-            "",
+          document_url: doc.document_url ?? doc.url ?? "",
           document_id: doc.id ?? undefined,
           original_document_name:
             doc.original_document_name ??
@@ -1070,7 +1092,10 @@ export default function ReceiptCreate({
       const daybookId = inv.day_book_id ?? inv.daybook_id;
       return {
         location: branchCode,
-        type: (inv.day_book_document_type as string) ?? (inv.day_book_type as string) ?? "",
+        type:
+          (inv.day_book_document_type as string) ??
+          (inv.day_book_type as string) ??
+          "",
         subledger: detailRow?.customer_code ?? "",
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
@@ -1211,8 +1236,10 @@ export default function ReceiptCreate({
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
-    const receiptNo =
-      options?.receiptNo ?? sourceReceiptNoForReversalRef.current ?? "";
+    const receiptNo = firstNonEmptyString(
+      options?.receiptNo,
+      sourceReceiptNoForReversalRef.current,
+    );
     const status = (options?.status ?? "UNPOSTED").toString().toUpperCase();
     const isUpdate = options?.reversalId != null && options.reversalId > 0;
     const details = options?.detailsOverride ?? values.details ?? [];
@@ -1339,15 +1366,15 @@ export default function ReceiptCreate({
     });
 
     if (hasAdjustments) {
-    const partyLocalTotal =
-      (values.details ?? []).reduce(
-        (sum, d) =>
-          sum +
-          (d.local_amount != null && Number.isFinite(d.local_amount)
-            ? d.local_amount
-            : 0),
-        0,
-      ) ?? 0;
+      const partyLocalTotal =
+        (values.details ?? []).reduce(
+          (sum, d) =>
+            sum +
+            (d.local_amount != null && Number.isFinite(d.local_amount)
+              ? d.local_amount
+              : 0),
+          0,
+        ) ?? 0;
       const adjLocalTotal =
         (values.adjustments ?? []).reduce(
           (sum, a) =>
@@ -1396,9 +1423,15 @@ export default function ReceiptCreate({
           if (res?.id != null) {
             setReverseReceiptSaveResponse((prev) => ({
               id: prev!.id,
-              receipt_no: res.receipt_no ?? prev?.receipt_no ?? "",
-              reverse_receipt_no:
-                res.reverse_receipt_no ?? prev?.reverse_receipt_no ?? "",
+              receipt_no: firstNonEmptyString(
+                sourceReceiptNoForReversalRef.current,
+                res.receipt_no,
+                prev?.receipt_no,
+              ),
+              reverse_receipt_no: firstNonEmptyString(
+                res.reverse_receipt_no,
+                prev?.reverse_receipt_no,
+              ),
               status: res.status != null ? String(res.status) : "UNPOSTED",
             }));
             await queryClient.invalidateQueries({ queryKey: ["receipt"] });
@@ -1425,8 +1458,11 @@ export default function ReceiptCreate({
           if (data?.id != null) {
             setReverseReceiptSaveResponse({
               id: Number(data.id),
-              receipt_no: data.receipt_no ?? "",
-              reverse_receipt_no: data.reverse_receipt_no ?? "",
+              receipt_no: firstNonEmptyString(
+                sourceReceiptNoForReversalRef.current,
+                data.receipt_no,
+              ),
+              reverse_receipt_no: firstNonEmptyString(data.reverse_receipt_no),
               status: data.status != null ? String(data.status) : "UNPOSTED",
             });
             if (
@@ -1471,7 +1507,7 @@ export default function ReceiptCreate({
       const payload = isUpdate
         ? buildReceiptPayload(values, { status: "UNPOSTED" })
         : buildReceiptPayload(values);
-payload.is_agent = false;
+      payload.is_agent = false;
       if (isUpdate) {
         const fd = buildReceiptFormData(payload);
         const raw = (await apiCallProtected.put(
@@ -1577,9 +1613,15 @@ payload.is_agent = false;
       if (res?.id != null) {
         setReverseReceiptSaveResponse((prev) => ({
           ...prev!,
-          receipt_no: res.receipt_no ?? prev?.receipt_no ?? "",
-          reverse_receipt_no:
-            res.reverse_receipt_no ?? prev?.reverse_receipt_no ?? "",
+          receipt_no: firstNonEmptyString(
+            sourceReceiptNoForReversalRef.current,
+            res.receipt_no,
+            prev?.receipt_no,
+          ),
+          reverse_receipt_no: firstNonEmptyString(
+            res.reverse_receipt_no,
+            prev?.reverse_receipt_no,
+          ),
           status: res.status != null ? String(res.status) : "POSTED",
         }));
         await queryClient.invalidateQueries({ queryKey: ["receipt"] });
@@ -2211,10 +2253,16 @@ payload.is_agent = false;
                               const name = String(i.account_name ?? "").trim();
                               return {
                                 value: id,
-                                label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                                label: name
+                                  ? `${name}${gl ? ` - ${gl}` : ""}`
+                                  : gl,
                               };
                             }}
-                            searchFields={["gl_account_code", "account_name", "id"]}
+                            searchFields={[
+                              "gl_account_code",
+                              "account_name",
+                              "id",
+                            ]}
                             returnOriginalData
                             styles={partyFieldStyles}
                           />
@@ -2708,7 +2756,9 @@ payload.is_agent = false;
                         <Table.Td>{inv.document_no ?? "—"}</Table.Td>
                         <Table.Td>
                           {String(
-                            inv.day_book_document_type ?? inv.day_book_type ?? "—",
+                            inv.day_book_document_type ??
+                              inv.day_book_type ??
+                              "—",
                           )}
                         </Table.Td>
                         <Table.Td>
@@ -2768,316 +2818,319 @@ payload.is_agent = false;
           <Modal
             opened={documentsModalOpened}
             onClose={closeDocumentsModal}
-            title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
+            title={
+              isReadOnly
+                ? "Supporting Documents"
+                : "Attach Supporting Documents"
+            }
             size="xl"
             centered
             style={{ fontFamily: "Inter" }}
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
-              <Stack gap="xs">
-                {form.values.supporting_documents.map((doc, index) => (
-                  <Grid key={index} columns={12} gutter="sm" align="flex-end">
-                    <Grid.Col span={5.5}>
-                      <TextInput
-                        label="Document Name"
-                        placeholder="Enter document name"
-                        value={doc.name}
-                        disabled={isReadOnly}
-                        onChange={(e) => {
+            <Stack gap="xs">
+              {form.values.supporting_documents.map((doc, index) => (
+                <Grid key={index} columns={12} gutter="sm" align="flex-end">
+                  <Grid.Col span={5.5}>
+                    <TextInput
+                      label="Document Name"
+                      placeholder="Enter document name"
+                      value={doc.name}
+                      disabled={isReadOnly}
+                      onChange={(e) => {
+                        if (isReadOnly) return;
+                        const updatedDocs = [
+                          ...form.values.supporting_documents,
+                        ];
+                        updatedDocs[index] = {
+                          ...updatedDocs[index],
+                          name: e.target.value,
+                        };
+                        form.setFieldValue("supporting_documents", updatedDocs);
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={5.5}>
+                    <Box>
+                      <Text size="sm" fw={500} mb={4}>
+                        File
+                      </Text>
+                      <Dropzone
+                        onDrop={(files: File[]) => {
                           if (isReadOnly) return;
+                          if (files.length === 0) return;
+                          const file = files[0];
+                          if (fileErrors[index]) {
+                            const newErrors = { ...fileErrors };
+                            delete newErrors[index];
+                            setFileErrors(newErrors);
+                          }
+                          if (file.size > MAX_FILE_SIZE) {
+                            const newErrors = { ...fileErrors };
+                            newErrors[index] =
+                              `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                            setFileErrors(newErrors);
+                            ToastNotification({
+                              type: "error",
+                              message: `File "${file.name}" exceeds 5MB limit`,
+                            });
+                            return;
+                          }
                           const updatedDocs = [
                             ...form.values.supporting_documents,
                           ];
                           updatedDocs[index] = {
                             ...updatedDocs[index],
-                            name: e.target.value,
+                            file,
+                            document_url: undefined,
                           };
                           form.setFieldValue(
                             "supporting_documents",
                             updatedDocs,
                           );
                         }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={5.5}>
-                      <Box>
-                        <Text size="sm" fw={500} mb={4}>
-                          File
+                        onReject={(fileRejections: any[]) => {
+                          if (isReadOnly) return;
+                          const rejection = fileRejections[0];
+                          if (
+                            rejection?.errors?.some(
+                              (e: any) => e.code === "file-too-large",
+                            )
+                          ) {
+                            const newErrors = { ...fileErrors };
+                            newErrors[index] = "File size exceeds 5MB limit";
+                            setFileErrors(newErrors);
+                          }
+                        }}
+                        maxSize={MAX_FILE_SIZE}
+                        accept={undefined}
+                        multiple={false}
+                        styles={{
+                          root: {
+                            border: "1px solid var(--mantine-color-gray-4)",
+                            borderRadius: "var(--mantine-radius-sm)",
+                            backgroundColor: "var(--mantine-color-white)",
+                            minHeight: "36px",
+                            padding: "0",
+                          },
+                          inner: {
+                            padding: "0",
+                            minHeight: "36px",
+                          },
+                        }}
+                      >
+                        <Group
+                          justify="space-between"
+                          gap="xs"
+                          px="sm"
+                          style={{
+                            minHeight: "36px",
+                            pointerEvents: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                            {doc.file ? (
+                              <>
+                                <IconUpload
+                                  size={16}
+                                  color="var(--mantine-color-dimmed)"
+                                />
+                                <Text
+                                  size="sm"
+                                  truncate
+                                  style={{
+                                    flex: 1,
+                                    color: "var(--mantine-color-dark)",
+                                  }}
+                                >
+                                  {doc.file.name}
+                                </Text>
+                              </>
+                            ) : doc.document_url ? (
+                              <>
+                                <IconDownload
+                                  size={16}
+                                  color="var(--mantine-color-blue-6)"
+                                />
+                                <Text
+                                  size="sm"
+                                  truncate
+                                  style={{
+                                    flex: 1,
+                                    color: "var(--mantine-color-blue-6)",
+                                    cursor: "pointer",
+                                    textDecoration: "underline",
+                                    pointerEvents: "auto",
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (
+                                      doc.document_url &&
+                                      doc.original_document_name
+                                    ) {
+                                      downloadFile(
+                                        doc.document_url,
+                                        doc.original_document_name,
+                                      );
+                                    }
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.opacity = "0.8";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.opacity = "1";
+                                  }}
+                                >
+                                  {doc.original_document_name ||
+                                    "Download file"}
+                                </Text>
+                              </>
+                            ) : (
+                              <>
+                                <IconUpload
+                                  size={16}
+                                  color="var(--mantine-color-dimmed)"
+                                />
+                                <Text
+                                  size="sm"
+                                  c="dimmed"
+                                  truncate
+                                  style={{ flex: 1 }}
+                                >
+                                  Drag and drop or click to select file
+                                </Text>
+                              </>
+                            )}
+                          </Group>
+                          {!isReadOnly && (doc.file || doc.document_url) && (
+                            <Button
+                              variant="subtle"
+                              color="red"
+                              size="xs"
+                              p={4}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (fileErrors[index]) {
+                                  const newErrors = { ...fileErrors };
+                                  delete newErrors[index];
+                                  setFileErrors(newErrors);
+                                }
+                                const updatedDocs = [
+                                  ...form.values.supporting_documents,
+                                ];
+                                updatedDocs[index] = {
+                                  ...updatedDocs[index],
+                                  file: null,
+                                  document_url: undefined,
+                                  document_id: undefined,
+                                };
+                                form.setFieldValue(
+                                  "supporting_documents",
+                                  updatedDocs,
+                                );
+                              }}
+                              style={{ pointerEvents: "auto" }}
+                            >
+                              <IconX size={14} />
+                            </Button>
+                          )}
+                        </Group>
+                      </Dropzone>
+                      {fileErrors[index] && (
+                        <Text size="xs" c="red" mt={4}>
+                          {fileErrors[index]}
                         </Text>
-                        <Dropzone
-                          onDrop={(files: File[]) => {
-                            if (isReadOnly) return;
-                            if (files.length === 0) return;
-                            const file = files[0];
-                            if (fileErrors[index]) {
-                              const newErrors = { ...fileErrors };
-                              delete newErrors[index];
-                              setFileErrors(newErrors);
-                            }
-                            if (file.size > MAX_FILE_SIZE) {
-                              const newErrors = { ...fileErrors };
-                              newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
-                              setFileErrors(newErrors);
-                              ToastNotification({
-                                type: "error",
-                                message: `File "${file.name}" exceeds 5MB limit`,
-                              });
-                              return;
-                            }
-                            const updatedDocs = [
-                              ...form.values.supporting_documents,
-                            ];
-                            updatedDocs[index] = {
-                              ...updatedDocs[index],
-                              file,
-                              document_url: undefined,
-                            };
+                      )}
+                    </Box>
+                  </Grid.Col>
+                  {!isReadOnly && (
+                    <Grid.Col span={1}>
+                      <Button
+                        variant="light"
+                        color="red"
+                        onClick={() => {
+                          if (fileErrors[index]) {
+                            const newErrors = { ...fileErrors };
+                            delete newErrors[index];
+                            setFileErrors(newErrors);
+                          }
+                          if (form.values.supporting_documents.length === 1) {
+                            form.setFieldValue("supporting_documents", [
+                              { name: "", file: null },
+                            ]);
+                          } else {
+                            const updatedDocs =
+                              form.values.supporting_documents.filter(
+                                (_, i) => i !== index,
+                              );
                             form.setFieldValue(
                               "supporting_documents",
                               updatedDocs,
                             );
-                          }}
-                          onReject={(fileRejections: any[]) => {
-                            if (isReadOnly) return;
-                            const rejection = fileRejections[0];
-                            if (
-                              rejection?.errors?.some(
-                                (e: any) => e.code === "file-too-large",
-                              )
-                            ) {
-                              const newErrors = { ...fileErrors };
-                              newErrors[index] = "File size exceeds 5MB limit";
-                              setFileErrors(newErrors);
-                            }
-                          }}
-                          maxSize={MAX_FILE_SIZE}
-                          accept={undefined}
-                          multiple={false}
-                          styles={{
-                            root: {
-                              border: "1px solid var(--mantine-color-gray-4)",
-                              borderRadius: "var(--mantine-radius-sm)",
-                              backgroundColor: "var(--mantine-color-white)",
-                              minHeight: "36px",
-                              padding: "0",
-                            },
-                            inner: {
-                              padding: "0",
-                              minHeight: "36px",
-                            },
-                          }}
-                        >
-                          <Group
-                            justify="space-between"
-                            gap="xs"
-                            px="sm"
-                            style={{
-                              minHeight: "36px",
-                              pointerEvents: "none",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                              {doc.file ? (
-                                <>
-                                  <IconUpload
-                                    size={16}
-                                    color="var(--mantine-color-dimmed)"
-                                  />
-                                  <Text
-                                    size="sm"
-                                    truncate
-                                    style={{
-                                      flex: 1,
-                                      color: "var(--mantine-color-dark)",
-                                    }}
-                                  >
-                                    {doc.file.name}
-                                  </Text>
-                                </>
-                              ) : doc.document_url ? (
-                                <>
-                                  <IconDownload
-                                    size={16}
-                                    color="var(--mantine-color-blue-6)"
-                                  />
-                                  <Text
-                                    size="sm"
-                                    truncate
-                                    style={{
-                                      flex: 1,
-                                      color: "var(--mantine-color-blue-6)",
-                                      cursor: "pointer",
-                                      textDecoration: "underline",
-                                      pointerEvents: "auto",
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (
-                                        doc.document_url &&
-                                        doc.original_document_name
-                                      ) {
-                                        downloadFile(
-                                          doc.document_url,
-                                          doc.original_document_name,
-                                        );
-                                      }
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.opacity = "0.8";
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.opacity = "1";
-                                    }}
-                                  >
-                                    {doc.original_document_name ||
-                                      "Download file"}
-                                  </Text>
-                                </>
-                              ) : (
-                                <>
-                                  <IconUpload
-                                    size={16}
-                                    color="var(--mantine-color-dimmed)"
-                                  />
-                                  <Text size="sm" c="dimmed" truncate style={{ flex: 1 }}>
-                                    Drag and drop or click to select file
-                                  </Text>
-                                </>
-                              )}
-                            </Group>
-                            {!isReadOnly && (doc.file || doc.document_url) && (
-                              <Button
-                                variant="subtle"
-                                color="red"
-                                size="xs"
-                                p={4}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (fileErrors[index]) {
-                                    const newErrors = { ...fileErrors };
-                                    delete newErrors[index];
-                                    setFileErrors(newErrors);
-                                  }
-                                  const updatedDocs = [
-                                    ...form.values.supporting_documents,
-                                  ];
-                                  updatedDocs[index] = {
-                                    ...updatedDocs[index],
-                                    file: null,
-                                    document_url: undefined,
-                                    document_id: undefined,
-                                  };
-                                  form.setFieldValue(
-                                    "supporting_documents",
-                                    updatedDocs,
-                                  );
-                                }}
-                                style={{ pointerEvents: "auto" }}
-                              >
-                                <IconX size={14} />
-                              </Button>
-                            )}
-                          </Group>
-                        </Dropzone>
-                        {fileErrors[index] && (
-                          <Text size="xs" c="red" mt={4}>
-                            {fileErrors[index]}
-                          </Text>
-                        )}
-                      </Box>
+                            const newErrors: {
+                              [key: number]: string;
+                            } = {};
+                            Object.keys(fileErrors).forEach((key) => {
+                              const keyNum = parseInt(key);
+                              if (keyNum < index) {
+                                newErrors[keyNum] = fileErrors[keyNum];
+                              } else if (keyNum > index) {
+                                newErrors[keyNum - 1] = fileErrors[keyNum];
+                              }
+                            });
+                            setFileErrors(newErrors);
+                          }
+                        }}
+                      >
+                        <IconTrash size={16} />
+                      </Button>
                     </Grid.Col>
-                    {!isReadOnly && (
-                      <Grid.Col span={1}>
+                  )}
+                  {!isReadOnly && (
+                    <Grid.Col span={1} offset={11}>
+                      {index ===
+                        form.values.supporting_documents.length - 1 && (
                         <Button
                           variant="light"
-                          color="red"
+                          color="#105476"
                           onClick={() => {
-                            if (fileErrors[index]) {
-                              const newErrors = { ...fileErrors };
-                              delete newErrors[index];
-                              setFileErrors(newErrors);
-                            }
-                            if (
-                              form.values.supporting_documents.length === 1
-                            ) {
-                              form.setFieldValue("supporting_documents", [
-                                { name: "", file: null },
-                              ]);
-                            } else {
-                              const updatedDocs =
-                                form.values.supporting_documents.filter(
-                                  (_, i) => i !== index,
-                                );
-                              form.setFieldValue(
-                                "supporting_documents",
-                                updatedDocs,
-                              );
-                              const newErrors: {
-                                [key: number]: string;
-                              } = {};
-                              Object.keys(fileErrors).forEach((key) => {
-                                const keyNum = parseInt(key);
-                                if (keyNum < index) {
-                                  newErrors[keyNum] = fileErrors[keyNum];
-                                } else if (keyNum > index) {
-                                  newErrors[keyNum - 1] =
-                                    fileErrors[keyNum];
-                                }
-                              });
-                              setFileErrors(newErrors);
-                            }
+                            form.setFieldValue("supporting_documents", [
+                              ...form.values.supporting_documents,
+                              { name: "", file: null },
+                            ]);
                           }}
                         >
-                          <IconTrash size={16} />
+                          <IconPlus size={16} />
                         </Button>
-                      </Grid.Col>
-                    )}
-                    {!isReadOnly && (
-                      <Grid.Col span={1} offset={11}>
-                        {index ===
-                          form.values.supporting_documents.length - 1 && (
-                            <Button
-                              variant="light"
-                              color="#105476"
-                              onClick={() => {
-                                form.setFieldValue("supporting_documents", [
-                                  ...form.values.supporting_documents,
-                                  { name: "", file: null },
-                                ]);
-                              }}
-                            >
-                              <IconPlus size={16} />
-                            </Button>
-                          )}
-                      </Grid.Col>
-                    )}
-                  </Grid>
-                ))}
-
-                {!isReadOnly &&
-                  form.values.supporting_documents.length === 0 && (
-                  <Button
-                    variant="light"
-                    color="#105476"
-                    leftSection={<IconPlus size={16} />}
-                    onClick={() => {
-                      form.setFieldValue("supporting_documents", [
-                        { name: "", file: null },
-                      ]);
-                    }}
-                    fullWidth
-                  >
-                    Add Document
-                  </Button>
+                      )}
+                    </Grid.Col>
                   )}
+                </Grid>
+              ))}
 
-                <Group justify="flex-end" mt="md">
-                  <Button variant="outline" onClick={closeDocumentsModal}>
-                    Close
-                  </Button>
-                </Group>
-              </Stack>
+              {!isReadOnly && form.values.supporting_documents.length === 0 && (
+                <Button
+                  variant="light"
+                  color="#105476"
+                  leftSection={<IconPlus size={16} />}
+                  onClick={() => {
+                    form.setFieldValue("supporting_documents", [
+                      { name: "", file: null },
+                    ]);
+                  }}
+                  fullWidth
+                >
+                  Add Document
+                </Button>
+              )}
+
+              <Group justify="flex-end" mt="md">
+                <Button variant="outline" onClick={closeDocumentsModal}>
+                  Close
+                </Button>
+              </Group>
+            </Stack>
           </Modal>
 
           {/* Action Buttons */}
@@ -3103,7 +3156,8 @@ payload.is_agent = false;
                   const newErrors: { [key: number]: string } = {};
                   form.values.supporting_documents.forEach((doc, idx) => {
                     if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                      newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                      newErrors[idx] =
+                        `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                     }
                   });
                   setFileErrors(newErrors);

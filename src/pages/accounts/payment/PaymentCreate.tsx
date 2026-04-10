@@ -208,6 +208,7 @@ const fetchOutstandingAllocations = async (payload: {
 type PaymentListItem = {
   id?: number;
   payment_no?: string;
+  reverse_payment_no?: string;
   status?: string;
   date?: string;
   day_book_id?: number;
@@ -411,6 +412,18 @@ function parseDocumentDate(value: string | null | undefined): Date | null {
 function formatDocumentDateDisplay(value: string | null | undefined): string {
   const d = parseDocumentDate(value);
   return d ? d.toLocaleDateString() : "—";
+}
+
+/** First non-empty trimmed string — API often returns `payment_no: ""` where `??` would not fall back. */
+function firstNonEmptyString(
+  ...candidates: Array<string | number | null | undefined>
+): string {
+  for (const c of candidates) {
+    if (c == null) continue;
+    const s = String(c).trim();
+    if (s !== "") return s;
+  }
+  return "";
 }
 
 type PaymentCreateProps = {
@@ -762,8 +775,6 @@ export default function PaymentCreate({
 
     const docNo = (
       paymentFromState.payment_no ??
-      (paymentFromState as { reverse_payment_no?: string })
-        .reverse_payment_no ??
       (paymentFromState as { document_no?: string }).document_no ??
       ""
     ).toString();
@@ -772,11 +783,16 @@ export default function PaymentCreate({
       if (isReversalEditOrView) {
         setReversePaymentSaveResponse({
           id: Number(paymentFromState.id),
-          payment_no: docNo,
-          reverse_payment_no: docNo,
+          payment_no: (paymentFromState.payment_no ?? "").toString(),
+          reverse_payment_no: (
+            paymentFromState.reverse_payment_no ?? ""
+          ).toString(),
           status: (paymentFromState.status ?? "UNPOSTED").toString(),
         });
-        sourcePaymentNoRef.current = "";
+        // Original payment no for API `payment_no`; keep when save/post response omits it.
+        sourcePaymentNoRef.current = (
+          paymentFromState.payment_no ?? ""
+        ).toString();
       } else {
         sourcePaymentNoRef.current = (
           paymentFromState.payment_no ?? ""
@@ -1210,7 +1226,10 @@ export default function PaymentCreate({
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
-    const paymentNo = options?.paymentNo ?? sourcePaymentNoRef.current ?? "";
+    const paymentNo = firstNonEmptyString(
+      options?.paymentNo,
+      sourcePaymentNoRef.current,
+    );
     const isUpdate = options?.reversalId != null && options.reversalId > 0;
     const details = options?.detailsOverride ?? values.details ?? [];
     const source = paymentFromState as
@@ -1378,9 +1397,15 @@ export default function PaymentCreate({
             setReversePaymentSaveResponse((prev) => ({
               ...prev!,
               id: prev!.id,
-              payment_no: res.payment_no ?? prev?.payment_no ?? "",
-              reverse_payment_no:
-                res.reverse_payment_no ?? prev?.reverse_payment_no ?? "",
+              payment_no: firstNonEmptyString(
+                sourcePaymentNoRef.current,
+                res.payment_no,
+                prev?.payment_no,
+              ),
+              reverse_payment_no: firstNonEmptyString(
+                res.reverse_payment_no,
+                prev?.reverse_payment_no,
+              ),
               status: res.status != null ? String(res.status) : "UNPOSTED",
             }));
             await queryClient.invalidateQueries({ queryKey: ["payment"] });
@@ -1406,8 +1431,11 @@ export default function PaymentCreate({
           if (data?.id != null) {
             setReversePaymentSaveResponse({
               id: Number(data.id),
-              payment_no: data.payment_no ?? "",
-              reverse_payment_no: data.reverse_payment_no ?? "",
+              payment_no: firstNonEmptyString(
+                sourcePaymentNoRef.current,
+                data.payment_no,
+              ),
+              reverse_payment_no: firstNonEmptyString(data.reverse_payment_no),
               status: data.status != null ? String(data.status) : "UNPOSTED",
             });
             if (
@@ -1592,9 +1620,15 @@ export default function PaymentCreate({
           setReversePaymentSaveResponse((prev) => ({
             ...prev!,
             id: prev!.id,
-            payment_no: res.payment_no ?? prev?.payment_no ?? "",
-            reverse_payment_no:
-              res.reverse_payment_no ?? prev?.reverse_payment_no ?? "",
+            payment_no: firstNonEmptyString(
+              sourcePaymentNoRef.current,
+              res.payment_no,
+              prev?.payment_no,
+            ),
+            reverse_payment_no: firstNonEmptyString(
+              res.reverse_payment_no,
+              prev?.reverse_payment_no,
+            ),
             status: res.status != null ? String(res.status) : "POSTED",
           }));
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
