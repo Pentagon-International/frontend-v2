@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
   type MRT_ColumnDef,
+  type MRT_PaginationState,
 } from "mantine-react-table";
 import {
   ActionIcon,
@@ -11,27 +12,36 @@ import {
   Button,
   Card,
   Center,
+  Grid,
   Group,
   Loader,
   Menu,
-  Select,
   Stack,
   Text,
+  TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import {
-  IconChevronLeft,
-  IconChevronRight,
   IconDotsVertical,
   IconEdit,
   IconEye,
+  IconFilter,
   IconPlus,
   IconReceiptRefund,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import { useDebouncedValue } from "@mantine/hooks";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { Dropdown, SearchableSelect } from "../../../components";
+import { useListFilterStore } from "../../../store/listFilterStore";
+import FormTextInput from "../../../components/FormTextInput";
+
+const LIST_KEY = "RECEIPT_MASTER";
 
 type ReceiptRow = Record<string, unknown> & {
   id?: number | string;
@@ -53,83 +63,189 @@ type ReceiptFilterResponse = {
   data?: ReceiptRow[];
 };
 
-type ReceiptListResult = {
-  list: ReceiptRow[];
-  total: number;
+type ReceiptFilters = {
+  day_book_id: string;
+  day_book_name: string;
+  receipt_no: string;
+  type: string;
+  amount: string;
+  status: string;
 };
 
 export default function ReceiptMaster() {
   const navigate = useNavigate();
-  // 1-based current page and page size, same as EnquiryMaster
-  const [listCurrentPage, setListCurrentPage] = useState(1);
-  const [listPageSize, setListPageSize] = useState(25);
-  const [search] = useState("");
+  const location = useLocation();
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const DEFAULT_FILTERS: ReceiptFilters = {
+    day_book_id: "",
+    day_book_name: "",
+    receipt_no: "",
+    type: "",
+    amount: "",
+    status: "",
+  };
+  const [draftFilters, setDraftFilters] =
+    useState<ReceiptFilters>(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] =
+    useState<ReceiptFilters>(DEFAULT_FILTERS);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  const index = (listCurrentPage - 1) * listPageSize;
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
+
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const restored = { ...DEFAULT_FILTERS, ...stored.filters };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key]);
+
+  const currentPage = pagination.pageIndex + 1;
+  const index = pagination.pageIndex * pagination.pageSize;
+  const typeOptions = ["CHEQUE", "ONLINE", "CASH", "NEFT"];
+  const statusOptions = ["POSTED", "UNPOSTED"];
 
   const handlePageSizeChange = (newPageSize: number) => {
-    setListPageSize(newPageSize);
-    setListCurrentPage(1);
+    setPagination({
+      pageIndex: 0,
+      pageSize: newPageSize,
+    });
   };
 
   const handlePageChange = (newPage: number) => {
-    setListCurrentPage(newPage);
+    setPagination((prev) => ({
+      ...prev,
+      pageIndex: newPage - 1,
+    }));
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
+  };
+
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
+  };
+
+  const buildFiltersPayload = (
+    filters: ReceiptFilters,
+    searchValue: string,
+  ) => {
+    const cleaned = Object.entries(filters).reduce((acc, [key, value]) => {
+      if (key === "day_book_name") return acc;
+      if (value && value.trim() !== "") acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+
+    if (searchValue?.trim()) cleaned.search = searchValue;
+    return cleaned;
   };
 
   const {
-    data: receiptResult,
+    data: receiptData = [],
     isLoading: receiptLoading,
     isFetching: receiptFetching,
     error: receiptError,
   } = useQuery({
-    queryKey: ["receipt", listCurrentPage, listPageSize, search],
-    queryFn: async (): Promise<ReceiptListResult> => {
+    queryKey: [
+      "receipt",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(appliedFilters),
+      debouncedSearch,
+    ],
+    queryFn: async (): Promise<ReceiptRow[]> => {
       try {
-        const payload = { filters: {"is_agent": false} as Record<string, unknown> };
-        if (search?.trim()) {
-          payload.filters.search = search.trim();
-        }
+        const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
+        const payload =
+          Object.keys(filtersPayload).length > 0
+            ? { filters: { is_agent: false, ...filtersPayload } }
+            : { filters: { is_agent: false } };
+        setIsInitialLoad(false);
+
         const response = await apiCallProtected.post(
-          `${URL.receiptFilter}?index=${index}&limit=${listPageSize}`,
+          `${URL.receiptFilter}?index=${index}&limit=${pagination.pageSize}`,
           payload,
         );
+        setShowFilters(false);
+
+        const raw = response as any;
+        const bodyCandidate =
+          raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
         const body =
-          response?.data != null
-            ? (response.data as ReceiptFilterResponse)
+          bodyCandidate != null
+            ? (bodyCandidate as ReceiptFilterResponse | ReceiptRow[])
             : null;
+
         if (!body) {
-          return { list: [], total: 0 };
+          setTotalRecords(0);
+          return [];
         }
-        const list = Array.isArray(body.data)
-          ? body.data
+
+        const list = Array.isArray((body as ReceiptFilterResponse).data)
+          ? ((body as ReceiptFilterResponse).data as ReceiptRow[])
           : Array.isArray(body)
-            ? (body as unknown as ReceiptRow[])
+            ? (body as ReceiptRow[])
             : [];
-        const total = body.total != null ? Number(body.total) : list.length;
-        return { list, total };
+
+        const totalFromBody = (body as ReceiptFilterResponse).total;
+        setTotalRecords(totalFromBody != null ? Number(totalFromBody) : list.length);
+        return list;
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response
           ?.status;
         if (status === 404) {
-          return { list: [], total: 0 };
+          setTotalRecords(0);
+          return [];
         }
-        console.error("Error fetching receipt data:", err);
-        return { list: [], total: 0 };
+        throw err;
       }
     },
+    enabled: !isRestoring && search === debouncedSearch,
     staleTime: 0,
     refetchOnWindowFocus: false,
-    refetchOnMount: "always",
+    refetchOnMount: false,
   });
 
-  const isLoading = receiptFetching || receiptLoading;
-  const tableData = receiptResult?.list ?? [];
-  const listTotalRecords = receiptResult?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(listTotalRecords / listPageSize));
-  const pagination = {
-    pageIndex: listCurrentPage - 1,
-    pageSize: listPageSize,
-  };
+  const isLoading = receiptFetching || receiptLoading || isInitialLoad;
+  const tableData = receiptData ?? [];
 
   const columns = useMemo<MRT_ColumnDef<ReceiptRow>[]>(
     () => [
@@ -211,7 +327,10 @@ export default function ReceiptMaster() {
               <Menu.Dropdown>
                 <Box px={10} py={5}>
                   <UnstyledButton
-                    onClick={() =>
+                    onClick={() =>{
+                      setStoreFilters(LIST_KEY, appliedFilters);
+                      setStoreSearch(LIST_KEY, search);
+                      setShouldRestore(LIST_KEY, true);
                       navigate("/receipt/view", {
                         state: {
                           ...row.original,
@@ -221,6 +340,7 @@ export default function ReceiptMaster() {
                             [],
                         },
                       })
+                    }
                     }
                   >
                     <Group gap="sm">
@@ -237,7 +357,10 @@ export default function ReceiptMaster() {
                 {isUnposted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
+                      onClick={() => {
+                        setStoreFilters(LIST_KEY, appliedFilters);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
                         navigate("/receipt/edit", {
                           state: {
                             ...row.original,
@@ -246,8 +369,8 @@ export default function ReceiptMaster() {
                               (row.original as any)?.supporting_documents ??
                               [],
                           },
-                        })
-                      }
+                        });
+                      }}
                     >
                       <Group gap="sm">
                         <IconEdit size={16} style={{ color: "#105476" }} />
@@ -265,6 +388,9 @@ export default function ReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() => {
+                        setStoreFilters(LIST_KEY, appliedFilters);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
                         const {
                           documents: _documents,
                           supporting_documents: _supportingDocuments,
@@ -296,7 +422,15 @@ export default function ReceiptMaster() {
         },
       },
     ],
-    [index, navigate],
+    [
+      index,
+      navigate,
+      appliedFilters,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+    ],
   );
 
   const table = useMantineReactTable({
@@ -316,7 +450,8 @@ export default function ReceiptMaster() {
     },
     layoutMode: "grid",
     manualPagination: true,
-    rowCount: listTotalRecords,
+    onPaginationChange: setPagination,
+    rowCount: totalRecords,
     state: {
       pagination,
     },
@@ -427,6 +562,67 @@ export default function ReceiptMaster() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
+            <TextInput
+              placeholder="Search..."
+              leftSection={<IconSearch size={16} />}
+              rightSection={
+                search ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                    }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <IconX size={16} />
+                  </ActionIcon>
+                ) : null
+              }
+              w={248}
+              size="sm"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              styles={{
+                input: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontstyle: "regular",
+                  color: "#333740",
+                  minWidth: "24px",
+                  minHeight: "24px",
+                  width: "248px",
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  "&:focus": {
+                    border: "1px solid #105476",
+                  },
+                },
+              }}
+            />
+            <ActionIcon
+              variant={showFilters ? "filled" : "outline"}
+              size={36}
+              color={showFilters ? "#E0F5FF" : "gray"}
+              onClick={() => setShowFilters(!showFilters)}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                  border: showFilters
+                    ? "1px solid #105476"
+                    : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  "&:active": {
+                    border: "1px solid #105476",
+                    color: "#FFFFFF",
+                  },
+                },
+              }}
+            >
+              <IconFilter size={18} />
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"
@@ -443,13 +639,189 @@ export default function ReceiptMaster() {
                   },
                 },
               }}
-              onClick={() => navigate("/receipt/create")}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/receipt/create");
+              }}
             >
               Create New
             </Button>
           </Group>
         </Group>
       </Box>
+
+      {showFilters && (
+        <Box
+          tt="capitalize"
+          mb="sm"
+          p="sm"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+            flexShrink: 0,
+            height: "fit-content",
+          }}
+        >
+          <Group
+            justify="space-between"
+            align="center"
+            mb="sm"
+            px="md"
+            style={{
+              backgroundColor: "#FAFAFA",
+              padding: "4px 8px",
+            }}
+          >
+            <Text
+              size="sm"
+              fw={600}
+              c="#000000"
+              style={{ fontFamily: "Inter", fontSize: "14px" }}
+            >
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
+          </Group>
+
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
+            <Grid.Col span={3}>
+              <SearchableSelect
+                apiEndpoint={URL.daybookGet}
+                label="Day Book"
+                placeholder="Type Day Book"
+                value={draftFilters.day_book_id}
+                displayValue={draftFilters.day_book_name}
+                onChange={(val, selectedData) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    day_book_id: val || "",
+                    day_book_name: selectedData?.label || "",
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.name ?? ""),
+                })}
+                searchFields={["name"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <SearchableSelect
+                apiEndpoint={URL.receipt}
+                label="Receipt No"
+                placeholder="Type Receipt No"
+                value={draftFilters.receipt_no}
+                onChange={(val) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    receipt_no: val || "",
+                  }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.receipt_no ?? ""),
+                  label: String(item.receipt_no ?? ""),
+                })}
+                searchFields={["receipt_no"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Dropdown
+                size="xs"
+                label="Type"
+                placeholder="Select Type"
+                data={typeOptions}
+                searchable
+                value={draftFilters.type || null}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    type: value || "",
+                  }))
+                }
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Dropdown
+                size="xs"
+                label="Status"
+                placeholder="Select Status"
+                data={statusOptions}
+                searchable
+                value={draftFilters.status || null}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    status: value || "",
+                  }))
+                }
+              />
+            </Grid.Col>
+          </Grid>
+
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={clearAllFilters}
+              leftSection={<IconX size={16} />}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  color: "#444955",
+                },
+              }}
+            >
+              Clear Filters
+            </Button>
+            <Button
+              size="sm"
+              onClick={applyFilters}
+              loading={isLoading}
+              disabled={isLoading}
+              leftSection={<IconFilter size={16} />}
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  "&:hover": {
+                    backgroundColor: "#0d4261",
+                  },
+                },
+              }}
+            >
+              Apply Filters
+            </Button>
+          </Group>
+        </Box>
+      )}
 
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>
@@ -469,68 +841,14 @@ export default function ReceiptMaster() {
       ) : (
         <>
           <MantineReactTable table={table} />
-          {/* Pagination bar: same layout as EnquiryMaster – left: rows per page + range; right: page nav */}
-          <Group
-            w="100%"
-            justify="space-between"
-            align="center"
-            p="xs"
-            wrap="nowrap"
-            pt="sm"
-          >
-            <Group gap="sm" align="center" wrap="nowrap">
-              <Text size="sm" c="dimmed">
-                Rows per page
-              </Text>
-              <Select
-                size="xs"
-                data={["10", "25", "50"]}
-                value={String(listPageSize)}
-                onChange={(val) => {
-                  if (!val) return;
-                  handlePageSizeChange(Number(val));
-                }}
-                w={110}
-                styles={{ input: { fontSize: 12, height: 30 } } as any}
-              />
-              <Text size="sm" c="dimmed">
-                {listTotalRecords === 0
-                  ? "0–0 of 0"
-                  : `${(listCurrentPage - 1) * listPageSize + 1}–${Math.min(
-                      listCurrentPage * listPageSize,
-                      listTotalRecords,
-                    )} of ${listTotalRecords}`}
-              </Text>
-            </Group>
-            <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() =>
-                  handlePageChange(Math.max(1, listCurrentPage - 1))
-                }
-                disabled={listCurrentPage === 1}
-              >
-                <IconChevronLeft size={16} />
-              </ActionIcon>
-              <Text size="sm" ta="center" style={{ width: 26 }}>
-                {listCurrentPage}
-              </Text>
-              <Text size="sm" c="dimmed">
-                of {totalPages}
-              </Text>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() =>
-                  handlePageChange(Math.min(totalPages, listCurrentPage + 1))
-                }
-                disabled={listCurrentPage >= totalPages}
-              >
-                <IconChevronRight size={16} />
-              </ActionIcon>
-            </Group>
-          </Group>
+          <PaginationBar
+            pageSize={pagination.pageSize}
+            currentPage={currentPage}
+            totalRecords={totalRecords}
+            onPageSizeChange={handlePageSizeChange}
+            onPageChange={handlePageChange}
+            pageSizeOptions={["10", "25", "50"]}
+          />
         </>
       )}
     </Card>

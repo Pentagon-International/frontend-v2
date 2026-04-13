@@ -34,6 +34,7 @@ interface FileRecord {
   extracted_data?: PayloadData;
   diff_summary?: string;
   error_message?: string;
+  created_by?: string;
 }
 
 interface OceanRouting {
@@ -2379,6 +2380,7 @@ const HBLDocumentManager: FC = () => {
     ["txn_id", "TXN ID"], ["filename", "Filename"],
     ["bl_number", "BL Number"],
     ["status", "Status"],
+    ["created_by", "Created By"],
   ];
 
   const doneCount = allFiles.filter(f => f.status === "done").length;
@@ -2467,6 +2469,7 @@ const HBLDocumentManager: FC = () => {
                 </td>
                 <td className="td-bl">{f.bl_number ?? "—"}</td>
                 <td><Badge status={f.status} /></td>
+                <td>{f.created_by ?? "—"}</td>
                 <td><span className="pdf-tag">{f.pdf_type ?? "—"}</span></td>
                 <td className="td-date">{f.uploaded_at ? f.uploaded_at.slice(0, 16) : "—"}</td>
                 <td onClick={e => e.stopPropagation()}>

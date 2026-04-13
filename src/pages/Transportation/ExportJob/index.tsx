@@ -1,7 +1,8 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
+  MRT_PaginationState,
   useMantineReactTable,
 } from "mantine-react-table";
 import {
@@ -14,24 +15,19 @@ import {
   Box,
   Menu,
   ActionIcon,
-  Select,
   Loader,
-  Grid,
-  TextInput,
   Modal,
   Badge,
+  Grid,
+  TextInput,
 } from "@mantine/core";
 import {
   IconPlus,
   IconDotsVertical,
   IconEdit,
-  IconChevronLeft,
-  IconChevronRight,
-  IconFilter,
-  IconFilterOff,
-  IconSearch,
-  IconCalendar,
   IconX,
+  IconSearch,
+  IconFilter,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
@@ -39,17 +35,20 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
-  Dropdown,
+  ToastNotification,
   SearchableSelect,
   SingleDateInput,
+  Dropdown,
 } from "../../../components";
-import { DateInput } from "@mantine/dates";
-import { ToastNotification } from "../../../components";
-import dayjs from "dayjs";
 import FormTextInput from "../../../components/FormTextInput";
+import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useDebouncedValue } from "@mantine/hooks";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { useListFilterStore } from "../../../store/listFilterStore";
 
-// Type definitions
+const LIST_KEY = "OCEAN_EXPORT_JOB_MASTER";
+
 type ExportJobData = {
   id: number;
   service_id?: number;
@@ -57,8 +56,8 @@ type ExportJobData = {
   is_direct?: boolean | string | number;
   agent_code: string | null;
   agent_name: string | null;
-  origin_agent: string | null; // Deprecated, use agent_code
-  origin_agent_name: string | null; // Deprecated, use agent_name
+  origin_agent: string | null;
+  origin_agent_name: string | null;
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -75,36 +74,78 @@ type ExportJobData = {
   mbl_number: string | null;
   mbl_date: string | null;
   status: string;
+  job_id?: string;
   housing_details?: Array<{
     hbl_number: string;
   }>;
 };
 
-type FilterState = {
-  mbl_number: string | null;
-  origin_agent: string | null;
-  origin_code: string | null;
-  destination_code: string | null;
-  service: string | null;
-  etd: Date | null;
-  eta: Date | null;
+type OceanExportJobFilters = {
+  job_id: string;
+  mbl_number: string;
+  origin_agent: string;
+  origin_agent_label: string;
+  origin_code: string;
+  origin_port_label: string;
+  destination_code: string;
+  destination_name: string;
+  service: string;
+  etd: string;
+  eta: string;
+  status: string;
 };
 
 function ExportJobMaster() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const isRefreshingFromEdit = useRef(false);
+
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
+  const [totalRecords, setTotalRecords] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+
+  const DEFAULT_FILTERS: OceanExportJobFilters = {
+    job_id: "",
+    mbl_number: "",
+    origin_agent: "",
+    origin_agent_label: "",
+    origin_code: "",
+    origin_port_label: "",
+    destination_code: "",
+    destination_name: "",
+    service: "",
+    etd: "",
+    eta: "",
+    status: "",
+  };
+  const [draftFilters, setDraftFilters] =
+    useState<OceanExportJobFilters>(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] =
+    useState<OceanExportJobFilters>(DEFAULT_FILTERS);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
   const [cancelConfirmRow, setCancelConfirmRow] = useState<ExportJobData | null>(
     null
   );
   const [isCancelling, setIsCancelling] = useState(false);
 
   const dateFormat = useDateFormat();
+  const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
+
   const getStatusBadge = (statusRaw: string | undefined | null) => {
     const statusUpper = (statusRaw || "").toUpperCase();
     const label =
@@ -117,340 +158,147 @@ function ExportJobMaster() {
     return { label, color } as const;
   };
 
-  // Filter state
-  const [filters, setFilters] = useState<FilterState>({
-    mbl_number: null,
-    origin_agent: null,
-    origin_code: null,
-    destination_code: null,
-    service: null,
-    etd: null,
-    eta: null,
-  });
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+    setIsInitialLoad(true);
 
-  // Display values for SearchableSelect
-  const [originAgentDisplayValue, setOriginAgentDisplayValue] = useState<
-    string | null
-  >(null);
-  const [originDisplayValue, setOriginDisplayValue] = useState<string | null>(
-    null,
-  );
-  const [destinationDisplayValue, setDestinationDisplayValue] = useState<
-    string | null
-  >(null);
-
-  // Memoize additionalParams for SearchableSelect
-  const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
-
-  // Build filter payload according to API specification
-  const buildFilterPayload = useMemo(() => {
-    const payload: Record<string, unknown> = {};
-
-    // MBL Number - icontains search
-    if (filters.mbl_number && filters.mbl_number.trim()) {
-      payload.mbl_number = filters.mbl_number.trim();
-    }
-
-    // Destination Agent - icontains search
-    if (filters.origin_agent && filters.origin_agent.trim()) {
-      payload.origin_agent = filters.origin_agent.trim();
-    }
-
-    // Origin Code - exact match or array
-    if (filters.origin_code && filters.origin_code.trim()) {
-      payload.origin_code = filters.origin_code.trim();
-    }
-
-    // Destination Code - exact match or array
-    if (filters.destination_code && filters.destination_code.trim()) {
-      payload.destination_code = filters.destination_code.trim();
-    }
-
-    // Service - exact match or array
-    if (filters.service && filters.service.trim()) {
-      payload.service = filters.service.trim();
-    }
-
-    // ETD - single date format: "YYYY-MM-DD"
-    if (filters.etd) {
-      payload.etd = dayjs(filters.etd).format("YYYY-MM-DD");
-    }
-
-    // ETA - single date format: "YYYY-MM-DD"
-    if (filters.eta) {
-      payload.eta = dayjs(filters.eta).format("YYYY-MM-DD");
-    }
-
-    return payload;
-  }, [filters]);
-
-  // Track if we're refreshing from edit to prevent duplicate calls
-  const isRefreshingFromEdit = useRef(false);
-
-  // Fetch data using useQuery - initial load without filters
-  const {
-    data: exportJobData,
-    isLoading,
-    isFetching,
-    refetch: refetchExportJobs,
-  } = useQuery<{ data: ExportJobData[]; total_count: number }>({
-    queryKey: ["exportJobs"],
-    queryFn: async () => {
-      try {
-        const response = await apiCallProtected.post(
-          URL.importJobFilter,
-          { filters: { service: ["FCL", "LCL"], service_type: "Export" } },
-          API_HEADER,
-        );
-        const result = response as unknown as {
-          status: boolean;
-          message: string;
-          data: ExportJobData[];
-          total_count: number;
-        };
-
-        // Handle response format: { status, message, data, total_count }
-        if (result?.status && Array.isArray(result?.data)) {
-          return {
-            data: result.data,
-            total_count: result.total_count || result.data.length,
-          };
-        }
-        return { data: [], total_count: 0 };
-      } catch (error) {
-        console.error("Error fetching export jobs:", error);
-        return { data: [], total_count: 0 };
-      }
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
-    refetchOnWindowFocus: false,
-    refetchOnMount: true, // Enable to fetch on mount and show loader
-    enabled: true, // Always enabled to fetch initial data
-  });
-
-  // Fetch filtered data - disabled by default, only runs when explicitly refetched via Apply Filters button
-  const {
-    data: filteredExportJobData,
-    isLoading: isFilteredLoading,
-    isFetching: isFilteredFetching,
-    refetch: refetchFilteredExportJobs,
-  } = useQuery<{ data: ExportJobData[]; total_count: number }>({
-    queryKey: ["filteredExportJobs", buildFilterPayload],
-    queryFn: async () => {
-      try {
-        const filterPayload = buildFilterPayload;
-        // Don't return empty array - let the query be disabled instead
-        if (Object.keys(filterPayload).length === 0) {
-          return { data: [], total_count: 0 };
-        }
-
-        const response = await apiCallProtected.post(
-          URL.importJobFilter,
-          { filters: filterPayload },
-          API_HEADER,
-        );
-        const result = response as unknown as {
-          status: boolean;
-          message: string;
-          data: ExportJobData[];
-          total_count: number;
-        };
-
-        if (result?.status && Array.isArray(result?.data)) {
-          return {
-            data: result.data,
-            total_count: result.total_count || result.data.length,
-          };
-        }
-        return { data: [], total_count: 0 };
-      } catch (error) {
-        console.error("Error fetching filtered export jobs:", error);
-        return { data: [], total_count: 0 };
-      }
-    },
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    enabled: false, // Never auto-run - only run when explicitly refetched via Apply Filters button
-  });
-
-  // Use filtered data if filters are applied, otherwise use initial data
-  // Only change data when filtersApplied flag changes (via Apply/Clear buttons), not on filter input changes
-  const data = useMemo(() => {
-    if (filtersApplied && filteredExportJobData) {
-      return filteredExportJobData.data || [];
-    }
-    // Always return initial data when filters are not applied
-    return exportJobData?.data || [];
-  }, [filtersApplied, filteredExportJobData, exportJobData]);
-
-  const totalRecords = useMemo(() => {
-    if (filtersApplied && filteredExportJobData) {
-      return filteredExportJobData.total_count || 0;
-    }
-    // Always return initial data count when filters are not applied
-    return exportJobData?.total_count || 0;
-  }, [filtersApplied, filteredExportJobData, exportJobData]);
-
-  // Combined loading state - show loader whenever API is called (initial load, filter, or refresh)
-  const isTableLoading = useMemo(() => {
-    // Show loader when refreshing from edit (location.state?.refreshData is set)
-    if (location.state?.refreshData) {
-      return isLoading || isFetching;
-    }
-    // Otherwise, show loader based on filter state - use isFetching to catch all API calls
-    return filtersApplied
-      ? isFilteredLoading || isFilteredFetching
-      : isLoading || isFetching;
-  }, [
-    isLoading,
-    isFetching,
-    isFilteredLoading,
-    isFilteredFetching,
-    filtersApplied,
-    location.state?.refreshData,
-  ]);
-
-  // Client-side search filtering
-  const displayData = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return data;
-    }
-    const query = searchQuery.toLowerCase().trim();
-    return data.filter((job) => {
-      return (
-        job.mbl_number?.toLowerCase().includes(query) ||
-        job.agent_name?.toLowerCase().includes(query) ||
-        job.origin_name?.toLowerCase().includes(query) ||
-        job.destination_name?.toLowerCase().includes(query) ||
-        job.carrier_name?.toLowerCase().includes(query)
-      );
-    });
-  }, [data, searchQuery]);
-
-  // Filter functions
-  const toggleFilters = () => {
-    setShowFilters(!showFilters);
-  };
-
-  const updateFilter = (key: keyof FilterState, value: unknown) => {
-    setFilters((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  const applyFilters = async () => {
-    const hasFilterValues = Object.values(buildFilterPayload).some((val) => {
-      // Check if value is not empty
-      if (val === null || val === undefined || val === "") return false;
-      // Check if it's an object (date range) and has at least one key
-      if (typeof val === "object" && !Array.isArray(val)) {
-        return Object.keys(val).length > 0;
-      }
-      return true;
-    });
-
-    if (!hasFilterValues) {
-      // No filters selected - clear filters and show initial data
-      setFiltersApplied(false);
-      setCurrentPage(1);
-      // Invalidate filtered queries and refetch initial data
-      await queryClient.invalidateQueries({ queryKey: ["filteredExportJobs"] });
-      await refetchExportJobs();
-      ToastNotification({
-        type: "info",
-        message: "No filters selected, showing all data",
-      });
-      setShowFilters(false);
+    if (!shouldRestore) {
+      setIsRestoring(false);
       return;
     }
 
-    // Mark that filters were applied - this will trigger data change
-    setFiltersApplied(true);
-    setCurrentPage(1); // Reset to first page
-
-    // Manually refetch filtered data with current filter payload
-    await refetchFilteredExportJobs();
-
-    ToastNotification({
-      type: "success",
-      message: "Filters applied successfully",
-    });
-    setShowFilters(false);
-  };
-
-  const clearAllFilters = async () => {
-    setShowFilters(false);
-    setFilters({
-      mbl_number: null,
-      origin_agent: null,
-      origin_code: null,
-      destination_code: null,
-      service: null,
-      etd: null,
-      eta: null,
-    });
-    setOriginAgentDisplayValue(null);
-    setOriginDisplayValue(null);
-    setDestinationDisplayValue(null);
-    setFiltersApplied(false); // Mark that filters are cleared
-    setCurrentPage(1);
-
-    // Invalidate filtered queries
-    await queryClient.invalidateQueries({ queryKey: ["filteredExportJobs"] });
-
-    // Refetch initial data to show all records
-    await refetchExportJobs();
-
-    ToastNotification({
-      type: "success",
-      message: "All filters cleared successfully",
-    });
-  };
-
-  const handleConfirmCancel = async () => {
-    if (!cancelConfirmRow) return;
-    const rowToCancel = cancelConfirmRow;
-    setIsCancelling(true);
-    try {
-      const response = (await apiCallProtected.patch(
-        `${URL.importJob}${rowToCancel.id}/`,
-        { status: "CANCEL" },
-        API_HEADER
-      )) as any;
-      if (response?.status === false) {
-        throw new Error(response?.message || "Failed to cancel job");
-      }
-      setCancelConfirmRow(null);
-      ToastNotification({
-        type: "success",
-        message: "Job cancelled successfully",
-      });
-      if (filtersApplied) await refetchFilteredExportJobs();
-      else await refetchExportJobs();
-    } catch (err: any) {
-      ToastNotification({
-        type: "error",
-        message: err?.message || "Failed to cancel job",
-      });
-    } finally {
-      setIsCancelling(false);
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
     }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const restored = { ...DEFAULT_FILTERS, ...stored.filters };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key]);
+
+  const currentPage = pagination.pageIndex + 1;
+  const index = pagination.pageIndex * pagination.pageSize;
+
+  const handlePageSizeChange = (size: number) => {
+    setPagination({ pageIndex: 0, pageSize: size });
   };
 
-  // Refetch when navigating from create/edit page - only once
+  const handlePageChange = (page: number) => {
+    setPagination((prev) => ({ ...prev, pageIndex: page - 1 }));
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
+  };
+
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
+  };
+
+  const buildFiltersPayload = (
+    filters: OceanExportJobFilters,
+    searchValue: string
+  ): Record<string, string | string[]> => {
+    const cleaned: Record<string, string> = {};
+
+    const entries: [keyof OceanExportJobFilters, string][] = [
+      ["job_id", filters.job_id],
+      ["mbl_number", filters.mbl_number],
+      ["origin_code", filters.origin_code],
+      ["destination_code", filters.destination_code],
+      ["etd", filters.etd],
+      ["eta", filters.eta],
+    ];
+
+    entries.forEach(([key, value]) => {
+      if (!value?.trim()) return;
+      cleaned[key as string] = value.trim();
+    });
+
+    if (filters.origin_agent_label?.trim()) {
+      cleaned.agent_name = filters.origin_agent_label.trim();
+    }
+
+    if (filters.status?.trim()) {
+      cleaned.status = filters.status.trim().toUpperCase();
+    }
+
+    if (searchValue?.trim()) cleaned.search = searchValue.trim();
+
+    const serviceVal = filters.service?.trim();
+    const base: Record<string, string | string[]> = {
+      service: serviceVal ? serviceVal : ["FCL", "LCL"],
+      service_type: "Export",
+      ...cleaned,
+    };
+
+    return base;
+  };
+
+  const {
+    data: exportJobData = [],
+    isLoading: exportJobLoading,
+    isFetching: exportJobFetching,
+    refetch: refetchExportJobs,
+  } = useQuery({
+    queryKey: [
+      "oceanExportJobs",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(appliedFilters),
+      debouncedSearch,
+    ],
+    queryFn: async (): Promise<ExportJobData[]> => {
+      const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
+
+      setIsInitialLoad(false);
+      const response = await apiCallProtected.post(
+        `${URL.filterJobCreate}?index=${index}&limit=${pagination.pageSize}`,
+        { filters: filtersPayload },
+        API_HEADER
+      );
+
+      setShowFilters(false);
+
+      const result = response as {
+        status?: boolean;
+        data?: ExportJobData[];
+        total_count?: number;
+      };
+      const list = Array.isArray(result?.data) ? result.data : [];
+      setTotalRecords(result?.total_count ?? list.length);
+
+      return list;
+    },
+    enabled: !isRestoring && search === debouncedSearch,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+  });
+
+  const isLoading = exportJobFetching || exportJobLoading || isInitialLoad;
+
   useEffect(() => {
     if (location.state?.refreshData && !isRefreshingFromEdit.current) {
       isRefreshingFromEdit.current = true;
-      // Invalidate and refetch data
-      queryClient.invalidateQueries({ queryKey: ["exportJobs"] });
-      queryClient.invalidateQueries({ queryKey: ["filteredExportJobs"] });
+      queryClient.invalidateQueries({ queryKey: ["oceanExportJobs"] });
       refetchExportJobs().finally(() => {
-        // Clear the refresh flag after refetch completes
         navigate(location.pathname, { replace: true, state: {} });
-        // Reset the flag after a short delay to allow for future refreshes
         setTimeout(() => {
           isRefreshingFromEdit.current = false;
         }, 1000);
@@ -464,7 +312,52 @@ function ExportJobMaster() {
     refetchExportJobs,
   ]);
 
-  // Columns definition
+  const persistListAndNavigate = useCallback(
+    (to: string, state?: object) => {
+      setStoreFilters(LIST_KEY, appliedFilters);
+      setStoreSearch(LIST_KEY, search);
+      setShouldRestore(LIST_KEY, true);
+      navigate(to, state !== undefined ? { state } : undefined);
+    },
+    [
+      appliedFilters,
+      search,
+      navigate,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+    ]
+  );
+
+  const handleConfirmCancel = async () => {
+    if (!cancelConfirmRow) return;
+    const rowToCancel = cancelConfirmRow;
+    setIsCancelling(true);
+    try {
+      const response = (await apiCallProtected.patch(
+        `${URL.importJob}${rowToCancel.id}/`,
+        { status: "CANCEL" },
+        API_HEADER
+      )) as { status?: boolean; message?: string };
+      if (response?.status === false) {
+        throw new Error(response?.message || "Failed to cancel job");
+      }
+      setCancelConfirmRow(null);
+      ToastNotification({
+        type: "success",
+        message: "Job cancelled successfully",
+      });
+      await refetchExportJobs();
+    } catch (err: unknown) {
+      ToastNotification({
+        type: "error",
+        message: err instanceof Error ? err.message : "Failed to cancel job",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const columns = useMemo<MRT_ColumnDef<ExportJobData>[]>(
     () => [
       {
@@ -576,8 +469,8 @@ function ExportJobMaster() {
                   disabled={isCancel}
                   onClick={() => {
                     if (!isCancel) {
-                      navigate(`/SeaExport/export-job/edit`, {
-                        state: { job: row.original },
+                      persistListAndNavigate(`/SeaExport/export-job/edit`, {
+                        job: row.original,
                       });
                     }
                   }}
@@ -600,39 +493,26 @@ function ExportJobMaster() {
         },
       },
     ],
-    [navigate],
+    [dateFormat, persistListAndNavigate]
   );
-
-  // Paginate data
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    return displayData.slice(start, end);
-  }, [displayData, currentPage, pageSize]);
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    setPageSize(size);
-    setCurrentPage(1); // Reset to first page when changing page size
-  };
 
   const table = useMantineReactTable({
     columns,
-    data: paginatedData,
-    state: {
-      isLoading: isTableLoading,
-    },
+    data: exportJobData,
     enableColumnFilters: false,
-    enablePagination: false, // Use custom pagination
+    enablePagination: true,
     enableTopToolbar: false,
     enableBottomToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
+    manualPagination: true,
+    onPaginationChange: setPagination,
+    rowCount: totalRecords,
+    state: {
+      pagination,
+    },
     initialState: {
       columnPinning: { right: ["actions"] },
     },
@@ -749,7 +629,7 @@ function ExportJobMaster() {
       }}
     >
       <Box mb="md">
-        <Group justify="space-between" align="center" wrap="nowrap">
+        <Group justify="space-between" align="center">
           <Text
             size="md"
             fw={600}
@@ -758,46 +638,63 @@ function ExportJobMaster() {
           >
             Export Job List
           </Text>
-
-          <Group gap="sm" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap">
             <TextInput
-              placeholder="Search"
+              placeholder="Search..."
               leftSection={<IconSearch size={16} />}
-              w={{ sm: 150, md: 300 }}
-              radius="sm"
-              size="xs"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.currentTarget.value)}
+              rightSection={
+                search ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size="sm"
+                    onClick={() => setSearch("")}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <IconX size={16} />
+                  </ActionIcon>
+                ) : null
+              }
+              w={248}
+              size="sm"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
               styles={{
                 input: {
+                  borderRadius: "4px",
                   fontSize: "14px",
                   fontFamily: "Inter",
+                  color: "#333740",
+                  minWidth: "24px",
+                  minHeight: "24px",
+                  width: "248px",
                   height: "36px",
+                  border: "1px solid #D0D1D4",
+                  "&:focus": {
+                    border: "1px solid #105476",
+                  },
                 },
               }}
             />
-            <Button
+            <ActionIcon
               variant={showFilters ? "filled" : "outline"}
-              leftSection={<IconFilter size={16} />}
-              size="sm"
-              onClick={toggleFilters}
+              size={36}
+              color={showFilters ? "#E0F5FF" : "gray"}
+              onClick={() => setShowFilters(!showFilters)}
               styles={{
                 root: {
-                  backgroundColor: showFilters ? "#105476" : "transparent",
                   borderRadius: "4px",
-                  color: showFilters ? "white" : "#105476",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontStyle: "semibold",
-                  border: "1px solid #105476",
-                  "&:hover": {
-                    backgroundColor: showFilters ? "#105476" : "#E0F5FF",
+                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                  border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  "&:active": {
+                    border: "1px solid #105476",
+                    color: "#FFFFFF",
                   },
                 },
               }}
             >
-              Filters
-            </Button>
+              <IconFilter size={18} />
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"
@@ -814,7 +711,7 @@ function ExportJobMaster() {
                   },
                 },
               }}
-              onClick={() => navigate("/SeaExport/export-job/create")}
+              onClick={() => persistListAndNavigate("/SeaExport/export-job/create")}
             >
               Create New
             </Button>
@@ -822,7 +719,6 @@ function ExportJobMaster() {
         </Group>
       </Box>
 
-      {/* Filter Section */}
       {showFilters && (
         <Box
           tt="capitalize"
@@ -867,16 +763,29 @@ function ExportJobMaster() {
           <Grid gutter="sm" px="md" pt="xs" pb="sm">
             <Grid.Col span={3}>
               <FormTextInput
-                label="MBL Number"
-                placeholder="Enter MBL Number"
+                label="Job ID"
+                placeholder="Type Job ID"
                 size="xs"
-                value={filters.mbl_number || ""}
+                value={draftFilters.job_id}
                 onChange={(e) =>
-                  updateFilter("mbl_number", e.target.value || null)
+                  setDraftFilters((prev) => ({ ...prev, job_id: e.currentTarget.value }))
                 }
               />
             </Grid.Col>
-
+            <Grid.Col span={3}>
+              <FormTextInput
+                label="MBL Number"
+                placeholder="Enter MBL Number"
+                size="xs"
+                value={draftFilters.mbl_number}
+                onChange={(e) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    mbl_number: e.currentTarget.value,
+                  }))
+                }
+              />
+            </Grid.Col>
             <Grid.Col span={3}>
               <SearchableSelect
                 size="xs"
@@ -885,19 +794,21 @@ function ExportJobMaster() {
                 apiEndpoint={URL.agent}
                 searchFields={["customer_name", "customer_code"]}
                 displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_name), // Use customer_name as value
-                  label: String(item.customer_name), // Display customer_name
+                  value: String(item.customer_name),
+                  label: String(item.customer_name),
                 })}
-                value={filters.origin_agent} // Stores customer_name
-                displayValue={originAgentDisplayValue} // Displays customer_name
+                value={draftFilters.origin_agent || undefined}
+                displayValue={draftFilters.origin_agent_label || undefined}
                 onChange={(value, selectedData) => {
-                  updateFilter("origin_agent", value || null); // Store customer_name
-                  setOriginAgentDisplayValue(selectedData?.label || null); // Display customer_name
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    origin_agent: value || "",
+                    origin_agent_label: selectedData?.label || value || "",
+                  }));
                 }}
                 minSearchLength={2}
               />
             </Grid.Col>
-
             <Grid.Col span={3}>
               <SearchableSelect
                 size="xs"
@@ -909,17 +820,19 @@ function ExportJobMaster() {
                   value: String(item.port_code),
                   label: `${item.port_name} (${item.port_code})`,
                 })}
-                value={filters.origin_code}
-                displayValue={originDisplayValue}
+                value={draftFilters.origin_code}
+                displayValue={draftFilters.origin_port_label}
                 onChange={(value, selectedData) => {
-                  updateFilter("origin_code", value || null);
-                  setOriginDisplayValue(selectedData?.label || null);
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    origin_code: value || "",
+                    origin_port_label: selectedData?.label || "",
+                  }));
                 }}
                 additionalParams={seaTransportParams}
                 minSearchLength={2}
               />
             </Grid.Col>
-
             <Grid.Col span={3}>
               <SearchableSelect
                 size="xs"
@@ -931,17 +844,19 @@ function ExportJobMaster() {
                   value: String(item.port_code),
                   label: `${item.port_name} (${item.port_code})`,
                 })}
-                value={filters.destination_code}
-                displayValue={destinationDisplayValue}
+                value={draftFilters.destination_code}
+                displayValue={draftFilters.destination_name}
                 onChange={(value, selectedData) => {
-                  updateFilter("destination_code", value || null);
-                  setDestinationDisplayValue(selectedData?.label || null);
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    destination_code: value || "",
+                    destination_name: selectedData?.label || "",
+                  }));
                 }}
                 additionalParams={seaTransportParams}
                 minSearchLength={2}
               />
             </Grid.Col>
-
             <Grid.Col span={3}>
               <Dropdown
                 label="Service"
@@ -950,59 +865,54 @@ function ExportJobMaster() {
                 searchable
                 clearable
                 data={["FCL", "LCL"]}
-                value={filters.service}
-                onChange={(value) => updateFilter("service", value || null)}
+                value={draftFilters.service || null}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({ ...prev, service: value || "" }))
+                }
               />
             </Grid.Col>
-
             <Grid.Col span={3}>
               <SingleDateInput
                 label="ETD"
                 placeholder="YYYY-MM-DD"
                 size="xs"
-                value={filters.etd}
-                onChange={(date) => updateFilter("etd", date)}
+                value={draftFilters.etd ? dayjs(draftFilters.etd).toDate() : null}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                  }))
+                }
                 clearable
                 valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={14} />}
-                leftSectionPointerEvents="none"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                styles={
-                  {
-                    input: { fontSize: "12px" },
-                    label: {
-                      fontSize: "12px",
-                      fontWeight: 500,
-                      color: "#495057",
-                    },
-                  } as any
-                }
               />
             </Grid.Col>
-
             <Grid.Col span={3}>
               <SingleDateInput
                 label="ETA"
                 placeholder="YYYY-MM-DD"
                 size="xs"
-                value={filters.eta}
-                onChange={(date) => updateFilter("eta", date)}
+                value={draftFilters.eta ? dayjs(draftFilters.eta).toDate() : null}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                  }))
+                }
                 clearable
                 valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={14} />}
-                leftSectionPointerEvents="none"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                styles={
-                  {
-                    input: { fontSize: "12px" },
-                    label: {
-                      fontSize: "12px",
-                      fontWeight: 500,
-                      color: "#495057",
-                    },
-                  } as any
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <Dropdown
+                label="Status"
+                placeholder="Select Status"
+                size="xs"
+                data={["Active", "Closed", "Cancel"]}
+                searchable
+                value={draftFilters.status || null}
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({ ...prev, status: value || "" }))
                 }
               />
             </Grid.Col>
@@ -1031,8 +941,8 @@ function ExportJobMaster() {
             <Button
               size="sm"
               onClick={applyFilters}
-              loading={isFilteredLoading}
-              disabled={isFilteredLoading}
+              loading={isLoading}
+              disabled={isLoading}
               leftSection={<IconFilter size={16} />}
               styles={{
                 root: {
@@ -1054,7 +964,7 @@ function ExportJobMaster() {
         </Box>
       )}
 
-      {isTableLoading ? (
+      {isLoading ? (
         <Center py="xl">
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
@@ -1074,7 +984,7 @@ function ExportJobMaster() {
               flexDirection: "column",
             }}
           >
-            {isFetching && (
+            {exportJobFetching && (
               <div
                 style={{
                   position: "absolute",
@@ -1101,102 +1011,14 @@ function ExportJobMaster() {
             <MantineReactTable table={table} />
           </div>
 
-          {/* Custom Pagination Bar */}
-          <Group
-            w="100%"
-            justify="space-between"
-            align="center"
-            p="xs"
-            wrap="nowrap"
-            pt="md"
-          >
-            <Group gap="sm" align="center" wrap="nowrap">
-              <Text
-                size="sm"
-                c="dimmed"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                Rows per page
-              </Text>
-              <Select
-                size="xs"
-                data={["10", "25", "50"]}
-                value={String(pageSize)}
-                onChange={(val) => {
-                  if (!val) return;
-                  handlePageSizeChange(Number(val));
-                }}
-                w={110}
-                styles={
-                  {
-                    input: {
-                      fontSize: "13px",
-                      height: "36px",
-                      fontFamily: "Inter",
-                    },
-                  } as Record<string, unknown>
-                }
-              />
-              <Text
-                size="sm"
-                c="dimmed"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                {(() => {
-                  const total = displayData.length || 0;
-                  if (total === 0) return "0–0 of 0";
-                  const start = (currentPage - 1) * pageSize + 1;
-                  const end = Math.min(currentPage * pageSize, total);
-                  return `${start}–${end} of ${total}`;
-                })()}
-              </Text>
-            </Group>
-
-            <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-              >
-                <IconChevronLeft size={16} />
-              </ActionIcon>
-              <Text
-                size="sm"
-                ta="center"
-                style={{ width: 26, fontFamily: "Inter, sans-serif" }}
-              >
-                {currentPage}
-              </Text>
-              <Text
-                size="sm"
-                c="dimmed"
-                style={{ fontFamily: "Inter, sans-serif" }}
-              >
-                of {Math.max(1, Math.ceil(displayData.length / pageSize))}
-              </Text>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  const totalPages = Math.max(
-                    1,
-                    Math.ceil(displayData.length / pageSize),
-                  );
-                  handlePageChange(Math.min(totalPages, currentPage + 1));
-                }}
-                disabled={(() => {
-                  const totalPages = Math.max(
-                    1,
-                    Math.ceil(displayData.length / pageSize),
-                  );
-                  return currentPage >= totalPages;
-                })()}
-              >
-                <IconChevronRight size={16} />
-              </ActionIcon>
-            </Group>
-          </Group>
+          <PaginationBar
+            pageSize={pagination.pageSize}
+            currentPage={currentPage}
+            totalRecords={totalRecords}
+            onPageSizeChange={handlePageSizeChange}
+            onPageChange={handlePageChange}
+            pageSizeOptions={["10", "25", "50"]}
+          />
         </>
       )}
       <Modal

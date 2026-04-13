@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
   type MRT_ColumnDef,
+  type MRT_PaginationState,
 } from "mantine-react-table";
 import {
   ActionIcon,
@@ -11,28 +12,35 @@ import {
   Button,
   Card,
   Center,
+  Grid,
   Group,
   Loader,
   Menu,
-  Select,
-  type SelectProps,
   Stack,
   Text,
+  TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import {
-  IconChevronLeft,
-  IconChevronRight,
   IconDotsVertical,
   IconEdit,
   IconEye,
+  IconFilter,
   IconPlus,
   IconReceiptRefund,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import { useDebouncedValue } from "@mantine/hooks";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { Dropdown, SearchableSelect } from "../../../components";
+import { useListFilterStore } from "../../../store/listFilterStore";
+
+const LIST_KEY = "PAYMENT_MASTER";
 
 type PaymentRow = Record<string, unknown> & {
   id?: number | string;
@@ -54,82 +62,154 @@ type PaymentFilterResponse = {
   data?: PaymentRow[];
 };
 
-type PaymentListResult = {
-  list: PaymentRow[];
-  total: number;
+type PaymentFilters = {
+  day_book_id: string;
+  day_book_name: string;
+  payment_no: string;
+  type: string;
+  amount: string;
+  status: string;
 };
 
 export default function PaymentMaster() {
   const navigate = useNavigate();
-  const [listCurrentPage, setListCurrentPage] = useState(1);
-  const [listPageSize, setListPageSize] = useState(25);
-  const [search] = useState("");
-
-  const index = (listCurrentPage - 1) * listPageSize;
-
-  const handlePageSizeChange = (newPageSize: number) => {
-    setListPageSize(newPageSize);
-    setListCurrentPage(1);
+  const location = useLocation();
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const DEFAULT_FILTERS: PaymentFilters = {
+    day_book_id: "",
+    day_book_name: "",
+    payment_no: "",
+    type: "",
+    amount: "",
+    status: "",
   };
+  const [draftFilters, setDraftFilters] = useState<PaymentFilters>(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] =
+    useState<PaymentFilters>(DEFAULT_FILTERS);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  const handlePageChange = (newPage: number) => {
-    setListCurrentPage(newPage);
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
+
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+    if (typeof stored?.search === "string") setSearch(stored.search);
+    if (stored?.filters && typeof stored.filters === "object") {
+      const restored = { ...DEFAULT_FILTERS, ...stored.filters };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key]);
+
+  const currentPage = pagination.pageIndex + 1;
+  const index = pagination.pageIndex * pagination.pageSize;
+  const typeOptions = ["CHEQUE", "ONLINE", "CASH", "NEFT"];
+  const statusOptions = ["POSTED", "UNPOSTED"];
+
+  const handlePageSizeChange = (newPageSize: number) =>
+    setPagination({ pageIndex: 0, pageSize: newPageSize });
+  const handlePageChange = (newPage: number) =>
+    setPagination((prev) => ({ ...prev, pageIndex: newPage - 1 }));
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
+  };
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
+  };
+  const buildFiltersPayload = (filters: PaymentFilters, searchValue: string) => {
+    const cleaned = Object.entries(filters).reduce((acc, [key, value]) => {
+      if (key === "day_book_name") return acc;
+      if (value && value.trim() !== "") acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+    if (searchValue?.trim()) cleaned.search = searchValue;
+    return cleaned;
   };
 
   const {
-    data: paymentResult,
+    data: paymentData = [],
     isLoading: paymentLoading,
     isFetching: paymentFetching,
     error: paymentError,
   } = useQuery({
-    queryKey: ["payment", listCurrentPage, listPageSize, search],
-    queryFn: async (): Promise<PaymentListResult> => {
+    queryKey: [
+      "payment",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(appliedFilters),
+      debouncedSearch,
+    ],
+    queryFn: async (): Promise<PaymentRow[]> => {
       try {
-        const payload = { filters: {is_agent:false} as Record<string, unknown> };
-        if (search?.trim()) {
-          payload.filters.search = search.trim();
-        }
+        const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
+        const payload =
+          Object.keys(filtersPayload).length > 0
+            ? { filters: { is_agent: false, ...filtersPayload } }
+            : { filters: { is_agent: false } };
+        setIsInitialLoad(false);
         const response = await apiCallProtected.post(
-          `${URL.paymentFilter}?index=${index}&limit=${listPageSize}`,
+          `${URL.paymentFilter}?index=${index}&limit=${pagination.pageSize}`,
           payload,
         );
-        const body =
-          response?.data != null
-            ? (response.data as PaymentFilterResponse)
-            : null;
+        setShowFilters(false);
+        const raw = response as any;
+        const bodyCandidate = raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
+        const body = bodyCandidate != null ? (bodyCandidate as PaymentFilterResponse | PaymentRow[]) : null;
         if (!body) {
-          return { list: [], total: 0 };
+          setTotalRecords(0);
+          return [];
         }
-        const list = Array.isArray(body.data)
-          ? body.data
-          : Array.isArray(body)
-            ? (body as unknown as PaymentRow[])
-            : [];
-        const total = body.total != null ? Number(body.total) : list.length;
-        return { list, total };
+        const list = Array.isArray((body as PaymentFilterResponse).data)
+          ? ((body as PaymentFilterResponse).data as PaymentRow[])
+          : Array.isArray(body) ? (body as PaymentRow[]) : [];
+        const totalFromBody = (body as PaymentFilterResponse).total;
+        setTotalRecords(totalFromBody != null ? Number(totalFromBody) : list.length);
+        return list;
       } catch (err: unknown) {
-        const status = (err as { response?: { status?: number } })?.response
-          ?.status;
+        const status = (err as { response?: { status?: number } })?.response?.status;
         if (status === 404) {
-          return { list: [], total: 0 };
+          setTotalRecords(0);
+          return [];
         }
-        console.error("Error fetching payment data:", err);
-        return { list: [], total: 0 };
+        throw err;
       }
     },
+    enabled: !isRestoring && search === debouncedSearch,
     staleTime: 0,
     refetchOnWindowFocus: false,
-    refetchOnMount: "always",
+    refetchOnMount: false,
   });
 
-  const isLoading = paymentFetching || paymentLoading;
-  const tableData = paymentResult?.list ?? [];
-  const listTotalRecords = paymentResult?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(listTotalRecords / listPageSize));
-  const pagination = {
-    pageIndex: listCurrentPage - 1,
-    pageSize: listPageSize,
-  };
+  const isLoading = paymentFetching || paymentLoading || isInitialLoad;
+  const tableData = paymentData ?? [];
 
   const columns = useMemo<MRT_ColumnDef<PaymentRow>[]>(
     () => [
@@ -211,8 +291,12 @@ export default function PaymentMaster() {
               <Menu.Dropdown>
                 <Box px={10} py={5}>
                   <UnstyledButton
-                    onClick={() =>
+                    onClick={() =>{
+                      setStoreFilters(LIST_KEY, appliedFilters);
+                      setStoreSearch(LIST_KEY, search);
+                      setShouldRestore(LIST_KEY, true);
                       navigate("/payment/view", { state: row.original })
+                    }
                     }
                   >
                     <Group gap="sm">
@@ -229,9 +313,12 @@ export default function PaymentMaster() {
                 {isUnposted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
-                        navigate("/payment/edit", { state: row.original })
-                      }
+                      onClick={() => {
+                        setStoreFilters(LIST_KEY, appliedFilters);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
+                        navigate("/payment/edit", { state: row.original });
+                      }}
                     >
                       <Group gap="sm">
                         <IconEdit size={16} style={{ color: "#105476" }} />
@@ -254,6 +341,9 @@ export default function PaymentMaster() {
                           supporting_documents: _supportingDocuments,
                           ...paymentDataWithoutDocuments
                         } = (row.original as any) ?? {};
+                        setStoreFilters(LIST_KEY, appliedFilters);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
                         navigate("/payment/reversal/create", {
                           state: paymentDataWithoutDocuments,
                         });
@@ -280,7 +370,7 @@ export default function PaymentMaster() {
         },
       },
     ],
-    [index, navigate],
+    [index, navigate, appliedFilters, search, setStoreFilters, setStoreSearch, setShouldRestore],
   );
 
   const table = useMantineReactTable({
@@ -300,7 +390,7 @@ export default function PaymentMaster() {
     },
     layoutMode: "grid",
     manualPagination: true,
-    rowCount: listTotalRecords,
+    rowCount: totalRecords,
     state: {
       pagination,
     },
@@ -411,6 +501,45 @@ export default function PaymentMaster() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
+            <TextInput
+              placeholder="Search..."
+              leftSection={<IconSearch size={16} />}
+              rightSection={
+                search ? (
+                  <ActionIcon variant="transparent" size="sm" onClick={() => setSearch("")} style={{ cursor: "pointer" }}>
+                    <IconX size={16} />
+                  </ActionIcon>
+                ) : null
+              }
+              w={248}
+              size="sm"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              styles={{
+                input: {
+                  borderRadius: "4px", fontSize: "14px", fontFamily: "Inter",
+                  color: "#333740", height: "36px", border: "1px solid #D0D1D4",
+                  "&:focus": { border: "1px solid #105476" },
+                },
+              }}
+            />
+            <ActionIcon
+              variant={showFilters ? "filled" : "outline"}
+              size={36}
+              color={showFilters ? "#E0F5FF" : "gray"}
+              onClick={() => setShowFilters(!showFilters)}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                  border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  "&:active": { border: "1px solid #105476", color: "#FFFFFF" },
+                },
+              }}
+            >
+              <IconFilter size={18} />
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               size="sm"
@@ -427,13 +556,99 @@ export default function PaymentMaster() {
                   },
                 },
               }}
-              onClick={() => navigate("/payment/create")}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/payment/create");
+              }}
             >
               Create New
             </Button>
           </Group>
         </Group>
       </Box>
+
+      {showFilters && (
+        <Box tt="capitalize" mb="sm" p="sm" style={{ borderRadius: "8px", border: "1px solid #E0E0E0", flexShrink: 0, height: "fit-content" }}>
+          <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#FAFAFA", padding: "4px 8px" }}>
+            <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>Filter</Text>
+            <ActionIcon variant="subtle" color="gray" onClick={() => setShowFilters(false)} aria-label="Close filters" size="sm">
+              <IconX size={18} />
+            </ActionIcon>
+          </Group>
+
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
+            <Grid.Col span={3}>
+              <SearchableSelect
+                apiEndpoint={URL.daybookGet}
+                label="Day Book"
+                placeholder="Type Day Book"
+                value={draftFilters.day_book_id}
+                displayValue={draftFilters.day_book_name}
+                onChange={(val, selectedData) =>
+                  setDraftFilters((prev) => ({ ...prev, day_book_id: val || "", day_book_name: selectedData?.label || "" }))
+                }
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({ value: String(item.id ?? ""), label: String(item.name ?? "") })}
+                searchFields={["name"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <SearchableSelect
+                apiEndpoint={URL.payment}
+                label="Payment No"
+                placeholder="Type Payment No"
+                value={draftFilters.payment_no}
+                onChange={(val) => setDraftFilters((prev) => ({ ...prev, payment_no: val || "" }))}
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({ value: String(item.payment_no ?? ""), label: String(item.payment_no ?? "") })}
+                searchFields={["payment_no"]}
+                size="xs"
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Dropdown
+                size="xs"
+                label="Type"
+                placeholder="Select Type"
+                data={typeOptions}
+                searchable
+                value={draftFilters.type || null}
+                onChange={(value) => setDraftFilters((prev) => ({ ...prev, type: value || "" }))}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={3}>
+              <Dropdown
+                size="xs"
+                label="Status"
+                placeholder="Select Status"
+                data={statusOptions}
+                searchable
+                value={draftFilters.status || null}
+                onChange={(value) => setDraftFilters((prev) => ({ ...prev, status: value || "" }))}
+              />
+            </Grid.Col>
+          </Grid>
+
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+            <Button size="sm" variant="default" onClick={clearAllFilters} leftSection={<IconX size={16} />}
+              styles={{ root: { borderRadius: "4px", fontSize: "14px", fontFamily: "Inter", fontWeight: 600, height: "36px", border: "1px solid #D0D1D4", color: "#444955" } }}>
+              Clear Filters
+            </Button>
+            <Button size="sm" onClick={applyFilters} loading={isLoading} disabled={isLoading} leftSection={<IconFilter size={16} />}
+              styles={{ root: { backgroundColor: "#105476", borderRadius: "4px", fontSize: "14px", fontFamily: "Inter", fontWeight: 600, height: "36px", "&:hover": { backgroundColor: "#0d4261" } } }}>
+              Apply Filters
+            </Button>
+          </Group>
+        </Box>
+      )}
 
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>
@@ -453,67 +668,14 @@ export default function PaymentMaster() {
       ) : (
         <>
           <MantineReactTable table={table} />
-          <Group
-            w="100%"
-            justify="space-between"
-            align="center"
-            p="xs"
-            wrap="nowrap"
-            pt="sm"
-          >
-            <Group gap="sm" align="center" wrap="nowrap">
-              <Text size="sm" c="dimmed">
-                Rows per page
-              </Text>
-              <Select
-                size="xs"
-                data={["10", "25", "50"]}
-                value={String(listPageSize)}
-                onChange={(val) => {
-                  if (!val) return;
-                  handlePageSizeChange(Number(val));
-                }}
-                w={110}
-                styles={{ input: { fontSize: 12, height: 30 } } as SelectProps["styles"]}
-              />
-              <Text size="sm" c="dimmed">
-                {listTotalRecords === 0
-                  ? "0–0 of 0"
-                  : `${(listCurrentPage - 1) * listPageSize + 1}–${Math.min(
-                      listCurrentPage * listPageSize,
-                      listTotalRecords,
-                    )} of ${listTotalRecords}`}
-              </Text>
-            </Group>
-            <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() =>
-                  handlePageChange(Math.max(1, listCurrentPage - 1))
-                }
-                disabled={listCurrentPage === 1}
-              >
-                <IconChevronLeft size={16} />
-              </ActionIcon>
-              <Text size="sm" ta="center" style={{ width: 26 }}>
-                {listCurrentPage}
-              </Text>
-              <Text size="sm" c="dimmed">
-                of {totalPages}
-              </Text>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() =>
-                  handlePageChange(Math.min(totalPages, listCurrentPage + 1))
-                }
-                disabled={listCurrentPage >= totalPages}
-              >
-                <IconChevronRight size={16} />
-              </ActionIcon>
-            </Group>
-          </Group>
+          <PaginationBar
+            pageSize={pagination.pageSize}
+            currentPage={currentPage}
+            totalRecords={totalRecords}
+            onPageSizeChange={handlePageSizeChange}
+            onPageChange={handlePageChange}
+            pageSizeOptions={["10", "25", "50"]}
+          />
         </>
       )}
     </Card>

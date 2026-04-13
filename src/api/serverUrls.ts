@@ -1,5 +1,6 @@
 export const URL = {
   base: import.meta.env.VITE_API_BASE_URL,
+  globalSearch: "global-search/",
   loginUser: "accounts/login/",
   logoutUser: "accounts/logout/",
   refreshToken: "token/refresh/",
@@ -99,6 +100,7 @@ export const URL = {
   pipeline: "pipeline/",
   pipelineFilter: "pipeline/filter/",
   unitMasterFilter: "unit-master/filter/",
+  daybookGet: "day-book-master/",
   daybook: "filter/day-book-master/",
   quotationDefaultChargesFilter: "quotation-default-charges/filter/",
   conditionalNotes: "conditions/conditional-notes/",
@@ -156,6 +158,8 @@ export const URL = {
   journalVoucherReversalFilter: "filter/reverse_voucher/",
   subledgerEnquiry: "filter/subledger_enquiry/",
   documentAllocation: "filter/document_allocation/",
+  outstandingAllocations: "outstanding-details/allocations/",
+  outstandingAllocationDocuments: "outstanding-details/allocation-documents/",
 
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",
