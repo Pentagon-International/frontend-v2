@@ -1,7 +1,8 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
+  MRT_PaginationState,
   useMantineReactTable,
 } from "mantine-react-table";
 import {
@@ -12,38 +13,40 @@ import {
   Center,
   Stack,
   Grid,
-  Select,
   Menu,
   ActionIcon,
   Box,
   UnstyledButton,
   TextInput,
+  Loader,
 } from "@mantine/core";
 import {
-  IconCalendar,
-  IconChevronLeft,
-  IconChevronRight,
   IconFilter,
-  IconFilterOff,
   IconPlus,
   IconDotsVertical,
   IconEdit,
   IconEye,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useForm } from "@mantine/form";
 import {
   SearchableSelect,
-  ToastNotification,
   Dropdown,
   SingleDateInput,
 } from "../../../components";
-import { DateInput } from "@mantine/dates";
 import { URL } from "../../../api/serverUrls";
 import dayjs from "dayjs";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useDebouncedValue } from "@mantine/hooks";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { useListFilterStore } from "../../../store/listFilterStore";
+import FormTextInput from "../../../components/FormTextInput";
+
+const LIST_KEY = "OCEAN_JOB_GENERATION_MASTER";
 
 // Type definitions based on API response
 type OceanJobData = {
@@ -70,12 +73,14 @@ type OceanJobData = {
     customer_seal_no: string;
     actual_seal_no: string;
   }>;
-  shipment_details: Array<any>;
+  shipment_details: Array<unknown>;
 };
 
 type FilterState = {
   origin: string | null;
+  origin_name: string | null;
   destination: string | null;
+  destination_name: string | null;
   service: string | null;
   schedule: string | null;
   vessel: string | null;
@@ -90,7 +95,7 @@ function OceanJobGenerationMaster() {
   const location = useLocation();
 
   // Detect service type from URL immediately
-  const getServiceTypeFromUrl = () => {
+  const getServiceTypeFromUrl = useCallback(() => {
     const pathname = location.pathname.toLowerCase();
     if (pathname.includes("lcl-job-generation")) {
       return "LCL";
@@ -98,18 +103,40 @@ function OceanJobGenerationMaster() {
       return "FCL";
     }
     return null;
-  };
+  }, [location.pathname]);
 
   const dateFormat = useDateFormat();
 
   // States
   const [showFilters, setShowFilters] = useState(false);
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [appliedFilterPayload, setAppliedFilterPayload] = useState<Record<string, unknown>>({
+    service: getServiceTypeFromUrl(),
+  });
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
 
   // Filter form - Initialize with service type from URL
   const filterForm = useForm<FilterState>({
     initialValues: {
       origin: null,
+      origin_name: null,
       destination: null,
+      destination_name: null,
       service: getServiceTypeFromUrl(),
       schedule: null,
       vessel: null,
@@ -122,12 +149,13 @@ function OceanJobGenerationMaster() {
 
   // Build filter payload
   const buildFilterPayload = useMemo(() => {
-    const payload: any = {};
-    if (filterForm.values.service) payload.service = filterForm.values.service;
+    const payload: Record<string, unknown> = {};
+    const urlServiceType = getServiceTypeFromUrl();
+    if (urlServiceType) payload.service = urlServiceType;
     if (filterForm.values.origin)
-      payload.origin_code_read = filterForm.values.origin;
+      payload.origin_code = filterForm.values.origin;
     if (filterForm.values.destination)
-      payload.destination_code_read = filterForm.values.destination;
+      payload.destination_code = filterForm.values.destination;
     if (filterForm.values.schedule)
       payload.schedule = filterForm.values.schedule;
     if (filterForm.values.vessel) payload.vessel = filterForm.values.vessel;
@@ -141,7 +169,7 @@ function OceanJobGenerationMaster() {
     if (filterForm.values.etd)
       payload.etd = dayjs(filterForm.values.etd).format("YYYY-MM-DD");
     return payload;
-  }, [filterForm.values]);
+  }, [filterForm.values, getServiceTypeFromUrl]);
 
   // Update service filter when URL changes
   useEffect(() => {
@@ -149,116 +177,158 @@ function OceanJobGenerationMaster() {
     if (serviceType && filterForm.values.service !== serviceType) {
       filterForm.setFieldValue("service", serviceType);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
+  }, [filterForm, getServiceTypeFromUrl]);
 
-  // Fetch bookings from API - Only run when service filter is set
-  const {
-    data: bookingData,
-    isLoading,
-    isFetching,
-    refetch,
-  } = useQuery({
-    queryKey: ["bookings", buildFilterPayload],
-    queryFn: async () => {
-      try {
-        const requestBody = { filters: buildFilterPayload };
-        const response = await apiCallProtected.post(
-          URL.bookingFilter,
-          requestBody
-        );
-        const data = response as any;
-        if (data?.success && Array.isArray(data?.data)) {
-          return data.data;
-        }
-        return [];
-      } catch (error) {
-        console.error("Error fetching bookings:", error);
-        return [];
-      }
-    },
-    enabled: !!filterForm.values.service, // Only run when service is set
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  // Check for refresh from create/edit page
   useEffect(() => {
-    if (location.state?.refreshData) {
-      // Clear state first to prevent multiple refetches
-      navigate(location.pathname, { replace: true, state: {} });
-      // Then refetch - this will show loading state via isFetching
-      refetch();
-    }
-  }, [location.state?.refreshData, location.pathname, navigate, refetch]);
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
 
-  // Display data
-  const displayData = useMemo(() => {
-    return bookingData || [];
-  }, [bookingData]);
-
-  const applyFilters = () => {
-    const formValues = filterForm.values;
-    const hasFilterValues =
-      formValues.origin ||
-      formValues.destination ||
-      formValues.service ||
-      formValues.schedule ||
-      formValues.vessel ||
-      formValues.voyage ||
-      formValues.cut_off_date ||
-      formValues.eta ||
-      formValues.etd;
-
-    if (!hasFilterValues) {
-      ToastNotification({
-        type: "info",
-        message: "No filters selected, showing all data",
-      });
+    if (!shouldRestore) {
+      setIsRestoring(false);
       return;
     }
 
-    refetch();
-    ToastNotification({
-      type: "success",
-      message: "Filters applied successfully",
+    if (typeof stored?.search === "string") setSearch(stored.search);
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const f = stored.filters as Record<string, unknown>;
+      const payloadOnly: Record<string, unknown> = { ...f };
+      delete payloadOnly.origin_name;
+      delete payloadOnly.destination_name;
+      filterForm.setValues({
+        origin: (f.origin_code as string) || (f.origin_code_read as string) || null,
+        origin_name: (f.origin_name as string) || null,
+        destination:
+          (f.destination_code as string) ||
+          (f.destination_code_read as string) ||
+          null,
+        destination_name: (f.destination_name as string) || null,
+        service: (f.service as string) || getServiceTypeFromUrl(),
+        schedule: (f.schedule as string) || null,
+        vessel: (f.vessel as string) || null,
+        voyage: (f.voyage as string) || null,
+        cut_off_date: f.cut_off_date ? new Date(f.cut_off_date as string) : null,
+        eta: f.eta ? new Date(f.eta as string) : null,
+        etd: f.etd ? new Date(f.etd as string) : null,
+      });
+      setAppliedFilterPayload(payloadOnly);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key, clearAllExcept, filterForm, getServiceTypeFromUrl, getState, setShouldRestore]);
+
+  const currentPage = pagination.pageIndex + 1;
+  const index = pagination.pageIndex * pagination.pageSize;
+
+  const handlePageSizeChange = (newPageSize: number) =>
+    setPagination({ pageIndex: 0, pageSize: newPageSize });
+  const handlePageChange = (newPage: number) =>
+    setPagination((prev) => ({ ...prev, pageIndex: newPage - 1 }));
+
+  const {
+    data: bookingData,
+    isLoading: bookingLoading,
+    isFetching: bookingFetching,
+    error: bookingError,
+  } = useQuery({
+    queryKey: [
+      "ocean-job-bookings",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(appliedFilterPayload),
+      debouncedSearch,
+    ],
+    queryFn: async (): Promise<OceanJobData[]> => {
+      try {
+        const filtersWithSearch: Record<string, unknown> = { ...appliedFilterPayload };
+        if (debouncedSearch?.trim()) filtersWithSearch.search = debouncedSearch.trim();
+
+        const payload =
+          Object.keys(filtersWithSearch).length > 0
+            ? { filters: filtersWithSearch }
+            : { filters: { service: getServiceTypeFromUrl() } };
+
+        setIsInitialLoad(false);
+
+        const response = await apiCallProtected.post(
+          `${URL.bookingFilter}?index=${index}&limit=${pagination.pageSize}`,
+          payload,
+        );
+        const data = response as {
+          total?: number;
+          data?: OceanJobData[] | { data?: OceanJobData[]; total?: number };
+        };
+
+        const nestedData =
+          data?.data && !Array.isArray(data.data)
+            ? (data.data as { data?: OceanJobData[]; total?: number })
+            : undefined;
+        const list: OceanJobData[] = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(nestedData?.data)
+            ? nestedData.data
+            : [];
+
+        const total = data?.total ?? nestedData?.total ?? list.length;
+        setTotalRecords(Number(total));
+        return list;
+      } catch (error) {
+        console.error("Error fetching ocean job list:", error);
+        setTotalRecords(0);
+        return [];
+      }
+    },
+    enabled: !isRestoring && search === debouncedSearch,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  const isLoading = bookingLoading || bookingFetching || isInitialLoad;
+
+  // Display data
+  const displayData = useMemo(() => {
+    return (bookingData || []).map((row, i) => ({
+      ...row,
+      sno: index + i + 1,
+    }));
+  }, [bookingData, index]);
+
+  const applyFilters = () => {
+    const payload = buildFilterPayload;
+    setAppliedFilterPayload(payload);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, {
+      ...payload,
+      origin_name: filterForm.values.origin_name || "",
+      destination_name: filterForm.values.destination_name || "",
     });
+    setStoreSearch(LIST_KEY, search);
     setShowFilters(false);
   };
 
   const clearAllFilters = () => {
-    const formValues = filterForm.values;
-    const hasFilterValues =
-      formValues.origin ||
-      formValues.destination ||
-      formValues.service ||
-      formValues.schedule ||
-      formValues.vessel ||
-      formValues.voyage ||
-      formValues.cut_off_date ||
-      formValues.eta ||
-      formValues.etd;
-
-    if (!hasFilterValues) {
-      ToastNotification({
-        type: "info",
-        message: "No filters to clear",
-      });
-      return;
-    }
-
     filterForm.reset();
-    // Reset service to URL-based default
     filterForm.setFieldValue("service", getServiceTypeFromUrl());
+    const defaultPayload = { service: getServiceTypeFromUrl() };
+    setAppliedFilterPayload(defaultPayload as Record<string, unknown>);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
+    setSearch("");
     setShowFilters(false);
-    refetch();
-    ToastNotification({
-      type: "success",
-      message: "All filters cleared successfully",
-    });
   };
 
-  const handleEdit = (job: OceanJobData) => {
+  const handleEdit = useCallback((job: OceanJobData) => {
+    setStoreFilters(LIST_KEY, {
+      ...appliedFilterPayload,
+      origin_name: filterForm.values.origin_name || "",
+      destination_name: filterForm.values.destination_name || "",
+    });
+    setStoreSearch(LIST_KEY, search);
+    setShouldRestore(LIST_KEY, true);
     const pathname = location.pathname.toLowerCase();
     if (pathname.includes("lcl-job-generation")) {
       navigate("/SeaExport/lcl-job-generation/edit", {
@@ -269,9 +339,16 @@ function OceanJobGenerationMaster() {
         state: { job, mode: "edit" },
       });
     }
-  };
+  }, [appliedFilterPayload, filterForm.values.destination_name, filterForm.values.origin_name, location.pathname, navigate, search, setShouldRestore, setStoreFilters, setStoreSearch]);
 
-  const handleView = (job: OceanJobData) => {
+  const handleView = useCallback((job: OceanJobData) => {
+    setStoreFilters(LIST_KEY, {
+      ...appliedFilterPayload,
+      origin_name: filterForm.values.origin_name || "",
+      destination_name: filterForm.values.destination_name || "",
+    });
+    setStoreSearch(LIST_KEY, search);
+    setShouldRestore(LIST_KEY, true);
     const pathname = location.pathname.toLowerCase();
     if (pathname.includes("lcl-job-generation")) {
       navigate("/SeaExport/lcl-job-generation/view", {
@@ -282,7 +359,7 @@ function OceanJobGenerationMaster() {
         state: { job, mode: "view" },
       });
     }
-  };
+  }, [appliedFilterPayload, filterForm.values.destination_name, filterForm.values.origin_name, location.pathname, navigate, search, setShouldRestore, setStoreFilters, setStoreSearch]);
 
   const columns = useMemo<MRT_ColumnDef<OceanJobData>[]>(
     () => [
@@ -391,14 +468,15 @@ function OceanJobGenerationMaster() {
         ),
       },
     ],
-    []
+    [dateFormat, handleEdit, handleView]
   );
 
   const table = useMantineReactTable({
     columns,
     data: displayData,
     state: {
-      isLoading: isLoading || isFetching, // Show loading during initial load and refetch
+      pagination,
+      isLoading,
     },
     enableColumnFilters: false,
     enablePagination: true,
@@ -408,6 +486,9 @@ function OceanJobGenerationMaster() {
     enableBottomToolbar: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
+    manualPagination: true,
+    rowCount: totalRecords,
+    onPaginationChange: setPagination,
     initialState: {
       pagination: { pageSize: 25, pageIndex: 0 },
       columnPinning: { right: ["actions"] },
@@ -424,6 +505,14 @@ function OceanJobGenerationMaster() {
       shadow: "sm",
       p: "md",
       radius: "md",
+      style: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        maxHeight: "1536px",
+        overflow: "auto",
+      },
     },
     mantineTableBodyCellProps: ({ column }) => {
       let extraStyles = {};
@@ -433,12 +522,17 @@ function OceanJobGenerationMaster() {
           right: 0,
           minWidth: "30px",
           zIndex: 2,
+          borderLeft: "1px solid #F3F3F3",
+          boxShadow: "1px -2px 4px 0px #00000040",
         };
       }
       return {
         style: {
-          padding: "8px 12px",
-          fontSize: "13px",
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          color: "#333740",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -450,31 +544,34 @@ function OceanJobGenerationMaster() {
         extraStyles = {
           position: "sticky",
           right: 0,
-          minWidth: "30px",
+          minWidth: "80px",
           zIndex: 2,
+          backgroundColor: "#FBFBFB",
+          boxShadow: "0px -2px 4px 0px #00000040",
         };
       }
       return {
         style: {
-          padding: "6px 12px",
-          fontSize: "12px",
-          backgroundColor: "#ffffff",
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: "14px",
+          fontFamily: "Inter",
+          color: "#444955",
+          backgroundColor: "#FBFBFB",
           top: 0,
-          zIndex: column.id === "actions" ? 4 : 3,
-          borderBottom: "1px solid #e9ecef",
+          zIndex: 3,
+          borderBottom: "1px solid #F3F3F3",
           ...extraStyles,
         },
       };
     },
     mantineTableContainerProps: {
       style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
         position: "relative",
+        overflow: "auto",
       },
     },
     renderEmptyRowsFallback: () => (
@@ -493,28 +590,113 @@ function OceanJobGenerationMaster() {
   });
 
   return (
-    <Card shadow="sm" padding="lg" radius="md" withBorder>
-      <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-        <Text size="md" fw={600} c="#105476">
+    <Card
+      shadow="sm"
+      pt="md"
+      pb="sm"
+      px="md"
+      radius="md"
+      withBorder
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        flex: 1,
+      }}
+    >
+      <Box>
+      <Group justify="space-between" align="center" pb="sm">
+        <Text
+          size="md"
+          fw={600}
+          c="#444955"
+          style={{ fontFamily: "Inter", fontSize: "16px" }}
+        >
           Ocean Job List
         </Text>
 
-        <Group gap="sm" wrap="nowrap">
-          <Button
+        <Group gap="xs" wrap="nowrap">
+          <TextInput
+            placeholder="Search..."
+            leftSection={<IconSearch size={16} />}
+            rightSection={
+              search ? (
+                <ActionIcon
+                  variant="transparent"
+                  size="sm"
+                  onClick={() => setSearch("")}
+                  style={{ cursor: "pointer" }}
+                >
+                  <IconX size={16} />
+                </ActionIcon>
+              ) : null
+            }
+            w={248}
+            size="sm"
+            value={search}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+            styles={{
+              input: {
+                borderRadius: "4px",
+                fontSize: "14px",
+                fontFamily: "Inter",
+                color: "#333740",
+                minWidth: "24px",
+                minHeight: "24px",
+                width: "248px",
+                height: "36px",
+                border: "1px solid #D0D1D4",
+                "&:focus": { border: "1px solid #105476" },
+              },
+            }}
+          />
+          <ActionIcon
             variant={showFilters ? "filled" : "outline"}
-            leftSection={<IconFilter size={16} />}
-            size="xs"
-            color="#105476"
+            size={36}
+            color={showFilters ? "#E0F5FF" : "gray"}
             onClick={() => setShowFilters(!showFilters)}
+            styles={{
+              root: {
+                borderRadius: "4px",
+                backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                color: showFilters ? "#105476" : "#737780",
+                "&:active": {
+                  border: "1px solid #105476",
+                  color: "#FFFFFF",
+                },
+              },
+            }}
           >
-            Filters
-          </Button>
+            <IconFilter size={18} />
+          </ActionIcon>
           <Button
             variant="filled"
             leftSection={<IconPlus size={14} />}
-            size="xs"
+            size="sm"
             color="#105476"
+            styles={{
+              root: {
+                backgroundColor: "#105476",
+                borderRadius: "4px",
+                color: "#FFFFFF",
+                fontSize: "14px",
+                fontFamily: "Inter",
+                fontstyle: "semibold",
+                "&:hover": {
+                  backgroundColor: "#105476",
+                },
+              },
+            }}
             onClick={() => {
+              setStoreFilters(LIST_KEY, {
+                ...appliedFilterPayload,
+                origin_name: filterForm.values.origin_name || "",
+                destination_name: filterForm.values.destination_name || "",
+              });
+              setStoreSearch(LIST_KEY, search);
+              setShouldRestore(LIST_KEY, true);
               const pathname = location.pathname.toLowerCase();
               let serviceType = "FCL"; // Default
               let createPath = "/SeaExport/fcl-job-generation/create";
@@ -529,28 +711,71 @@ function OceanJobGenerationMaster() {
           </Button>
         </Group>
       </Group>
+      </Box>
 
       {showFilters && (
-        <Card
-          shadow="xs"
-          padding="md"
-          radius="md"
-          withBorder
+        <Box
+          tt="capitalize"
           mb="md"
-          bg="#f8f9fa"
+          p="sm"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+            flexShrink: 0,
+            height: "fit-content",
+          }}
         >
-          <Group justify="space-between" align="center">
-            <Group align="center" gap="xs">
-              <IconFilter size={16} color="#105476" />
-              <Text size="sm" fw={500} c="#105476">
-                Filters
-              </Text>
-            </Group>
+          <Group
+            justify="space-between"
+            align="center"
+            mb="sm"
+            px="md"
+            style={{
+              backgroundColor: "#FAFAFA",
+              padding: "4px 8px",
+            }}
+          >
+            <Text
+              size="sm"
+              fw={600}
+              c="#000000"
+              style={{ fontFamily: "Inter", fontSize: "14px" }}
+            >
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
           </Group>
 
-          <Grid>
-            <Grid.Col span={12}>
-              <Grid>
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
+
+                {/* Vessel Filter */}
+                <Grid.Col span={2.4}>
+                  <FormTextInput
+                    size="xs"
+                    label="Vessel"
+                    placeholder="Enter vessel name"
+                    {...filterForm.getInputProps("vessel")}
+                  />
+                </Grid.Col>
+
+                {/* Voyage Filter */}
+                <Grid.Col span={2.4}>
+                  <FormTextInput
+                    size="xs"
+                    label="Voyage"
+                    placeholder="Enter voyage number"
+                    {...filterForm.getInputProps("voyage")}
+                  />
+                </Grid.Col>
+
                 {/* Origin Filter */}
                 <Grid.Col span={2.4}>
                   <SearchableSelect
@@ -558,15 +783,21 @@ function OceanJobGenerationMaster() {
                     label="Origin"
                     placeholder="Type origin code or name"
                     apiEndpoint={URL.portMaster}
+                    dropdownZIndex={1000}
                     searchFields={["port_code", "port_name"]}
+                    additionalParams={{
+                      transport_mode: "SEA"
+                    }}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.port_code),
                       label: `${item.port_name} (${item.port_code})`,
                     })}
                     value={filterForm.values.origin}
-                    onChange={(value) =>
-                      filterForm.setFieldValue("origin", value || null)
-                    }
+                    displayValue={filterForm.values.origin_name}
+                    onChange={(value, selectedData) => {
+                      filterForm.setFieldValue("origin", value || null);
+                      filterForm.setFieldValue("origin_name", selectedData?.label || null);
+                    }}
                     minSearchLength={3}
                   />
                 </Grid.Col>
@@ -578,42 +809,25 @@ function OceanJobGenerationMaster() {
                     label="Destination"
                     placeholder="Type destination code or name"
                     apiEndpoint={URL.portMaster}
+                    dropdownZIndex={1000}
                     searchFields={["port_code", "port_name"]}
+                    additionalParams={{
+                      transport_mode: "SEA"
+                    }}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.port_code),
                       label: `${item.port_name} (${item.port_code})`,
                     })}
                     value={filterForm.values.destination}
-                    onChange={(value) =>
-                      filterForm.setFieldValue("destination", value || null)
-                    }
-                    minSearchLength={3}
-                  />
-                </Grid.Col>
-
-                {/* Service Filter */}
-                <Grid.Col span={2.4}>
-                  <Select
-                    key={`service-${filterForm.values.service}`}
-                    label="Service"
-                    placeholder="Select Service"
-                    searchable
-                    clearable
-                    size="xs"
-                    data={[
-                      { value: "FCL", label: "FCL" },
-                      { value: "LCL", label: "LCL" },
-                    ]}
-                    nothingFoundMessage="No services found"
-                    {...filterForm.getInputProps("service")}
-                    styles={{
-                      input: { fontSize: "12px" },
-                      label: {
-                        fontSize: "12px",
-                        fontWeight: 500,
-                        color: "#495057",
-                      },
+                    displayValue={filterForm.values.destination_name}
+                    onChange={(value, selectedData) => {
+                      filterForm.setFieldValue("destination", value || null);
+                      filterForm.setFieldValue(
+                        "destination_name",
+                        selectedData?.label || null
+                      );
                     }}
+                    minSearchLength={3}
                   />
                 </Grid.Col>
 
@@ -632,68 +846,6 @@ function OceanJobGenerationMaster() {
                       { value: "Quarterly", label: "Quarterly" },
                     ]}
                     {...filterForm.getInputProps("schedule")}
-                    styles={{
-                      input: { fontSize: "12px" },
-                      label: {
-                        fontSize: "12px",
-                        fontWeight: 500,
-                        color: "#495057",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-
-                {/* Vessel Filter */}
-                <Grid.Col span={2.4}>
-                  <TextInput
-                    size="xs"
-                    label="Vessel"
-                    placeholder="Enter vessel name"
-                    {...filterForm.getInputProps("vessel")}
-                    styles={{
-                      input: { fontSize: "12px" },
-                      label: {
-                        fontSize: "12px",
-                        fontWeight: 500,
-                        color: "#495057",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-
-                {/* Voyage Filter */}
-                <Grid.Col span={2.4}>
-                  <TextInput
-                    size="xs"
-                    label="Voyage"
-                    placeholder="Enter voyage number"
-                    {...filterForm.getInputProps("voyage")}
-                    styles={{
-                      input: { fontSize: "12px" },
-                      label: {
-                        fontSize: "12px",
-                        fontWeight: 500,
-                        color: "#495057",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-
-                {/* Cut Off Date Filter */}
-                <Grid.Col span={2.4}>
-                  <SingleDateInput
-                    key={`cut-off-${filterForm.values.cut_off_date}`}
-                    label="Cut Off Date"
-                    placeholder="YYYY-MM-DD"
-                    size="xs"
-                    {...filterForm.getInputProps("cut_off_date")}
-                    valueFormat="YYYY-MM-DD"
-                    leftSection={<IconCalendar size={14} />}
-                    leftSectionPointerEvents="none"
-                    radius="md"
-                    nextIcon={<IconChevronRight size={16} />}
-                    previousIcon={<IconChevronLeft size={16} />}
-                    clearable
                   />
                 </Grid.Col>
 
@@ -704,14 +856,8 @@ function OceanJobGenerationMaster() {
                     label="ETA"
                     placeholder="YYYY-MM-DD"
                     size="xs"
-                    {...filterForm.getInputProps("eta")}
-                    valueFormat="YYYY-MM-DD"
-                    leftSection={<IconCalendar size={14} />}
-                    leftSectionPointerEvents="none"
-                    radius="md"
-                    nextIcon={<IconChevronRight size={16} />}
-                    previousIcon={<IconChevronLeft size={16} />}
-                    clearable
+                    value={filterForm.values.eta}
+                    onChange={(date) => filterForm.setFieldValue("eta", date)}
                   />
                 </Grid.Col>
 
@@ -722,44 +868,96 @@ function OceanJobGenerationMaster() {
                     label="ETD"
                     placeholder="YYYY-MM-DD"
                     size="xs"
-                    {...filterForm.getInputProps("etd")}
-                    valueFormat="YYYY-MM-DD"
-                    leftSection={<IconCalendar size={14} />}
-                    leftSectionPointerEvents="none"
-                    radius="md"
-                    nextIcon={<IconChevronRight size={16} />}
-                    previousIcon={<IconChevronLeft size={16} />}
-                    clearable
+                    value={filterForm.values.etd}
+                    onChange={(date) => filterForm.setFieldValue("etd", date)}
                   />
                 </Grid.Col>
-              </Grid>
-            </Grid.Col>
+
+                {/* Cut Off Date Filter */}
+                <Grid.Col span={2.4}>
+                  <SingleDateInput
+                    key={`cut-off-${filterForm.values.cut_off_date}`}
+                    label="Cut Off Date"
+                    placeholder="YYYY-MM-DD"
+                    size="xs"
+                    value={filterForm.values.cut_off_date}
+                    onChange={(date) => filterForm.setFieldValue("cut_off_date", date)}
+                  />
+                </Grid.Col>
           </Grid>
 
-          <Group justify="end" mt="sm">
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
             <Button
-              size="xs"
-              variant="outline"
-              color="#105476"
-              leftSection={<IconFilterOff size={14} />}
+              size="sm"
+              variant="default"
+              leftSection={<IconX size={16} />}
               onClick={clearAllFilters}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  color: "#444955",
+                },
+              }}
             >
               Clear Filters
             </Button>
             <Button
-              size="xs"
-              variant="filled"
-              color="#105476"
-              leftSection={<IconFilter size={14} />}
+              size="sm"
+              leftSection={<IconFilter size={16} />}
               onClick={applyFilters}
+              loading={isLoading}
+              disabled={isLoading}
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  "&:hover": {
+                    backgroundColor: "#0d4261",
+                  },
+                },
+              }}
             >
               Apply Filters
             </Button>
           </Group>
-        </Card>
+        </Box>
       )}
 
-      <MantineReactTable table={table} />
+      {isLoading ? (
+        <Center py="xl">
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text c="dimmed">Loading ocean job data...</Text>
+          </Stack>
+        </Center>
+      ) : bookingError ? (
+        <Center py="xl">
+          <Stack align="center" gap="md">
+            <Text c="dimmed">Error loading ocean job data. Please try refreshing the page.</Text>
+          </Stack>
+        </Center>
+      ) : (
+        <>
+          <MantineReactTable table={table} />
+          <PaginationBar
+            pageSize={pagination.pageSize}
+            currentPage={currentPage}
+            totalRecords={totalRecords}
+            onPageSizeChange={handlePageSizeChange}
+            onPageChange={handlePageChange}
+            pageSizeOptions={["10", "25", "50"]}
+          />
+        </>
+      )}
     </Card>
   );
 }

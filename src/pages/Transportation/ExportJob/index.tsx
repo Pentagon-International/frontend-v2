@@ -219,7 +219,6 @@ function ExportJobMaster() {
     const entries: [keyof OceanExportJobFilters, string][] = [
       ["job_id", filters.job_id],
       ["mbl_number", filters.mbl_number],
-      ["origin_agent", filters.origin_agent],
       ["origin_code", filters.origin_code],
       ["destination_code", filters.destination_code],
       ["etd", filters.etd],
@@ -230,6 +229,10 @@ function ExportJobMaster() {
       if (!value?.trim()) return;
       cleaned[key as string] = value.trim();
     });
+
+    if (filters.origin_agent_label?.trim()) {
+      cleaned.agent_name = filters.origin_agent_label.trim();
+    }
 
     if (filters.status?.trim()) {
       cleaned.status = filters.status.trim().toUpperCase();

@@ -3423,7 +3423,7 @@ function QuotationCreate({
 
   // Fetch unit data based on service type
   const fetchUnitData = useCallback(
-    async (serviceType: string) => {
+    async (serviceType: string, serviceId?: number) => {
       setIsLoadingUnitData(true);
       try {
         const payload = {
@@ -3447,58 +3447,33 @@ function QuotationCreate({
           // 2. selectedService?.fcl_details (for edit mode from quotation data)
           // 3. selectedService?.cargo_details (fallback)
           if (serviceType === "FCL") {
-            // Get cargo_details - check multiple sources
-            let cargoDetails: any[] | null = null;
+            // Resolve container details for the currently selected service step.
+            let cargoDetails: any[] = [];
+            const selectedServiceData: any =
+              (serviceId &&
+                actualEnquiryData?.services?.find(
+                  (service: any) => service.id === serviceId,
+                )) ||
+              selectedService;
 
-            // First, try to get from actualEnquiryData.services (create mode from enquiry)
-            if (actualEnquiryData?.services) {
-              const fclServiceFromEnquiry = actualEnquiryData.services.find(
-                (service: any) => service.service === "FCL",
-              );
-              if (
-                fclServiceFromEnquiry?.cargo_details &&
-                Array.isArray(fclServiceFromEnquiry.cargo_details)
-              ) {
-                cargoDetails = fclServiceFromEnquiry.cargo_details;
-              }
+            if (Array.isArray(selectedServiceData?.cargo_details)) {
+              cargoDetails = selectedServiceData.cargo_details;
+            } else if (Array.isArray(selectedServiceData?.fcl_details)) {
+              cargoDetails = selectedServiceData.fcl_details;
             }
 
-            // If not found, try selectedService.fcl_details (edit mode from quotation)
-            if (
-              !cargoDetails &&
-              selectedService?.fcl_details &&
-              Array.isArray(selectedService.fcl_details)
-            ) {
-              cargoDetails = selectedService.fcl_details;
-            }
-
-            // If still not found, try selectedService.cargo_details (fallback)
-            if (
-              !cargoDetails &&
-              selectedService?.cargo_details &&
-              Array.isArray(selectedService.cargo_details)
-            ) {
-              cargoDetails = selectedService.cargo_details;
-            }
-
-            // Get distinct container_type_code from cargo_details
-            const containerTypeCodes: string[] = [];
-            if (cargoDetails && cargoDetails.length > 0) {
-              const codes = [
-                ...new Set(
-                  cargoDetails
-                    .map(
-                      (cargo: any) =>
-                        cargo.container_type_code || cargo.container_type,
-                    )
-                    .filter(
-                      (code: string) =>
-                        code !== null && code !== undefined && code !== "",
-                    ),
-                ),
-              ];
-              containerTypeCodes.push(...codes);
-            }
+            const containerTypeCodes = [
+              ...new Set(
+                cargoDetails
+                  .map((cargo: any) =>
+                    (cargo.container_type_code || cargo.container_type || "")
+                      .toString()
+                      .trim()
+                      .toUpperCase(),
+                  )
+                  .filter(Boolean),
+              ),
+            ];
 
             console.log(
               "Container type codes from enquiry:",
@@ -3510,10 +3485,14 @@ function QuotationCreate({
             // 2. The "shipment" unit (unit_code === "shipment") - usually in ALL but keeping for safety
             // 3. Units where unit_code matches any container_type_code from cargo_details
             filteredData = response.data.filter((item: any) => {
+              const unitCode = (item.unit_code || "")
+                .toString()
+                .trim()
+                .toUpperCase();
               return (
                 item.service_type === "ALL" ||
-                item.unit_code === "shipment" ||
-                containerTypeCodes.includes(item.unit_code)
+                unitCode === "SHIPMENT" ||
+                containerTypeCodes.includes(unitCode)
               );
             });
 
@@ -3543,7 +3522,7 @@ function QuotationCreate({
   // Fetch unit data when selected service changes
   useEffect(() => {
     if (selectedService?.service) {
-      fetchUnitData(selectedService.service);
+      fetchUnitData(selectedService.service, selectedService.id);
     }
   }, [selectedService, fetchUnitData]);
 

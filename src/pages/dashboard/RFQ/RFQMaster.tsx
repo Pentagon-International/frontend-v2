@@ -4,7 +4,6 @@ import {
   Button,
   Group,
   Menu,
-  Pagination,
   Stack,
   Text,
   TextInput,
@@ -30,8 +29,6 @@ import {
   IconX,
   IconTag,
   IconDownload,
-  IconChevronRight,
-  IconChevronLeft,
   IconArrowLeft,
 } from "@tabler/icons-react";
 import {
@@ -51,6 +48,7 @@ import {
   SearchableSelect,
   DateRangeInput,
 } from "../../../components";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
@@ -211,15 +209,6 @@ function RFQMaster() {
   // Detailed view pagination (completely separate)
   const [previewCurrentPage, setPreviewCurrentPage] = useState(1);
   const [previewPageSize, setPreviewPageSize] = useState(25);
-
-  const listPaginationInfo = useMemo(() => {
-    const total = listTotalRecords || 0;
-    const totalPages = Math.max(1, Math.ceil(total / listPageSize || 1));
-    const start = total === 0 ? 0 : (listCurrentPage - 1) * listPageSize + 1;
-    const end =
-      total === 0 ? 0 : Math.min(listCurrentPage * listPageSize, total);
-    return { start, end, total, totalPages };
-  }, [listCurrentPage, listPageSize, listTotalRecords]);
 
   const previewColumnToKeyMap: Record<string, string> = {
     "Enquiry ID": "enquiry_id",
@@ -1106,12 +1095,12 @@ function RFQMaster() {
           // Note: When query is disabled, refetch() might not set isLoading=true,
           // so we rely on isRefreshingData for the loader
           const result = await refetchSummary();
-          if (result.data?.length) {
+          if (result.data?.data?.length) {
             setFiltersApplied(true);
           }
 
           // Check if data was returned successfully
-          if (result.data && Array.isArray(result.data)) {
+          if (result.data?.data && Array.isArray(result.data.data)) {
             // Data is now set in filteredEnquiryData via React Query
             // displayData will automatically update to show filteredEnquiryData
             // Small delay to ensure React Query has updated the data state
@@ -1413,7 +1402,7 @@ function RFQMaster() {
         if (filtersApplied) {
           setIsRefreshingData(true);
           const result = await refetchSummary();
-          if (result.data?.length) {
+          if (result.data?.data?.length) {
             setFiltersApplied(true);
           }
           setIsRefreshingData(false);
@@ -1588,7 +1577,7 @@ function RFQMaster() {
         setIsRefreshingData(true);
         setFiltersApplied(true);
         const result = await refetchSummary();
-        if (result.data && Array.isArray(result.data)) {
+        if (result.data?.data && Array.isArray(result.data.data)) {
           // Data will be set via React Query
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
@@ -1738,7 +1727,7 @@ function RFQMaster() {
       // Call API after a small delay to ensure state is updated
       setTimeout(async () => {
         const result = await refetchSummary();
-        if (result.data?.length) {
+        if (result.data?.data?.length) {
           setFiltersApplied(true);
         }
         setIsRefreshingData(false);
@@ -1902,7 +1891,7 @@ function RFQMaster() {
 
             console.log("✅ [refreshData] Fetching summary data with restored/current state");
             const result = await refetchSummary();
-            if (result.data && Array.isArray(result.data)) {
+            if (result.data?.data && Array.isArray(result.data.data)) {
               await new Promise((resolve) => setTimeout(resolve, 50));
             }
             setIsRefreshingData(false);
@@ -2545,7 +2534,7 @@ function RFQMaster() {
                               filters: { enquiry_id: row.original.enquiry_id },
                             };
                             const response = await apiCallProtected.post(
-                              `${URL.quotationFilter}`,
+                              `${URL.quotationFilter}?index=0&limit=1`,
                               filterPayload,
                             );
                             const data = response as any;
@@ -3749,7 +3738,6 @@ function RFQMaster() {
               <>
                 <MantineReactTable table={previewTable} />
 
-                {/* Preview Pagination - unified design */}
                 <Group
                   w="100%"
                   justify="space-between"
@@ -3760,157 +3748,41 @@ function RFQMaster() {
                   wrap="nowrap"
                   mt="xs"
                 >
-                  {/* Left side: Back to Dashboard Button or Rows per page */}
-                  <Group gap="sm" align="center" wrap="nowrap" mt={10}>
-                    {location.state?.returnToDashboard ||
-                    returnToDashboardRef.current ? (
-                      <Button
-                        leftSection={<IconArrowLeft size={16} />}
-                        onClick={() => {
-                          const dashboardState =
-                            location.state?.dashboardState ||
-                            dashboardStateRef.current;
-                          if (dashboardState) {
-                            // Navigate back to dashboard with state to restore detailed view
-                            navigate("/", {
-                              state: {
-                                returnToEnquiryDetailedView: true,
-                                dashboardState: dashboardState,
-                              },
-                            });
-                          } else {
-                            // Fallback to regular dashboard navigation
-                            navigate("/");
-                          }
-                        }}
-                        variant="outline"
-                        size="sm"
-                        color="#105476"
-                      >
-                        Back to Dashboard
-                      </Button>
-                    ) : (
-                      <>
-                        <Text size="sm" c="dimmed">
-                          Rows per page
-                        </Text>
-                        <Select
-                          size="xs"
-                          data={["10", "25", "50"]}
-                          value={String(previewPageSize)}
-                          onChange={(val) => {
-                            if (!val) return;
-                            handlePreviewPageSizeChange(Number(val));
-                          }}
-                          w={110}
-                          styles={
-                            { input: { fontSize: 12, height: 30 } } as any
-                          }
-                        />
-                        <Text size="sm" c="dimmed">
-                          {(() => {
-                            const total = tablePreviewData?.total || 0;
-                            if (total === 0) return "0–0 of 0";
-                            const start =
-                              (previewCurrentPage - 1) * previewPageSize + 1;
-                            const end = Math.min(
-                              previewCurrentPage * previewPageSize,
-                              total,
-                            );
-                            return `${start}–${end} of ${total}`;
-                          })()}
-                        </Text>
-                      </>
-                    )}
-                  </Group>
-
-                  {/* Right side: Page controls or Rows per page (if button is shown) */}
-                  <Group gap="xs" align="center" wrap="nowrap" mt={10}>
-                    {(location.state?.returnToDashboard ||
-                      returnToDashboardRef.current) && (
-                      <>
-                        <Text size="sm" c="dimmed">
-                          Rows per page
-                        </Text>
-                        <Select
-                          size="xs"
-                          data={["10", "25", "50"]}
-                          value={String(previewPageSize)}
-                          onChange={(val) => {
-                            if (!val) return;
-                            handlePreviewPageSizeChange(Number(val));
-                          }}
-                          w={110}
-                          styles={
-                            { input: { fontSize: 12, height: 30 } } as any
-                          }
-                        />
-                        <Text size="sm" c="dimmed">
-                          {(() => {
-                            const total = tablePreviewData?.total || 0;
-                            if (total === 0) return "0–0 of 0";
-                            const start =
-                              (previewCurrentPage - 1) * previewPageSize + 1;
-                            const end = Math.min(
-                              previewCurrentPage * previewPageSize,
-                              total,
-                            );
-                            return `${start}–${end} of ${total}`;
-                          })()}
-                        </Text>
-                      </>
-                    )}
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={() =>
-                        handlePreviewPageChange(
-                          Math.max(1, previewCurrentPage - 1),
-                        )
-                      }
-                      disabled={previewCurrentPage === 1}
-                    >
-                      <IconChevronLeft size={16} />
-                    </ActionIcon>
-                    <Text size="sm" ta="center" style={{ width: 26 }}>
-                      {previewCurrentPage}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      of{" "}
-                      {Math.max(
-                        1,
-                        Math.ceil(
-                          (tablePreviewData?.total || 0) / previewPageSize,
-                        ),
-                      )}
-                    </Text>
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
+                  {(location.state?.returnToDashboard ||
+                    returnToDashboardRef.current) && (
+                    <Button
+                      leftSection={<IconArrowLeft size={16} />}
                       onClick={() => {
-                        const totalPages = Math.max(
-                          1,
-                          Math.ceil(
-                            (tablePreviewData?.total || 0) / previewPageSize,
-                          ),
-                        );
-                        handlePreviewPageChange(
-                          Math.min(totalPages, previewCurrentPage + 1),
-                        );
+                        const dashboardState =
+                          location.state?.dashboardState ||
+                          dashboardStateRef.current;
+                        if (dashboardState) {
+                          navigate("/", {
+                            state: {
+                              returnToEnquiryDetailedView: true,
+                              dashboardState: dashboardState,
+                            },
+                          });
+                        } else {
+                          navigate("/");
+                        }
                       }}
-                      disabled={(() => {
-                        const totalPages = Math.max(
-                          1,
-                          Math.ceil(
-                            (tablePreviewData?.total || 0) / previewPageSize,
-                          ),
-                        );
-                        return previewCurrentPage >= totalPages;
-                      })()}
+                      variant="outline"
+                      size="sm"
+                      color="#105476"
                     >
-                      <IconChevronRight size={16} />
-                    </ActionIcon>
-                  </Group>
+                      Back to Dashboard
+                    </Button>
+                  )}
+                  <Box style={{ flex: 1, minWidth: 0 }}>
+                    <PaginationBar
+                      pageSize={previewPageSize}
+                      currentPage={previewCurrentPage}
+                      totalRecords={tablePreviewData?.total || 0}
+                      onPageSizeChange={handlePreviewPageSizeChange}
+                      onPageChange={handlePreviewPageChange}
+                    />
+                  </Box>
                 </Group>
               </>
             )}
@@ -3930,7 +3802,6 @@ function RFQMaster() {
               <MantineReactTable table={table} />
             )}
 
-            {/* Custom Pagination Bar */}
             <Group
               w="100%"
               justify="space-between"
@@ -3939,137 +3810,41 @@ function RFQMaster() {
               wrap="nowrap"
               pt="md"
             >
-              {/* Left side: Back to Dashboard Button or Rows per page */}
-              <Group gap="sm" align="center" wrap="nowrap">
-                {location.state?.returnToDashboard ||
-                returnToDashboardRef.current ? (
-                  <Button
-                    leftSection={<IconArrowLeft size={16} />}
-                    onClick={() => {
-                      const dashboardState =
-                        location.state?.dashboardState ||
-                        dashboardStateRef.current;
-                      if (dashboardState) {
-                        // Navigate back to dashboard with state to restore detailed view
-                        navigate("/", {
-                          state: {
-                            returnToEnquiryDetailedView: true,
-                            dashboardState: dashboardState,
-                          },
-                        });
-                      } else {
-                        // Fallback to regular dashboard navigation
-                        navigate("/");
-                      }
-                    }}
-                    variant="outline"
-                    size="sm"
-                    color="#105476"
-                  >
-                    Back to Dashboard
-                  </Button>
-                ) : (
-                  <>
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(listPageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        handlePageSizeChange(Number(val));
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } } as any}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
-                        const total = listTotalRecords || 0;
-                        if (total === 0) return "0–0 of 0";
-                        const start = (listCurrentPage - 1) * listPageSize + 1;
-                        const end = Math.min(
-                          listCurrentPage * listPageSize,
-                          total,
-                        );
-                        return `${start}–${end} of ${total}`;
-                      })()}
-                    </Text>
-                  </>
-                )}
-              </Group>
-
-              {/* Right side: Page controls or Rows per page (if button is shown) */}
-              <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-                {(location.state?.returnToDashboard ||
-                  returnToDashboardRef.current) && (
-                  <>
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(listPageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        handlePageSizeChange(Number(val));
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } } as any}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
-                        const total = listTotalRecords || 0;
-                        if (total === 0) return "0–0 of 0";
-                        const start = (listCurrentPage - 1) * listPageSize + 1;
-                        const end = Math.min(
-                          listCurrentPage * listPageSize,
-                          total,
-                        );
-                        return `${start}–${end} of ${total}`;
-                      })()}
-                    </Text>
-                  </>
-                )}
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() =>
-                    handlePageChange(Math.max(1, listCurrentPage - 1))
-                  }
-                  disabled={listCurrentPage === 1}
-                >
-                  <IconChevronLeft size={16} />
-                </ActionIcon>
-                <Text size="sm" ta="center" style={{ width: 26 }}>
-                  {listCurrentPage}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  of {Math.max(1, Math.ceil(listTotalRecords / listPageSize))}
-                </Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
+              {(location.state?.returnToDashboard ||
+                returnToDashboardRef.current) && (
+                <Button
+                  leftSection={<IconArrowLeft size={16} />}
                   onClick={() => {
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(listTotalRecords / listPageSize),
-                    );
-                    handlePageChange(Math.min(totalPages, listCurrentPage + 1));
+                    const dashboardState =
+                      location.state?.dashboardState ||
+                      dashboardStateRef.current;
+                    if (dashboardState) {
+                      navigate("/", {
+                        state: {
+                          returnToEnquiryDetailedView: true,
+                          dashboardState: dashboardState,
+                        },
+                      });
+                    } else {
+                      navigate("/");
+                    }
                   }}
-                  disabled={(() => {
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(listTotalRecords / listPageSize),
-                    );
-                    return listCurrentPage >= totalPages;
-                  })()}
+                  variant="outline"
+                  size="sm"
+                  color="#105476"
                 >
-                  <IconChevronRight size={16} />
-                </ActionIcon>
-              </Group>
+                  Back to Dashboard
+                </Button>
+              )}
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <PaginationBar
+                  pageSize={listPageSize}
+                  currentPage={listCurrentPage}
+                  totalRecords={listTotalRecords}
+                  onPageSizeChange={handlePageSizeChange}
+                  onPageChange={handlePageChange}
+                />
+              </Box>
             </Group>
           </>
         )}

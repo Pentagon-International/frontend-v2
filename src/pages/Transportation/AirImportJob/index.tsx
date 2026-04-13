@@ -216,7 +216,7 @@ function AirImportJobMaster() {
     const cleaned: Record<string, string> = {};
 
     Object.entries(filters).forEach(([key, value]) => {
-      if (key === "agent_name" || key === "origin_name" || key === "destination_name") {
+      if (key === "agent_code" || key === "origin_name" || key === "destination_name") {
         return;
       }
       if (!value) return;

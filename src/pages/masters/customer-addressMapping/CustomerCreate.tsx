@@ -9,6 +9,7 @@ import {
   Grid,
   Group,
   Select,
+  MultiSelect,
   Stack,
   Tabs,
   Switch,
@@ -123,7 +124,7 @@ type AddressData = {
 
 type CustomerFormData = {
   customer_name: string;
-  customer_type_code: string;
+  customer_type_code: string[];
   term_code: string;
   own_office: string;
   assigned_to: string;
@@ -205,7 +206,10 @@ const customerValidationSchema = yup.object({
     .required("Customer name is required")
     .min(3, "Customer name must be at least 3 characters")
     .max(100, "Customer name must not exceed 100 characters"),
-  customer_type_code: yup.string().required("Customer type is required"),
+  customer_type_code: yup
+    .array()
+    .of(yup.string().required())
+    .min(1, "Customer type is required"),
   term_code: yup.string().required("Credit type is required"),
   own_office: yup
     .string()
@@ -309,6 +313,37 @@ function normalizeTwoDecimalString(value: string): string {
   const n = Number(v);
   if (!isFinite(n)) return v;
   return n.toFixed(2);
+}
+
+function normalizeCustomerTypeCodes(source: {
+  customer_type_code?: string | string[] | null;
+  customer_type?: string | null;
+  customer_types?: Array<{
+    customer_type_code?: string | null;
+    customer_type_name?: string | null;
+  }> | null;
+}): string[] {
+  if (Array.isArray(source.customer_type_code)) {
+    return source.customer_type_code
+      .map((v) => String(v).trim())
+      .filter(Boolean);
+  }
+
+  if (source.customer_type_code) {
+    return [String(source.customer_type_code).trim()].filter(Boolean);
+  }
+
+  if (Array.isArray(source.customer_types) && source.customer_types.length > 0) {
+    return source.customer_types
+      .map((item) => String(item?.customer_type_code ?? "").trim())
+      .filter(Boolean);
+  }
+
+  if (source.customer_type) {
+    return [String(source.customer_type).trim()].filter(Boolean);
+  }
+
+  return [];
 }
 
 const tdsDisplayValidationSchema = yup
@@ -1148,7 +1183,7 @@ function CustomerCreate() {
   const customerForm = useForm<CustomerFormData>({
     initialValues: {
       customer_name: "",
-      customer_type_code: "",
+      customer_type_code: [],
       term_code: "",
       own_office: "",
       assigned_to: "",
@@ -1259,7 +1294,16 @@ function CustomerCreate() {
       if (restoredCustomerData) {
         customerForm.setValues({
           customer_name: restoredCustomerData.customer_name || "",
-          customer_type_code: restoredCustomerData.customer_type_code || "",
+          customer_type_code: normalizeCustomerTypeCodes(
+            restoredCustomerData as {
+              customer_type_code?: string | string[] | null;
+              customer_type?: string | null;
+              customer_types?: Array<{
+                customer_type_code?: string | null;
+                customer_type_name?: string | null;
+              }> | null;
+            },
+          ),
           term_code: restoredCustomerData.term_code || "",
           own_office: restoredCustomerData.own_office || "",
           assigned_to: restoredCustomerData.assigned_to || "",
@@ -1398,6 +1442,10 @@ function CustomerCreate() {
             id: number;
             name?: string;
             customer_type?: string;
+            customer_types?: Array<{
+              customer_type_code?: string;
+              customer_type_name?: string;
+            }>;
             credit_type?: string;
             assigned_to_display?: string;
             tds_type?: string;
@@ -1501,10 +1549,7 @@ function CustomerCreate() {
               fetchedCustomerData.customer_name ||
               fetchedCustomerData.name ||
               "",
-            customer_type_code:
-              fetchedCustomerData.customer_type_code ||
-              fetchedCustomerData.customer_type ||
-              "",
+            customer_type_code: normalizeCustomerTypeCodes(fetchedCustomerData),
             term_code:
               fetchedCustomerData.term_code ||
               fetchedCustomerData.credit_type ||
@@ -1744,8 +1789,16 @@ function CustomerCreate() {
       const customerDataWithNetwork = customerData as typeof customerData & { network_id?: number | null; network_name?: string | null };
       const formData = {
         customer_name: customerData.customer_name || customerData.name || "",
-        customer_type_code:
-          customerData.customer_type_code || customerData.customer_type || "",
+        customer_type_code: normalizeCustomerTypeCodes(
+          customerData as {
+            customer_type_code?: string | string[] | null;
+            customer_type?: string | null;
+            customer_types?: Array<{
+              customer_type_code?: string | null;
+              customer_type_name?: string | null;
+            }> | null;
+          },
+        ),
         term_code: customerData.term_code || customerData.credit_type || "",
         own_office: customerData.own_office ? "true" : "false",
         assigned_to: customerData.assigned_to_display || "",
@@ -2574,7 +2627,7 @@ function CustomerCreate() {
                 </Grid.Col>
 
                 <Grid.Col span={4}>
-                  <Select
+                  <MultiSelect
                     label={isVendorMasterRoute ? "Vendor Type" : "Customer Type"}
                     withAsterisk
                     placeholder={
@@ -2636,13 +2689,16 @@ function CustomerCreate() {
                   />
                 </Grid.Col>
 
-                {(!customerForm.values.customer_type_code ||
-                  customerTypeOptions.find(
-                    (o) =>
-                      o.value === customerForm.values.customer_type_code &&
-                      (o.label?.toLowerCase() === "agent" ||
-                        o.value?.toLowerCase() === "agent"),
-                  ) == null) && (
+                {(!customerForm.values.customer_type_code?.length ||
+                  customerForm.values.customer_type_code.find((value) => {
+                    const option = customerTypeOptions.find(
+                      (o) => o.value === value,
+                    );
+                    return (
+                      option?.label?.toLowerCase() === "agent" ||
+                      value?.toLowerCase() === "agent"
+                    );
+                  }) == null) && (
                   <Grid.Col span={4}>
                     <Dropdown
                       label="Assign To"
