@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -19,25 +19,26 @@ import {
   Badge,
   Modal,
   Tooltip,
+  Select,
 } from "@mantine/core";
 import {
-  IconCalendar,
-  IconChevronLeft,
-  IconChevronRight,
   IconFilter,
   IconPlus,
   IconDotsVertical,
   IconEdit,
   IconX,
+  IconSearch,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { URL } from "../../../api/serverUrls";
-import { searchAPI } from "../../../service/searchApi";
-import { SearchableSelect, SingleDateInput, ToastNotification } from "../../../components";
+import {
+  SearchableSelect,
+  SingleDateInput,
+  ToastNotification,
+} from "../../../components";
+import FormTextInput from "../../../components/FormTextInput";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
-import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
 import { putAPICall } from "../../../service/putApiCall";
@@ -45,11 +46,15 @@ import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useListFilterStore } from "../../../store/listFilterStore";
+
+const LIST_KEY = "OCEAN_EXPORT_BOOKING_MASTER";
 
 // Type definitions
 type ExportShipmentData = {
   id: number;
   shipment_code: string;
+  enquiry_id?: string | null;
   date: string;
   service: string;
   customer_name: string;
@@ -60,6 +65,8 @@ type ExportShipmentData = {
 };
 
 type FilterState = {
+  booking_id: string | null;
+  enquiry_id: string | null;
   customer: string | null;
   service: string | null;
   origin: string | null;
@@ -67,14 +74,35 @@ type FilterState = {
   date: Date | null;
 };
 
+type PersistedListFilters = {
+  booking_id: string | null;
+  enquiry_id: string | null;
+  customer: string | null;
+  service: string | null;
+  origin: string | null;
+  destination: string | null;
+  date: string | null;
+  filtersApplied: boolean;
+  showFilters: boolean;
+  pageIndex: number;
+};
+
 function OceanExportBookingMaster() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
 
-  const dateFormat = useDateFormat();
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const setStoreDisplayValues = useListFilterStore((s) => s.setDisplayValues);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
-  //States
+  const dateFormat = useDateFormat();
+  const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
+
+  const [isRestoring, setIsRestoring] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
 
@@ -82,9 +110,6 @@ function OceanExportBookingMaster() {
   const [pageIndex, setPageIndex] = useState(0); // 0-based index for API
   const [pageSize, setPageSize] = useState(25); // Default page size
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
-
-  // Ref to track if this is the initial mount
-  const isInitialMount = useRef(true);
 
   // Display name states for filter fields
   const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
@@ -117,6 +142,8 @@ function OceanExportBookingMaster() {
   // State to store the actual applied filter values
   const filterForm = useForm<FilterState>({
     initialValues: {
+      booking_id: null,
+      enquiry_id: null,
       customer: null,
       service: null,
       origin: null,
@@ -125,9 +152,8 @@ function OceanExportBookingMaster() {
     },
   });
 
-  // Search states
   const [searchQuery, setSearchQuery] = useState("");
-  const [debounced] = useDebouncedValue(searchQuery, 5000);
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
 
   // Check if we're on the create or edit route
   const isCreateRoute = location.pathname.endsWith("/create");
@@ -138,84 +164,104 @@ function OceanExportBookingMaster() {
   const searchParams = new URLSearchParams(location.search);
   const shouldRefetch = searchParams.get("refetch") === "true";
 
-  // Build filter payload function
+  useEffect(() => {
+    if (shouldRefetch) {
+      queryClient.invalidateQueries({
+        queryKey: ["ocean-export-booking/filter/"],
+      });
+
+      const newSearchParams = new URLSearchParams(location.search);
+      newSearchParams.delete("refetch");
+      const newSearch = newSearchParams.toString();
+      const newPath = newSearch
+        ? `${location.pathname}?${newSearch}`
+        : location.pathname;
+
+      navigate(newPath, { replace: true });
+    }
+  }, [
+    shouldRefetch,
+    queryClient,
+    location.search,
+    location.pathname,
+    navigate,
+  ]);
+
   const buildFilterPayload = () => {
     const values = filterForm.values;
-    const payload: any = {};
-
+    const payload: Record<string, string> = {};
+    if (values.booking_id?.trim())
+      payload.shipment_code = values.booking_id.trim();
+    if (values.enquiry_id?.trim())
+      payload.enquiry_id = values.enquiry_id.trim();
     if (values.customer) payload.customer_code = values.customer;
     if (values.service) payload.service = values.service;
     if (values.origin) payload.origin_code = values.origin;
     if (values.destination) payload.destination_code = values.destination;
     if (values.date) payload.date = dayjs(values.date).format("YYYY-MM-DD");
-
     return payload;
   };
 
-  // Fetch export shipments data using filter endpoint with service=["FCL", "LCL"]
+  const buildBookingRequestFilters = (
+    searchValue: string,
+  ): Record<string, string> => {
+    const extra: Record<string, string> = {};
+    if (filtersApplied) Object.assign(extra, buildFilterPayload());
+    const trimmed = searchValue.trim();
+    if (trimmed) extra.search = trimmed;
+    return extra;
+  };
+
   const {
     data: exportShipmentsResponse,
     isLoading,
+    isFetching,
+    isError,
     refetch: refetchExportShipments,
   } = useQuery({
-    queryKey: ["ocean-export-booking/filter/", pageIndex, pageSize],
+    queryKey: [
+      "ocean-export-booking/filter/",
+      pageIndex,
+      pageSize,
+      filtersApplied,
+      filtersApplied ? JSON.stringify(filterForm.values) : "-",
+      debouncedSearch,
+    ],
+    enabled: !isRestoring && searchQuery === debouncedSearch,
     queryFn: async () => {
       try {
-        // Calculate offset: index should be the number of records to skip
         const offset = pageIndex * pageSize;
-        //console.log("🔄 Fetching ocean export booking data...", {
-        //   pageIndex,
-        //   pageSize,
-        //   offset,
-        // });
-        // Build URL with query parameters
         const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
+        const filtersPayload = buildBookingRequestFilters(debouncedSearch);
         const response = (await apiCallProtected.post(url, {
           filters: {
             service_type: "EXPORT",
             service: ["FCL", "LCL"],
+            ...filtersPayload,
           },
-        })) as any; // Response interceptor returns data directly
-        console.log("📊 Ocean export booking API response:", response);
+        })) as Record<string, unknown>;
 
-        // Handle response structure with pagination metadata
         if (response && typeof response === "object") {
-          // Update total records from response
-          if (response.total !== undefined) {
+          if (typeof response.total === "number") {
             setTotalRecords(response.total);
           }
-
-          // Extract data array
-          let data = [];
+          let data: ExportShipmentData[] = [];
           if (Array.isArray(response.data)) {
-            data = response.data;
+            data = response.data as ExportShipmentData[];
           } else if (Array.isArray(response.results)) {
-            data = response.results;
+            data = response.results as ExportShipmentData[];
           } else if (Array.isArray(response.result)) {
-            data = response.result;
-          } else if (Array.isArray(response)) {
-            data = response;
+            data = response.result as ExportShipmentData[];
           }
-
-          console.log(
-            "📦 Processed ocean export booking data:",
-            data,
-            "Length:",
-            data.length,
-            "Total:",
-            response.total,
-          );
-
           return {
             data,
-            total: response.total || 0,
-            count: response.count || data.length,
-            index: response.index || pageIndex,
-            limit: response.limit || pageSize,
-            total_pagination: response.total_pagination || 0,
+            total: (response.total as number) || 0,
+            count: (response.count as number) || data.length,
+            index: (response.index as number) ?? pageIndex,
+            limit: (response.limit as number) ?? pageSize,
+            total_pagination: (response.total_pagination as number) || 0,
           };
         }
-
         return {
           data: [],
           total: 0,
@@ -236,289 +282,152 @@ function OceanExportBookingMaster() {
         };
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 0,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: true, // Enable refetch on mount to load data initially
+    refetchOnMount: true,
   });
 
-  // Extract data and pagination info from response
-  const exportShipmentsData = exportShipmentsResponse?.data || [];
-  const totalRecordsFromAPI = exportShipmentsResponse?.total || 0;
+  const displayData = exportShipmentsResponse?.data ?? [];
 
-  // Sync totalRecords with API response
+  const [isApplyingFilters, setIsApplyingFilters] = useState(false);
+
   useEffect(() => {
-    if (totalRecordsFromAPI > 0 && !filtersApplied) {
-      setTotalRecords(totalRecordsFromAPI);
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
     }
-  }, [totalRecordsFromAPI, filtersApplied]);
-
-  // Separate query for filtered data - only runs when filters are applied
-  const {
-    data: filteredExportShipmentsResponse,
-    isLoading: filteredExportShipmentsLoading,
-    refetch: refetchFilteredExportShipments,
-  } = useQuery({
-    queryKey: [
-      "filteredOceanExportBooking",
-      filterForm.values,
-      pageIndex,
-      pageSize,
-    ],
-    queryFn: async () => {
-      const payload = buildFilterPayload();
-      if (Object.keys(payload).length === 0) {
-        return {
-          data: [],
-          total: 0,
-          count: 0,
-          index: pageIndex,
-          limit: pageSize,
-          total_pagination: 0,
-        };
-      }
-
-      // Calculate offset: index should be the number of records to skip
-      const offset = pageIndex * pageSize;
-      // Build URL with query parameters
-      const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
-      const response = (await apiCallProtected.post(url, {
-        filters: {
-          service_type: "EXPORT",
-          service: ["FCL", "LCL"],
-          ...payload,
-        },
-      })) as any; // Response interceptor returns data directly
-      console.log("📊 Filtered ocean export booking API response:", response);
-
-      // Handle response structure with pagination metadata
-      if (response && typeof response === "object") {
-        // Update total records from response
-        if (response.total !== undefined) {
-          setTotalRecords(response.total);
-        }
-
-        // Extract data array
-        let data = [];
-        if (Array.isArray(response.data)) {
-          data = response.data;
-        } else if (Array.isArray(response.results)) {
-          data = response.results;
-        } else if (Array.isArray(response.result)) {
-          data = response.result;
-        } else if (Array.isArray(response)) {
-          data = response;
-        }
-
-        console.log(
-          "📦 Processed filtered ocean export booking data:",
-          data,
-          "Length:",
-          data.length,
-          "Total:",
-          response.total,
-        );
-
-        return {
-          data,
-          total: response.total || 0,
-          count: response.count || data.length,
-          index: response.index || pageIndex,
-          limit: response.limit || pageSize,
-          total_pagination: response.total_pagination || 0,
-        };
-      }
-
-      return {
-        data: [],
-        total: 0,
-        count: 0,
-        index: pageIndex,
-        limit: pageSize,
-        total_pagination: 0,
-      };
-    },
-    enabled: false,
-  });
-
-  // Extract filtered data
-  const filteredExportShipmentsData =
-    filteredExportShipmentsResponse?.data || [];
-  const totalRecordsFromFilteredAPI =
-    filteredExportShipmentsResponse?.total || 0;
-
-  // Sync totalRecords with API response (for both filtered and unfiltered)
-  useEffect(() => {
-    if (filtersApplied && totalRecordsFromFilteredAPI > 0) {
-      setTotalRecords(totalRecordsFromFilteredAPI);
-    } else if (!filtersApplied && totalRecordsFromAPI > 0) {
-      setTotalRecords(totalRecordsFromAPI);
-    }
-  }, [totalRecordsFromAPI, totalRecordsFromFilteredAPI, filtersApplied]);
-
-  const { data: searchData, isLoading: searchLoading } = useQuery({
-    queryKey: ["oceanExportBookingSearch", debounced],
-    queryFn: async () => {
-      if (!debounced.trim()) return null;
-      try {
-        const result = await searchAPI(debounced, new AbortController().signal);
-        return result;
-      } catch (error) {
-        console.error("Search API Error:", error);
-        return null;
-      }
-    },
-    enabled: debounced.trim() !== "",
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-  });
-
-  // Determine which data to display
-  const displayData = useMemo(() => {
-    let data = [];
-    if (debounced.trim() !== "" && searchData) {
-      data = searchData;
-      console.log("📊 Using search data:", data);
-    } else if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
-      data = filteredExportShipmentsData;
-      console.log("📊 Using filtered data:", data);
-    } else {
-      data = exportShipmentsData;
-      console.log("📊 Using default export shipments data:", data);
-    }
-    console.log("📊 Final displayData:", data, "Length:", data?.length);
-    return Array.isArray(data) ? data : [];
-  }, [
-    debounced,
-    searchData,
-    exportShipmentsData,
-    filteredExportShipmentsData,
-    filtersApplied,
-    filterForm.values, // Use filterForm.values instead of buildFilterPayload function
-  ]);
-
-  // Loading state
-  const isDataLoading =
-    searchLoading ||
-    (filtersApplied ? filteredExportShipmentsLoading : isLoading);
-
-  console.log("🔄 Loading states:", {
-    searchLoading,
-    filteredExportShipmentsLoading,
-    isLoading,
-    filtersApplied,
-    isDataLoading,
-  });
-
-  // Effect to handle refetch when coming from successful form submission
-  useEffect(() => {
-    if (shouldRefetch) {
-      // Refetch the export shipments data
-      queryClient.invalidateQueries({
-        queryKey: ["ocean-export-booking/filter/"],
+    const f = stored.filters as PersistedListFilters | undefined;
+    if (f && typeof f === "object") {
+      filterForm.setValues({
+        booking_id: f.booking_id ?? null,
+        enquiry_id: f.enquiry_id ?? null,
+        customer: f.customer ?? null,
+        service: f.service ?? null,
+        origin: f.origin ?? null,
+        destination: f.destination ?? null,
+        date: f.date ? dayjs(f.date, "YYYY-MM-DD").toDate() : null,
       });
-
-      // Remove the refetch parameter from URL to prevent unnecessary refetches on subsequent visits
-      const newSearchParams = new URLSearchParams(location.search);
-      newSearchParams.delete("refetch");
-      const newSearch = newSearchParams.toString();
-      const newPath = newSearch
-        ? `${location.pathname}?${newSearch}`
-        : location.pathname;
-
-      // Replace the current URL to remove the refetch parameter
-      navigate(newPath, { replace: true });
+      setFiltersApplied(Boolean(f.filtersApplied));
+      setShowFilters(Boolean(f.showFilters));
+      setPageIndex(typeof f.pageIndex === "number" ? f.pageIndex : 0);
     }
+    const dv = stored.displayValues;
+    if (dv) {
+      setCustomerDisplayName(dv.customer ?? null);
+      setOriginDisplayName(dv.origin ?? null);
+      setDestinationDisplayName(dv.destination ?? null);
+    }
+    if (typeof stored.search === "string") {
+      setSearchQuery(stored.search);
+    }
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore runs on navigation key
+  }, [location.key]);
+
+  const persistListAndNavigate = useCallback(() => {
+    const persisted: PersistedListFilters = {
+      booking_id: filterForm.values.booking_id,
+      enquiry_id: filterForm.values.enquiry_id,
+      customer: filterForm.values.customer,
+      service: filterForm.values.service,
+      origin: filterForm.values.origin,
+      destination: filterForm.values.destination,
+      date: filterForm.values.date
+        ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
+        : null,
+      filtersApplied,
+      showFilters,
+      pageIndex,
+    };
+    setStoreFilters(LIST_KEY, persisted);
+    setStoreDisplayValues(LIST_KEY, {
+      customer: customerDisplayName,
+      origin: originDisplayName,
+      destination: destinationDisplayName,
+    });
+    setStoreSearch(LIST_KEY, searchQuery);
+    setShouldRestore(LIST_KEY, true);
+    navigate("./create");
   }, [
-    shouldRefetch,
-    queryClient,
-    location.search,
-    location.pathname,
+    filterForm.values,
+    filtersApplied,
+    showFilters,
+    pageIndex,
+    customerDisplayName,
+    originDisplayName,
+    destinationDisplayName,
+    searchQuery,
     navigate,
+    setStoreFilters,
+    setStoreDisplayValues,
+    setStoreSearch,
+    setShouldRestore,
   ]);
 
-  // Reset filtersApplied when search is cleared
+  const isDataLoading = isRestoring || isLoading;
+
   useEffect(() => {
-    if (debounced.trim() === "" && searchQuery.trim() === "") {
-      setFiltersApplied(false);
+    if (!isApplyingFilters) return;
+    if (isFetching) return;
+
+    setIsApplyingFilters(false);
+
+    if (isError) {
+      ToastNotification({
+        type: "error",
+        message: "Error applying filters",
+      });
+      return;
     }
-  }, [debounced, searchQuery]);
 
-  // Effect to handle refreshData state from navigation
+    ToastNotification({
+      type: "success",
+      message: "Filters applied successfully",
+    });
+  }, [isApplyingFilters, isFetching, isError]);
+
   useEffect(() => {
-    console.log("refresh data----", location.state?.refreshData);
-
     if (location.state?.refreshData) {
-      console.log("🔄 Refreshing data after create/edit operation");
-
-      // Refresh export shipments data
       const refreshData = async () => {
         try {
-          console.log(
-            "🔄 Starting aggressive data refresh for ocean export booking...",
-          );
-
-          // Remove all cached data first
           queryClient.removeQueries({
             queryKey: ["ocean-export-booking/filter/"],
           });
-          queryClient.removeQueries({
-            queryKey: ["filteredOceanExportBooking"],
-          });
-
-          // Wait a moment for cleanup
           await new Promise((resolve) => setTimeout(resolve, 50));
-
-          // Refresh all quotation data
-          if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
-            refetchFilteredExportShipments();
-          } else {
-            refetchExportShipments();
-          }
-
-          // Additional refetch to ensure UI updates
+          await refetchExportShipments();
           setTimeout(async () => {
             await queryClient.refetchQueries({
               queryKey: ["ocean-export-booking/filter/"],
               type: "active",
             });
-            console.log(
-              "✅ Ocean export booking data refresh completed with additional refetch",
-            );
           }, 200);
-
-          console.log("✅ Ocean export booking data refresh completed");
         } catch (error) {
           console.error("Error refreshing ocean export booking data:", error);
         }
       };
-
       refreshData();
-
-      // Clear the refresh flag after starting the refresh process
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [
     location.state,
-    refetchFilteredExportShipments,
     refetchExportShipments,
     navigate,
     location.pathname,
+    queryClient,
   ]);
 
-  // Additional effect to ensure data refresh on component mount
   useEffect(() => {
     const refreshOnMount = async () => {
       try {
-        // Always refetch data when component mounts to ensure fresh data
         await queryClient.refetchQueries({
           queryKey: ["ocean-export-booking/filter/"],
           type: "active",
         });
-        console.log(
-          "🔄 Ocean export booking data refreshed on component mount",
-        );
       } catch (error) {
         console.error(
           "Error refreshing ocean export booking data on mount:",
@@ -526,64 +435,26 @@ function OceanExportBookingMaster() {
         );
       }
     };
-
-    // Small delay to ensure component is fully mounted
     const timeoutId = setTimeout(refreshOnMount, 100);
-
     return () => clearTimeout(timeoutId);
   }, [queryClient]);
 
-  // Pagination handlers
   const handlePageChange = (page: number) => {
-    // PaginationBar uses 1-based page numbers, convert to 0-based index
     const newIndex = page - 1;
     setPageIndex(newIndex);
   };
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
-    setPageIndex(0); // Reset to first page when page size changes
+    setPageIndex(0);
   };
-
-  // Effect to refetch data when pageSize or pageIndex changes
-  useEffect(() => {
-    // Skip on initial mount
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-
-    // When pagination changes, refetch the appropriate query
-    if (filtersApplied) {
-      const hasFilterValues =
-        filterForm.values.customer ||
-        filterForm.values.service ||
-        filterForm.values.origin ||
-        filterForm.values.destination ||
-        filterForm.values.date;
-
-      if (hasFilterValues) {
-        // If filters are applied, manually refetch filtered query (it's disabled by default)
-        refetchFilteredExportShipments();
-      }
-    }
-    // Note: Main query will automatically refetch when pageSize/pageIndex changes
-    // because they're in the queryKey, so we don't need to manually trigger it
-  }, [
-    pageSize,
-    pageIndex,
-    filtersApplied,
-    refetchFilteredExportShipments,
-    filterForm.values,
-  ]);
 
   const applyFilters = async () => {
     try {
-      console.log("Applying filters...");
       const formValues = filterForm.values;
-      console.log("Current filters:", formValues);
-
       const hasFilterValues =
+        (formValues.booking_id && formValues.booking_id.trim() !== "") ||
+        (formValues.enquiry_id && formValues.enquiry_id.trim() !== "") ||
         formValues.customer ||
         formValues.service ||
         formValues.origin ||
@@ -592,8 +463,7 @@ function OceanExportBookingMaster() {
 
       if (!hasFilterValues) {
         setFiltersApplied(false);
-        setPageIndex(0); // Reset pagination
-
+        setPageIndex(0);
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
@@ -601,24 +471,9 @@ function OceanExportBookingMaster() {
         return;
       }
 
-      // ✅ Reset pagination when applying filters
       setPageIndex(0);
-      // ✅ set state first
       setFiltersApplied(true);
-
-      // ✅ Trigger API refetch and wait for it
-      const { data } = await refetchFilteredExportShipments();
-
-      // ✅ Toast only after success
-      ToastNotification({
-        type: "success",
-        message:
-          data?.data && data.data.length > 0
-            ? "Filters applied successfully"
-            : "No matching data found",
-      });
-
-      console.log("Filters applied successfully");
+      setIsApplyingFilters(true);
     } catch (error) {
       ToastNotification({
         type: "error",
@@ -644,15 +499,12 @@ function OceanExportBookingMaster() {
       queryClient.invalidateQueries({
         queryKey: ["ocean-export-booking/filter/"],
       });
-      queryClient.invalidateQueries({
-        queryKey: ["filteredOceanExportBooking"],
-      });
-      if (filtersApplied) refetchFilteredExportShipments();
-      else refetchExportShipments();
-    } catch (err: any) {
+      void refetchExportShipments();
+    } catch (err: unknown) {
       ToastNotification({
         type: "error",
-        message: err?.message || "Failed to cancel booking",
+        message:
+          err instanceof Error ? err.message : "Failed to cancel booking",
       });
     } finally {
       setIsCancelling(false);
@@ -665,6 +517,8 @@ function OceanExportBookingMaster() {
 
       const formValues = filterForm.values;
       const hasFilterValues =
+        (formValues.booking_id && formValues.booking_id.trim() !== "") ||
+        (formValues.enquiry_id && formValues.enquiry_id.trim() !== "") ||
         formValues.customer ||
         formValues.service ||
         formValues.origin ||
@@ -673,32 +527,23 @@ function OceanExportBookingMaster() {
 
       if (!hasFilterValues) {
         setFiltersApplied(false);
-        setPageIndex(0); // Reset pagination
-
+        setPageIndex(0);
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
         });
         return;
       }
-      filterForm.reset(); // Reset form to initial values
-      setFiltersApplied(false); // Reset filters applied state
+      filterForm.reset();
+      setFiltersApplied(false);
       setSearchQuery("");
-      setPageIndex(0); // Reset pagination
-
-      // Clear display names
+      setPageIndex(0);
       setCustomerDisplayName(null);
       setOriginDisplayName(null);
       setDestinationDisplayName(null);
-
-      // Invalidate queries and refetch unfiltered data
       await queryClient.invalidateQueries({
         queryKey: ["ocean-export-booking/filter/"],
       });
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredOceanExportBooking"],
-      });
-      queryClient.removeQueries({ queryKey: ["filteredOceanExportBooking"] }); // Remove filtered data from cache
       ToastNotification({
         type: "success",
         message: "All filters cleared successfully",
@@ -720,7 +565,10 @@ function OceanExportBookingMaster() {
         accessorKey: "enquiry_id",
         header: "Enquiry ID",
         size: 150,
-        Cell: ({ cell }) => cell.getValue() || "-"
+        Cell: ({ cell }) => {
+          const v = cell.getValue<string | null | undefined>();
+          return v != null && String(v) !== "" ? String(v) : "-";
+        },
       },
       {
         accessorKey: "date",
@@ -842,7 +690,7 @@ function OceanExportBookingMaster() {
         },
       },
     ],
-    [navigate],
+    [navigate, dateFormat],
   );
 
   const table = useMantineReactTable({
@@ -987,6 +835,43 @@ function OceanExportBookingMaster() {
               </Text>
 
               <Group gap="xs" wrap="nowrap">
+                <FormTextInput
+                  placeholder="Search..."
+                  leftSection={<IconSearch size={16} />}
+                  rightSection={
+                    searchQuery ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        onClick={() => setSearchQuery("")}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    ) : null
+                  }
+                  w={248}
+                  size="sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                  styles={{
+                    input: {
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      color: "#333740",
+                      minWidth: "24px",
+                      minHeight: "24px",
+                      width: "248px",
+                      height: "36px",
+                      border: "1px solid #D0D1D4",
+                      "&:focus": {
+                        border: "1px solid #105476",
+                      },
+                    },
+                  }}
+                />
+
                 <ActionIcon
                   variant={showFilters ? "filled" : "outline"}
                   size={36}
@@ -1022,7 +907,7 @@ function OceanExportBookingMaster() {
                       },
                     },
                   }}
-                  onClick={() => navigate("./create")}
+                  onClick={persistListAndNavigate}
                 >
                   Create New
                 </Button>
@@ -1071,11 +956,38 @@ function OceanExportBookingMaster() {
               </Group>
 
               <Grid gutter="md" px="md">
-                {/* Customer Name Filter */}
+                <Grid.Col span={2.4}>
+                  <FormTextInput
+                    size="xs"
+                    label="Booking ID"
+                    placeholder="Enter Booking ID"
+                    value={filterForm.values.booking_id ?? ""}
+                    onChange={(e) =>
+                      filterForm.setFieldValue(
+                        "booking_id",
+                        e.currentTarget.value || null,
+                      )
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <FormTextInput
+                    size="xs"
+                    label="Enquiry ID"
+                    placeholder="Enter Enquiry ID"
+                    value={filterForm.values.enquiry_id ?? ""}
+                    onChange={(e) =>
+                      filterForm.setFieldValue(
+                        "enquiry_id",
+                        e.currentTarget.value || null,
+                      )
+                    }
+                  />
+                </Grid.Col>
                 <Grid.Col span={2.4}>
                   <SearchableSelect
                     size="xs"
-                    label="Customer Name"
+                    label="Customer"
                     placeholder="Type customer name"
                     apiEndpoint={URL.allCustomers}
                     searchFields={["customer_name", "customer_code"]}
@@ -1090,28 +1002,35 @@ function OceanExportBookingMaster() {
                       setCustomerDisplayName(selectedData?.label || null);
                     }}
                     minSearchLength={2}
+                    dropdownZIndex={1000}
                   />
                 </Grid.Col>
-
-                {/* Date Filter */}
+                <Grid.Col span={2.4}>
+                  <Select
+                    size="xs"
+                    label="Service"
+                    placeholder="All"
+                    clearable
+                    data={[
+                      { value: "FCL", label: "FCL" },
+                      { value: "LCL", label: "LCL" },
+                    ]}
+                    value={filterForm.values.service ?? null}
+                    onChange={(v) =>
+                      filterForm.setFieldValue("service", v ?? null)
+                    }
+                  />
+                </Grid.Col>
                 <Grid.Col span={2.4}>
                   <SingleDateInput
                     key={`date-${filterForm.values.date}`}
                     label="Date"
                     placeholder="YYYY-MM-DD"
                     size="xs"
-                    {...filterForm.getInputProps("date")}
-                    valueFormat="YYYY-MM-DD"
-                    leftSection={<IconCalendar size={14} />}
-                    leftSectionPointerEvents="none"
-                    radius="md"
-                    nextIcon={<IconChevronRight size={16} />}
-                    previousIcon={<IconChevronLeft size={16} />}
-                    clearable
+                    value={filterForm.values.date}
+                    onChange={(d) => filterForm.setFieldValue("date", d)}
                   />
                 </Grid.Col>
-
-                {/* Origin Filter */}
                 <Grid.Col span={2.4}>
                   <SearchableSelect
                     size="xs"
@@ -1131,10 +1050,10 @@ function OceanExportBookingMaster() {
                     }}
                     minSearchLength={3}
                     className="filter-searchable-select"
+                    additionalParams={seaTransportParams}
+                    dropdownZIndex={1000}
                   />
                 </Grid.Col>
-
-                {/* Destination Filter */}
                 <Grid.Col span={2.4}>
                   <SearchableSelect
                     size="xs"
@@ -1154,6 +1073,8 @@ function OceanExportBookingMaster() {
                     }}
                     minSearchLength={3}
                     className="filter-searchable-select"
+                    additionalParams={seaTransportParams}
+                    dropdownZIndex={1000}
                   />
                 </Grid.Col>
               </Grid>
@@ -1223,10 +1144,7 @@ function OceanExportBookingMaster() {
             </Center>
           ) : (
             <>
-              <MantineReactTable
-                key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
-                table={table}
-              />
+              <MantineReactTable table={table} />
 
               {/* Pagination Bar */}
               <PaginationBar

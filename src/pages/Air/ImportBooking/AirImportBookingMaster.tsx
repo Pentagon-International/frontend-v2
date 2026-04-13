@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -15,46 +15,46 @@ import {
   Loader,
   Stack,
   Grid,
-  Select,
   Menu,
-  UnstyledButton,
   Modal,
-  Divider,
   Badge,
-  Table,
   Tooltip,
+  Select,
 } from "@mantine/core";
 import {
-  IconCalendar,
-  IconChevronLeft,
-  IconChevronRight,
   IconFilter,
   IconPlus,
   IconDotsVertical,
   IconEdit,
   IconX,
-  IconCirclePlus,
+  IconSearch,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { URL } from "../../../api/serverUrls";
-import { SearchableSelect, SingleDateInput } from "../../../components";
-import { DateInput } from "@mantine/dates";
+import {
+  SearchableSelect,
+  SingleDateInput,
+  ToastNotification,
+} from "../../../components";
+import FormTextInput from "../../../components/FormTextInput";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
-import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
-import { ToastNotification } from "../../../components";
 import dayjs from "dayjs";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useDebouncedValue } from "@mantine/hooks";
+import { useListFilterStore } from "../../../store/listFilterStore";
+
+const LIST_KEY = "AIR_IMPORT_BOOKING_MASTER";
 
 // Type definitions
 type ImportShipmentData = {
   id: number;
   shipment_code: string;
+  enquiry_id?: string | null;
   service_type: string;
   import_to_export: boolean;
   reference: string | null;
@@ -125,6 +125,8 @@ type ImportShipmentData = {
 };
 
 type FilterState = {
+  booking_id: string | null;
+  enquiry_id: string | null;
   customer: string | null;
   service: string | null;
   origin: string | null;
@@ -132,14 +134,37 @@ type FilterState = {
   date: Date | null;
 };
 
+type PersistedListFilters = {
+  booking_id: string | null;
+  enquiry_id: string | null;
+  customer: string | null;
+  service: string | null;
+  origin: string | null;
+  destination: string | null;
+  date: string | null;
+  filtersApplied: boolean;
+  showFilters: boolean;
+  pageIndex: number;
+};
+
 function AirImportBookingMaster() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const [showFilters, setShowFilters] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const setStoreDisplayValues = useListFilterStore((s) => s.setDisplayValues);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const dateFormat = useDateFormat();
+  const airTransportParams = useMemo(() => ({ transport_mode: "AIR" }), []);
+
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filtersApplied, setFiltersApplied] = useState(false);
 
   // Pagination states
   const [pageIndex, setPageIndex] = useState(0); // 0-based index for API
@@ -175,6 +200,8 @@ function AirImportBookingMaster() {
 
   const filterForm = useForm<FilterState>({
     initialValues: {
+      booking_id: null,
+      enquiry_id: null,
       customer: null,
       service: null,
       origin: null,
@@ -182,6 +209,9 @@ function AirImportBookingMaster() {
       date: null,
     },
   });
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
 
   // Check if we're on the create or edit route
   const isCreateRoute = location.pathname.endsWith("/create");
@@ -216,6 +246,210 @@ function AirImportBookingMaster() {
     navigate,
   ]);
 
+  const buildFilterPayload = () => {
+    const values = filterForm.values;
+    const payload: Record<string, string> = {};
+    if (values.booking_id?.trim())
+      payload.shipment_code = values.booking_id.trim();
+    if (values.enquiry_id?.trim())
+      payload.enquiry_id = values.enquiry_id.trim();
+    if (values.customer) payload.customer_code = values.customer;
+    if (values.service) payload.service = values.service;
+    if (values.origin) payload.origin_code = values.origin;
+    if (values.destination) payload.destination_code = values.destination;
+    if (values.date) payload.date = dayjs(values.date).format("YYYY-MM-DD");
+    return payload;
+  };
+
+  const buildBookingRequestFilters = (
+    searchValue: string
+  ): Record<string, string> => {
+    const extra: Record<string, string> = {};
+    if (filtersApplied) Object.assign(extra, buildFilterPayload());
+    const trimmed = searchValue.trim();
+    if (trimmed) extra.search = trimmed;
+    return extra;
+  };
+
+  const {
+    data: importShipmentsResponse,
+    isLoading,
+    isFetching,
+    isError,
+    refetch: refetchImportShipments,
+  } = useQuery({
+    queryKey: [
+      "air-import-booking/filter/",
+      pageIndex,
+      pageSize,
+      filtersApplied,
+      filtersApplied ? JSON.stringify(filterForm.values) : "-",
+      debouncedSearch,
+    ],
+    enabled: !isRestoring && searchQuery === debouncedSearch,
+    queryFn: async () => {
+      try {
+        const offset = pageIndex * pageSize;
+        const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
+        const filtersPayload = buildBookingRequestFilters(debouncedSearch);
+        const response = (await apiCallProtected.post(url, {
+          filters: {
+            service_type: "IMPORT",
+            service: "AIR",
+            ...filtersPayload,
+          },
+        })) as Record<string, unknown>;
+
+        if (response && typeof response === "object") {
+          if (typeof response.total === "number") {
+            setTotalRecords(response.total);
+          }
+          let data: ImportShipmentData[] = [];
+          if (Array.isArray(response.data)) {
+            data = response.data as ImportShipmentData[];
+          } else if (Array.isArray(response.results)) {
+            data = response.results as ImportShipmentData[];
+          } else if (Array.isArray(response.result)) {
+            data = response.result as ImportShipmentData[];
+          }
+          return {
+            data,
+            total: (response.total as number) || 0,
+            count: (response.count as number) || data.length,
+            index: (response.index as number) ?? pageIndex,
+            limit: (response.limit as number) ?? pageSize,
+            total_pagination: (response.total_pagination as number) || 0,
+          };
+        }
+        return {
+          data: [],
+          total: 0,
+          count: 0,
+          index: pageIndex,
+          limit: pageSize,
+          total_pagination: 0,
+        };
+      } catch (error) {
+        console.error("❌ Error fetching air import booking:", error);
+        return {
+          data: [],
+          total: 0,
+          count: 0,
+          index: pageIndex,
+          limit: pageSize,
+          total_pagination: 0,
+        };
+      }
+    },
+    staleTime: 0,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+  });
+
+  const displayData = importShipmentsResponse?.data ?? [];
+
+  const [isApplyingFilters, setIsApplyingFilters] = useState(false);
+
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+    const f = stored.filters as PersistedListFilters | undefined;
+    if (f && typeof f === "object") {
+      filterForm.setValues({
+        booking_id: f.booking_id ?? null,
+        enquiry_id: f.enquiry_id ?? null,
+        customer: f.customer ?? null,
+        service: f.service ?? null,
+        origin: f.origin ?? null,
+        destination: f.destination ?? null,
+        date: f.date ? dayjs(f.date, "YYYY-MM-DD").toDate() : null,
+      });
+      setFiltersApplied(Boolean(f.filtersApplied));
+      setShowFilters(Boolean(f.showFilters));
+      setPageIndex(typeof f.pageIndex === "number" ? f.pageIndex : 0);
+    }
+    const dv = stored.displayValues;
+    if (dv) {
+      setCustomerDisplayName(dv.customer ?? null);
+      setOriginDisplayName(dv.origin ?? null);
+      setDestinationDisplayName(dv.destination ?? null);
+    }
+    if (typeof stored.search === "string") {
+      setSearchQuery(stored.search);
+    }
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore runs on navigation key
+  }, [location.key]);
+
+  const persistListAndNavigate = useCallback(() => {
+    const persisted: PersistedListFilters = {
+      booking_id: filterForm.values.booking_id,
+      enquiry_id: filterForm.values.enquiry_id,
+      customer: filterForm.values.customer,
+      service: filterForm.values.service,
+      origin: filterForm.values.origin,
+      destination: filterForm.values.destination,
+      date: filterForm.values.date
+        ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
+        : null,
+      filtersApplied,
+      showFilters,
+      pageIndex,
+    };
+    setStoreFilters(LIST_KEY, persisted);
+    setStoreDisplayValues(LIST_KEY, {
+      customer: customerDisplayName,
+      origin: originDisplayName,
+      destination: destinationDisplayName,
+    });
+    setStoreSearch(LIST_KEY, searchQuery);
+    setShouldRestore(LIST_KEY, true);
+    navigate("./create");
+  }, [
+    filterForm.values,
+    filtersApplied,
+    showFilters,
+    pageIndex,
+    customerDisplayName,
+    originDisplayName,
+    destinationDisplayName,
+    searchQuery,
+    navigate,
+    setStoreFilters,
+    setStoreDisplayValues,
+    setStoreSearch,
+    setShouldRestore,
+  ]);
+
+  const isDataLoading = isRestoring || isLoading;
+
+  useEffect(() => {
+    if (!isApplyingFilters) return;
+    if (isFetching) return;
+
+    setIsApplyingFilters(false);
+
+    if (isError) {
+      ToastNotification({
+        type: "error",
+        message: "Error applying filters",
+      });
+      return;
+    }
+
+    ToastNotification({
+      type: "success",
+      message: "Filters applied successfully",
+    });
+  }, [isApplyingFilters, isFetching, isError]);
+
   // Effect to handle refreshData state from navigation
   useEffect(() => {
     if (location.state?.refreshData) {
@@ -224,37 +458,22 @@ function AirImportBookingMaster() {
           queryClient.removeQueries({
             queryKey: ["air-import-booking/filter/"],
           });
-          queryClient.removeQueries({ queryKey: ["filteredAirImportBooking"] });
-
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          await queryClient.refetchQueries({
-            queryKey: ["air-import-booking/filter/"],
-            type: "active",
-          });
-
-          if (filtersApplied) {
-            await queryClient.refetchQueries({
-              queryKey: ["filteredAirImportBooking"],
-              type: "active",
-            });
-          }
-
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          await refetchImportShipments();
           setTimeout(async () => {
             await queryClient.refetchQueries({
               queryKey: ["air-import-booking/filter/"],
               type: "active",
             });
-          }, 300);
+          }, 200);
         } catch (error) {
-          console.error("Error refreshing data:", error);
+          console.error("Error refreshing air import booking data:", error);
         }
       };
-
       refreshData();
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location.state, queryClient, navigate, filtersApplied]);
+  }, [location.state, refetchImportShipments, navigate, location.pathname, queryClient]);
 
   // Additional effect to ensure data refresh on component mount
   useEffect(() => {
@@ -268,321 +487,42 @@ function AirImportBookingMaster() {
         console.error("Error refreshing data on mount:", error);
       }
     };
-
-    const timeoutId = setTimeout(refreshOnMount, 200);
+    const timeoutId = setTimeout(refreshOnMount, 100);
     return () => clearTimeout(timeoutId);
   }, [queryClient]);
 
-  // Fetch import shipments data with service="AIR"
-  const {
-    data: importShipmentsResponse,
-    isLoading,
-    refetch: refetchImportShipments,
-  } = useQuery({
-    queryKey: ["air-import-booking/filter/", pageIndex, pageSize],
-    queryFn: async () => {
-      try {
-        // Calculate offset: index should be the number of records to skip
-        const offset = pageIndex * pageSize;
-        console.log("🔄 Fetching air import booking data...", {
-          pageIndex,
-          pageSize,
-          offset,
-        });
-        // Build URL with query parameters
-        const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
-        const response = (await apiCallProtected.post(url, {
-          filters: {
-            service_type: "IMPORT",
-            service: "AIR",
-          },
-        })) as any; // Response interceptor returns data directly
-        console.log("📊 Air import booking API response:", response);
-
-        // Handle response structure with pagination metadata
-        if (response && typeof response === "object") {
-          // Update total records from response
-          if (response.total !== undefined) {
-            setTotalRecords(response.total);
-          }
-
-          // Extract data array
-          let data = [];
-          if (Array.isArray(response.data)) {
-            data = response.data;
-          } else if (Array.isArray(response.results)) {
-            data = response.results;
-          } else if (Array.isArray(response.result)) {
-            data = response.result;
-          } else if (Array.isArray(response)) {
-            data = response;
-          }
-
-          console.log(
-            "📦 Processed air import booking data:",
-            data,
-            "Length:",
-            data.length,
-            "Total:",
-            response.total
-          );
-
-          return {
-            data,
-            total: response.total || 0,
-            count: response.count || data.length,
-            index: response.index || offset,
-            limit: response.limit || pageSize,
-            total_pagination: response.total_pagination || 0,
-          };
-        }
-
-        return {
-          data: [],
-          total: 0,
-          count: 0,
-          index: offset,
-          limit: pageSize,
-          total_pagination: 0,
-        };
-      } catch (error) {
-        console.error("❌ Error fetching air import booking:", error);
-        return {
-          data: [],
-          total: 0,
-          count: 0,
-          index: pageIndex * pageSize,
-          limit: pageSize,
-          total_pagination: 0,
-        };
-      }
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
-  });
-
-  // Extract data and pagination info from response
-  const importShipmentsData = importShipmentsResponse?.data || [];
-  const totalRecordsFromAPI = importShipmentsResponse?.total || 0;
-
-  // Sync totalRecords with API response
-  useEffect(() => {
-    if (totalRecordsFromAPI > 0 && !filtersApplied) {
-      setTotalRecords(totalRecordsFromAPI);
-    }
-  }, [totalRecordsFromAPI, filtersApplied]);
-
-  // State to store the actual applied filter values
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>({
-    customer: null,
-    service: null,
-    origin: null,
-    destination: null,
-    date: null,
-  });
-
-  // Separate query for filtered data
-  const {
-    data: filteredImportShipmentsResponse,
-    isLoading: filteredImportShipmentsLoading,
-    refetch: refetchFilteredImportShipments,
-  } = useQuery({
-    queryKey: [
-      "filteredAirImportBooking",
-      filtersApplied,
-      appliedFilters,
-      pageIndex,
-      pageSize,
-    ],
-    queryFn: async () => {
-      try {
-        if (!filtersApplied) {
-          return {
-            data: [],
-            total: 0,
-            count: 0,
-            index: pageIndex * pageSize,
-            limit: pageSize,
-            total_pagination: 0,
-          };
-        }
-
-        const payload: Record<string, string> = {};
-
-        if (appliedFilters.customer)
-          payload.customer_code = appliedFilters.customer;
-        if (appliedFilters.service) payload.service = appliedFilters.service;
-        if (appliedFilters.origin) payload.origin_code = appliedFilters.origin;
-        if (appliedFilters.destination)
-          payload.destination_code = appliedFilters.destination;
-        if (appliedFilters.date)
-          payload.date = dayjs(appliedFilters.date).format("YYYY-MM-DD");
-
-        if (Object.keys(payload)?.length === 0) {
-          return {
-            data: [],
-            total: 0,
-            count: 0,
-            index: pageIndex * pageSize,
-            limit: pageSize,
-            total_pagination: 0,
-          };
-        }
-
-        // Calculate offset: index should be the number of records to skip
-        const offset = pageIndex * pageSize;
-        // Build URL with query parameters
-        const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
-        const response = (await apiCallProtected.post(url, {
-          filters: {
-            service_type: "IMPORT",
-            service: "AIR",
-            ...payload,
-          },
-        })) as any; // Response interceptor returns data directly
-        console.log("📊 Filtered air import booking API response:", response);
-
-        // Handle response structure with pagination metadata
-        if (response && typeof response === "object") {
-          // Update total records from response
-          if (response.total !== undefined) {
-            setTotalRecords(response.total);
-          }
-
-          // Extract data array
-          let data = [];
-          if (Array.isArray(response.data)) {
-            data = response.data;
-          } else if (Array.isArray(response.results)) {
-            data = response.results;
-          } else if (Array.isArray(response.result)) {
-            data = response.result;
-          } else if (Array.isArray(response)) {
-            data = response;
-          }
-
-          console.log(
-            "📦 Processed filtered air import booking data:",
-            data,
-            "Length:",
-            data.length,
-            "Total:",
-            response.total
-          );
-
-          return {
-            data,
-            total: response.total || 0,
-            count: response.count || data.length,
-            index: response.index || offset,
-            limit: response.limit || pageSize,
-            total_pagination: response.total_pagination || 0,
-          };
-        }
-
-        return {
-          data: [],
-          total: 0,
-          count: 0,
-          index: offset,
-          limit: pageSize,
-          total_pagination: 0,
-        };
-      } catch (error) {
-        console.error("❌ Error fetching filtered air import booking:", error);
-        return {
-          data: [],
-          total: 0,
-          count: 0,
-          index: pageIndex * pageSize,
-          limit: pageSize,
-          total_pagination: 0,
-        };
-      }
-    },
-    enabled: false,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-  });
-
-  // Extract filtered data
-  const filteredImportShipmentsData =
-    filteredImportShipmentsResponse?.data || [];
-  const totalRecordsFromFilteredAPI =
-    filteredImportShipmentsResponse?.total || 0;
-
-  // Sync totalRecords with API response (for both filtered and unfiltered)
-  useEffect(() => {
-    if (filtersApplied && totalRecordsFromFilteredAPI > 0) {
-      setTotalRecords(totalRecordsFromFilteredAPI);
-    } else if (!filtersApplied && totalRecordsFromAPI > 0) {
-      setTotalRecords(totalRecordsFromAPI);
-    }
-  }, [totalRecordsFromAPI, totalRecordsFromFilteredAPI, filtersApplied]);
-
-  // Determine which data to display
-  const displayData = useMemo(() => {
-    if (filtersApplied) {
-      return filteredImportShipmentsData;
-    }
-    return importShipmentsData;
-  }, [importShipmentsData, filteredImportShipmentsData, filtersApplied]);
-
-  // Loading state
-  const isDataLoading = useMemo(() => {
-    if (filtersApplied) {
-      return filteredImportShipmentsLoading;
-    }
-    return isLoading;
-  }, [isLoading, filteredImportShipmentsLoading, filtersApplied]);
-
   const applyFilters = async () => {
     try {
+      const formValues = filterForm.values;
       const hasFilterValues =
-        filterForm.values.customer ||
-        filterForm.values.service ||
-        filterForm.values.origin ||
-        filterForm.values.destination ||
-        filterForm.values.date;
+        (formValues.booking_id && formValues.booking_id.trim() !== "") ||
+        (formValues.enquiry_id && formValues.enquiry_id.trim() !== "") ||
+        formValues.customer ||
+        formValues.service ||
+        formValues.origin ||
+        formValues.destination ||
+        formValues.date;
 
       if (!hasFilterValues) {
         setFiltersApplied(false);
-        setAppliedFilters({
-          customer: null,
-          service: null,
-          origin: null,
-          destination: null,
-          date: null,
-        });
-        setPageIndex(0); // Reset pagination
-
-        await queryClient.invalidateQueries({
-          queryKey: ["air-import-booking/filter/"],
+        setPageIndex(0);
+        ToastNotification({
+          type: "info",
+          message: "No filters selected, showing all data",
         });
         return;
       }
 
-      // Reset pagination when applying filters
       setPageIndex(0);
       setFiltersApplied(true);
-      setAppliedFilters({
-        customer: filterForm.values.customer,
-        service: filterForm.values.service,
-        origin: filterForm.values.origin,
-        destination: filterForm.values.destination,
-        date: filterForm.values.date,
-      });
-
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredAirImportBooking"],
-      });
-      setShowFilters(false);
-
-      await refetchFilteredImportShipments();
+      setIsApplyingFilters(true);
     } catch (error) {
+      ToastNotification({
+        type: "error",
+        message: "Error applying filters",
+      });
       console.error("Error applying filters:", error);
+    } finally {
       setShowFilters(false);
     }
   };
@@ -590,36 +530,41 @@ function AirImportBookingMaster() {
   const clearAllFilters = async () => {
     try {
       setShowFilters(false);
+      const formValues = filterForm.values;
+      const hasFilterValues =
+        (formValues.booking_id && formValues.booking_id.trim() !== "") ||
+        (formValues.enquiry_id && formValues.enquiry_id.trim() !== "") ||
+        formValues.customer ||
+        formValues.service ||
+        formValues.origin ||
+        formValues.destination ||
+        formValues.date;
 
+      if (!hasFilterValues) {
+        setFiltersApplied(false);
+        setPageIndex(0);
+        ToastNotification({
+          type: "info",
+          message: "No filters selected, showing all data",
+        });
+        return;
+      }
       filterForm.reset();
       setFiltersApplied(false);
-      setPageIndex(0); // Reset pagination
-
-      setAppliedFilters({
-        customer: null,
-        service: null,
-        origin: null,
-        destination: null,
-        date: null,
-      });
-
-      // Clear display names
+      setSearchQuery("");
+      setPageIndex(0);
       setCustomerDisplayName(null);
       setOriginDisplayName(null);
       setDestinationDisplayName(null);
-
       await queryClient.invalidateQueries({
         queryKey: ["air-import-booking/filter/"],
       });
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredAirImportBooking"],
-      });
-      await queryClient.removeQueries({
-        queryKey: ["filteredAirImportBooking"],
+      ToastNotification({
+        type: "success",
+        message: "All filters cleared successfully",
       });
     } catch (error) {
       console.error("Error clearing filters:", error);
-    } finally {
       setShowFilters(false);
     }
   };
@@ -645,13 +590,11 @@ function AirImportBookingMaster() {
       ToastNotification({ type: "success", message: "Booking cancelled successfully" });
       setCancelConfirmRow(null);
       queryClient.invalidateQueries({ queryKey: ["air-import-booking/filter/"] });
-      queryClient.invalidateQueries({ queryKey: ["filteredAirImportBooking"] });
-      if (filtersApplied) refetchFilteredImportShipments();
-      else refetchImportShipments();
-    } catch (err: any) {
+      void refetchImportShipments();
+    } catch (err: unknown) {
       ToastNotification({
         type: "error",
-        message: err?.message || "Failed to cancel booking",
+        message: err instanceof Error ? err.message : "Failed to cancel booking",
       });
     } finally {
       setIsCancelling(false);
@@ -669,7 +612,10 @@ function AirImportBookingMaster() {
         accessorKey: "enquiry_id",
         header: "Enquiry ID",
         size: 150,
-        Cell: ({ cell }) => cell.getValue() || "-"
+        Cell: ({ cell }) => {
+          const v = cell.getValue<string | null | undefined>();
+          return v != null && String(v) !== "" ? String(v) : "-";
+        },
       },
       {
         accessorKey: "date",
@@ -791,7 +737,7 @@ function AirImportBookingMaster() {
         },
       },
     ],
-    [navigate]
+    [navigate, dateFormat]
   );
 
   const table = useMantineReactTable({
@@ -936,6 +882,43 @@ function AirImportBookingMaster() {
               </Text>
 
               <Group gap="xs" wrap="nowrap">
+                <FormTextInput
+                  placeholder="Search..."
+                  leftSection={<IconSearch size={16} />}
+                  rightSection={
+                    searchQuery ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        onClick={() => setSearchQuery("")}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    ) : null
+                  }
+                  w={248}
+                  size="sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                  styles={{
+                    input: {
+                      borderRadius: "4px",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      color: "#333740",
+                      minWidth: "24px",
+                      minHeight: "24px",
+                      width: "248px",
+                      height: "36px",
+                      border: "1px solid #D0D1D4",
+                      "&:focus": {
+                        border: "1px solid #105476",
+                      },
+                    },
+                  }}
+                />
+
                 <ActionIcon
                   variant={showFilters ? "filled" : "outline"}
                   size={36}
@@ -971,7 +954,7 @@ function AirImportBookingMaster() {
                       },
                     },
                   }}
-                  onClick={() => navigate("./create")}
+                  onClick={persistListAndNavigate}
                 >
                   Create New
                 </Button>
@@ -1020,11 +1003,38 @@ function AirImportBookingMaster() {
               </Group>
 
               <Grid gutter="md" px="md">
-                {/* Customer Name Filter */}
+                <Grid.Col span={2.4}>
+                  <FormTextInput
+                    size="xs"
+                    label="Booking ID"
+                    placeholder="Enter Booking ID"
+                    value={filterForm.values.booking_id ?? ""}
+                    onChange={(e) =>
+                      filterForm.setFieldValue(
+                        "booking_id",
+                        e.currentTarget.value || null
+                      )
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2.4}>
+                  <FormTextInput
+                    size="xs"
+                    label="Enquiry ID"
+                    placeholder="Enter Enquiry ID"
+                    value={filterForm.values.enquiry_id ?? ""}
+                    onChange={(e) =>
+                      filterForm.setFieldValue(
+                        "enquiry_id",
+                        e.currentTarget.value || null
+                      )
+                    }
+                  />
+                </Grid.Col>
                 <Grid.Col span={2.4}>
                   <SearchableSelect
                     size="xs"
-                    label="Customer Name"
+                    label="Customer"
                     placeholder="Type customer name"
                     apiEndpoint={URL.allCustomers}
                     searchFields={["customer_name", "customer_code"]}
@@ -1039,28 +1049,19 @@ function AirImportBookingMaster() {
                       setCustomerDisplayName(selectedData?.label || null);
                     }}
                     minSearchLength={2}
+                    dropdownZIndex={1000}
                   />
                 </Grid.Col>
-
-                {/* Date Filter */}
                 <Grid.Col span={2.4}>
                   <SingleDateInput
                     key={`date-${filterForm.values.date}`}
                     label="Date"
                     placeholder="YYYY-MM-DD"
                     size="xs"
-                    {...filterForm.getInputProps("date")}
-                    valueFormat="YYYY-MM-DD"
-                    leftSection={<IconCalendar size={14} />}
-                    leftSectionPointerEvents="none"
-                    radius="md"
-                    nextIcon={<IconChevronRight size={16} />}
-                    previousIcon={<IconChevronLeft size={16} />}
-                    clearable
+                    value={filterForm.values.date}
+                    onChange={(d) => filterForm.setFieldValue("date", d)}
                   />
                 </Grid.Col>
-
-                {/* Origin Filter */}
                 <Grid.Col span={2.4}>
                   <SearchableSelect
                     size="xs"
@@ -1080,10 +1081,10 @@ function AirImportBookingMaster() {
                     }}
                     minSearchLength={3}
                     className="filter-searchable-select"
+                    additionalParams={airTransportParams}
+                    dropdownZIndex={1000}
                   />
                 </Grid.Col>
-
-                {/* Destination Filter */}
                 <Grid.Col span={2.4}>
                   <SearchableSelect
                     size="xs"
@@ -1103,6 +1104,8 @@ function AirImportBookingMaster() {
                     }}
                     minSearchLength={3}
                     className="filter-searchable-select"
+                    additionalParams={airTransportParams}
+                    dropdownZIndex={1000}
                   />
                 </Grid.Col>
               </Grid>
