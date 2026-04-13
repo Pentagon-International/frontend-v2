@@ -32,8 +32,6 @@ import {
   IconDownload,
   IconFile,
   IconX,
-  IconChevronLeft,
-  IconChevronRight,
   IconFilter,
   IconFilterOff,
   IconSearch,
@@ -41,6 +39,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../api/serverUrls";
 import { ToastNotification } from "../../components";
+import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { API_HEADER } from "../../store/storeKeys";
 import { apiCallProtected } from "../../api/axios";
@@ -127,6 +126,7 @@ type AssignFormValues = {
 
 type FilterState = {
   // customer_code: string | null; // Commented out
+  customer: string | null;
   commodity: string | null;
   city: string | null;
   state: string | null;
@@ -167,6 +167,12 @@ function PotentialCustomers() {
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [citySearchValue, setCitySearchValue] = useState("");
   const [debouncedCitySearch] = useDebouncedValue(citySearchValue, 400);
+  const [customerSearchValue, setCustomerSearchValue] = useState("");
+  const [debouncedCustomerSearch] = useDebouncedValue(customerSearchValue, 400);
+  const [customerOptions, setCustomerOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [customerOptionsLoading, setCustomerOptionsLoading] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
@@ -196,6 +202,7 @@ function PotentialCustomers() {
   const filterForm = useForm<FilterState>({
     initialValues: {
       // customer_code: null, // Commented out
+      customer: null,
       commodity: null,
       city: null,
       state: null,
@@ -246,6 +253,7 @@ function PotentialCustomers() {
       if (restoredFilters && Object.keys(restoredFilters).length > 0) {
         filterForm.setValues(restoredFilters);
         hasFilters = Boolean(
+          restoredFilters.customer ||
           restoredFilters.commodity ||
           restoredFilters.city ||
           restoredFilters.state ||
@@ -303,6 +311,52 @@ function PotentialCustomers() {
     setStoreFilters(LIST_KEY, filtersWithValues);
     setStoreSearch(LIST_KEY, searchQuery);
   }, [filterForm.values, searchQuery, setStoreFilters, setStoreSearch]);
+
+  // Fetch customer options for customer filter (server-side search)
+  useEffect(() => {
+    const term = debouncedCustomerSearch.trim();
+    if (!term) {
+      setCustomerOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    setCustomerOptionsLoading(true);
+    apiCallProtected
+      .post("potential/filter/?index=0&limit=25", {
+        filters: { customer: term },
+      })
+      .then((res: any) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const unique = Array.from(
+          new Set(
+            rows
+              .map((r: any) => String(r?.customer ?? "").trim())
+              .filter(Boolean),
+          ),
+        );
+        setCustomerOptions(unique.map((c) => ({ value: String(c), label: String(c) })));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.error("Error fetching customer options:", err);
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to fetch customers";
+        ToastNotification({
+          type: "error",
+          message: `Error fetching customers: ${errorMessage}`,
+        });
+        setCustomerOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCustomerOptionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedCustomerSearch]);
 
 
   // Fetch potential customers data using useQuery
@@ -478,6 +532,9 @@ function PotentialCustomers() {
         // if (filterForm.values.customer_code) {
         //   baseFilters.customer_code = filterForm.values.customer_code;
         // }
+        if (filterForm.values.customer) {
+          baseFilters.customer = filterForm.values.customer;
+        }
         if (filterForm.values.commodity) {
           baseFilters.commodity = filterForm.values.commodity;
         }
@@ -677,6 +734,7 @@ function PotentialCustomers() {
       // Check if there are any actual filter values (excluding search, which is handled separately)
       // Exclude sales_person when statusFilter is "unassigned"
       const hasFilterValues =
+        filterForm.values.customer ||
         filterForm.values.commodity ||
         filterForm.values.city ||
         filterForm.values.state ||
@@ -721,6 +779,8 @@ function PotentialCustomers() {
       setShowFilters(false);
 
       filterForm.reset(); // Reset form to initial values
+      setCustomerSearchValue("");
+      setCustomerOptions([]);
       setSearchQuery(""); // Clear search
       setFiltersApplied(false); // Reset filters applied state
       setCurrentPage(1); // Reset to first page
@@ -1145,7 +1205,7 @@ function PotentialCustomers() {
     columns,
     data: displayData,
     enableColumnFilters: false,
-    enablePagination: true,
+    enablePagination: false,
     enableTopToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
@@ -1153,35 +1213,6 @@ function PotentialCustomers() {
     enableColumnPinning: true,
     enableStickyHeader: true,
     layoutMode: "grid",
-    // Pagination configuration
-    paginationDisplayMode: "pages",
-    initialState: {
-      pagination: {
-        pageIndex: currentPage - 1, // Convert to 0-based for table
-        pageSize: pageSize,
-      },
-    },
-    state: {
-      pagination: {
-        pageIndex: currentPage - 1, // Convert to 0-based for table
-        pageSize: pageSize,
-      },
-    },
-    onPaginationChange: (updater) => {
-      if (typeof updater === "function") {
-        const newPagination = updater({
-          pageIndex: currentPage - 1,
-          pageSize: pageSize,
-        });
-        setCurrentPage(newPagination.pageIndex + 1); // Convert back to 1-based
-        setPageSize(newPagination.pageSize);
-      } else {
-        setCurrentPage(updater.pageIndex + 1); // Convert back to 1-based
-        setPageSize(updater.pageSize);
-      }
-    },
-    manualPagination: true,
-    pageCount: Math.ceil(totalCount / pageSize),
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
@@ -1758,6 +1789,42 @@ function PotentialCustomers() {
                 </Grid.Col>
               )}
 
+              {/* Customer Filter */}
+              <Grid.Col span={2.4}>
+                <Select
+                  label="Customer"
+                  placeholder="Type customer name"
+                  size="xs"
+                  data={customerOptions}
+                  value={filterForm.values.customer}
+                  onChange={(value) =>
+                    filterForm.setFieldValue("customer", value || null)
+                  }
+                  searchable
+                  clearable
+                  searchValue={customerSearchValue}
+                  onSearchChange={setCustomerSearchValue}
+                  nothingFoundMessage={
+                    customerSearchValue.trim().length === 0
+                      ? "Type to search customers"
+                      : customerOptionsLoading
+                        ? "Searching..."
+                        : "No customers found"
+                  }
+                  disabled={customerOptionsLoading && customerOptions.length === 0}
+                  styles={{
+                    input: { fontSize: "13px", height: "36px" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#000000",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
+
                   {/* Customer Name Filter - Commented out */}
                   {/* <Grid.Col span={2.4}>
                     <SearchableSelect
@@ -1923,76 +1990,19 @@ function PotentialCustomers() {
           <>
             <MantineReactTable table={table} />
 
-            {/* Custom Pagination Bar */}
-            <Group
+            <Box
               w="100%"
-              justify="space-between"
-              align="center"
-              pt="sm"
-              pl="sm"
-              pr="xl"
               style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
-              wrap="nowrap"
               mt="sm"
             >
-              {/* Rows per page and range */}
-              <Group gap="sm" align="center" wrap="nowrap">
-                <Text size="sm" c="dimmed">
-                  Rows per page
-                </Text>
-                <Select
-                  size="xs"
-                  data={["10", "25", "50"]}
-                  value={String(pageSize)}
-                  onChange={(val) => {
-                    if (!val) return;
-                    handlePageSizeChange(Number(val));
-                  }}
-                  w={110}
-                  styles={{ input: { fontSize: 12, height: 30 } }}
-                />
-                <Text size="sm" c="dimmed">
-                  {(() => {
-                    if (totalCount === 0) return "0–0 of 0";
-                    const start = (currentPage - 1) * pageSize + 1;
-                    const end = Math.min(currentPage * pageSize, totalCount);
-                    return `${start}–${end} of ${totalCount}`;
-                  })()}
-                </Text>
-              </Group>
-
-              {/* Page controls */}
-              <Group gap="xs" align="center" wrap="nowrap">
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <IconChevronLeft size={16} />
-                </ActionIcon>
-                <Text size="sm" ta="center" style={{ width: 26 }}>
-                  {currentPage}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  of {Math.max(1, Math.ceil(totalCount / pageSize))}
-                </Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(totalCount / pageSize)
-                    );
-                    handlePageChange(Math.min(totalPages, currentPage + 1));
-                  }}
-                  disabled={currentPage >= Math.ceil(totalCount / pageSize)}
-                >
-                  <IconChevronRight size={16} />
-                </ActionIcon>
-              </Group>
-            </Group>
+              <PaginationBar
+                pageSize={pageSize}
+                currentPage={currentPage}
+                totalRecords={totalCount}
+                onPageSizeChange={handlePageSizeChange}
+                onPageChange={handlePageChange}
+              />
+            </Box>
           </>
         )}
       </Card>

@@ -6,6 +6,7 @@ import {
   DateRangeInput,
   SingleDateInput,
 } from "../../components";
+import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { URL } from "../../api/serverUrls";
 import {
   MantineReactTable,
@@ -338,17 +339,13 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           await refetchFilteredQuotations();
           setIsInitialLoading(false);
           // Reset pagination after restore refetch completes
-          if (tableRef.current) {
-            tableRef.current.setPageIndex(0);
-          }
+          setListCurrentPage(1);
         } else if (fromDate && toDate && !hasInitialFilters) {
           setIsInitialLoading(true);
           await loadAllQuotations();
           setIsInitialLoading(false);
           // Reset pagination after restore refetch completes
-          if (tableRef.current) {
-            tableRef.current.setPageIndex(0);
-          }
+          setListCurrentPage(1);
         }
         return;
       }
@@ -453,18 +450,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         }
         setIsInitialLoading(false);
         // Reset pagination after restore refetch completes
-        if (tableRef.current) {
-          tableRef.current.setPageIndex(0);
-        }
+        setListCurrentPage(1);
       } else if (fromDate && toDate) {
         // No filters/search but dates exist - load default data
         setIsInitialLoading(true);
         await loadAllQuotations();
         setIsInitialLoading(false);
         // Reset pagination after restore refetch completes
-        if (tableRef.current) {
-          tableRef.current.setPageIndex(0);
-        }
+        setListCurrentPage(1);
       }
     };
 
@@ -651,9 +644,6 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   // Single-flight protection for refetchFilteredQuotations
   const isRefetchingRef = useRef(false);
 
-  // Table ref for pagination reset
-  const tableRef = useRef<any>(null);
-
   // Separate query for filtered data - only triggers on explicit actions
   const {
     data: filteredQuotationResult = { data: [], total: 0 },
@@ -678,7 +668,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         // Skip if no filters/search
         if (Object.keys(filterPayload).length === 0) {
           console.log("No filters applied, skipping API call");
-          return [];
+          return { data: [], total: 0 };
         }
 
         const requestBody = { filters: filterPayload };
@@ -819,14 +809,6 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   // isInitialLoading is set manually before/after explicit refetch calls
   const tableLoading =
     isInitialLoading || quotationFetching || filteredQuotationFetching;
-  const listPaginationInfo = useMemo(() => {
-    const total = listTotalRecords || 0;
-    const totalPages = Math.max(1, Math.ceil(total / listPageSize || 1));
-    const start = total === 0 ? 0 : (listCurrentPage - 1) * listPageSize + 1;
-    const end =
-      total === 0 ? 0 : Math.min(listCurrentPage * listPageSize, total);
-    return { start, end, total, totalPages };
-  }, [listCurrentPage, listPageSize, listTotalRecords]);
 
   // Keep isLoading for backward compatibility (used elsewhere)
   const isLoading =
@@ -976,9 +958,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         }
         setIsInitialLoading(false);
         // Reset pagination after initial filters refetch completes
-        if (tableRef.current) {
-          tableRef.current.setPageIndex(0);
-        }
+        setListCurrentPage(1);
       }, 50);
     } else if (!isMountedRef.current && !location.state?.refreshData) {
       // Initial mount - load default data only if not navigating with refreshData flag
@@ -1025,9 +1005,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     setIsInitialLoading(true);
 
     // Reset pagination to prevent empty table rendering when search changes
-    if (tableRef.current) {
-      tableRef.current.setPageIndex(0);
-    }
+    setListCurrentPage(1);
 
     if (debouncedSearch.trim() !== "") {
       // Search exists - trigger filtered API (search will be merged with filters in memoizedFilterPayload)
@@ -1351,9 +1329,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       saveFiltersToStore();
 
       // Reset pagination to prevent empty table rendering
-      if (tableRef.current) {
-        tableRef.current.setPageIndex(0);
-      }
+      setListCurrentPage(1);
 
       setFiltersApplied(true);
       setIsInitialLoading(true);
@@ -1405,6 +1381,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     // Clear filters and search in store
     clearStoreFilters(currentListKey);
     clearStoreSearch(currentListKey);
+
+    setListCurrentPage(1);
 
     // Manually trigger API with cleared filters (default query)
     setIsInitialLoading(true);
@@ -2743,7 +2721,7 @@ console.log("currentQuotation: ", currentQuotation);
     columns,
     data: displayData,
     enableColumnFilters: false,
-    enablePagination: true,
+    enablePagination: false,
     enableTopToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
@@ -2756,7 +2734,6 @@ console.log("currentQuotation: ", currentQuotation);
       showProgressBars: isFetching,
     },
     initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
       columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
@@ -2845,15 +2822,10 @@ console.log("currentQuotation: ", currentQuotation);
     // pagination will be controlled by a custom bar below the table
   });
 
-  // Store table instance in ref for pagination reset
-  useEffect(() => {
-    tableRef.current = table;
-  }, [table]);
-
   // Reset pagination when filters or search change to prevent empty table rendering
   useEffect(() => {
-    if (tableRef.current && filtersApplied) {
-      tableRef.current.setPageIndex(0);
+    if (filtersApplied) {
+      setListCurrentPage(1);
     }
   }, [filtersApplied]);
 
@@ -3461,7 +3433,6 @@ console.log("currentQuotation: ", currentQuotation);
               )}
             </Box>
 
-            {/* Custom Pagination Bar */}
             <Group
               w="100%"
               justify="space-between"
@@ -3470,125 +3441,44 @@ console.log("currentQuotation: ", currentQuotation);
               wrap="nowrap"
               pt="md"
             >
-              {/* Left side: Back to Dashboard Button or Rows per page */}
-              <Group gap="sm" align="center" wrap="nowrap">
-                {location.state?.returnToDashboard ||
-                returnToDashboardRef.current ? (
-                  <Button
-                    leftSection={<IconArrowLeft size={16} />}
-                    onClick={() => {
-                      const dashboardState =
-                        location.state?.dashboardState ||
-                        dashboardStateRef.current;
-                      if (dashboardState) {
-                        navigate("/", {
-                          state: {
-                            returnToEnquiryDetailedView: true,
-                            dashboardState: dashboardState,
-                          },
-                        });
-                      } else {
-                        navigate("/");
-                      }
-                    }}
-                    variant="outline"
-                    size="sm"
-                    color="#105476"
-                  >
-                    Back to Dashboard
-                  </Button>
-                ) : (
-                  <>
-                    <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(listPageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        setListPageSize(Number(val));
-                        setListCurrentPage(1);
-                      }}
-                      w={110}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          height: "30px",
-                          fontFamily: "Inter",
+              {(location.state?.returnToDashboard ||
+                returnToDashboardRef.current) && (
+                <Button
+                  leftSection={<IconArrowLeft size={16} />}
+                  onClick={() => {
+                    const dashboardState =
+                      location.state?.dashboardState ||
+                      dashboardStateRef.current;
+                    if (dashboardState) {
+                      navigate("/", {
+                        state: {
+                          returnToEnquiryDetailedView: true,
+                          dashboardState: dashboardState,
                         },
-                      }}
-                    />
-                    <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                      {`${listPaginationInfo.start}–${listPaginationInfo.end} of ${listPaginationInfo.total}`}
-                    </Text>
-                  </>
-                )}
-              </Group>
-
-              {/* Right side: Page controls or Rows per page (if button is shown) */}
-              <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-                {(location.state?.returnToDashboard ||
-                  returnToDashboardRef.current) && (
-                  <>
-                    <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(listPageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        setListPageSize(Number(val));
-                        setListCurrentPage(1);
-                      }}
-                      w={110}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          height: "30px",
-                          fontFamily: "Inter",
-                        },
-                      }}
-                    />
-                    <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                      {`${listPaginationInfo.start}–${listPaginationInfo.end} of ${listPaginationInfo.total}`}
-                    </Text>
-                  </>
-                )}
-                <ActionIcon
-                  variant="default"
+                      });
+                    } else {
+                      navigate("/");
+                    }
+                  }}
+                  variant="outline"
                   size="sm"
-                  onClick={() => setListCurrentPage(Math.max(1, listCurrentPage - 1))}
-                  disabled={listCurrentPage <= 1}
+                  color="#105476"
                 >
-                  <IconChevronLeft size={16} />
-                </ActionIcon>
-                <Text
-                  size="sm"
-                  ta="center"
-                  style={{ width: 26, fontFamily: "Inter" }}
-                >
-                  {listCurrentPage}
-                </Text>
-                <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                  of {listPaginationInfo.totalPages}
-                </Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() =>
-                    setListCurrentPage(
-                      Math.min(listPaginationInfo.totalPages, listCurrentPage + 1)
-                    )
-                  }
-                  disabled={listCurrentPage >= listPaginationInfo.totalPages}
-                >
-                  <IconChevronRight size={16} />
-                </ActionIcon>
-              </Group>
+                  Back to Dashboard
+                </Button>
+              )}
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <PaginationBar
+                  pageSize={listPageSize}
+                  currentPage={listCurrentPage}
+                  totalRecords={listTotalRecords}
+                  onPageSizeChange={(size) => {
+                    setListPageSize(size);
+                    setListCurrentPage(1);
+                  }}
+                  onPageChange={setListCurrentPage}
+                />
+              </Box>
             </Group>
           </>
         )}

@@ -58,6 +58,7 @@ import {
   DateRangeInput,
   SingleDateInput,
 } from "../../components";
+import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { searchAPI } from "../../service/searchApi";
 import { apiCallProtected } from "../../api/axios";
@@ -94,6 +95,25 @@ type FilterState = {
 
 const LIST_KEY = "CALL_ENTRY_MASTER";
 
+type CallEntryPageResult = { items: any[]; total: number };
+
+function parseCallEntryFilterResponse(data: any): CallEntryPageResult {
+  let items: any[] = [];
+  if (data && Array.isArray(data.data)) {
+    items = data.data;
+  } else if (data && Array.isArray(data.results)) {
+    items = data.results;
+  } else if (data && Array.isArray(data.result)) {
+    items = data.result;
+  }
+  const totalRaw = data?.total ?? data?.count;
+  const total =
+    typeof totalRaw === "number" && !Number.isNaN(totalRaw)
+      ? totalRaw
+      : items.length;
+  return { items, total };
+}
+
 function CallEntry() {
   // Get first day of current month and today's date
   const getDefaultFromDate = (): Date => {
@@ -107,9 +127,8 @@ function CallEntry() {
 
   const dateFormat = useDateFormat();
 
-  const [rowCount, setRowCount] = useState(0);
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(25);
   const queryClient = useQueryClient();
 
   // Date range state
@@ -137,9 +156,6 @@ function CallEntry() {
     },
   });
 
-  const totalPages = Math.ceil(rowCount / pageSize);
-  const startItem = pageIndex * pageSize + 1;
-  const endItem = Math.min((pageIndex + 1) * pageSize, rowCount);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -199,7 +215,7 @@ function CallEntry() {
 
   // Fetch call entry data with React Query - using filter API with date range on initial mount
   const {
-    data: callEntryData = [],
+    data: callEntryResult = { items: [], total: 0 },
     isLoading: callEntryLoading,
     refetch: refetchCallEntries,
   } = useQuery({
@@ -228,23 +244,18 @@ function CallEntry() {
           };
         }
 
+        const index = pageIndex * pageSize;
         const response = await apiCallProtected.post(
-          URL.filter_call_entries,
+          `${URL.filter_call_entries}?index=${index}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
         console.log("Initial load API response:", data);
 
-        // Handle response - API returns { results: [...] }
-        if (data && Array.isArray(data.results)) {
-          return data.results;
-        } else if (data && Array.isArray(data.result)) {
-          return data.result;
-        }
-        return [];
+        return parseCallEntryFilterResponse(data);
       } catch (error) {
         console.error("Error fetching call entry data:", error);
-        return [];
+        return { items: [], total: 0 };
       }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -269,7 +280,7 @@ function CallEntry() {
 
   // Separate query for filtered data - triggers on Apply Filters, Clear Filters, Search changes, Navigation back
   const {
-    data: filteredCallEntryData = [],
+    data: filteredCallEntryResult = { items: [], total: 0 },
     isLoading: filteredCallEntryLoading,
     isFetching: filteredCallEntryFetching,
     refetch: refetchFilteredCallEntries,
@@ -279,6 +290,8 @@ function CallEntry() {
       filtersApplied,
       appliedFilters,
       debouncedSearch, // Include debouncedSearch in queryKey to trigger on search changes
+      pageIndex,
+      pageSize,
     ],
     queryFn: async () => {
       try {
@@ -287,7 +300,7 @@ function CallEntry() {
         // If no filters and no search, return empty (will use unfiltered data)
         if (Object.keys(filterPayload).length === 0) {
           console.log("No filters or search, skipping API call");
-          return [];
+          return { items: [], total: 0 };
         }
 
         const requestBody = { filters: filterPayload };
@@ -298,23 +311,18 @@ function CallEntry() {
           debouncedSearch,
         });
 
+        const index = pageIndex * pageSize;
         const response = await apiCallProtected.post(
-          URL.filter_call_entries,
+          `${URL.filter_call_entries}?index=${index}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
         console.log("Filter API response:", data);
 
-        // Handle both 'result' and 'results' properties
-        if (data && Array.isArray(data.result)) {
-          return data.result;
-        } else if (data && Array.isArray(data.results)) {
-          return data.results;
-        }
-        return [];
+        return parseCallEntryFilterResponse(data);
       } catch (error) {
         console.error("Error fetching filtered call entry data:", error);
-        return [];
+        return { items: [], total: 0 };
       }
     },
     // Disable query during refreshData to prevent auto-trigger from queryKey changes
@@ -582,7 +590,9 @@ function CallEntry() {
 
     // Update ref for next comparison
     prevSearchRef.current = debouncedSearch;
-    
+
+    setPageIndex(0);
+
     // Save search to store immediately
     setStoreSearch(LIST_KEY, searchQuery);
     
@@ -967,22 +977,38 @@ function CallEntry() {
     refetchOnWindowFocus: false,
   });
 
-  // Determine which data to display
+  // Determine which data to display (server-paginated page from active query)
   const displayData = useMemo(() => {
-    // Use filtered data if filters are applied OR search is present
-    if ((filtersApplied || debouncedSearch.trim()) && filteredCallEntryData?.length)  {
-      return filteredCallEntryData;
-    } else if ((filtersApplied || debouncedSearch.trim()) && !filteredCallEntryData?.length){
-      return []
+    if (filtersApplied || debouncedSearch.trim()) {
+      return filteredCallEntryResult.items;
     }
-    console.log("Displaying unfiltered data:", callEntryData);
-    return callEntryData || [];
+    console.log("Displaying unfiltered data:", callEntryResult.items);
+    return callEntryResult.items || [];
   }, [
-    callEntryData,
-    filteredCallEntryData,
+    callEntryResult.items,
+    filteredCallEntryResult.items,
     filtersApplied,
     debouncedSearch,
   ]);
+
+  const totalRecords = useMemo(() => {
+    if (filtersApplied || debouncedSearch.trim()) {
+      return filteredCallEntryResult.total;
+    }
+    return callEntryResult.total;
+  }, [
+    filtersApplied,
+    debouncedSearch,
+    filteredCallEntryResult.total,
+    callEntryResult.total,
+  ]);
+
+  useEffect(() => {
+    const totalPagesCount = Math.max(1, Math.ceil(totalRecords / pageSize));
+    if (pageIndex >= totalPagesCount) {
+      setPageIndex(Math.max(0, totalPagesCount - 1));
+    }
+  }, [totalRecords, pageSize, pageIndex]);
 
   // Loading state - show loader until API response is received
   const isLoading = useMemo(() => {
@@ -1020,6 +1046,7 @@ function CallEntry() {
 
       if (!hasFilterValues) {
         // If no filter values, show unfiltered data
+        setPageIndex(0);
         setFiltersApplied(false);
         setAppliedFilters({
           customer: null,
@@ -1520,7 +1547,7 @@ function CallEntry() {
     columns,
     data: displayData,
     enableColumnFilters: false,
-    enablePagination: true,
+    enablePagination: false,
     enableTopToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
@@ -1528,7 +1555,6 @@ function CallEntry() {
     enableColumnPinning: true,
     enableStickyHeader: true,
     initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
       columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
@@ -2120,7 +2146,6 @@ function CallEntry() {
               table={table}
             />
 
-            {/* Custom Pagination Bar */}
             <Group
               w="100%"
               justify="space-between"
@@ -2129,157 +2154,44 @@ function CallEntry() {
               wrap="nowrap"
               pt="md"
             >
-              {/* Left side: Back to Dashboard Button or Rows per page */}
-              <Group gap="sm" align="center" wrap="nowrap">
-                {location.state?.returnToDashboard ||
-                returnToDashboardRef.current ? (
-                  <Button
-                    leftSection={<IconArrowLeft size={16} />}
-                    onClick={() => {
-                      const dashboardState =
-                        location.state?.dashboardState ||
-                        dashboardStateRef.current;
-                      if (dashboardState) {
-                        navigate("/", {
-                          state: {
-                            returnToCallEntryDetailedView: true,
-                            dashboardState: dashboardState,
-                          },
-                        });
-                      } else {
-                        navigate("/");
-                      }
-                    }}
-                    variant="outline"
-                    size="sm"
-                    color="#105476"
-                  >
-                    Back to Dashboard
-                  </Button>
-                ) : (
-                  <>
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(table.getState().pagination.pageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        table.setPageSize(Number(val));
-                        table.setPageIndex(0);
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } } as any}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
-                        const { pageIndex, pageSize } =
-                          table.getState().pagination;
-                        const total =
-                          table.getPrePaginationRowModel().rows.length || 0;
-                        if (total === 0) return "0–0 of 0";
-                        const start = pageIndex * pageSize + 1;
-                        const end = Math.min((pageIndex + 1) * pageSize, total);
-                        return `${start}–${end} of ${total}`;
-                      })()}
-                    </Text>
-                  </>
-                )}
-              </Group>
-
-              {/* Right side: Page controls or Rows per page (if button is shown) */}
-              <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-                {(location.state?.returnToDashboard ||
-                  returnToDashboardRef.current) && (
-                  <>
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
-                      size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(table.getState().pagination.pageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        table.setPageSize(Number(val));
-                        table.setPageIndex(0);
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } } as any}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
-                        const { pageIndex, pageSize } =
-                          table.getState().pagination;
-                        const total =
-                          table.getPrePaginationRowModel().rows.length || 0;
-                        if (total === 0) return "0–0 of 0";
-                        const start = pageIndex * pageSize + 1;
-                        const end = Math.min((pageIndex + 1) * pageSize, total);
-                        return `${start}–${end} of ${total}`;
-                      })()}
-                    </Text>
-                  </>
-                )}
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() =>
-                    table.setPageIndex(
-                      Math.max(0, table.getState().pagination.pageIndex - 1)
-                    )
-                  }
-                  disabled={table.getState().pagination.pageIndex === 0}
-                >
-                  <IconChevronLeft size={16} />
-                </ActionIcon>
-                <Text size="sm" ta="center" style={{ width: 26 }}>
-                  {table.getState().pagination.pageIndex + 1}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  of{" "}
-                  {Math.max(
-                    1,
-                    Math.ceil(
-                      (table.getPrePaginationRowModel().rows.length || 0) /
-                        table.getState().pagination.pageSize
-                    )
-                  )}
-                </Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
+              {(location.state?.returnToDashboard ||
+                returnToDashboardRef.current) && (
+                <Button
+                  leftSection={<IconArrowLeft size={16} />}
                   onClick={() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    table.setPageIndex(
-                      Math.min(
-                        totalPages - 1,
-                        table.getState().pagination.pageIndex + 1
-                      )
-                    );
+                    const dashboardState =
+                      location.state?.dashboardState ||
+                      dashboardStateRef.current;
+                    if (dashboardState) {
+                      navigate("/", {
+                        state: {
+                          returnToCallEntryDetailedView: true,
+                          dashboardState: dashboardState,
+                        },
+                      });
+                    } else {
+                      navigate("/");
+                    }
                   }}
-                  disabled={(() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    return (
-                      table.getState().pagination.pageIndex >= totalPages - 1
-                    );
-                  })()}
+                  variant="outline"
+                  size="sm"
+                  color="#105476"
                 >
-                  <IconChevronRight size={16} />
-                </ActionIcon>
-              </Group>
+                  Back to Dashboard
+                </Button>
+              )}
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <PaginationBar
+                  pageSize={pageSize}
+                  currentPage={pageIndex + 1}
+                  totalRecords={totalRecords}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPageIndex(0);
+                  }}
+                  onPageChange={(page) => setPageIndex(page - 1)}
+                />
+              </Box>
             </Group>
           </>
         )}

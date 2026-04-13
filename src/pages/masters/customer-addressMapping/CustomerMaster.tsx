@@ -79,6 +79,11 @@ type CustomerData = {
   customer_code: string;
   customer_name: string;
   customer_type?: string;
+  customer_types?: Array<{
+    id?: number;
+    customer_type_code?: string;
+    customer_type_name?: string;
+  }>;
   status: string;
   term_code?: string;
   own_office?: boolean;
@@ -1055,9 +1060,21 @@ function CustomerMaster() {
         accessorKey: "customer_type_name",
         header: "Customer Type",
         size: 150,
-        Cell: ({ cell }) => (
-          <Text size="sm">{cell.getValue<string>() || "N/A"}</Text>
-        ),
+        Cell: ({ row, cell }) => {
+          const rowData = row.original as CustomerData;
+          const typeNames =
+            rowData.customer_types
+              ?.map((item) => item?.customer_type_name?.trim())
+              .filter((name): name is string => Boolean(name)) || [];
+
+          return (
+            <Text size="sm">
+              {typeNames.length > 0
+                ? typeNames.join(", ")
+                : cell.getValue<string>() || "N/A"}
+            </Text>
+          );
+        },
       },
       {
         accessorKey: "term_code",

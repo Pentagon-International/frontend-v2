@@ -232,6 +232,7 @@ type InvoiceFormData = {
   roe: number | null;
   narration: string;
   irn_no: string;
+  fapiao_no: string;
   charges: ChargeItem[];
 };
 
@@ -293,6 +294,7 @@ type InvoiceDataFromApi = {
   roe?: string | number;
   narration?: string;
   irn_no?: string;
+  fapiao_no?: string;
   state_id?: number;
   currency_id?: number;
   currency_code?: string;
@@ -508,6 +510,12 @@ function InvoiceCreate({
     return "";
   }, [user?.country?.country_code]);
 
+  const isChinaUser = useMemo(() => {
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return countryCode === "CN" || countryName === "CHINA";
+  }, [user?.country?.country_code, user?.country?.country_name]);
+
   // Helper function to calculate ROE based on currency and user's country
   const getRoeValue = useCallback(
     (currency: string): number => {
@@ -541,6 +549,7 @@ function InvoiceCreate({
       roe: null,
       narration: "",
       irn_no: "",
+      fapiao_no: "",
       charges: [],
     },
     validate: {
@@ -1355,6 +1364,7 @@ function InvoiceCreate({
           : null,
       narration: invoiceData.narration ?? "",
       irn_no: invoiceData.irn_no ?? "",
+      fapiao_no: invoiceData.fapiao_no ?? "",
       charges:
         invoiceData.charges && invoiceData.charges.length > 0
           ? invoiceData.charges.map((c: any) => ({
@@ -2088,6 +2098,7 @@ function InvoiceCreate({
         roe: values.roe,
         narration: values.narration || null,
         irn_no: values.irn_no || null,
+        fapiao_no: values.fapiao_no || null,
         ...(isUpdate ? { status: "UNPOSTED" } : {}),
         total,
         header_total,
@@ -2441,6 +2452,7 @@ function InvoiceCreate({
         roe: values.roe,
         narration: values.narration || null,
         irn_no: values.irn_no || null,
+        fapiao_no: values.fapiao_no || null,
         status: "POSTED",
         total,
         header_total,
@@ -3004,6 +3016,20 @@ function InvoiceCreate({
                 readOnly={isReadOnly}
               />
             </Grid.Col>
+
+            {isChinaUser && (
+              <Grid.Col span={2}>
+                <FormTextInput
+                  label="Fapiao No"
+                  placeholder="Enter fapiao number"
+                  value={form.values.fapiao_no}
+                  onChange={(e) =>
+                    form.setFieldValue("fapiao_no", e.target.value)
+                  }
+                  readOnly={false}
+                />
+              </Grid.Col>
+            )}
 
             {/* Address - moved to end */}
             <Grid.Col span={6}>
