@@ -37,6 +37,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
+import useAuthStore from "../../../store/authStore";
 
 // Type definitions
 type CountryData = {
@@ -107,6 +108,8 @@ type AddressData = {
   phone_no: string;
   mobile_no: string;
   email: string;
+  trn_no?: string;
+  validity_date?: string | null;
   pan_no?: string;
   gst_id?: string;
   tan_no?: string;
@@ -265,6 +268,11 @@ const addressValidationSchema = yup.object({
           .email("Please enter a valid email address")
           .required("Email is required")
           .max(100, "Email must not exceed 100 characters"),
+        trn_no: yup
+          .string()
+          .optional()
+          .max(30, "TRN No must not exceed 30 characters"),
+        validity_date: yup.string().nullable().optional(),
         pan_no: yup.string().optional().max(20, "PAN must not exceed 20 characters"),
         gst_id: yup.string().optional().max(20, "GST No must not exceed 20 characters"),
         tan_no: yup.string().optional().max(20, "TAN must not exceed 20 characters"),
@@ -435,6 +443,7 @@ const AddressCard = memo(
     index,
     isViewMode,
     isVendorMasterRoute,
+    isDubaiUser,
     addressForm,
     countryOptions,
     selectedCountries,
@@ -456,6 +465,7 @@ const AddressCard = memo(
     index: number;
     isViewMode: boolean;
     isVendorMasterRoute: boolean;
+    isDubaiUser: boolean;
     addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
     countryOptions: { value: string; label: string }[];
     selectedCountries: Record<number, string>;
@@ -699,9 +709,41 @@ const AddressCard = memo(
               {...addressForm.getInputProps(`addresses_data.${index}.email`)}
             />
             </Grid.Col>
+            {isDubaiUser && (
+              <>
+                <Grid.Col span={4}>
+                  <TextInput
+                    label="TRN No"
+                    placeholder="Enter TRN no"
+                    disabled={isViewMode}
+                    {...addressForm.getInputProps(
+                      `addresses_data.${index}.trn_no`,
+                    )}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="Validity Date"
+                    placeholder="Select validity date"
+                    disabled={isViewMode}
+                    value={parseDateYYYYMMDD(
+                      addressForm.values.addresses_data[index]?.validity_date ??
+                        null,
+                    )}
+                    onChange={(value) =>
+                      addressForm.setFieldValue(
+                        `addresses_data.${index}.validity_date`,
+                        formatDateYYYYMMDD(value),
+                      )
+                    }
+                  />
+                </Grid.Col>
+              </>
+            )}
             </Grid>
           </Card>
 
+          {!isDubaiUser && (
           <Card withBorder radius="md" padding="md">
             <Box
               mb="sm"
@@ -892,6 +934,7 @@ const AddressCard = memo(
             </Grid.Col>
             </Grid>
           </Card>
+          )}
         </Stack>
       </Card>
     );
@@ -921,6 +964,12 @@ function CustomerCreate() {
   const [active, setActive] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const userCountry = useAuthStore((s) => s.user?.country);
+  const isDubaiUser =
+    String(userCountry?.country_code ?? "").toUpperCase() === "AE" ||
+    String(userCountry?.country_name ?? "").toLowerCase().includes("united arab emirates") ||
+    String(userCountry?.country_name ?? "").toLowerCase().includes("uae") ||
+    String(userCountry?.country_name ?? "").toLowerCase().includes("dubai");
   const [selectedCountries, setSelectedCountries] = useState<
     Record<number, string>
   >({});
@@ -950,6 +999,7 @@ function CustomerCreate() {
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
   const isViewMode = Boolean(params.id && location.pathname.includes("/view/"));
   const isCreateMode = !params.id;
+  const maxStep = isVendorMasterRoute ? 2 : 1;
 
   const tdsDisplayForm = useForm<TdsDisplayFormValues>({
     initialValues: {
@@ -1201,6 +1251,8 @@ function CustomerCreate() {
           phone_no: "",
           mobile_no: "",
           email: "",
+          trn_no: "",
+          validity_date: null,
           pan_no: "",
           gst_id: "",
           tan_no: "",
@@ -1239,6 +1291,8 @@ function CustomerCreate() {
           phone_no: "",
           mobile_no: "",
           email: "",
+          trn_no: "",
+          validity_date: null,
           pan_no: "",
           gst_id: "",
           tan_no: "",
@@ -1501,6 +1555,8 @@ function CustomerCreate() {
                 phone_no: addr.phone_no || addr.landline || addr.phone || "",
                 mobile_no: addr.mobile_no || addr.mobile || "",
                 email: addr.email || "",
+                trn_no: (addr as AddressData).trn_no ?? "",
+                validity_date: (addr as AddressData).validity_date ?? null,
                 pan_no: addr.pan_no ?? "",
                 pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
                 Itr_filed: (addr as AddressData).Itr_filed ?? "",
@@ -1744,6 +1800,8 @@ function CustomerCreate() {
             phone_no: addr.phone_no || addr.landline || addr.phone || "",
             mobile_no: addr.mobile_no || addr.mobile || "",
             email: addr.email || "",
+            trn_no: (addr as AddressData).trn_no ?? "",
+            validity_date: (addr as AddressData).validity_date ?? null,
             pan_no: addr.pan_no ?? "",
             pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
             Itr_filed: (addr as AddressData).Itr_filed ?? "",
@@ -1951,6 +2009,8 @@ function CustomerCreate() {
       phone_no: "",
       mobile_no: "",
       email: "",
+      trn_no: "",
+      validity_date: null,
       pan_no: "",
       gst_id: "",
       tan_no: "",
@@ -2223,6 +2283,8 @@ function CustomerCreate() {
           ...addr,
           address_type:
             addr.address_type === "Primary" ? "Primary" : addr.address_type,
+          trn_no: addr.trn_no ?? "",
+          validity_date: addr.validity_date ?? null,
           pan_no: addr.pan_no ?? "",
           gst_id: addr.gst_id ?? "",
           tan_no: addr.tan_no ?? "",
@@ -2305,6 +2367,8 @@ function CustomerCreate() {
             ...addr,
             address_type:
               addr.address_type === "Primary" ? "Primary" : addr.address_type,
+            trn_no: addr.trn_no ?? "",
+            validity_date: addr.validity_date ?? null,
             pan_no: addr.pan_no ?? "",
             gst_id: addr.gst_id ?? "",
             tan_no: addr.tan_no ?? "",
@@ -2376,6 +2440,42 @@ function CustomerCreate() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRelationshipMapping = () => {
+    if (isViewMode) return;
+
+    // Validate both forms before navigating to relationship mapping
+    const customerResult = customerForm.validate();
+    const addressResult = addressForm.validate();
+
+    if (!customerResult.hasErrors && !addressResult.hasErrors) {
+      if (isCreateMode) {
+        navigate("/master/customer-relationship-mapping/create", {
+          state: {
+            fromCustomerMaster: true,
+            customerFormData: customerForm.values,
+            addressFormData: addressForm.values,
+          },
+        });
+        return;
+      }
+
+      if (isEditMode && customerId) {
+        navigate("/master/customer-relationship-mapping/edit", {
+          state: {
+            customer_id: Number(customerId),
+            fromCustomerMaster: true,
+            customerFormData: customerForm.values,
+            addressFormData: addressForm.values,
+          },
+        });
+      }
+    } else {
+      // Force re-render to show validation errors inline
+      if (customerResult.hasErrors) customerForm.validate();
+      if (addressResult.hasErrors) addressForm.validate();
     }
   };
 
@@ -2509,40 +2609,53 @@ function CustomerCreate() {
         </Box>
       )}
 
-      {/* Header */}
-      <Group justify="space-between" align="center" mb="lg">
-        <Text size="xl" fw={600} c="#105476">
-          {isCreateMode
-            ? isVendorMasterRoute
-              ? "Create Vendor"
-              : "Create Customer"
-            : isEditMode
-              ? isVendorMasterRoute
-                ? "Edit Vendor"
-                : "Edit Customer"
-              : isVendorMasterRoute
-                ? "View Vendor"
-                : "View Customer"}
-        </Text>
-
-        {!isViewMode && (
-          <Button
-            rightSection={<IconCheck size={16} />}
-            onClick={handleFinalSubmit}
-            color="teal"
-            disabled={isSubmitting}
-            loading={isSubmitting}
-          >
-            {isCreateMode ? "Create" : "Update"}
-          </Button>
-        )}
-      </Group>
-
-      <Tabs
-        value={String(active)}
-        onChange={(v) => v !== null && setActive(Number(v))}
-        color="#105476"
+      <Box
+        style={{
+          backgroundColor: "#ffffff",
+          borderRadius: 8,
+          display: "flex",
+          flexDirection: "column",
+          height: "calc(100vh - 100px)",
+          minHeight: 0,
+          overflow: "hidden",
+        }}
       >
+        <Box
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "16px",
+            backgroundColor: "#F8F8F8",
+          }}
+        >
+          {/* Header */}
+          <Group justify="space-between" align="center" mb="lg">
+            <Text size="xl" fw={600} c="#105476">
+              {isCreateMode
+                ? isVendorMasterRoute
+                  ? "Create Vendor"
+                  : "Create Customer"
+                : isEditMode
+                  ? isVendorMasterRoute
+                    ? "Edit Vendor"
+                    : "Edit Customer"
+                  : isVendorMasterRoute
+                    ? "View Vendor"
+                    : "View Customer"}
+            </Text>
+          </Group>
+
+          <Tabs
+            value={String(active)}
+            onChange={(v) => v !== null && setActive(Number(v))}
+            color="#105476"
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+            }}
+          >
         <Tabs.List
           mb="md"
           style={{
@@ -2600,7 +2713,15 @@ function CustomerCreate() {
           )}
         </Tabs.List>
 
-        <Tabs.Panel value="0">
+        <Tabs.Panel value="0" style={{ flex: 1, minHeight: 0 }}>
+          <Box
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              paddingBottom: "16px",
+              backgroundColor: "#F8F8F8",
+            }}
+          >
           <Box mt="md">
             <Card shadow="sm" padding="lg" radius="md">
               <Grid gutter={"sm"}>
@@ -2717,33 +2838,20 @@ function CustomerCreate() {
                 )}
               </Grid>
 
-              <Group justify="space-between" mt="xl">
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => navigate(baseMasterPath)}
-                >
-                  {isVendorMasterRoute
-                    ? "Back to Vendor List"
-                    : "Back to Customer List"}
-                </Button>
-                <Group>
-                  <Button
-                    variant="default"
-                    onClick={() => setActive(1)}
-                    rightSection={<IconArrowRight size={14} />}
-                    disabled={isSubmitting}
-                  >
-                    Next
-                  </Button>
-                </Group>
-              </Group>
             </Card>
+          </Box>
           </Box>
         </Tabs.Panel>
 
-        <Tabs.Panel value="1">
+        <Tabs.Panel value="1" style={{ flex: 1, minHeight: 0 }}>
+          <Box
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              paddingBottom: "16px",
+              backgroundColor: "#F8F8F8",
+            }}
+          >
           <Box mt="md">
             <Card shadow="sm" padding="xs" radius="md">
               {/* <Text size="sm" fw={500}>
@@ -2757,6 +2865,7 @@ function CustomerCreate() {
                     index={index}
                     isViewMode={isViewMode}
                     isVendorMasterRoute={isVendorMasterRoute}
+                    isDubaiUser={isDubaiUser}
                     addressForm={addressForm}
                     countryOptions={countryOptions}
                     selectedCountries={selectedCountries}
@@ -2789,129 +2898,21 @@ function CustomerCreate() {
                   Add Address
                 </Button>
               </Group>
-
-              <Group justify="space-between" mt="xl">
-                <Button
-                  variant="default"
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => setActive(0)}
-                  disabled={isSubmitting}
-                >
-                  Back
-                </Button>
-                <Group>
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    onClick={() => navigate(baseMasterPath)}
-                    disabled={isSubmitting}
-                  >
-                    {isViewMode ? "Back to List" : "Cancel"}
-                  </Button>
-                  {isCreateMode && !isViewMode && (
-                    <Button
-                      bg="#105476"
-                      onClick={() => {
-                        // Validate both forms before navigating to relationship mapping
-                        const customerResult = customerForm.validate();
-                        const addressResult = addressForm.validate();
-
-                        if (
-                          !customerResult.hasErrors &&
-                          !addressResult.hasErrors
-                        ) {
-                          // Navigate to customer relationship mapping with customer form data
-                          navigate(
-                            "/master/customer-relationship-mapping/create",
-                            {
-                              state: {
-                                fromCustomerMaster: true,
-                                customerFormData: customerForm.values,
-                                addressFormData: addressForm.values,
-                              },
-                            },
-                          );
-                        } else {
-                          // Force re-render to show validation errors inline
-                          if (customerResult.hasErrors) {
-                            customerForm.validate();
-                          }
-                          if (addressResult.hasErrors) {
-                            addressForm.validate();
-                          }
-                        }
-                      }}
-                      disabled={isSubmitting}
-                      style={{ border: "1px solid #105476" }}
-                      color="white"
-                    >
-                      {isVendorMasterRoute
-                        ? "Add Vendor Relationships"
-                        : "Add Customer Relationships"}
-                    </Button>
-                  )}
-                  {isEditMode && !isViewMode && customerId && (
-                    <Button
-                      bg="#105476"
-                      onClick={() => {
-                        // Validate both forms before navigating to relationship mapping
-                        const customerResult = customerForm.validate();
-                        const addressResult = addressForm.validate();
-
-                        if (
-                          !customerResult.hasErrors &&
-                          !addressResult.hasErrors
-                        ) {
-                          // Navigate to customer relationship mapping edit with customer_id
-                          navigate(
-                            "/master/customer-relationship-mapping/edit",
-                            {
-                              state: {
-                                customer_id: Number(customerId),
-                                fromCustomerMaster: true,
-                                customerFormData: customerForm.values,
-                                addressFormData: addressForm.values,
-                              },
-                            },
-                          );
-                        } else {
-                          // Force re-render to show validation errors inline
-                          if (customerResult.hasErrors) {
-                            customerForm.validate();
-                          }
-                          if (addressResult.hasErrors) {
-                            addressForm.validate();
-                          }
-                        }
-                      }}
-                      disabled={isSubmitting}
-                      style={{ border: "1px solid #105476" }}
-                      color="white"
-                    >
-                      {isVendorMasterRoute
-                        ? "Edit Vendor Relationships"
-                        : "Edit Customer Relationships"}
-                    </Button>
-                  )}
-                  {isVendorMasterRoute && !isViewMode && (
-                    <Button
-                      rightSection={<IconArrowRight size={14} />}
-                      onClick={() => setActive(2)}
-                      color="#105476"
-                      disabled={isSubmitting}
-                    >
-                      Next
-                    </Button>
-                  )}
-
-                </Group>
-              </Group>
             </Card>
+          </Box>
           </Box>
         </Tabs.Panel>
 
         {isVendorMasterRoute && (
-          <Tabs.Panel value="2">
+          <Tabs.Panel value="2" style={{ flex: 1, minHeight: 0 }}>
+            <Box
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                paddingBottom: "16px",
+                backgroundColor: "#F8F8F8",
+              }}
+            >
             <Box mt="md">
               <Card shadow="sm" padding="lg" radius="md">
                 <Stack gap="md">
@@ -3286,35 +3287,135 @@ function CustomerCreate() {
                     </Button>
                   </Group>
                 </Stack>
-
-                <Group justify="space-between" mt="xl">
-                  <Button
-                    variant="default"
-                    leftSection={<IconArrowLeft size={16} />}
-                    onClick={() => setActive(1)}
-                    disabled={isSubmitting}
-                  >
-                    Back
-                  </Button>
-                  <Group>
-                    <Button
-                      variant="outline"
-                      color="#105476"
-                      onClick={() => navigate(baseMasterPath)}
-                      disabled={isSubmitting}
-                    >
-                      {isViewMode ? "Back to List" : "Cancel"}
-                    </Button>
-                    {!isViewMode && (
-                      <Box />
-                    )}
-                  </Group>
-                </Group>
               </Card>
+            </Box>
             </Box>
           </Tabs.Panel>
         )}
-      </Tabs>
+          </Tabs>
+        </Box>
+
+        {/* Footer Buttons */}
+        <Box
+          style={{
+            borderTop: "1px solid #e9ecef",
+            padding: "20px 32px",
+            backgroundColor: "#ffffff",
+          }}
+        >
+        <Group justify="space-between">
+          <Group gap="sm">
+            {active > 0 && (
+              <Button
+                variant="outline"
+                color="gray"
+                size="sm"
+                leftSection={<IconArrowLeft size={16} />}
+                styles={{
+                  root: {
+                    borderColor: "#d0d0d0",
+                    color: "#666",
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                  },
+                }}
+                onClick={() => setActive((v) => Math.max(0, v - 1))}
+                disabled={isSubmitting}
+              >
+                Back
+              </Button>
+            )}
+
+            <Button
+              variant="outline"
+              color="gray"
+              size="sm"
+              styles={{
+                root: {
+                  borderColor: "#d0d0d0",
+                  color: "#666",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                },
+              }}
+              onClick={() => navigate(baseMasterPath)}
+              disabled={isSubmitting}
+            >
+              {isViewMode ? "Back to List" : "Cancel"}
+            </Button>
+          </Group>
+
+          <Group gap="sm">
+            {active === 1 && !isViewMode && (isCreateMode || isEditMode) && (
+              <Button
+                bg="#105476"
+                onClick={handleRelationshipMapping}
+                disabled={isSubmitting}
+                style={{ border: "1px solid #105476" }}
+                color="white"
+                size="sm"
+              >
+                {isCreateMode
+                  ? isVendorMasterRoute
+                    ? "Add Vendor Relationships"
+                    : "Add Customer Relationships"
+                  : isVendorMasterRoute
+                    ? "Edit Vendor Relationships"
+                    : "Edit Customer Relationships"}
+              </Button>
+            )}
+
+            {active < maxStep && (
+              <Button
+                size="sm"
+                style={{
+                  backgroundColor: "#105476",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                }}
+                rightSection={<IconArrowRight size={14} />}
+                onClick={() => setActive((v) => Math.min(maxStep, v + 1))}
+                disabled={isSubmitting}
+              >
+                Next
+              </Button>
+            )}
+
+            {active === maxStep && !isViewMode && (
+              <Button
+                size="sm"
+                style={{
+                  backgroundColor: "#105476",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                }}
+                rightSection={
+                  isSubmitting ? <Loader size={16} color="white" /> : <IconCheck size={16} />
+                }
+                onClick={handleFinalSubmit}
+                disabled={isSubmitting}
+              >
+                {isSubmitting
+                  ? isCreateMode
+                    ? isVendorMasterRoute
+                      ? "Creating Vendor..."
+                      : "Creating Customer..."
+                    : isVendorMasterRoute
+                      ? "Updating Vendor..."
+                      : "Updating Customer..."
+                  : isCreateMode
+                    ? "Create"
+                    : "Update"}
+              </Button>
+            )}
+          </Group>
+        </Group>
+        </Box>
+      </Box>
     </Box>
   );
 }

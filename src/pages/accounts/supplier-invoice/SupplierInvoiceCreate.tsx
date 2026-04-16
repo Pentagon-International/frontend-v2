@@ -189,7 +189,7 @@ type SupplierInvoiceFormValues = {
   customer_gst_no: string;
   location_gst_no: string;
   type: "INV" | "CRN";
-  Inv_Crn_note: string;
+  Inv_Crn_note: Date | null;
   Inv_Crn_no: string;
   roe: number | null;
   currency_id: string;
@@ -491,7 +491,7 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: "",
       location_gst_no: "",
       type: "INV",
-      Inv_Crn_note: "",
+      Inv_Crn_note: null,
       Inv_Crn_no: "",
       roe: null,
       currency_id: defaultBranchCurrencyId || "",
@@ -949,7 +949,9 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
       type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as "INV" | "CRN",
-      Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
+      Inv_Crn_note:
+        parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
+        normalizeDate((data.Inv_Crn_note as string) ?? null),
       Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
       roe:
         data.roe != null && data.roe !== ""
@@ -1228,7 +1230,9 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: values.customer_gst_no || "",
       location_gst_no: values.location_gst_no || "",
       type: values.type ?? "INV",
-      Inv_Crn_note: values.Inv_Crn_note || "",
+      Inv_Crn_note: values.Inv_Crn_note
+        ? formatDDMMYYYY(new Date(values.Inv_Crn_note))
+        : "",
       Inv_Crn_no: values.Inv_Crn_no || "",
       roe: values.roe ?? null,
       currency_id: values.currency_id ? Number(values.currency_id) : null,
@@ -1333,7 +1337,9 @@ export default function SupplierInvoiceCreate({
       narration: (data.narration ?? "") as string,
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
-      Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
+      Inv_Crn_note:
+        parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
+        normalizeDate((data.Inv_Crn_note as string) ?? null),
       Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
       currency_id: data.currency_id != null ? String(data.currency_id) : "",
       taxable_amount:
@@ -1982,7 +1988,7 @@ export default function SupplierInvoiceCreate({
           <Text size="sm" fw={600} c="#105476" mb="xs">
             Agent INV/CRN Detail
           </Text>
-          <Grid mb="md" columns={12}>
+          <Grid mb="md" columns={12} align="flex-end">
 
             <Grid.Col span={0.7}>
               <Dropdown
@@ -2002,18 +2008,6 @@ export default function SupplierInvoiceCreate({
             </Grid.Col>
             <Grid.Col span={0.9}>
               <TextInput
-                label="Inv/Crn Note"
-                placeholder="Inv/Crn Note"
-                value={form.values.Inv_Crn_note}
-                onChange={(e) =>
-                  form.setFieldValue("Inv_Crn_note", e.target.value)
-                }
-                styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
-              />
-            </Grid.Col>
-            <Grid.Col span={0.9}>
-              <TextInput
                 label="Inv/Crn No"
                 placeholder="Inv/Crn No"
                 withAsterisk
@@ -2026,7 +2020,16 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
-            <Grid.Col span={0.8}>
+            <Grid.Col span={1.15}>
+              <SingleDateInput
+                label="Inv/Crn Date"
+                placeholder="Select Inv/Crn Date"
+                value={normalizeDate(form.values.Inv_Crn_note)}
+                onChange={(d) => form.setFieldValue("Inv_Crn_note", d)}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+              />
+            </Grid.Col>
+            <Grid.Col span={0.85}>
               <Dropdown
                 label="Currency"
                 placeholder={

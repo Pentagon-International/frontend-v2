@@ -2484,6 +2484,106 @@ function ImportJobCreate() {
     }
   };
 
+  const handlePushToOdexDownload = useCallback(() => {
+    const odexPayload = {
+      headerField: {
+        senderID: "",
+        receiverID: "INNHA",
+        versionNo: "SCE1102",
+        indicator: "T",
+        messageID: "SACHM22",
+        sequenceOrControlNumber: 210001,
+        date: "20260416",
+        time: "T17:29",
+        reportingEvent: "SCE",
+      },
+      master: {
+        decRef: {
+          msgTyp: "F",
+          prtofRptng: "INNHA",
+          jobNo: 210001,
+          jobDt: "20260101",
+          rptngEvent: "SCE",
+        },
+        authPrsn: {
+          sbmtrTyp: "",
+          sbmtrCd: "",
+          authReprsntvCd: "",
+        },
+        vesselDtls: {
+          modeOfTrnsprt: "1",
+          typOfTrnsprtMeans: "10",
+          trnsprtMeansId: "9292266",
+        },
+        voyageDtls: {
+          cnvnceRefNmbr: "",
+          totalNoOfTrnsprtEqmtMnfsted: 1,
+          totalNmbrOfLines: 1,
+        },
+        mastrCnsgmtDec: [
+          {
+            MCRef: {
+              lineNo: 1,
+              mstrBlNo: "A92FX33619",
+              mstrBlDt: "20251215",
+              consolidatedIndctr: "",
+              prevDec: "N",
+              consolidatorPan: "PAN:",
+            },
+            trnsprtDocMsr: {
+              nmbrOfPkgs: 1288,
+              typsOfPkgs: "PKG",
+              marksNoOnPkgs: "",
+              grossWeight: 24131.8,
+              netWeight: 24131.8,
+              unitOfWeight: "KGS",
+              grossVolume: 30.12,
+              crncyCd: "INR",
+            },
+            trnsprtEqmt: [
+              {
+                eqmtSeqNo: 1,
+                eqmtId: "IAAU2007570",
+                eqmtTyp: "CN",
+                eqmtSize: "2200",
+                eqmtLoadStatus: "FCL",
+                adtnlEqmtHold: "",
+                eqmtSealTyp: "BTSL",
+                eqmtSealNmbr: "",
+                otherEqmtId: "",
+                socFlag: "N",
+                cntrAgntCd: "",
+                cntrWeight: 24131.8,
+                totalNmbrOfPkgs: 1288,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(odexPayload, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const fileJobNo =
+       jobData?.job_id || jobData?.id || "draft";
+    const fileDate = odexPayload.headerField.date || "date";
+    const fileTime = (odexPayload.headerField.time || "time").replace(/[^0-9A-Za-z]/g, "");
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${fileJobNo}-${fileDate}-${fileTime}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    ToastNotification({
+      type: "success",
+      message: "Odex file downloaded successfully",
+    });
+  }, [jobData?.id, jobData?.job_id]);
+
   const handleSubmit = async () => {
     // Ensure we're using the latest form values by constructing payload right before API call
     setIsSubmitting(true);
@@ -3064,6 +3164,44 @@ function ImportJobCreate() {
                       Delivery Order - {housing.hbl_number || `HBL ${idx + 1}`}
                     </Menu.Item>
                   ))}
+                  <Menu.Item
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconDownload size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
+                    onClick={handlePushToOdexDownload}
+                  >
+                    Push To Odex
+                  </Menu.Item>
                   {jobData?.id != null && (
                     <Menu.Item
                       leftSection={
@@ -4940,6 +5078,7 @@ function ImportJobCreate() {
                 Estimates
               </Text>
               {mode === "edit" && !isReadOnly && (
+                <Group gap="sm">
                 <Button
                   variant="outline"
                   color="#105476"
@@ -5043,6 +5182,89 @@ function ImportJobCreate() {
                 >
                   Create Supplier Invoice
                 </Button>
+                <Button
+                  variant="light"
+                  color="#105476"
+                  size="sm"
+                  leftSection={<IconFileInvoice size={16} />}
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                    },
+                  }}
+                  onClick={() => {
+                    const estimates = estimatesForm.values.estimates ?? [];
+                    const chargesFromEstimates = estimates
+                      .filter(
+                        (e) =>
+                          e.charge_id != null ||
+                          (e.charge_name && e.charge_name.trim() !== ""),
+                      )
+                      .map((e) => ({
+                        charge_id: e.charge_id,
+                        charge_name: e.charge_name ?? "",
+                        segment: "",
+                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                        sub_job: "",
+                        cn_r: "",
+                        currency: e.currency_code ?? "",
+                        currency_id: e.currency_id ?? "",
+                        roe: e.roe,
+                        unit_code: e.unit_code ?? "",
+                        unit_id: e.unit_id ?? "",
+                        no_of_unit: e.no_of_unit,
+                        amount_per_unit: e.cost_per_unit,
+                        amount: e.total_cost,
+                        amount_in_local:
+                          e.total_cost != null && e.roe != null
+                            ? Math.round(e.total_cost * e.roe * 100) / 100
+                            : e.total_cost,
+                        tax_code: "",
+                        tax: "false",
+                      }));
+                    const firstSupplier =
+                      estimates.find(
+                        (e) =>
+                          String(e.supplier_code ?? "").trim() !== "" ||
+                          String(e.supplier_name ?? "").trim() !== "",
+                      ) ?? null;
+                    navigate("/payment-request/create", {
+                      state: {
+                        serviceType: ["FCL", "LCL"],
+                        voucherType: "SEA IMPORTS",
+                        chargesFromEstimates:
+                          chargesFromEstimates.length > 0
+                            ? chargesFromEstimates
+                            : undefined,
+                        supplier:
+                          firstSupplier != null
+                            ? {
+                                supplier_code: String(
+                                  firstSupplier.supplier_code ?? "",
+                                ),
+                                supplier_name: String(
+                                  firstSupplier.supplier_name ?? "",
+                                ),
+                              }
+                            : null,
+                        job_reference_1:
+                          jobData?.job_id != null
+                            ? String(jobData.job_id)
+                            : jobData?.id != null
+                              ? String(jobData.id)
+                              : "",
+                        ...(jobWithMergedHousingDetails && {
+                          job: jobWithMergedHousingDetails,
+                        }),
+                      },
+                    });
+                  }}
+                >
+                  Create PRQ
+                </Button>
+                </Group>
               )}
             </Group>
             <EstimatesSection serviceType="SEA" form={estimatesForm} readOnly={isReadOnly} />
