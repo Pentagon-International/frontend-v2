@@ -4940,6 +4940,7 @@ function ImportJobCreate() {
                 Estimates
               </Text>
               {mode === "edit" && !isReadOnly && (
+                <Group gap="sm">
                 <Button
                   variant="outline"
                   color="#105476"
@@ -5043,6 +5044,89 @@ function ImportJobCreate() {
                 >
                   Create Supplier Invoice
                 </Button>
+                <Button
+                  variant="light"
+                  color="#105476"
+                  size="sm"
+                  leftSection={<IconFileInvoice size={16} />}
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                    },
+                  }}
+                  onClick={() => {
+                    const estimates = estimatesForm.values.estimates ?? [];
+                    const chargesFromEstimates = estimates
+                      .filter(
+                        (e) =>
+                          e.charge_id != null ||
+                          (e.charge_name && e.charge_name.trim() !== ""),
+                      )
+                      .map((e) => ({
+                        charge_id: e.charge_id,
+                        charge_name: e.charge_name ?? "",
+                        segment: "",
+                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                        sub_job: "",
+                        cn_r: "",
+                        currency: e.currency_code ?? "",
+                        currency_id: e.currency_id ?? "",
+                        roe: e.roe,
+                        unit_code: e.unit_code ?? "",
+                        unit_id: e.unit_id ?? "",
+                        no_of_unit: e.no_of_unit,
+                        amount_per_unit: e.cost_per_unit,
+                        amount: e.total_cost,
+                        amount_in_local:
+                          e.total_cost != null && e.roe != null
+                            ? Math.round(e.total_cost * e.roe * 100) / 100
+                            : e.total_cost,
+                        tax_code: "",
+                        tax: "false",
+                      }));
+                    const firstSupplier =
+                      estimates.find(
+                        (e) =>
+                          String(e.supplier_code ?? "").trim() !== "" ||
+                          String(e.supplier_name ?? "").trim() !== "",
+                      ) ?? null;
+                    navigate("/payment-request/create", {
+                      state: {
+                        serviceType: ["FCL", "LCL"],
+                        voucherType: "SEA IMPORTS",
+                        chargesFromEstimates:
+                          chargesFromEstimates.length > 0
+                            ? chargesFromEstimates
+                            : undefined,
+                        supplier:
+                          firstSupplier != null
+                            ? {
+                                supplier_code: String(
+                                  firstSupplier.supplier_code ?? "",
+                                ),
+                                supplier_name: String(
+                                  firstSupplier.supplier_name ?? "",
+                                ),
+                              }
+                            : null,
+                        job_reference_1:
+                          jobData?.job_id != null
+                            ? String(jobData.job_id)
+                            : jobData?.id != null
+                              ? String(jobData.id)
+                              : "",
+                        ...(jobWithMergedHousingDetails && {
+                          job: jobWithMergedHousingDetails,
+                        }),
+                      },
+                    });
+                  }}
+                >
+                  Create PRQ
+                </Button>
+                </Group>
               )}
             </Group>
             <EstimatesSection serviceType="SEA" form={estimatesForm} readOnly={isReadOnly} />

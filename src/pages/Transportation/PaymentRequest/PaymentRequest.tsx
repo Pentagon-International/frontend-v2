@@ -420,6 +420,24 @@ function resolveVoucherTypeFromServiceType(serviceType: unknown): string {
   return "";
 }
 
+function resolveVoucherTypeFromSourceState(state: unknown): string {
+  const explicitVoucherType =
+    state && typeof state === "object" && "voucherType" in state
+      ? String((state as { voucherType?: unknown }).voucherType ?? "").trim()
+      : "";
+
+  if (explicitVoucherType) {
+    return explicitVoucherType.toUpperCase();
+  }
+
+  const serviceType =
+    state && typeof state === "object" && "serviceType" in state
+      ? (state as { serviceType?: unknown }).serviceType
+      : undefined;
+
+  return resolveVoucherTypeFromServiceType(serviceType);
+}
+
 const emptyCharge = (): ChargeItem => ({
   charge_id: null,
   charge_name: "",
@@ -679,7 +697,7 @@ function PaymentRequest() {
   }, [location.state, requestId]);
 
   const defaultVoucherTypeFromSource = useMemo(
-    () => resolveVoucherTypeFromServiceType((location.state as any)?.serviceType),
+    () => resolveVoucherTypeFromSourceState(location.state),
     [location.state],
   );
 
