@@ -58,6 +58,65 @@ type ExportShipmentData = {
   destination_name: string;
   customer_service_name: string;
   status?: string;
+  destination_agent_code?: string;
+  destination_agent_address?: string;
+  destination_agent_email?: string;
+  destination_agent_name?: string;
+  destination_agent_phone?: string;
+  notify1_customer_name?: string;
+  notify1_customer_address?: string;
+  notify1_customer_email?: string;
+  cha?: string;
+  cha_id?: number | null;
+  cha_address?: string;
+  shipment_terms_code?: string;
+  origin_code?: string;
+  destination_code?: string;
+  is_hazardous?: boolean;
+  // Additional fields returned by the filter API
+  customer_code_read?: string;
+  origin_code_read?: string;
+  destination_code_read?: string;
+  etd?: string;
+  eta?: string;
+  atd?: string;
+  ata?: string;
+  carrier_code_read?: string;
+  voyage_no?: string;
+  mawb_no?: string;
+  mawb_date?: string;
+  carrier_booking_no?: string;
+  igm_no?: string;
+  igm_date?: string;
+  houseno?: string;
+  routed?: string;
+  routed_by?: string;
+  // Agent fields
+  agent_name?: string;
+  agent_address?: string;
+  agent_email?: string;
+  // Shipper fields
+  shipper_name?: string;
+  shipper_address?: string;
+  shipper_email?: string;
+  // Consignee fields
+  consignee_name?: string;
+  consignee_address?: string;
+  consignee_email?: string;
+  // Notify party fields
+  notify_customer_name?: string;
+  notify_customer_address?: string;
+  notify_customer_email?: string;
+  // Shipment terms / cargo details
+  shipment_terms_code_read?: string;
+  marks_no?: string | null;
+  commodity_description?: string | null;
+  service_type?: string;
+  events?: Array<Record<string, unknown>>;
+  routing_details?: Array<Record<string, unknown>>;
+  cargo_details?: Array<Record<string, unknown>>;
+  rate_details?: Array<Record<string, unknown>>;
+  housing_details?: Array<Record<string, unknown>>;
 };
 
 type FilterState = {
@@ -135,6 +194,12 @@ function AirExportBookingMaster() {
   // Cancel confirmation modal
   const [cancelConfirmRow, setCancelConfirmRow] = useState<ExportShipmentData | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Create Job modal state
+  const [createJobLoading, setCreateJobLoading] = useState(false);
+  const [createJobModalOpen, setCreateJobModalOpen] = useState(false);
+  const [createJobResponse, setCreateJobResponse] = useState<Record<string, unknown> | null>(null);
+  const [createJobError, setCreateJobError] = useState<string | null>(null);
 
   // State to store the actual applied filter values
   const filterForm = useForm<FilterState>({
@@ -575,6 +640,149 @@ function AirExportBookingMaster() {
     }
   };
 
+  const handleCreateJob = async (booking: ExportShipmentData) => {
+    const routingDetails = Array.isArray(booking.routing_details) ? booking.routing_details : [];
+    const rateDetails = Array.isArray(booking.rate_details) ? booking.rate_details : [];
+    const housingDetails = Array.isArray(booking.housing_details) ? booking.housing_details : [];
+    const cargoDetails = Array.isArray(booking.cargo_details) ? booking.cargo_details : [];
+
+    const payload: Record<string, unknown> = {
+      service: booking.service || "AIR",
+      service_type: booking.service_type || "Export",
+       agent: booking.destination_agent_code || "",
+     origin_code: booking.origin_code || "",
+     destination_code: booking.destination_code || "",
+     etd: null,
+     eta: null,
+     atd: null,
+     ata: null,
+     carrier_code:  "",
+     flightno:  "",
+     is_direct: false,
+     mawb_no: booking.mawb_no || "",
+     mbl_date: null,
+     carrier_booking_no: booking.carrier_booking_no || "",
+     voyage_number: booking.voyage_no || "",
+     estimates:[],
+      ocean_routings: routingDetails.map((r) => ({
+        transport_type: "Air",
+        from_port_code:
+          r.from_port_code|| "",
+        to_port_code:
+          r.to_port_code || "",
+        carrier_code: r.carrier_code || "",
+        flight: r.flight || "",
+        rail_no: r.rail_no || "",
+        truck_no: r.truck_no || "",
+        voyage_number: r.voyage_number || "",
+        vessel: r.vessel || "",
+        etd: r.etd ? dayjs(r.etd as string).isValid() ? dayjs(r.etd as string).format("YYYY-MM-DD") : null : null,
+        eta: r.eta ? dayjs(r.eta as string).isValid() ? dayjs(r.eta as string).format("YYYY-MM-DD") : null : null,
+        atd: r.atd ? dayjs(r.atd as string).isValid() ? dayjs(r.atd as string).format("YYYY-MM-DD") : null : null,
+        ata: r.ata ? dayjs(r.ata as string).isValid() ? dayjs(r.ata as string).format("YYYY-MM-DD") : null : null,
+      })),
+      // estimates: rateDetails.map((r) => ({
+      //   ...(r.supplier_code ? { supplier_code: String(r.supplier_code) } : {}),
+      //   ...(r.charge_id != null ? { charge_id: Number(r.charge_id) } : {}),
+      //   pp_cc: r.pp_cc || "Prepaid",
+      //   ...(r.unit_id != null ? { unit_id: Number(r.unit_id) } : {}),
+      //   no_of_unit: Number(r.no_of_unit ?? r.no_of_units ?? 0),
+      //   ...(r.currency_id != null ? { currency_id: Number(r.currency_id) } : {}),
+      //   roe: Number(r.roe ?? 1),
+      //   cost_per_unit: Number(r.cost_per_unit ?? 0),
+      //   total_cost: Number(r.total_cost ?? 0),
+      // })),
+      housing_details:[{
+              hawb_no: booking.houseno|| "",
+              origin_code: booking.origin_code || "",
+              destination_code: booking.destination_code || "",
+              trade: "Re Export",
+              routed: booking.routed || "",
+              routed_by: booking.routed_by || "",
+              customer_service: booking.customer_service_name || "",
+              agent_name: booking.destination_agent_name || "",
+              agent_address: booking.destination_agent_address || "",
+              agent_email: booking.destination_agent_email || "",
+              shipper_name: booking.shipper_name || "",
+              shipper_address: booking.shipper_address || "",
+              shipper_email: booking.shipper_email || "",
+              // consignee
+              consignee_name: booking.consignee_name || "",
+              consignee_address: booking.consignee_address || "",
+              consignee_email: booking.consignee_email || "",
+              // notify party
+              notify1_customer_name: booking.notify1_customer_name || "",
+              notify1_customer_address: booking.notify1_customer_address || "",
+              notify1_customer_email: booking.notify1_customer_email || "",
+              cha_name: booking.cha || "",
+              cha_address: booking.cha_address || "",
+              // commodity / marks / shipment terms
+              commodity_description: booking.commodity_description || "",
+              marks_no: booking.marks_no || "",
+              shipment_terms_code: booking.shipment_terms_code || "",
+              cargo_details: Array.isArray(booking.cargo_details) ? 
+              booking.cargo_details.map((cargo: Record<string, unknown>) => ({
+                no_of_packages: cargo.no_of_packages || "",
+                gross_weight: cargo.gross_weight || "",
+                volume: cargo.volume || "",
+                chargeable_weight: cargo.chargeable_weight || "",
+                haz: booking.is_hazardous || ""
+              })) : [],
+              mawb_charges: Array.isArray(booking.rate_details) ? booking.rate_details.map((charge: Record<string, unknown>) => ({
+                charge_id: charge.charge_id || "",
+                supplier_code:  "",
+                pp_cc: charge.pp_cc || "",
+                unit_id: charge.unit_id || "",
+                no_of_unit: charge.no_of_units || "",
+                amount: charge.min_sell || "",
+                amount_per_unit: charge.sell_per_unit || "",
+                cost_local_amount: "",
+                currency_id: charge.currency_id || "",
+                roe: charge.roe || "",
+                sell_local_amount: "",
+                total_cost: charge.total_cost || "",
+                unit_cost: charge.cost_per_unit || "",
+              })) : [],
+              events: Array.isArray(booking.events) ? booking.events.map((event: Record<string, unknown>) => ({
+                event_id: event.event_id || "",
+                event_name: event.event_name || "",
+                event_date: event.event_date || "",
+                event_status: event.event_status || "",
+                event_description: event.event_description || "",
+                event_type: event.event_type || "",
+                event_priority: event.event_priority || "",
+                event_location: event.event_location || "",
+              })) : [],
+            }],
+    };
+
+    setCreateJobModalOpen(true);
+    setCreateJobLoading(true);
+    setCreateJobResponse(null);
+    setCreateJobError(null);
+
+    try {
+      const response = (await apiCallProtected.post(
+        URL.jobCreate,
+        payload,
+      )) as Record<string, unknown>;
+      setCreateJobResponse(response);
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { data?: { message?: string; detail?: string; error?: string } };
+        message?: string;
+      };
+      const errMsg =
+        axiosErr?.response?.data?.message ||
+        axiosErr?.response?.data?.detail ||
+        axiosErr?.response?.data?.error ||
+        (err instanceof Error ? err.message : "Failed to create job");
+      setCreateJobError(String(errMsg));
+    } finally {
+      setCreateJobLoading(false);
+    }
+  };
+
   const columns = useMemo<MRT_ColumnDef<ExportShipmentData>[]>(
     () => [
       {
@@ -662,6 +870,7 @@ function AirExportBookingMaster() {
           const statusUpper = (row.original.status ?? "").toUpperCase();
           const isCancel = statusUpper === "CANCEL";
           const canCancel = statusUpper !== "GENERATED" && !isCancel;
+          const isBooked = statusUpper === "BOOKED";
           return (
             <Menu shadow="md" width={140}>
               <Menu.Target>
@@ -688,6 +897,14 @@ function AirExportBookingMaster() {
                     Edit
                   </Menu.Item>
                 </Tooltip>
+                {isBooked && (
+                  <Menu.Item
+                    leftSection={<IconPlus size={14} />}
+                    onClick={() => handleCreateJob(row.original)}
+                  >
+                    Create Job
+                  </Menu.Item>
+                )}
                 {canCancel && (
                   <Tooltip
                     label="This booking already has a job. If required, you can cancel the job."
@@ -1190,6 +1407,218 @@ function AirExportBookingMaster() {
           </Button>
         </Group>
       </Modal>
+      {/* Create Job Modal */}
+      <Modal
+        opened={createJobModalOpen}
+        onClose={() => {
+          if (!createJobLoading) {
+            setCreateJobModalOpen(false);
+            setCreateJobResponse(null);
+            setCreateJobError(null);
+          }
+        }}
+        title={
+          <Text fw={600} size="md" c="#444955" style={{ fontFamily: "Inter" }}>
+            Create Job
+          </Text>
+        }
+        centered
+        size="md"
+        closeOnClickOutside={!createJobLoading}
+        closeOnEscape={!createJobLoading}
+        withCloseButton={!createJobLoading}
+      >
+        {createJobLoading ? (
+          <Center py="xl">
+            <Stack align="center" gap="md">
+              <Loader size="md" color="#105476" />
+              <Text c="dimmed" size="sm" style={{ fontFamily: "Inter" }}>
+                Creating job, please wait...
+              </Text>
+            </Stack>
+          </Center>
+        ) : createJobError ? (
+          <Stack gap="md">
+            <Box
+              style={{
+                border: "1px solid #FFCDD2",
+                borderRadius: "6px",
+                padding: "12px 16px",
+                backgroundColor: "#FFF5F5",
+              }}
+            >
+              <Text size="sm" c="red" style={{ fontFamily: "Inter" }}>
+                {createJobError}
+              </Text>
+            </Box>
+            <Group justify="flex-end" gap="xs">
+              <Button
+                size="sm"
+                variant="outline"
+                styles={{
+                  root: {
+                    borderColor: "#105476",
+                    color: "#105476",
+                    borderRadius: "4px",
+                    fontFamily: "Inter",
+                  },
+                }}
+                onClick={() => {
+                  setCreateJobModalOpen(false);
+                  setCreateJobError(null);
+                }}
+              >
+                Close
+              </Button>
+            </Group>
+          </Stack>
+        ) : createJobResponse ? (
+          (() => {
+            const respData = createJobResponse as {
+              success?: boolean;
+              message?: string;
+              data?: {
+                job_details_id?: number;
+                id?: number;
+                job_id?: string;
+                job_no?: string;
+              };
+              job_details_id?: number;
+              id?: number;
+              job_id?: string;
+            };
+            const isSuccess =
+              respData?.success === true || respData?.success === undefined;
+            const message =
+              respData?.message ||
+              (isSuccess ? "Job created successfully!" : "Job creation failed.");
+            const jobDetailsId =
+              respData?.data?.job_details_id ??
+              respData?.data?.id ??
+              respData?.job_details_id ??
+              respData?.id;
+            const jobNo = respData?.data?.job_id || respData?.data?.job_no || respData?.job_id;
+
+            return (
+              <Stack gap="md">
+                <Box
+                  style={{
+                    border: `1px solid ${isSuccess ? "#C8E6C9" : "#FFCDD2"}`,
+                    borderRadius: "6px",
+                    padding: "12px 16px",
+                    backgroundColor: isSuccess ? "#F1F8E9" : "#FFF5F5",
+                  }}
+                >
+                  <Text
+                    size="sm"
+                    fw={600}
+                    c={isSuccess ? "green" : "red"}
+                    style={{ fontFamily: "Inter" }}
+                  >
+                    {message}
+                  </Text>
+                </Box>
+
+                {(jobDetailsId != null || jobNo) && (
+                  <Box
+                    style={{
+                      border: "1px solid #E0E0E0",
+                      borderRadius: "6px",
+                      padding: "12px 16px",
+                      backgroundColor: "#FAFAFA",
+                    }}
+                  >
+                    <Stack gap="xs">
+                      {jobDetailsId != null && (
+                        <Group gap="xs">
+                          <Text
+                            size="sm"
+                            fw={600}
+                            c="#444955"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            Job ID:
+                          </Text>
+                          <Text
+                            size="sm"
+                            c="#333740"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            {String(jobDetailsId)}
+                          </Text>
+                        </Group>
+                      )}
+                      {jobNo && (
+                        <Group gap="xs">
+                          <Text
+                            size="sm"
+                            fw={600}
+                            c="#444955"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            Job No:
+                          </Text>
+                          <Text
+                            size="sm"
+                            c="#333740"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            {String(jobNo)}
+                          </Text>
+                        </Group>
+                      )}
+                    </Stack>
+                  </Box>
+                )}
+
+                <Group justify="flex-end" gap="xs">
+                  {/* {isSuccess && jobDetailsId != null && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      styles={{
+                        root: {
+                          borderColor: "#105476",
+                          color: "#105476",
+                          borderRadius: "4px",
+                          fontFamily: "Inter",
+                        },
+                      }}
+                      onClick={() => {
+                        setCreateJobModalOpen(false);
+                        setCreateJobResponse(null);
+                        navigate("/air/export-job/view", {
+                          state: { jobId: Number(jobDetailsId) },
+                        });
+                      }}
+                    >
+                      View Job
+                    </Button>
+                  )} */}
+                  <Button
+                    size="sm"
+                    styles={{
+                      root: {
+                        backgroundColor: "#105476",
+                        borderRadius: "4px",
+                        fontFamily: "Inter",
+                        color: "#FFFFFF",
+                      },
+                    }}
+                    onClick={() => {
+                      setCreateJobModalOpen(false);
+                      setCreateJobResponse(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </Group>
+              </Stack>
+            );
+          })()
+        ) : null}
+      </Modal>
+
       <Outlet />
     </>
   );

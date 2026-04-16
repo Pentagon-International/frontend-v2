@@ -688,6 +688,7 @@ function AirImportBookingMaster() {
           const statusUpper = (row.original.status ?? "").toUpperCase();
           const isCancel = statusUpper === "CANCEL";
           const canCancel = statusUpper !== "GENERATED" && !isCancel;
+          const isBooked = statusUpper === "BOOKED";
           return (
             <Menu shadow="md" width={140}>
               <Menu.Target>
@@ -714,6 +715,20 @@ function AirImportBookingMaster() {
                     Edit
                   </Menu.Item>
                 </Tooltip>
+                {isBooked && (
+                  <Menu.Item
+                    leftSection={<IconPlus size={14} />}
+                    onClick={() => {
+                      // const { id: _ignoredId, ...jobWithoutId } =
+                      //   row.original as unknown as Record<string, unknown>;
+                      // navigate("/air/import-job/create", {
+                      //   state: { job: jobWithoutId },
+                      // });
+                    }}
+                  >
+                    Create Job
+                  </Menu.Item>
+                )}
                 {canCancel && (
                   <Tooltip
                     label="This booking already has a job. If required, you can cancel the job."
