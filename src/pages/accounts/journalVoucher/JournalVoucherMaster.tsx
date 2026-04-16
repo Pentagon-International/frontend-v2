@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
+  MRT_PaginationState,
   useMantineReactTable,
 } from "mantine-react-table";
 import {
@@ -11,28 +12,37 @@ import {
   Button,
   Card,
   Center,
+  Grid,
   Group,
   Loader,
   Menu,
-  Select,
   Stack,
   Text,
+  TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import {
-  IconChevronLeft,
-  IconChevronRight,
   IconDotsVertical,
   IconEdit,
   IconEye,
+  IconFilter,
   IconPlus,
   IconReceiptRefund,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
-import { postAPICall } from "../../../service/postApiCall";
+import { apiCallProtected } from "../../../api/axios";
+import { useDebouncedValue } from "@mantine/hooks";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import FormTextInput from "../../../components/FormTextInput";
+import { Dropdown, SingleDateInput } from "../../../components";
+import { useListFilterStore } from "../../../store/listFilterStore";
+import dayjs from "dayjs";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -66,6 +76,16 @@ type JVRecord = {
   }>;
 };
 
+const LIST_KEY = "JOURNAL_VOUCHER_MASTER";
+
+type JournalVoucherFilters = {
+  document_no: string;
+  account_name: string;
+  journal_date_from: Date | null;
+  journal_date_to: Date | null;
+  status: string;
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatDate(dateStr?: string | null): string {
@@ -97,47 +117,205 @@ function statusColor(status?: string): string {
 
 function JournalVoucherMaster() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const defaultDateFrom = dayjs().startOf("month").toDate();
+  const defaultDateTo = dayjs().toDate();
+  const dateFormat = useDateFormat();
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-
-  // ─── Query ────────────────────────────────────────────────────────────────
-
-  const { data, isLoading, isFetching } = useQuery<{
-    data: JVRecord[];
-    total_count: number;
-  }>({
-    queryKey: ["journalVoucherMaster"],
-    queryFn: async () => {
-      try {
-        const response = await postAPICall(
-          (URL as any).journalVoucherFilter,
-          { filters: {} },
-          API_HEADER,
-        );
-        const result = response as { status?: boolean; data?: JVRecord[] };
-        const rows = Array.isArray(result?.data)
-          ? result.data
-          : Array.isArray(result)
-            ? (result as unknown as JVRecord[])
-            : [];
-        return { data: rows, total_count: rows.length };
-      } catch {
-        return { data: [], total_count: 0 };
-      }
-    },
-    staleTime: 2 * 60 * 1000,
-    refetchOnWindowFocus: false,
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
   });
 
-  const allData = data?.data ?? [];
-  const totalRecords = data?.total_count ?? 0;
-  const isTableLoading = isLoading || isFetching;
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
 
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return allData.slice(start, start + pageSize);
-  }, [allData, currentPage, pageSize]);
+  const DEFAULT_FILTERS: JournalVoucherFilters = {
+    document_no: "",
+    account_name: "",
+    journal_date_from: defaultDateFrom,
+    journal_date_to: defaultDateTo,
+    status: "",
+  };
+
+  const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
+
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
+
+  useEffect(() => {
+    if (isRestoring) return;
+    setPagination((prev) =>
+      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
+    );
+    setStoreSearch(LIST_KEY, search);
+  }, [debouncedSearch, isRestoring, search, setStoreSearch]);
+
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const raw = stored.filters as Record<string, unknown>;
+      const restored = {
+        ...DEFAULT_FILTERS,
+        ...raw,
+        journal_date_from: raw.journal_date_from
+          ? new Date(String(raw.journal_date_from))
+          : raw.journal_date
+            ? new Date(String(raw.journal_date))
+            : DEFAULT_FILTERS.journal_date_from,
+        journal_date_to: raw.journal_date_to
+          ? new Date(String(raw.journal_date_to))
+          : raw.journal_date
+            ? new Date(String(raw.journal_date))
+            : DEFAULT_FILTERS.journal_date_to,
+      };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key]);
+
+  const currentPage = pagination.pageIndex + 1;
+  const index = pagination.pageIndex * pagination.pageSize;
+
+  const handlePageSizeChange = (size: number) => {
+    setPagination({ pageIndex: 0, pageSize: size });
+  };
+
+  const handlePageChange = (page: number) => {
+    setPagination((prev) => ({ ...prev, pageIndex: page - 1 }));
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters(draftFilters);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
+  };
+
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
+  };
+
+  const buildFiltersPayload = (
+    filters: JournalVoucherFilters,
+    searchValue: string,
+  ) => {
+    const cleaned: Record<string, string> = {};
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (!value) return;
+
+      if (key === "journal_date_from") {
+        cleaned.journal_date_from = dayjs(value as Date).format("YYYY-MM-DD");
+      } else if (key === "journal_date_to") {
+        cleaned.journal_date_to = dayjs(value as Date).format("YYYY-MM-DD");
+      } else if (typeof value === "string" && value.trim() !== "") {
+        cleaned[key] = value;
+      }
+    });
+
+    if (searchValue?.trim()) cleaned.search = searchValue;
+
+    return cleaned;
+  };
+
+  const {
+    data = [],
+    isLoading: isLoadingQuery,
+    isFetching,
+    error,
+  } = useQuery({
+    queryKey: [
+      "journalVoucherMaster",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(appliedFilters),
+      debouncedSearch,
+    ],
+    queryFn: async (): Promise<JVRecord[]> => {
+      try {
+        const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
+
+        const payload =
+          Object.keys(filtersPayload).length > 0
+            ? { filters: filtersPayload }
+            : { filters: {} };
+
+        setIsInitialLoad(false);
+
+        const response = await apiCallProtected.post(
+          `${(URL as any).journalVoucherFilter}?index=${index}&limit=${pagination.pageSize}`,
+          payload,
+          API_HEADER as any,
+        );
+
+        const raw = response as any;
+        const bodyCandidate =
+          raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
+        const body = bodyCandidate ?? null;
+
+        if (!body) {
+          setTotalRecords(0);
+          return [];
+        }
+
+        const list = Array.isArray(body?.data)
+          ? body.data
+          : Array.isArray(body)
+            ? body
+            : [];
+
+        const total = body?.total ?? body?.total_count ?? list.length;
+        setTotalRecords(Number(total));
+        return list;
+      } catch (err: any) {
+        const status = err?.response?.status;
+        if (status === 404) {
+          setTotalRecords(0);
+          return [];
+        }
+        throw err;
+      }
+    },
+    enabled: !isRestoring && search === debouncedSearch,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  const isLoading = isFetching || isLoadingQuery || isInitialLoad;
+  const tableData = data ?? [];
 
   // ─── Columns ──────────────────────────────────────────────────────────────
 
@@ -149,7 +327,7 @@ function JournalVoucherMaster() {
         size: 60,
         enableColumnFilter: false,
         enableSorting: false,
-        Cell: ({ row }) => (currentPage - 1) * pageSize + row.index + 1,
+        Cell: ({ row }) => index + row.index + 1,
       },
       {
         accessorKey: "document_no",
@@ -165,7 +343,13 @@ function JournalVoucherMaster() {
         accessorKey: "journal_date",
         header: "Journal Date",
         size: 130,
-        Cell: ({ cell }) => formatDate(cell.getValue<string>()),
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.journal_date
+              ? dayjs(row.original?.journal_date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "account_name",
@@ -282,11 +466,14 @@ function JournalVoucherMaster() {
                 {canEdit && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
+                      onClick={() => {
+                        setStoreFilters(LIST_KEY, appliedFilters);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
                         navigate(`/journal-voucher/edit/${row.original.id}`, {
                           state: { rowData: row.original },
-                        })
-                      }
+                        });
+                      }}
                     >
                       <Group gap="sm">
                         <IconEdit size={16} style={{ color: "#105476" }} />
@@ -300,11 +487,14 @@ function JournalVoucherMaster() {
 
                 <Box px={10} py={5}>
                   <UnstyledButton
-                    onClick={() =>
+                    onClick={() => {
+                      setStoreFilters(LIST_KEY, appliedFilters);
+                      setStoreSearch(LIST_KEY, search);
+                      setShouldRestore(LIST_KEY, true);
                       navigate(`/journal-voucher/view/${row.original.id}`, {
                         state: { rowData: row.original },
-                      })
-                    }
+                      });
+                    }}
                   >
                     <Group gap="sm">
                       <IconEye size={16} style={{ color: "#105476" }} />
@@ -318,11 +508,14 @@ function JournalVoucherMaster() {
                 {isPosted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
+                      onClick={() => {
+                        setStoreFilters(LIST_KEY, appliedFilters);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
                         navigate("/journal-voucher-reversal/create", {
                           state: { reversalOf: row.original },
-                        })
-                      }
+                        });
+                      }}
                     >
                       <Group gap="sm">
                         <IconReceiptRefund size={16} style={{ color: "#105476" }} />
@@ -339,15 +532,15 @@ function JournalVoucherMaster() {
         },
       },
     ],
-    [navigate, currentPage, pageSize],
+    [navigate, index, appliedFilters, search, setStoreFilters, setStoreSearch, setShouldRestore],
   );
 
   // ─── Table ────────────────────────────────────────────────────────────────
 
   const table = useMantineReactTable({
     columns,
-    data: paginatedData,
-    state: { isLoading: isTableLoading },
+    data: tableData,
+    state: { isLoading, pagination },
     enableColumnFilters: false,
     enablePagination: false,
     enableTopToolbar: false,
@@ -358,6 +551,9 @@ function JournalVoucherMaster() {
     enableStickyHeader: true,
     initialState: { columnPinning: { right: ["actions"] } },
     layoutMode: "grid",
+    manualPagination: true,
+    rowCount: totalRecords,
+    onPaginationChange: setPagination,
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
@@ -471,24 +667,258 @@ function JournalVoucherMaster() {
             Journal Voucher
           </Text>
 
-          <Button
-            leftSection={<IconPlus size={16} />}
-            size="sm"
-            styles={{
-              root: {
-                backgroundColor: "#105476",
-                borderRadius: "4px",
-                color: "#FFFFFF",
-                fontSize: "13px",
-                fontFamily: "Inter",
-              },
-            }}
-            onClick={() => navigate("/journal-voucher/create")}
-          >
-            Create New
-          </Button>
+          <Group gap="xs" wrap="nowrap">
+            <TextInput
+              placeholder="Search..."
+              leftSection={<IconSearch size={16} />}
+              rightSection={
+                search ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                    }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <IconX size={16} />
+                  </ActionIcon>
+                ) : null
+              }
+              w={248}
+              size="sm"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              styles={{
+                input: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontstyle: "regular",
+                  color: "#333740",
+                  minWidth: "24px",
+                  minHeight: "24px",
+                  width: "248px",
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  "&:focus": {
+                    border: "1px solid #105476",
+                  },
+                },
+              }}
+            />
+            <ActionIcon
+              variant={showFilters ? "filled" : "outline"}
+              size={36}
+              color={showFilters ? "#E0F5FF" : "gray"}
+              onClick={() => setShowFilters(!showFilters)}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                  border: showFilters
+                    ? "1px solid #105476"
+                    : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  "&:active": {
+                    border: "1px solid #105476",
+                    color: "#FFFFFF",
+                  },
+                },
+              }}
+            >
+              <IconFilter size={18} />
+            </ActionIcon>
+            <Button
+              leftSection={<IconPlus size={16} />}
+              size="sm"
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  color: "#FFFFFF",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontstyle: "semibold",
+                  "&:hover": {
+                    backgroundColor: "#105476",
+                  },
+                },
+              }}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/journal-voucher/create");
+              }}
+            >
+              Create New
+            </Button>
+          </Group>
         </Group>
       </Box>
+
+      {showFilters && (
+        <Box
+          tt="capitalize"
+          mb="sm"
+          p="sm"
+          style={{
+            borderRadius: "8px",
+            border: "1px solid #E0E0E0",
+            flexShrink: 0,
+            height: "fit-content",
+          }}
+        >
+          <Group
+            justify="space-between"
+            align="center"
+            mb="sm"
+            px="md"
+            style={{
+              backgroundColor: "#FAFAFA",
+              padding: "4px 8px",
+            }}
+          >
+            <Text
+              size="sm"
+              fw={600}
+              c="#000000"
+              style={{ fontFamily: "Inter", fontSize: "14px" }}
+            >
+              Filter
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setShowFilters(false)}
+              aria-label="Close filters"
+              size="sm"
+            >
+              <IconX size={18} />
+            </ActionIcon>
+          </Group>
+
+          <Grid gutter="sm" px="md" pt="xs" pb="sm">
+            <Grid.Col span={3}>
+              <FormTextInput
+                label="Document No"
+                placeholder="Type Document No"
+                value={draftFilters.document_no}
+                onChange={(e) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    document_no: e.currentTarget.value,
+                  }))
+                }
+                size="xs"
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <FormTextInput
+                label="Account Name"
+                placeholder="Type Account Name"
+                value={draftFilters.account_name}
+                onChange={(e) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    account_name: e.currentTarget.value,
+                  }))
+                }
+                size="xs"
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="Journal Date From"
+                placeholder="Select Date"
+                value={draftFilters.journal_date_from}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    journal_date_from: date,
+                  }))
+                }
+                size="xs"
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="Journal Date To"
+                placeholder="Select Date"
+                value={draftFilters.journal_date_to}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    journal_date_to: date,
+                  }))
+                }
+                size="xs"
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <Dropdown
+                size="xs"
+                label="Status"
+                placeholder="Select Status"
+                data={["POSTED", "UNPOSTED"]}
+                value={draftFilters.status}
+                searchable
+                onChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    status: value || "",
+                  }))
+                }
+              />
+            </Grid.Col>
+          </Grid>
+
+          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={clearAllFilters}
+              leftSection={<IconX size={16} />}
+              styles={{
+                root: {
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  border: "1px solid #D0D1D4",
+                  color: "#444955",
+                },
+              }}
+            >
+              Clear Filters
+            </Button>
+            <Button
+              size="sm"
+              onClick={applyFilters}
+              loading={isLoading}
+              disabled={isLoading}
+              leftSection={<IconFilter size={16} />}
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  height: "36px",
+                  "&:hover": {
+                    backgroundColor: "#0d4261",
+                  },
+                },
+              }}
+            >
+              Apply Filters
+            </Button>
+          </Group>
+        </Box>
+      )}
 
       {/* ── Table ── */}
       {isLoading ? (
@@ -500,121 +930,25 @@ function JournalVoucherMaster() {
             </Text>
           </Stack>
         </Center>
+      ) : error ? (
+        <Center py="xl" style={{ flex: 1 }}>
+          <Stack align="center" gap="md">
+            <Text c="dimmed" style={{ fontFamily: "Inter" }}>
+              Error loading journal vouchers. Please try refreshing the page.
+            </Text>
+          </Stack>
+        </Center>
       ) : (
         <>
-          <div
-            style={{
-              position: "relative",
-              flex: 1,
-              minHeight: 0,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {isFetching && !isLoading && (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  backgroundColor: "rgba(255,255,255,0.8)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 10,
-                  borderRadius: "8px",
-                }}
-              >
-                <Stack align="center" gap="md">
-                  <Loader size="lg" color="#105476" />
-                  <Text c="dimmed" style={{ fontFamily: "Inter" }}>
-                    Refreshing...
-                  </Text>
-                </Stack>
-              </div>
-            )}
-            <MantineReactTable table={table} />
-          </div>
-
-          {/* ── Pagination ── */}
-          <Group
-            w="100%"
-            justify="space-between"
-            align="center"
-            p="xs"
-            wrap="nowrap"
-            pt="md"
-          >
-            <Group gap="sm" align="center" wrap="nowrap">
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                Rows per page
-              </Text>
-              <Select
-                size="xs"
-                data={["10", "25", "50"]}
-                value={String(pageSize)}
-                onChange={(val) => {
-                  if (!val) return;
-                  setPageSize(Number(val));
-                  setCurrentPage(1);
-                }}
-                w={110}
-                styles={
-                  {
-                    input: {
-                      fontSize: "13px",
-                      height: "36px",
-                      fontFamily: "Inter",
-                    },
-                  } as Record<string, unknown>
-                }
-              />
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                {(() => {
-                  if (totalRecords === 0) return "0–0 of 0";
-                  const start = (currentPage - 1) * pageSize + 1;
-                  const end = Math.min(currentPage * pageSize, totalRecords);
-                  return `${start}–${end} of ${totalRecords}`;
-                })()}
-              </Text>
-            </Group>
-
-            <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                <IconChevronLeft size={16} />
-              </ActionIcon>
-              <Text
-                size="sm"
-                ta="center"
-                style={{ width: 26, fontFamily: "Inter" }}
-              >
-                {currentPage}
-              </Text>
-              <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
-                of {Math.max(1, Math.ceil(totalRecords / pageSize))}
-              </Text>
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  const total = Math.max(
-                    1,
-                    Math.ceil(totalRecords / pageSize),
-                  );
-                  setCurrentPage((p) => Math.min(total, p + 1));
-                }}
-                disabled={
-                  currentPage >= Math.max(1, Math.ceil(totalRecords / pageSize))
-                }
-              >
-                <IconChevronRight size={16} />
-              </ActionIcon>
-            </Group>
-          </Group>
+          <MantineReactTable table={table} />
+          <PaginationBar
+            pageSize={pagination.pageSize}
+            currentPage={currentPage}
+            totalRecords={totalRecords}
+            onPageSizeChange={handlePageSizeChange}
+            onPageChange={handlePageChange}
+            pageSizeOptions={["10", "25", "50"]}
+          />
         </>
       )}
     </Card>

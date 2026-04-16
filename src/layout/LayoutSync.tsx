@@ -110,9 +110,15 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/SeaExport")) {
       setActiveNav("Transportation");
       setActiveSubNav("FCL Job Generation"); // Default to FCL
+    } else if (path.startsWith("/payment-request-approval")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Payment Request Approval");
+    } else if (path.startsWith("/supplier-invoice-rcm")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Supplier Invoice RCM");
     } else if (path.startsWith("/supplier-invoice/reversal")) {
       setActiveNav("Desk");
-      setActiveSubNav("Supplier Invoice Reverse");
+      setActiveSubNav("Supplier Invoice Reversal");
     } else if (path.startsWith("/supplier-invoice")) {
       setActiveNav("Desk");
       setActiveSubNav("Supplier Invoice");
@@ -128,9 +134,30 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/payment/reversal")) {
       setActiveNav("Desk");
       setActiveSubNav("Payment Reversal");
+    } else if (path.startsWith("/overseas-payment")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Overseas Payment");
     } else if (path.startsWith("/payment")) {
       setActiveNav("Desk");
       setActiveSubNav("Payment");
+    } else if (path.startsWith("/journal-voucher-reversal")) {
+      setActiveNav("Desk");
+      setActiveSubNav("JournalVoucherReversal");
+    } else if (path.startsWith("/journal-voucher")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Journal Voucher");
+    } else if (path.startsWith("/subledger-enquiry")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Subledger Enquiry");
+    } else if (path.startsWith("/document-allocation")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Document Allocation");
+    } else if (path.startsWith("/hbl-document-manager")) {
+      setActiveNav("Jobcreation");
+      setActiveSubNav("");
+    } else if (path.startsWith("/invoice")) {
+      setActiveNav("Invoice");
+      setActiveSubNav("");
     } else if (path.startsWith("/accounts")) {
       setActiveNav("Desk");
       setActiveSubNav("Accounts");

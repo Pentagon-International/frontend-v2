@@ -10,6 +10,8 @@ export const sectionIconColors: Record<string, string> = {
   Accounts: "#1034B5",
   Masters: "#1034B5",
   Settings: "#1034B5",
+  Jobcreation: "#1034B5",
+  Invoice: "#1034B5",
 
   Reports: "#B5105D",
   Help: "#B5105D",
@@ -29,6 +31,8 @@ export const sectionIconBackground: Record<string, string> = {
   Accounts: "#EDF1FC",
   Masters: "#EDF1FC",
   Settings: "#EDF1FC",
+  Jobcreation: "#EDF1FC",
+  Invoice: "#EDF1FC",
 
   Reports: "#FCEDF4",
   Help: "#FCEDF4",

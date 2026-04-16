@@ -37,8 +37,13 @@ export const SimpleNavLink = ({
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
+  const isActive =
+    label === "Dashboard"
+      ? pathname === "/"
+      : pathname === path || pathname.startsWith(`${path}/`) || activeNav === label;
+
   const style = getLinkStyles(
-    activeNav === label,
+    isActive,
     label,
     undefined,
     undefined,
@@ -83,7 +88,6 @@ export const SimpleNavLink = ({
     setOpenCollapsible("Tariff", false);
     setOpenCollapsible("Accounts", false);
   };
-  const isActive = activeNav === label;
   const iconColor = sectionIconColors[label] || "white";
   const iconBackground = sectionIconBackground[label] || "#105476";
 

@@ -161,7 +161,7 @@ export const CollapsibleNav = ({
   useEffect(() => {
     if (opened && isSidebarCollapsed && navRef.current) {
       const rect = navRef.current.getBoundingClientRect();
-      setFlyoutPos({ top: rect.top, left: rect.right + 8 });
+      setFlyoutPos({ top: rect.top, left: rect.right + 12 });
     }
   }, [opened, isSidebarCollapsed]);
 
@@ -337,7 +337,7 @@ export const CollapsibleNav = ({
             }}
             style={{
               position: "fixed",
-              top: flyoutPos.top,
+              top: label === "Accounts" ? 80 : flyoutPos.top,
               left: flyoutPos.left,
               zIndex: 100,
               background: "#fff",

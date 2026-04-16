@@ -37,8 +37,10 @@ import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
-import { Dropdown, SearchableSelect } from "../../../components";
+import { Dropdown, SearchableSelect, SingleDateInput } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import dayjs from "dayjs";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "PAYMENT_MASTER";
 
@@ -66,6 +68,8 @@ type PaymentFilters = {
   day_book_id: string;
   day_book_name: string;
   payment_no: string;
+  date_from: Date | null;
+  date_to: Date | null;
   type: string;
   amount: string;
   status: string;
@@ -74,6 +78,9 @@ type PaymentFilters = {
 export default function PaymentMaster() {
   const navigate = useNavigate();
   const location = useLocation();
+  const defaultDateFrom = dayjs().startOf("month").toDate();
+  const defaultDateTo = dayjs().toDate();
+  const dateFormat = useDateFormat();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -84,6 +91,8 @@ export default function PaymentMaster() {
     day_book_id: "",
     day_book_name: "",
     payment_no: "",
+    date_from: defaultDateFrom,
+    date_to: defaultDateTo,
     type: "",
     amount: "",
     status: "",
@@ -105,6 +114,13 @@ export default function PaymentMaster() {
   const [debouncedSearch] = useDebouncedValue(search, 500);
 
   useEffect(() => {
+    if (isRestoring) return;
+    setPagination((prev) =>
+      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
+    );
+  }, [debouncedSearch, isRestoring]);
+
+  useEffect(() => {
     const stored = getState(LIST_KEY);
     const shouldRestore = stored?.shouldRestore === true;
     if (!shouldRestore) {
@@ -113,7 +129,13 @@ export default function PaymentMaster() {
     }
     if (typeof stored?.search === "string") setSearch(stored.search);
     if (stored?.filters && typeof stored.filters === "object") {
-      const restored = { ...DEFAULT_FILTERS, ...stored.filters };
+      const raw = stored.filters as Record<string, unknown>;
+      const restored = {
+        ...DEFAULT_FILTERS,
+        ...raw,
+        date_from: raw.date_from ? new Date(String(raw.date_from)) : DEFAULT_FILTERS.date_from,
+        date_to: raw.date_to ? new Date(String(raw.date_to)) : DEFAULT_FILTERS.date_to,
+      };
       setDraftFilters(restored);
       setAppliedFilters(restored);
     }
@@ -147,7 +169,9 @@ export default function PaymentMaster() {
   const buildFiltersPayload = (filters: PaymentFilters, searchValue: string) => {
     const cleaned = Object.entries(filters).reduce((acc, [key, value]) => {
       if (key === "day_book_name") return acc;
-      if (value && value.trim() !== "") acc[key] = value;
+      if (key === "date_from" && value) acc.date_from = dayjs(value as Date).format("YYYY-MM-DD");
+      else if (key === "date_to" && value) acc.date_to = dayjs(value as Date).format("YYYY-MM-DD");
+      else if (typeof value === "string" && value.trim() !== "") acc[key] = value;
       return acc;
     }, {} as Record<string, string>);
     if (searchValue?.trim()) cleaned.search = searchValue;
@@ -230,6 +254,18 @@ export default function PaymentMaster() {
         accessorKey: "payment_no",
         header: "Payment No",
         size: 160,
+      },
+      {
+        accessorKey: "date",
+        header: "Date",
+        size: 100,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.date
+              ? dayjs(row.original?.date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "type",
@@ -608,6 +644,28 @@ export default function PaymentMaster() {
                 minSearchLength={1}
                 displayFormat={(item) => ({ value: String(item.payment_no ?? ""), label: String(item.payment_no ?? "") })}
                 searchFields={["payment_no"]}
+                size="xs"
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="Date From"
+                placeholder="Select Date"
+                value={draftFilters.date_from}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({ ...prev, date_from: date }))
+                }
+                size="xs"
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="Date To"
+                placeholder="Select Date"
+                value={draftFilters.date_to}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({ ...prev, date_to: date }))
+                }
                 size="xs"
               />
             </Grid.Col>

@@ -37,9 +37,11 @@ import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
-import { Dropdown, SearchableSelect } from "../../../components";
+import { Dropdown, SearchableSelect, SingleDateInput } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
+import dayjs from "dayjs";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "RECEIPT_MASTER";
 
@@ -67,6 +69,8 @@ type ReceiptFilters = {
   day_book_id: string;
   day_book_name: string;
   receipt_no: string;
+  date_from: Date | null;
+  date_to: Date | null;
   type: string;
   amount: string;
   status: string;
@@ -75,6 +79,9 @@ type ReceiptFilters = {
 export default function ReceiptMaster() {
   const navigate = useNavigate();
   const location = useLocation();
+  const defaultDateFrom = dayjs().startOf("month").toDate();
+  const defaultDateTo = dayjs().toDate();
+  const dateFormat = useDateFormat();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -85,6 +92,8 @@ export default function ReceiptMaster() {
     day_book_id: "",
     day_book_name: "",
     receipt_no: "",
+    date_from: defaultDateFrom,
+    date_to: defaultDateTo,
     type: "",
     amount: "",
     status: "",
@@ -107,6 +116,13 @@ export default function ReceiptMaster() {
   const [debouncedSearch] = useDebouncedValue(search, 500);
 
   useEffect(() => {
+    if (isRestoring) return;
+    setPagination((prev) =>
+      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
+    );
+  }, [debouncedSearch, isRestoring]);
+
+  useEffect(() => {
     const stored = getState(LIST_KEY);
     const shouldRestore = stored?.shouldRestore === true;
 
@@ -120,7 +136,13 @@ export default function ReceiptMaster() {
     }
 
     if (stored?.filters && typeof stored.filters === "object") {
-      const restored = { ...DEFAULT_FILTERS, ...stored.filters };
+      const raw = stored.filters as Record<string, unknown>;
+      const restored = {
+        ...DEFAULT_FILTERS,
+        ...raw,
+        date_from: raw.date_from ? new Date(String(raw.date_from)) : DEFAULT_FILTERS.date_from,
+        date_to: raw.date_to ? new Date(String(raw.date_to)) : DEFAULT_FILTERS.date_to,
+      };
       setDraftFilters(restored);
       setAppliedFilters(restored);
     }
@@ -170,7 +192,9 @@ export default function ReceiptMaster() {
   ) => {
     const cleaned = Object.entries(filters).reduce((acc, [key, value]) => {
       if (key === "day_book_name") return acc;
-      if (value && value.trim() !== "") acc[key] = value;
+      if (key === "date_from" && value) acc.date_from = dayjs(value as Date).format("YYYY-MM-DD");
+      else if (key === "date_to" && value) acc.date_to = dayjs(value as Date).format("YYYY-MM-DD");
+      else if (typeof value === "string" && value.trim() !== "") acc[key] = value;
       return acc;
     }, {} as Record<string, string>);
 
@@ -266,6 +290,18 @@ export default function ReceiptMaster() {
         accessorKey: "receipt_no",
         header: "Receipt No",
         size: 160,
+      },
+      {
+        accessorKey: "date",
+        header: "Date",
+        size: 100,
+        Cell:({ row }) => (
+          <Text size="sm">
+            {row.original.date
+              ? dayjs(row.original?.date).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
       },
       {
         accessorKey: "type",
@@ -738,6 +774,28 @@ export default function ReceiptMaster() {
                   label: String(item.receipt_no ?? ""),
                 })}
                 searchFields={["receipt_no"]}
+                size="xs"
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="Date From"
+                placeholder="Select Date"
+                value={draftFilters.date_from}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({ ...prev, date_from: date }))
+                }
+                size="xs"
+              />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <SingleDateInput
+                label="Date To"
+                placeholder="Select Date"
+                value={draftFilters.date_to}
+                onChange={(date) =>
+                  setDraftFilters((prev) => ({ ...prev, date_to: date }))
+                }
                 size="xs"
               />
             </Grid.Col>
