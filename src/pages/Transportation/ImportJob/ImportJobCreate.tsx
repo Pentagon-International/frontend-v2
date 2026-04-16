@@ -2484,6 +2484,106 @@ function ImportJobCreate() {
     }
   };
 
+  const handlePushToOdexDownload = useCallback(() => {
+    const odexPayload = {
+      headerField: {
+        senderID: "",
+        receiverID: "INNHA",
+        versionNo: "SCE1102",
+        indicator: "T",
+        messageID: "SACHM22",
+        sequenceOrControlNumber: 210001,
+        date: "20260416",
+        time: "T17:29",
+        reportingEvent: "SCE",
+      },
+      master: {
+        decRef: {
+          msgTyp: "F",
+          prtofRptng: "INNHA",
+          jobNo: 210001,
+          jobDt: "20260101",
+          rptngEvent: "SCE",
+        },
+        authPrsn: {
+          sbmtrTyp: "",
+          sbmtrCd: "",
+          authReprsntvCd: "",
+        },
+        vesselDtls: {
+          modeOfTrnsprt: "1",
+          typOfTrnsprtMeans: "10",
+          trnsprtMeansId: "9292266",
+        },
+        voyageDtls: {
+          cnvnceRefNmbr: "",
+          totalNoOfTrnsprtEqmtMnfsted: 1,
+          totalNmbrOfLines: 1,
+        },
+        mastrCnsgmtDec: [
+          {
+            MCRef: {
+              lineNo: 1,
+              mstrBlNo: "A92FX33619",
+              mstrBlDt: "20251215",
+              consolidatedIndctr: "",
+              prevDec: "N",
+              consolidatorPan: "PAN:",
+            },
+            trnsprtDocMsr: {
+              nmbrOfPkgs: 1288,
+              typsOfPkgs: "PKG",
+              marksNoOnPkgs: "",
+              grossWeight: 24131.8,
+              netWeight: 24131.8,
+              unitOfWeight: "KGS",
+              grossVolume: 30.12,
+              crncyCd: "INR",
+            },
+            trnsprtEqmt: [
+              {
+                eqmtSeqNo: 1,
+                eqmtId: "IAAU2007570",
+                eqmtTyp: "CN",
+                eqmtSize: "2200",
+                eqmtLoadStatus: "FCL",
+                adtnlEqmtHold: "",
+                eqmtSealTyp: "BTSL",
+                eqmtSealNmbr: "",
+                otherEqmtId: "",
+                socFlag: "N",
+                cntrAgntCd: "",
+                cntrWeight: 24131.8,
+                totalNmbrOfPkgs: 1288,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(odexPayload, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const fileJobNo =
+       jobData?.job_id || jobData?.id || "draft";
+    const fileDate = odexPayload.headerField.date || "date";
+    const fileTime = (odexPayload.headerField.time || "time").replace(/[^0-9A-Za-z]/g, "");
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${fileJobNo}-${fileDate}-${fileTime}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    ToastNotification({
+      type: "success",
+      message: "Odex file downloaded successfully",
+    });
+  }, [jobData?.id, jobData?.job_id]);
+
   const handleSubmit = async () => {
     // Ensure we're using the latest form values by constructing payload right before API call
     setIsSubmitting(true);
@@ -3064,6 +3164,44 @@ function ImportJobCreate() {
                       Delivery Order - {housing.hbl_number || `HBL ${idx + 1}`}
                     </Menu.Item>
                   ))}
+                  <Menu.Item
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconDownload size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
+                    onClick={handlePushToOdexDownload}
+                  >
+                    Push To Odex
+                  </Menu.Item>
                   {jobData?.id != null && (
                     <Menu.Item
                       leftSection={
