@@ -986,6 +986,9 @@ export const getFilteredBudgetData = async (
 ): Promise<BudgetResponse> => {
   try {
     const payload: any = {};
+    const selectedYearFromFilter = Number.isInteger(filters.year)
+      ? (filters.year as number)
+      : undefined;
     if (filters.type) payload.type = filters.type;
     if (filters.company) payload.company = filters.company;
     if (filters.location) payload.location = filters.location;
@@ -993,11 +996,39 @@ export const getFilteredBudgetData = async (
     if (filters.year && filters.month) {
       payload.month = `${filters.year}-${filters.month.toString().padStart(2, "0")}`;
     }
-    // Add start_month and end_month to payload
-    if (filters.start_month) payload.start_month = filters.start_month;
+    // Budget summary year rule:
+    // start_month always uses selected year.
+    // end_month uses next year only when start month is greater than end month.
+    const startMonthPart = filters.start_month?.split("-")[1];
+    const endMonthPart = filters.end_month?.split("-")[1];
+    const startYearPart = filters.start_month?.split("-")[0];
+    // Prefer year from explicitly selected month range.
+    // This avoids stale `filters.year` overriding current drill/filter month payloads.
+    const selectedYear =
+      (startYearPart ? parseInt(startYearPart, 10) : undefined) ??
+      selectedYearFromFilter;
+    const startMonthNum = startMonthPart ? parseInt(startMonthPart, 10) : undefined;
+    const endMonthNum = endMonthPart ? parseInt(endMonthPart, 10) : undefined;
+
+    if (filters.start_month) {
+      payload.start_month =
+        selectedYear && startMonthPart
+          ? `${selectedYear}-${startMonthPart}`
+          : filters.start_month;
+    }
     if (filters.end_month) {
-      // Use end_month as-is (already in YYYY-MM format)
-      payload.end_month = filters.end_month;
+      const isCrossYearRange =
+        typeof startMonthNum === "number" &&
+        typeof endMonthNum === "number" &&
+        startMonthNum >= endMonthNum;
+      const endYear = selectedYear
+        ? isCrossYearRange
+          ? selectedYear + 1
+          : selectedYear
+        : undefined;
+
+      payload.end_month =
+        endYear && endMonthPart ? `${endYear}-${endMonthPart}` : filters.end_month;
     }
     // Add search parameter
     if (filters.search) payload.search = filters.search;
