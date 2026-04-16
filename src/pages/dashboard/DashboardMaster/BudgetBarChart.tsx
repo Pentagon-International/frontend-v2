@@ -6,6 +6,7 @@ import {
   Button,
   Select,
   SegmentedControl,
+  Badge,
 } from "@mantine/core";
 import { BarChart, BarChartDataItem } from "../../../components";
 import dayjs from "dayjs";
@@ -85,6 +86,40 @@ const BudgetBarChart = ({
   handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
 }: BudgetBarChartProps) => {
+  const normalizedBudgetEndMonth = useMemo(() => {
+    if (!selectedYear || !budgetEndMonth) return budgetEndMonth;
+    const endMonthPart = budgetEndMonth.split("-")[1];
+    return endMonthPart ? `${selectedYear}-${endMonthPart}` : budgetEndMonth;
+  }, [selectedYear, budgetEndMonth]);
+
+  const payloadPeriod = useMemo(() => {
+    const startMonthPart = budgetStartMonth?.split("-")[1];
+    const endMonthPart = budgetEndMonth?.split("-")[1];
+    const startYearPart = budgetStartMonth?.split("-")[0];
+    const selectedYearNum = selectedYear
+      ? parseInt(selectedYear, 10)
+      : startYearPart
+        ? parseInt(startYearPart, 10)
+        : undefined;
+    const startMonthNum = startMonthPart ? parseInt(startMonthPart, 10) : undefined;
+    const endMonthNum = endMonthPart ? parseInt(endMonthPart, 10) : undefined;
+    const isCrossYearRange =
+      typeof startMonthNum === "number" &&
+      typeof endMonthNum === "number" &&
+      startMonthNum >= endMonthNum;
+
+    const payloadStart =
+      selectedYearNum && startMonthPart
+        ? `${selectedYearNum}-${startMonthPart}`
+        : budgetStartMonth;
+    const payloadEnd =
+      selectedYearNum && endMonthPart
+        ? `${isCrossYearRange ? selectedYearNum + 1 : selectedYearNum}-${endMonthPart}`
+        : budgetEndMonth;
+
+    return { payloadStart, payloadEnd };
+  }, [selectedYear, budgetStartMonth, budgetEndMonth]);
+
   // Memoized chart data preparation
   const barChartData = useMemo(() => {
     if (!budgetRawData?.data || !Array.isArray(budgetRawData.data)) {
@@ -176,14 +211,19 @@ const BudgetBarChart = ({
     >
       {/* Title and Controls */}
       <Group justify="space-between" align="center" mb="md">
-        <Text
-          size="md"
-          fw={500}
-          c="#22252B"
-          style={{ fontFamily: "Inter, sans-serif" }}
-        >
-          Budget vs Actual
-        </Text>
+        <Group justify="space-between" align="center" mb="md">
+          <Text
+            size="md"
+            fw={500}
+            c="#22252B"
+            style={{ fontFamily: "Inter, sans-serif" }}
+          >
+            Budget vs Actual
+          </Text>
+          <Badge color="#105476">
+            {payloadPeriod.payloadStart}  {"  -  "} {payloadPeriod.payloadEnd}
+          </Badge>
+        </Group>
         <Group gap="sm">
           <SegmentedControl
             value={budgetType}
@@ -250,12 +290,10 @@ const BudgetBarChart = ({
             <Select
               placeholder="To Month"
               data={toMonthOptions}
-              value={budgetEndMonth}
+              value={normalizedBudgetEndMonth}
               onChange={(value) => {
                 if (value) {
-                  // Calculate start month based on end month (financial year logic)
-                  // This will be handled in handleBudgetMonthFilterChange
-                  handleBudgetMonthFilterChange(null, value);
+                  handleBudgetMonthFilterChange(budgetStartMonth, value);
                 }
               }}
               size="xs"

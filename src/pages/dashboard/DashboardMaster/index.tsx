@@ -7386,13 +7386,9 @@ const Dashboard = () => {
   };
 
   const getToMonthOptions = (year: string | null) => {
-    // Use year from budgetEndMonth if available, otherwise use selectedYear or current financial year start
-    let selectedYearValue: string;
-    if (budgetEndMonth) {
-      selectedYearValue = budgetEndMonth.split("-")[0];
-    } else {
-      selectedYearValue = year || getCurrentFinancialYearStart();
-    }
+    // Always derive options from selected year to keep dropdown editable.
+    // end_month year mapping (same/next year) is handled at payload layer.
+    const selectedYearValue = year || getCurrentFinancialYearStart();
 
     const currentYear = dayjs().year();
     const currentMonth = dayjs().month() + 1;
