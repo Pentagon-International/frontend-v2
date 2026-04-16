@@ -160,6 +160,8 @@ export const URL = {
   documentAllocation: "filter/document_allocation/",
   outstandingAllocations: "outstanding-details/allocations/",
   outstandingAllocationDocuments: "outstanding-details/allocation-documents/",
+  outstandingAllocationDocumentsFilter:
+    "outstanding-details/filter/allocation-documents/",
 
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",

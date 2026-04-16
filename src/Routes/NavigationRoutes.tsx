@@ -178,6 +178,7 @@ import PipelineCreate from "../pages/dashboard/PipelineCreate";
 import useAuthStore from "../store/authStore";
 import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
 import DocumentAllocation from "../pages/accounts/document-allocation/DocumentAllocation";
+import DocumentAllocationList from "../pages/accounts/document-allocation/DocumentAllocationList";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
 import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
@@ -387,7 +388,8 @@ const NavigationRoutes = () => {
         <Route path="/journal-voucher-reversal/edit/:id" element={<JournalVoucherReversal />} />
         <Route path="/journal-voucher-reversal/view/:id" element={<JournalVoucherReversal />} />
         <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
-        <Route path="/document-allocation" element={<DocumentAllocation />} />
+        <Route path="/document-allocation" element={<DocumentAllocationList />} />
+        <Route path="/document-allocation/create" element={<DocumentAllocation />} />
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />

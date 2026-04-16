@@ -79,7 +79,8 @@ const Navbar = ({
       location.pathname.startsWith("/overseas-receipt") ||
       location.pathname.startsWith("/journal-voucher") ||
       location.pathname.startsWith("/journal-voucher-reversal") ||
-      location.pathname.startsWith("/subledger-enquiry")
+      location.pathname.startsWith("/subledger-enquiry") ||
+      location.pathname.startsWith("/document-allocation")
     ) {
       setIsAccountsOpen(true);
     }
