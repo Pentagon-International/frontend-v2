@@ -1002,9 +1002,11 @@ export const getFilteredBudgetData = async (
     const startMonthPart = filters.start_month?.split("-")[1];
     const endMonthPart = filters.end_month?.split("-")[1];
     const startYearPart = filters.start_month?.split("-")[0];
+    // Prefer year from explicitly selected month range.
+    // This avoids stale `filters.year` overriding current drill/filter month payloads.
     const selectedYear =
-      selectedYearFromFilter ??
-      (startYearPart ? parseInt(startYearPart, 10) : undefined);
+      (startYearPart ? parseInt(startYearPart, 10) : undefined) ??
+      selectedYearFromFilter;
     const startMonthNum = startMonthPart ? parseInt(startMonthPart, 10) : undefined;
     const endMonthNum = endMonthPart ? parseInt(endMonthPart, 10) : undefined;
 
