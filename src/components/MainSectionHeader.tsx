@@ -155,10 +155,12 @@ function MainSectionHeader() {
     sub: string | null,
   ): { path: string; needsState: boolean } | null => {
     switch (module) {
+      case "enquiry":
+        return { path: "/enquiry-create", needsState: true };
+      case "quotation":
+        return { path: "/quotation-create", needsState: true };
       case "booking":
-        // Only configure booking edit pages (air/ocean, import/export).
-        // These routes exist in `NavigationRoutes.tsx` and are used by booking forms
-        // when opening an existing record.
+        // Booking edit pages (air/ocean, import/export) as per `NavigationRoutes.tsx`.
         if (sub === "air_export")
           return { path: "/air/export-booking/edit", needsState: true };
         if (sub === "air_import")
@@ -168,6 +170,19 @@ function MainSectionHeader() {
         if (sub === "ocean_import")
           return { path: "/SeaExport/import-booking/edit", needsState: true };
         return null;
+      case "job":
+        if (sub === "air_export") return { path: "/air/export-job/edit", needsState: true };
+        if (sub === "ocean_export") return { path: "/SeaExport/export-job/edit", needsState: true };
+        if (sub === "air_import") return { path: "/air/import-job/edit", needsState: true };
+        if (sub === "ocean_import") return { path: "/SeaExport/import-job/edit", needsState: true };
+        return null;
+      case "invoice":
+        // Invoice module in global search typically needs landing to invoice list/master
+        return { path: "/invoice", needsState: false };
+      case "supplier_invoice":
+        return { path: "/supplier-invoice/edit", needsState: true };
+      case "reverse_supplier_invoice":
+        return { path: "/supplier-invoice/reversal/edit", needsState: true };
       default:
         return null;
     }
@@ -186,11 +201,7 @@ function MainSectionHeader() {
       console.log("[GlobalSearch] route resolved", { module, sub, id, target });
 
       if (!target) {
-        ToastNotification({
-          type: "warning",
-          message:
-            "Global search navigation is only configured for Air/Ocean Booking edit pages.",
-        });
+        // No toast here per requirement: just don't navigate if not configured.
         return;
       }
 
