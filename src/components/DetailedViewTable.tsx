@@ -1242,8 +1242,10 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             : "400px",
         maxHeight:
           moduleType === "pipelineReport" && drillLevel === 2
-            ? "calc(100vh - 180px)"
-            : "75vh",
+            ? "calc(70vh - 60px)"
+            : moduleType === "pipelineReport"
+              ? "calc(70vh - 120px)"
+              : "70vh",
         overflowY: "auto",
         overflowX: "auto",
         position: "relative",

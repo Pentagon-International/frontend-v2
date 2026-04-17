@@ -3399,11 +3399,9 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           <Tabs.Panel value="salesperson" pt="md">
             <Box
               style={{
-                height: "65vh",
-                overflow: "hidden",
-                overflowX: "hidden",
+                height: "70vh",
+                overflow: "visible",
                 position: "relative",
-                paddingBottom: "60px", // Add padding to ensure total row is visible with scroll
               }}
             >
               <DetailedViewTable
@@ -3439,11 +3437,9 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             )}
             <Box
               style={{
-                height: onBack ? "60vh" : "65vh",
-                overflow: "hidden",
-                overflowX: "hidden",
+                height: onBack ? "70vh" : "70vh",
+                overflow: "visible",
                 position: "relative",
-                paddingBottom: "60px", // Add padding to ensure total row is visible with scroll
               }}
             >
               <DetailedViewTable
@@ -3488,11 +3484,9 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             )}
             <Box
               style={{
-                height: onBack ? "60vh" : "65vh",
-                overflow: "hidden",
-                overflowX: "hidden",
+                height: onBack ? "70vh" : "70vh",
+                overflow: "visible",
                 position: "relative",
-                paddingBottom: "60px", // Add padding to ensure total row is visible with scroll
               }}
             >
               <DetailedViewTable
