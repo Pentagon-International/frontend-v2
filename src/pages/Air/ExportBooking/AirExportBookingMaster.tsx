@@ -1572,7 +1572,7 @@ function AirExportBookingMaster() {
                 )}
 
                 <Group justify="flex-end" gap="xs">
-                  {/* {isSuccess && jobDetailsId != null && (
+                  {isSuccess && jobDetailsId != null && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1587,14 +1587,14 @@ function AirExportBookingMaster() {
                       onClick={() => {
                         setCreateJobModalOpen(false);
                         setCreateJobResponse(null);
-                        navigate("/air/export-job/view", {
+                        navigate("/air/export-job/edit", {
                           state: { jobId: Number(jobDetailsId) },
                         });
                       }}
                     >
-                      View Job
+                      Open Job
                     </Button>
-                  )} */}
+                  )}
                   <Button
                     size="sm"
                     styles={{

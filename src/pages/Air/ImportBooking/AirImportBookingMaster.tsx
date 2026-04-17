@@ -198,6 +198,12 @@ function AirImportBookingMaster() {
   const [cancelConfirmRow, setCancelConfirmRow] = useState<ImportShipmentData | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
+  // Create Job modal state
+  const [createJobLoading, setCreateJobLoading] = useState(false);
+  const [createJobModalOpen, setCreateJobModalOpen] = useState(false);
+  const [createJobResponse, setCreateJobResponse] = useState<Record<string, unknown> | null>(null);
+  const [createJobError, setCreateJobError] = useState<string | null>(null);
+
   const filterForm = useForm<FilterState>({
     initialValues: {
       booking_id: null,
@@ -601,6 +607,143 @@ function AirImportBookingMaster() {
     }
   };
 
+  const handleCreateJob = async (booking: ImportShipmentData) => {
+    const routingDetails = Array.isArray(booking.routing_details) ? booking.routing_details : [];
+    const cargoDetails = Array.isArray(booking.cargo_details) ? booking.cargo_details : [];
+    const rateDetails = Array.isArray(booking.rate_details) ? booking.rate_details : [];
+
+    const payload: Record<string, unknown> = {
+      service: booking.service || "AIR",
+      service_type: booking.service_type || "Import",
+      agent: booking.destination_agent_name || "",
+      origin_code: booking.origin_code_read || "",
+      destination_code: booking.destination_code_read || "",
+      etd: booking.etd ? dayjs(booking.etd).isValid() ? dayjs(booking.etd).format("YYYY-MM-DDTHH:mm:ssZ") : null : null,
+      eta: booking.eta ? dayjs(booking.eta).isValid() ? dayjs(booking.eta).format("YYYY-MM-DDTHH:mm:ssZ") : null : null,
+      atd: null,
+      ata: null,
+      igm_no: "",
+      igm_date: null,
+      carrier_code: booking.carrier_name || "",
+      flightno: booking.vessel_name || "",
+      mawb_no: "",
+      mawb_date: null,
+      shipper_name: booking.shipper_name || "",
+      shipper_email: "",
+      shipper_address: "",
+      consignee_name: booking.consignee_name || "",
+      consignee_email: "",
+      consignee_address: "",
+      carrier_agent_name: "",
+      carrier_agent_email: "",
+      carrier_agent_address: "",
+      booking_ids: [],
+      ocean_routings: routingDetails.map((r) => ({
+        transport_type: "AIR",
+        from_port_code: r.from_location_name || "",
+        to_port_code: r.to_location_name || "",
+        etd: r.etd ? dayjs(r.etd as string).isValid() ? dayjs(r.etd as string).format("YYYY-MM-DDTHH:mm:ss[Z]") : null : null,
+        eta: r.eta ? dayjs(r.eta as string).isValid() ? dayjs(r.eta as string).format("YYYY-MM-DDTHH:mm:ss[Z]") : null : null,
+        atd: null,
+        ata: null,
+        carrier_code: r.carrier_name || "",
+        vessel: "",
+        flight: r.flight_no || "",
+        voyage_number: null,
+        truck_no: "",
+        rail_no: "",
+      })),
+      housing_details: [{
+        hawb_no: "",
+        origin_code: booking.origin_code_read || "",
+        destination_code: booking.destination_code_read || "",
+        trade: "Import",
+        routed: booking.routed || "",
+        routed_by: booking.routed_by || "",
+        customer_service: booking.customer_service_name || "",
+        agent_name: booking.destination_agent_name || "",
+        agent_address: "",
+        agent_email: "",
+        cha_name: booking.cha_name || "",
+        cha_address: "",
+        shipper_name: booking.shipper_name || "",
+        shipper_address: "",
+        shipper_email: "",
+        consignee_name: booking.consignee_name || "",
+        consignee_address: "",
+        consignee_email: "",
+        notify1_customer_name: booking.notify_customer_name || "",
+        notify1_customer_address: "",
+        notify1_customer_email: "",
+        commodity_description: booking.commodity_description || "",
+        marks_no: booking.marks_no || "",
+        item_no: "",
+        sub_item_no: "",
+        shipment_terms_code: booking.shipment_terms_code_read || "",
+        events: [],
+        cargo_details: cargoDetails.map((cargo) => ({
+          no_of_packages: Number(cargo.no_of_containers) || 0,
+          gross_weight: String(cargo.gross_weight || ""),
+          volume: "",
+          chargeable_weight: "",
+          haz: booking.is_hazardous || false,
+        })),
+        mawb_charges: rateDetails.map((charge) => ({
+          charge_id: Number(charge.id) || 0,
+          supplier_code: "",
+          pp_cc: String(charge.pp_cc || "Prepaid"),
+          unit_id: "",
+          currency_id: "",
+          no_of_unit: Number(charge.no_of_unit) || 0,
+          roe: "",
+          amount_per_unit: "",
+          amount: Number(charge.sell_amount_total) || 0,
+          sell_local_amount: Number(charge.sell_amount_total) || 0,
+          unit_cost: 0,
+          total_cost: 0,
+          cost_local_amount: 0,
+        })),
+      }],
+      estimates: rateDetails.map((charge) => ({
+        supplier_code: "",
+        charge_id: Number(charge.id) || 0,
+        pp_cc: String(charge.pp_cc || "Prepaid"),
+        unit_id: "",
+        no_of_unit: Number(charge.no_of_unit) || 0,
+        currency_id: "",
+        roe: "",
+        cost_per_unit: "",
+        total_cost: "",
+      })),
+    };
+
+    setCreateJobModalOpen(true);
+    setCreateJobLoading(true);
+    setCreateJobResponse(null);
+    setCreateJobError(null);
+
+    try {
+      const response = (await apiCallProtected.post(
+        URL.jobCreate,
+        payload,
+      )) as Record<string, unknown>;
+      setCreateJobResponse(response);
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { data?: { message?: string; detail?: string; error?: string } };
+        message?: string;
+      };
+      const errMsg =
+        axiosErr?.response?.data?.message ||
+        axiosErr?.response?.data?.detail ||
+        axiosErr?.response?.data?.error ||
+        (err instanceof Error ? err.message : "Failed to create job");
+      setCreateJobError(String(errMsg));
+    } finally {
+      setCreateJobLoading(false);
+    }
+  };
+
   const columns = useMemo<MRT_ColumnDef<ImportShipmentData>[]>(
     () => [
       {
@@ -718,13 +861,7 @@ function AirImportBookingMaster() {
                 {isBooked && (
                   <Menu.Item
                     leftSection={<IconPlus size={14} />}
-                    onClick={() => {
-                      // const { id: _ignoredId, ...jobWithoutId } =
-                      //   row.original as unknown as Record<string, unknown>;
-                      // navigate("/air/import-job/create", {
-                      //   state: { job: jobWithoutId },
-                      // });
-                    }}
+                    onClick={() => handleCreateJob(row.original)}
                   >
                     Create Job
                   </Menu.Item>
@@ -1226,6 +1363,218 @@ function AirImportBookingMaster() {
           </Button>
         </Group>
       </Modal>
+      {/* Create Job Modal */}
+      <Modal
+        opened={createJobModalOpen}
+        onClose={() => {
+          if (!createJobLoading) {
+            setCreateJobModalOpen(false);
+            setCreateJobResponse(null);
+            setCreateJobError(null);
+          }
+        }}
+        title={
+          <Text fw={600} size="md" c="#444955" style={{ fontFamily: "Inter" }}>
+            Create Job
+          </Text>
+        }
+        centered
+        size="md"
+        closeOnClickOutside={!createJobLoading}
+        closeOnEscape={!createJobLoading}
+        withCloseButton={!createJobLoading}
+      >
+        {createJobLoading ? (
+          <Center py="xl">
+            <Stack align="center" gap="md">
+              <Loader size="md" color="#105476" />
+              <Text c="dimmed" size="sm" style={{ fontFamily: "Inter" }}>
+                Creating job, please wait...
+              </Text>
+            </Stack>
+          </Center>
+        ) : createJobError ? (
+          <Stack gap="md">
+            <Box
+              style={{
+                border: "1px solid #FFCDD2",
+                borderRadius: "6px",
+                padding: "12px 16px",
+                backgroundColor: "#FFF5F5",
+              }}
+            >
+              <Text size="sm" c="red" style={{ fontFamily: "Inter" }}>
+                {createJobError}
+              </Text>
+            </Box>
+            <Group justify="flex-end" gap="xs">
+              <Button
+                size="sm"
+                variant="outline"
+                styles={{
+                  root: {
+                    borderColor: "#105476",
+                    color: "#105476",
+                    borderRadius: "4px",
+                    fontFamily: "Inter",
+                  },
+                }}
+                onClick={() => {
+                  setCreateJobModalOpen(false);
+                  setCreateJobError(null);
+                }}
+              >
+                Close
+              </Button>
+            </Group>
+          </Stack>
+        ) : createJobResponse ? (
+          (() => {
+            const respData = createJobResponse as {
+              success?: boolean;
+              message?: string;
+              data?: {
+                job_details_id?: number;
+                id?: number;
+                job_id?: string;
+                job_no?: string;
+              };
+              job_details_id?: number;
+              id?: number;
+              job_id?: string;
+            };
+            const isSuccess =
+              respData?.success === true || respData?.success === undefined;
+            const message =
+              respData?.message ||
+              (isSuccess ? "Job created successfully!" : "Job creation failed.");
+            const jobDetailsId =
+              respData?.data?.job_details_id ??
+              respData?.data?.id ??
+              respData?.job_details_id ??
+              respData?.id;
+            const jobNo = respData?.data?.job_id || respData?.data?.job_no || respData?.job_id;
+
+            return (
+              <Stack gap="md">
+                <Box
+                  style={{
+                    border: `1px solid ${isSuccess ? "#C8E6C9" : "#FFCDD2"}`,
+                    borderRadius: "6px",
+                    padding: "12px 16px",
+                    backgroundColor: isSuccess ? "#F1F8E9" : "#FFF5F5",
+                  }}
+                >
+                  <Text
+                    size="sm"
+                    fw={600}
+                    c={isSuccess ? "green" : "red"}
+                    style={{ fontFamily: "Inter" }}
+                  >
+                    {message}
+                  </Text>
+                </Box>
+
+                {(jobDetailsId != null || jobNo) && (
+                  <Box
+                    style={{
+                      border: "1px solid #E0E0E0",
+                      borderRadius: "6px",
+                      padding: "12px 16px",
+                      backgroundColor: "#FAFAFA",
+                    }}
+                  >
+                    <Stack gap="xs">
+                      {jobDetailsId != null && (
+                        <Group gap="xs">
+                          <Text
+                            size="sm"
+                            fw={600}
+                            c="#444955"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            Job ID:
+                          </Text>
+                          <Text
+                            size="sm"
+                            c="#333740"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            {String(jobDetailsId)}
+                          </Text>
+                        </Group>
+                      )}
+                      {jobNo && (
+                        <Group gap="xs">
+                          <Text
+                            size="sm"
+                            fw={600}
+                            c="#444955"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            Job No:
+                          </Text>
+                          <Text
+                            size="sm"
+                            c="#333740"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            {String(jobNo)}
+                          </Text>
+                        </Group>
+                      )}
+                    </Stack>
+                  </Box>
+                )}
+
+                <Group justify="flex-end" gap="xs">
+                  {isSuccess && jobDetailsId != null && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      styles={{
+                        root: {
+                          borderColor: "#105476",
+                          color: "#105476",
+                          borderRadius: "4px",
+                          fontFamily: "Inter",
+                        },
+                      }}
+                      onClick={() => {
+                        setCreateJobModalOpen(false);
+                        setCreateJobResponse(null);
+                        navigate("/air/import-job/edit", {
+                          state: { jobId: Number(jobDetailsId) },
+                        });
+                      }}
+                    >
+                      Open Job
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    styles={{
+                      root: {
+                        backgroundColor: "#105476",
+                        borderRadius: "4px",
+                        fontFamily: "Inter",
+                        color: "#FFFFFF",
+                      },
+                    }}
+                    onClick={() => {
+                      setCreateJobModalOpen(false);
+                      setCreateJobResponse(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </Group>
+              </Stack>
+            );
+          })()
+        ) : null}
+      </Modal>
+
       <Outlet />
     </>
   );

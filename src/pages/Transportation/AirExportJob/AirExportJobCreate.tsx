@@ -304,7 +304,6 @@ function AirExportJobCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
-  const jobData = location.state?.job;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
   const [hawbDetails, setHawbDetails] = useState<HAWBDetail[]>(
@@ -318,6 +317,11 @@ function AirExportJobCreate() {
 
   // Track if forms have been initialized from jobData (one-time initialization)
   const formsInitializedFromJobDataRef = useRef(false);
+  // Holds the job fetched by fetchAndReplace so the init effect can use it immediately,
+  // without waiting for navigate → location-update → re-render to settle.
+  const [fetchedJobForInit, setFetchedJobForInit] = useState<Record<string, unknown> | null>(null);
+  // Use fetchedJobForInit as immediate fallback when location.state?.job hasn't settled yet
+  const jobData = location.state?.job ?? fetchedJobForInit;
   // Track initialization key to force re-render of SearchableSelect components when form values are set
   const [formInitializedKey, setFormInitializedKey] = useState(0);
   // Track if form state has been restored from location.state (prevents overwriting user changes)
@@ -392,9 +396,21 @@ function AirExportJobCreate() {
           : Array.isArray(body)
             ? (body as unknown[])
             : [];
+        const singleObj =
+          body != null &&
+          typeof body === "object" &&
+          !Array.isArray(body) &&
+          (body as Record<string, unknown>).id != null
+            ? (body as Record<string, unknown>)
+            : null;
         const job =
-          list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+          list.length > 0
+            ? (list[0] as Record<string, unknown>)
+            : singleObj;
         if (!cancelled && job) {
+          // Store the fetched job immediately so the init useEffect can fire
+          // without waiting for the navigate→location-update→re-render chain.
+          setFetchedJobForInit(job);
           navigate("/air/export-job/edit", {
             state: {
               job,
@@ -1143,7 +1159,7 @@ function AirExportJobCreate() {
       formsInitializedFromJobDataRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData, mode]);
+  }, [jobData, fetchedJobForInit, mode]);
 
   // Force re-initialization if jobData becomes available after initial render
   useEffect(() => {

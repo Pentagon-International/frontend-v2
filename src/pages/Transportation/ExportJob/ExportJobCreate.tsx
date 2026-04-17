@@ -416,7 +416,7 @@ function ExportJobCreate() {
 
   const isReadOnly = mode === "view";
 
-  // When navigated from Customer Service (Jobs without BL) with jobId only - fetch job and show
+  // When navigated from Booking or Customer Service with jobId - fetch job and show
   useEffect(() => {
     const jobId = location.state?.jobId as number | undefined;
     if (jobId == null || location.state?.job) return;

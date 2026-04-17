@@ -57,11 +57,101 @@ type ExportShipmentData = {
   enquiry_id?: string | null;
   date: string;
   service: string;
+  service_type: string;
   customer_name: string;
+  customer_code_read: string;
   origin_name: string;
+  origin_code_read: string;
   destination_name: string;
+  destination_code_read: string;
   customer_service_name: string;
   status?: string;
+  freight?: string;
+  routed?: string;
+  routed_by?: string;
+  shipment_terms_code_read?: string;
+  carrier_name?: string;
+  carrier_code?: string;
+  eta?: string;
+  etd?: string;
+  atd?: string;
+  ata?: string;
+  vessel_name?: string;
+  voyage_no?: string;
+  mbl_no?: string;
+  mbl_date?: string;
+  shipper_name?: string;
+  shipper_address?: string;
+  shipper_email?: string;
+  consignee_name?: string;
+  consignee_address?: string;
+  consignee_email?: string;
+  destination_agent_name?: string;
+  destination_agent_code?: string;
+  destination_agent_address?: string;
+  destination_agent_email?: string;
+  cha_name?: string;
+  cha_address?: string;
+  is_hazardous?: boolean;
+  is_direct?: boolean;
+  commodity_description?: string | null;
+  marks_no?: string | null;
+  notify1_customer_name?: string;
+  notify1_customer_address?: string;
+  notify1_customer_email?: string;
+  notify2_customer_name?: string;
+  notify2_customer_address?: string;
+  notify2_customer_email?: string;
+  cargo_details?: Array<{
+    id: number;
+    container_type_name: string;
+    container_no: string;
+    no_of_containers: number;
+    no_of_packages: number;
+    gross_weight: string;
+    volume: string;
+    chargeable_weight: string;
+  }>;
+  routing_details?: Array<{
+    move_type: string;
+    etd: string;
+    eta: string;
+    atd: string;
+    ata: string;
+    vessel_name: string;
+    voyage_no: string;
+    status: string;
+    from_location_name: string;
+    from_port_code: string;
+    to_location_name: string;
+    to_port_code: string;
+    carrier_name: string;
+    carrier_code: string;
+  }>;
+  rate_details?: Array<{
+    id: number;
+    charge_id: number;
+    charge_name: string;
+    pp_cc: string;
+    unit_id: number;
+    no_of_unit: number;
+    currency_id: number;
+    roe: number;
+    sell_per_unit: number;
+    sell_amount_total: number | null;
+    cost_per_unit: number;
+    total_cost: number;
+  }>;
+  container_details?: Array<{
+    id: number;
+    container_type_name: string;
+    container_type_input: string;
+    container_no: string;
+    actual_seal_no: string;
+    customs_seal_no: string;
+    loading_date: string;
+    uploading_date: string;
+  }>;
 };
 
 type FilterState = {
@@ -138,6 +228,12 @@ function OceanExportBookingMaster() {
   const [cancelConfirmRow, setCancelConfirmRow] =
     useState<ExportShipmentData | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Create Job modal state
+  const [createJobLoading, setCreateJobLoading] = useState(false);
+  const [createJobModalOpen, setCreateJobModalOpen] = useState(false);
+  const [createJobResponse, setCreateJobResponse] = useState<Record<string, unknown> | null>(null);
+  const [createJobError, setCreateJobError] = useState<string | null>(null);
 
   // State to store the actual applied filter values
   const filterForm = useForm<FilterState>({
@@ -511,6 +607,147 @@ function OceanExportBookingMaster() {
     }
   };
 
+  const handleCreateJob = async (booking: ExportShipmentData) => {
+    const routingDetails = Array.isArray(booking.routing_details) ? booking.routing_details : [];
+    const cargoDetails = Array.isArray(booking.cargo_details) ? booking.cargo_details : [];
+    const rateDetails = Array.isArray(booking.rate_details) ? booking.rate_details : [];
+    const containerDetails = Array.isArray(booking.container_details) ? booking.container_details : [];
+
+    const payload: Record<string, unknown> = {
+      service: booking.service || "FCL",
+      service_type: booking.service_type || "Export",
+      agent: booking.destination_agent_code || booking.destination_agent_name || "",
+      origin_code: booking.origin_code_read || "",
+      destination_code: booking.destination_code_read || "",
+      etd: booking.etd ? dayjs(booking.etd).isValid() ? dayjs(booking.etd).format("YYYY-MM-DD") : null : null,
+      eta: booking.eta ? dayjs(booking.eta).isValid() ? dayjs(booking.eta).format("YYYY-MM-DD") : null : null,
+      atd: booking.atd ? dayjs(booking.atd).isValid() ? dayjs(booking.atd).format("YYYY-MM-DD") : null : null,
+      ata: booking.ata ? dayjs(booking.ata).isValid() ? dayjs(booking.ata).format("YYYY-MM-DD") : null : null,
+      is_direct: booking.is_direct || false,
+      carrier_code: booking.carrier_code || "",
+      vessel_name: booking.vessel_name || "",
+      voyage_number: booking.voyage_no || "",
+      mbl_number: booking.mbl_no || "",
+      mbl_date: booking.mbl_date ? dayjs(booking.mbl_date).isValid() ? dayjs(booking.mbl_date).format("YYYY-MM-DD") : null : null,
+      ocean_routings: routingDetails.map((r) => ({
+        transport_type: r.move_type || "SEA",
+        from_port_code: r.from_port_code || "",
+        to_port_code: r.to_port_code || "",
+        etd: r.etd ? dayjs(r.etd as string).isValid() ? dayjs(r.etd as string).format("YYYY-MM-DD") : null : null,
+        eta: r.eta ? dayjs(r.eta as string).isValid() ? dayjs(r.eta as string).format("YYYY-MM-DD") : null : null,
+        atd: r.atd ? dayjs(r.atd as string).isValid() ? dayjs(r.atd as string).format("YYYY-MM-DD") : null : null,
+        ata: r.ata ? dayjs(r.ata as string).isValid() ? dayjs(r.ata as string).format("YYYY-MM-DD") : null : null,
+        carrier_code: r.carrier_code || null,
+        vessel: r.vessel_name || null,
+        flight: null,
+        truck_no: null,
+        rail_no: null,
+        voyage_number: r.voyage_no || null,
+      })),
+      housing_details: [{
+        hbl_number: "",
+        house_date: booking.date ? dayjs(booking.date).isValid() ? dayjs(booking.date).format("YYYY-MM-DD") : null : null,
+        routed: booking.routed || "",
+        routed_by: booking.routed_by || "",
+        origin_code: booking.origin_code_read || "",
+        destination_code: booking.destination_code_read || "",
+        customer_service: booking.customer_service_name || "",
+        trade: "Re Export",
+        agent_name: booking.destination_agent_name || "",
+        agent_address: booking.destination_agent_address || "",
+        agent_email: booking.destination_agent_email || "",
+        cha_name: booking.cha_name || "",
+        cha_address: booking.cha_address || "",
+        shipper_name: booking.shipper_name || "",
+        shipper_address: booking.shipper_address || "",
+        shipper_email: booking.shipper_email || "",
+        consignee_name: booking.consignee_name || "",
+        consignee_address: booking.consignee_address || "",
+        consignee_email: booking.consignee_email || "",
+        notify1_customer_name: booking.notify1_customer_name || "",
+        notify1_customer_address: booking.notify1_customer_address || "",
+        notify1_customer_email: booking.notify1_customer_email || "",
+        notify2_customer_name: booking.notify2_customer_name || "",
+        notify2_customer_address: booking.notify2_customer_address || "",
+        notify2_customer_email: booking.notify2_customer_email || "",
+        commodity_description: booking.commodity_description || "",
+        marks_no: booking.marks_no || "",
+        item_no: "",
+        sub_item_no: "",
+        shipment_terms_code: booking.shipment_terms_code_read || "",
+        events: [],
+        cargo_details: cargoDetails.map((cargo) => ({
+          container_no: String(cargo.container_no || ""),
+          no_of_packages: Number(cargo.no_of_packages) || 0,
+          gross_weight: Number(cargo.gross_weight) || 0,
+          volume: Number(cargo.volume) || 0,
+          chargeable_weight: Number(cargo.chargeable_weight) || 0,
+          haz: booking.is_hazardous || false,
+        })),
+        mbl_charges: rateDetails.map((charge) => ({
+          charge_id: Number(charge.charge_id) || "",
+          supplier_code: "",
+          pp_cc: String(charge.pp_cc || "Collect"),
+          unit_id: Number(charge.unit_id) || "",
+          currency_id: Number(charge.currency_id) || "",
+          no_of_unit: Number(charge.no_of_unit) || 0,
+          roe: Number(charge.roe) || 1,
+          amount_per_unit: Number(charge.sell_per_unit) || 0,
+          amount: Number(charge.sell_amount_total) || 0,
+          sell_local_amount: Number(charge.sell_amount_total) || 0,
+          unit_cost: Number(charge.cost_per_unit) || 0,
+          total_cost: Number(charge.total_cost) || 0,
+          cost_local_amount: Number(charge.total_cost) || 0,
+        })),
+      }],
+      container_details: containerDetails.map((container) => ({
+        container_type_input: String(container.container_type_input || container.container_type_name || ""),
+        container_no: String(container.container_no || ""),
+        actual_seal_no: String(container.actual_seal_no || ""),
+        customs_seal_no: String(container.customs_seal_no || ""),
+        loading_date: container.loading_date ? dayjs(container.loading_date).isValid() ? dayjs(container.loading_date).format("YYYY-MM-DD") : null : null,
+        uploading_date: container.uploading_date ? dayjs(container.uploading_date).isValid() ? dayjs(container.uploading_date).format("YYYY-MM-DD") : null : null,
+      })),
+      estimates: rateDetails.map((charge) => ({
+        supplier_code: "",
+        charge_id: Number(charge.charge_id) || "",
+        pp_cc: String(charge.pp_cc || "Collect"),
+        unit_id: Number(charge.unit_id) || "",
+        no_of_unit: Number(charge.no_of_unit) || 0,
+        currency_id: Number(charge.currency_id) || "",
+        roe: Number(charge.roe) || "",
+        cost_per_unit: Number(charge.cost_per_unit) || "",
+        total_cost: Number(charge.total_cost) || "",
+      })),
+    };
+
+    setCreateJobModalOpen(true);
+    setCreateJobLoading(true);
+    setCreateJobResponse(null);
+    setCreateJobError(null);
+
+    try {
+      const response = (await apiCallProtected.post(
+        URL.jobCreate,
+        payload,
+      )) as Record<string, unknown>;
+      setCreateJobResponse(response);
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { data?: { message?: string; detail?: string; error?: string } };
+        message?: string;
+      };
+      const errMsg =
+        axiosErr?.response?.data?.message ||
+        axiosErr?.response?.data?.detail ||
+        axiosErr?.response?.data?.error ||
+        (err instanceof Error ? err.message : "Failed to create job");
+      setCreateJobError(String(errMsg));
+    } finally {
+      setCreateJobLoading(false);
+    }
+  };
+
   const clearAllFilters = async () => {
     try {
       setShowFilters(false);
@@ -671,13 +908,7 @@ function OceanExportBookingMaster() {
                 {isBooked && (
                   <Menu.Item
                     leftSection={<IconPlus size={14} />}
-                    onClick={() => {
-                      // const { id: _ignoredId, ...jobWithoutId } =
-                      //   row.original as unknown as Record<string, unknown>;
-                      // navigate("/SeaExport/export-job/create", {
-                      //   state: { job: jobWithoutId },
-                      // });
-                    }}
+                    onClick={() => handleCreateJob(row.original)}
                   >
                     Create Job
                   </Menu.Item>
@@ -1201,6 +1432,218 @@ function OceanExportBookingMaster() {
           </Button>
         </Group>
       </Modal>
+      {/* Create Job Modal */}
+      <Modal
+        opened={createJobModalOpen}
+        onClose={() => {
+          if (!createJobLoading) {
+            setCreateJobModalOpen(false);
+            setCreateJobResponse(null);
+            setCreateJobError(null);
+          }
+        }}
+        title={
+          <Text fw={600} size="md" c="#444955" style={{ fontFamily: "Inter" }}>
+            Create Job
+          </Text>
+        }
+        centered
+        size="md"
+        closeOnClickOutside={!createJobLoading}
+        closeOnEscape={!createJobLoading}
+        withCloseButton={!createJobLoading}
+      >
+        {createJobLoading ? (
+          <Center py="xl">
+            <Stack align="center" gap="md">
+              <Loader size="md" color="#105476" />
+              <Text c="dimmed" size="sm" style={{ fontFamily: "Inter" }}>
+                Creating job, please wait...
+              </Text>
+            </Stack>
+          </Center>
+        ) : createJobError ? (
+          <Stack gap="md">
+            <Box
+              style={{
+                border: "1px solid #FFCDD2",
+                borderRadius: "6px",
+                padding: "12px 16px",
+                backgroundColor: "#FFF5F5",
+              }}
+            >
+              <Text size="sm" c="red" style={{ fontFamily: "Inter" }}>
+                {createJobError}
+              </Text>
+            </Box>
+            <Group justify="flex-end" gap="xs">
+              <Button
+                size="sm"
+                variant="outline"
+                styles={{
+                  root: {
+                    borderColor: "#105476",
+                    color: "#105476",
+                    borderRadius: "4px",
+                    fontFamily: "Inter",
+                  },
+                }}
+                onClick={() => {
+                  setCreateJobModalOpen(false);
+                  setCreateJobError(null);
+                }}
+              >
+                Close
+              </Button>
+            </Group>
+          </Stack>
+        ) : createJobResponse ? (
+          (() => {
+            const respData = createJobResponse as {
+              success?: boolean;
+              message?: string;
+              data?: {
+                job_details_id?: number;
+                id?: number;
+                job_id?: string;
+                job_no?: string;
+              };
+              job_details_id?: number;
+              id?: number;
+              job_id?: string;
+            };
+            const isSuccess =
+              respData?.success === true || respData?.success === undefined;
+            const message =
+              respData?.message ||
+              (isSuccess ? "Job created successfully!" : "Job creation failed.");
+            const jobDetailsId =
+              respData?.data?.job_details_id ??
+              respData?.data?.id ??
+              respData?.job_details_id ??
+              respData?.id;
+            const jobNo = respData?.data?.job_id || respData?.data?.job_no || respData?.job_id;
+
+            return (
+              <Stack gap="md">
+                <Box
+                  style={{
+                    border: `1px solid ${isSuccess ? "#C8E6C9" : "#FFCDD2"}`,
+                    borderRadius: "6px",
+                    padding: "12px 16px",
+                    backgroundColor: isSuccess ? "#F1F8E9" : "#FFF5F5",
+                  }}
+                >
+                  <Text
+                    size="sm"
+                    fw={600}
+                    c={isSuccess ? "green" : "red"}
+                    style={{ fontFamily: "Inter" }}
+                  >
+                    {message}
+                  </Text>
+                </Box>
+
+                {(jobDetailsId != null || jobNo) && (
+                  <Box
+                    style={{
+                      border: "1px solid #E0E0E0",
+                      borderRadius: "6px",
+                      padding: "12px 16px",
+                      backgroundColor: "#FAFAFA",
+                    }}
+                  >
+                    <Stack gap="xs">
+                      {jobDetailsId != null && (
+                        <Group gap="xs">
+                          <Text
+                            size="sm"
+                            fw={600}
+                            c="#444955"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            Job ID:
+                          </Text>
+                          <Text
+                            size="sm"
+                            c="#333740"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            {String(jobDetailsId)}
+                          </Text>
+                        </Group>
+                      )}
+                      {jobNo && (
+                        <Group gap="xs">
+                          <Text
+                            size="sm"
+                            fw={600}
+                            c="#444955"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            Job No:
+                          </Text>
+                          <Text
+                            size="sm"
+                            c="#333740"
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            {String(jobNo)}
+                          </Text>
+                        </Group>
+                      )}
+                    </Stack>
+                  </Box>
+                )}
+
+                <Group justify="flex-end" gap="xs">
+                  {isSuccess && jobDetailsId != null && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      styles={{
+                        root: {
+                          borderColor: "#105476",
+                          color: "#105476",
+                          borderRadius: "4px",
+                          fontFamily: "Inter",
+                        },
+                      }}
+                      onClick={() => {
+                        setCreateJobModalOpen(false);
+                        setCreateJobResponse(null);
+                        navigate("/SeaExport/export-job/edit", {
+                          state: { jobId: Number(jobDetailsId) },
+                        });
+                      }}
+                    >
+                      Open Job
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    styles={{
+                      root: {
+                        backgroundColor: "#105476",
+                        borderRadius: "4px",
+                        fontFamily: "Inter",
+                        color: "#FFFFFF",
+                      },
+                    }}
+                    onClick={() => {
+                      setCreateJobModalOpen(false);
+                      setCreateJobResponse(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </Group>
+              </Stack>
+            );
+          })()
+        ) : null}
+      </Modal>
+
       <Outlet />
     </>
   );
