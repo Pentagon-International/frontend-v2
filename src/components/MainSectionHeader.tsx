@@ -53,6 +53,7 @@ function MainSectionHeader() {
   type GlobalSearchItem = {
     id: string;
     display_id?: string | null;
+    primary_code?: string | null;
     module: string;
     sub_module?: string | null;
     api_endpoint?: string | null;
@@ -153,6 +154,7 @@ function MainSectionHeader() {
   const moduleToRoute = (
     module: string,
     sub: string | null,
+    id: string,
   ): { path: string; needsState: boolean } | null => {
     switch (module) {
       case "enquiry":
@@ -160,7 +162,7 @@ function MainSectionHeader() {
       case "quotation":
         return { path: "/quotation-create", needsState: true };
       case "booking":
-        // Booking edit pages (air/ocean, import/export) as per `NavigationRoutes.tsx`.
+        // Booking: air/ocean import/export edit pages
         if (sub === "air_export")
           return { path: "/air/export-booking/edit", needsState: true };
         if (sub === "air_import")
@@ -171,37 +173,64 @@ function MainSectionHeader() {
           return { path: "/SeaExport/import-booking/edit", needsState: true };
         return null;
       case "job":
-        if (sub === "air_export") return { path: "/air/export-job/edit", needsState: true };
-        if (sub === "ocean_export") return { path: "/SeaExport/export-job/edit", needsState: true };
-        if (sub === "air_import") return { path: "/air/import-job/edit", needsState: true };
-        if (sub === "ocean_import") return { path: "/SeaExport/import-job/edit", needsState: true };
+        // Job: air/ocean import/export edit pages
+        if (sub === "air_export")
+          return { path: "/air/export-job/edit", needsState: true };
+        if (sub === "ocean_export")
+          return { path: "/SeaExport/export-job/edit", needsState: true };
+        if (sub === "air_import")
+          return { path: "/air/import-job/edit", needsState: true };
+        if (sub === "ocean_import")
+          return { path: "/SeaExport/import-job/edit", needsState: true };
         return null;
       case "invoice":
         // Invoice module in global search typically needs landing to invoice list/master
         return { path: "/invoice", needsState: false };
+      case "journal_voucher":
+        return { path: `/journal-voucher/edit/${id}`, needsState: false };
+      case "receipt":
+        return { path: "/receipt/edit", needsState: true };
+      case "reverse_receipt":
+        return { path: "/receipt/reversal/edit", needsState: true };
+      case "overseas_receipt":
+        return { path: "/overseas-receipt/edit", needsState: true };
       case "supplier_invoice":
         return { path: "/supplier-invoice/edit", needsState: true };
       case "reverse_supplier_invoice":
         return { path: "/supplier-invoice/reversal/edit", needsState: true };
+      case "payment":
+        return { path: "/payment/edit", needsState: true };
+      case "overseas_payment":
+        return { path: "/overseas-payment/edit", needsState: true };
+      case "reverse_payment":
+        return { path: "/payment/reversal/edit", needsState: true };
       default:
         return null;
     }
   };
 
   const openModuleEdit = async (item: GlobalSearchItem) => {
-    const module = String(item.module ?? "").trim();
-    const sub = item.sub_module ?? null;
+    const module = String(item.module ?? "").trim().toLowerCase();
+    const subRaw = item.sub_module ?? null;
+    const sub =
+      subRaw == null ? null : String(subRaw).trim().toLowerCase() || null;
     const id = String(item.id ?? "").trim();
     if (!module || !id) return;
 
     setSearchLoading(true);
     setSearchError(null);
     try {
-      const target = moduleToRoute(module, sub);
+      const target = moduleToRoute(module, sub, id);
       console.log("[GlobalSearch] route resolved", { module, sub, id, target });
 
       if (!target) {
         // No toast here per requirement: just don't navigate if not configured.
+        console.warn("[GlobalSearch] no route configured", {
+          module,
+          sub,
+          id,
+          display_id: item.display_id ?? null,
+        });
         return;
       }
 
@@ -425,11 +454,11 @@ function MainSectionHeader() {
                               <Box>
                                 <Text fw={600} size="sm">
                                   {it.display_id ?? it.id}
+                                  {it.primary_code ? ` (${it.primary_code})` : ""}
                                 </Text>
                                 <Text size="xs" c="dimmed">
                                   {it.module}
                                   {it.sub_module ? ` • ${it.sub_module}` : ""}
-                                  {it.matched_field ? ` • matched: ${it.matched_field}` : ""}
                                 </Text>
                               </Box>
                               <IconChevronRight size={18} color="#105476" />
