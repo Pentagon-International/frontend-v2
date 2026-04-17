@@ -184,8 +184,17 @@ function MainSectionHeader() {
           return { path: "/SeaExport/import-job/edit", needsState: true };
         return null;
       case "invoice":
-        // Invoice module in global search typically needs landing to invoice list/master
-        return { path: "/invoice", needsState: false };
+        // Invoice: navigate to nested invoice route under the correct job module
+        // (Do NOT use base-level /invoice for global search navigation)
+        if (sub === "air_export")
+          return { path: `/air/export-job/invoice/edit/${id}`, needsState: false };
+        if (sub === "air_import")
+          return { path: `/air/import-job/invoice/edit/${id}`, needsState: false };
+        if (sub === "ocean_export")
+          return { path: `/SeaExport/export-job/invoice/edit/${id}`, needsState: false };
+        if (sub === "ocean_import")
+          return { path: `/SeaExport/import-job/invoice/edit/${id}`, needsState: false };
+        return null;
       case "journal_voucher":
         return { path: `/journal-voucher/edit/${id}`, needsState: false };
       case "receipt":
