@@ -4,6 +4,9 @@ import { resolve } from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Deploy under http://<host>/uat/
+  // This ensures built asset URLs are prefixed with /uat/
+  base: '/uat/',
   plugins: [react()],
   resolve: {
     alias: {
